@@ -81,11 +81,10 @@ class TelegramManager {
             this.timeoutErr = result;
     }
     async createClient(handler = true, handlerFn) {
-        const { getCredentialsForMobile } = require('../../../utils');
-        const tgCreds = await getCredentialsForMobile(this.phoneNumber);
-        this.apiHash = tgCreds.apiHash;
-        this.apiId = tgCreds.apiId;
-        this.client = await clientOps.createClient(this.ctx, this.session, handler, handlerFn);
+        const { client, apiId, apiHash } = await clientOps.createClient(this.ctx, this.session, handler, handlerFn);
+        this.apiId = apiId;
+        this.apiHash = apiHash;
+        this.client = client;
         return this.client;
     }
     async destroy() {

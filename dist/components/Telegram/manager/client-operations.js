@@ -8,7 +8,6 @@ const telegram_1 = require("telegram");
 const events_1 = require("telegram/events");
 const Logger_1 = require("telegram/extensions/Logger");
 const Helpers_1 = require("telegram/Helpers");
-const utils_1 = require("../../../utils");
 const parseError_1 = require("../../../utils/parseError");
 const fetchWithTimeout_1 = require("../../../utils/fetchWithTimeout");
 const logbots_1 = require("../../../utils/logbots");
@@ -16,10 +15,7 @@ const generateTGConfig_1 = require("../utils/generateTGConfig");
 const withTimeout_1 = require("../../../utils/withTimeout");
 const connection_manager_1 = require("../utils/connection-manager");
 async function createClient(ctx, session, handler = true, handlerFn) {
-    const tgCreds = await (0, utils_1.getCredentialsForMobile)(ctx.phoneNumber);
-    const apiHash = tgCreds.apiHash;
-    const apiId = tgCreds.apiId;
-    const tgConfiguration = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
+    const { apiId, apiHash, params: tgConfiguration } = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
     let client = null;
     try {
         await (0, withTimeout_1.withTimeout)(async () => {
@@ -48,7 +44,7 @@ async function createClient(ctx, session, handler = true, handlerFn) {
                 throw new Error(`Client not connected after connection attempt for ${ctx.phoneNumber}`);
             }
         }
-        return client;
+        return { client, apiId, apiHash };
     }
     catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Client creation failed', error);

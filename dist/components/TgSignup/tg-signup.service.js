@@ -19,7 +19,7 @@ const Logger_1 = require("telegram/extensions/Logger");
 const Password_1 = require("telegram/Password");
 const users_service_1 = require("../users/users.service");
 const parseError_1 = require("../../utils/parseError");
-const tg_apps_1 = require("../../utils/tg-apps");
+const generateTGConfig_1 = require("../Telegram/utils/generateTGConfig");
 const utils_1 = require("../../utils");
 let TgSignupService = TgSignupService_1 = class TgSignupService {
     constructor(usersService) {
@@ -75,15 +75,9 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
-            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
+            const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
             const session = new sessions_1.StringSession('');
-            const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
-                connectionRetries: 5,
-                retryDelay: 2000,
-                useWSS: false,
-                useIPV6: false,
-                timeout: 30000
-            });
+            const client = new telegram_1.TelegramClient(session, apiId, apiHash, tgParams);
             await client.setLogLevel(Logger_1.LogLevel.ERROR);
             await client.connect();
             const sendResult = await client.invoke(new tl_1.Api.auth.SendCode({
@@ -143,14 +137,9 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
+                        const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
                         const newSession = new sessions_1.StringSession('');
-                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
-                            connectionRetries: 5,
-                            retryDelay: 2000,
-                            useWSS: false,
-                            timeout: 30000
-                        });
+                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, tgParams);
                         await newClient.connect();
                         session.client = newClient;
                     }

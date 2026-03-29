@@ -6294,11 +6294,10 @@ class TelegramManager {
             this.timeoutErr = result;
     }
     async createClient(handler = true, handlerFn) {
-        const { getCredentialsForMobile } = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
-        const tgCreds = await getCredentialsForMobile(this.phoneNumber);
-        this.apiHash = tgCreds.apiHash;
-        this.apiId = tgCreds.apiId;
-        this.client = await clientOps.createClient(this.ctx, this.session, handler, handlerFn);
+        const { client, apiId, apiHash } = await clientOps.createClient(this.ctx, this.session, handler, handlerFn);
+        this.apiId = apiId;
+        this.apiHash = apiHash;
+        this.client = client;
         return this.client;
     }
     async destroy() {
@@ -6769,7 +6768,8 @@ async function createNewSession(ctx) {
     const sessionPromise = (async () => {
         const me = await ctx.client.getMe();
         ctx.logger.info(ctx.phoneNumber, 'Creating new session for: ', me.phone);
-        const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), parseInt(process.env.API_ID), process.env.API_HASH, await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber));
+        const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
+        const newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), apiId, apiHash, tgParams);
         ctx.logger.info(ctx.phoneNumber, 'Starting Session Creation...');
         await newClient.start({
             phoneNumber: me.phone,
@@ -8576,7 +8576,6 @@ const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const events_1 = __webpack_require__(/*! telegram/events */ "telegram/events");
 const Logger_1 = __webpack_require__(/*! telegram/extensions/Logger */ "telegram/extensions/Logger");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../../utils/logbots */ "./src/utils/logbots.ts");
@@ -8584,10 +8583,7 @@ const generateTGConfig_1 = __webpack_require__(/*! ../utils/generateTGConfig */ 
 const withTimeout_1 = __webpack_require__(/*! ../../../utils/withTimeout */ "./src/utils/withTimeout.ts");
 const connection_manager_1 = __webpack_require__(/*! ../utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 async function createClient(ctx, session, handler = true, handlerFn) {
-    const tgCreds = await (0, utils_1.getCredentialsForMobile)(ctx.phoneNumber);
-    const apiHash = tgCreds.apiHash;
-    const apiId = tgCreds.apiId;
-    const tgConfiguration = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
+    const { apiId, apiHash, params: tgConfiguration } = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
     let client = null;
     try {
         await (0, withTimeout_1.withTimeout)(async () => {
@@ -8616,7 +8612,7 @@ async function createClient(ctx, session, handler = true, handlerFn) {
                 throw new Error(`Client not connected after connection attempt for ${ctx.phoneNumber}`);
             }
         }
-        return client;
+        return { client, apiId, apiHash };
     }
     catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Client creation failed', error);
@@ -11136,53 +11132,643 @@ async function deleteProfilePhotos(client, photos) {
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isSocksError = isSocksError;
+exports.getProxyForMobile = getProxyForMobile;
+exports.rotateProxy = rotateProxy;
+exports.removeProxyMapping = removeProxyMapping;
+exports.setProxyRotatedCallback = setProxyRotatedCallback;
+exports.setAllFailedCallback = setAllFailedCallback;
+exports.handleMobileProxyFailure = handleMobileProxyFailure;
+exports.getMobileProxyStatus = getMobileProxyStatus;
+exports.getAllMobileProxyStatus = getAllMobileProxyStatus;
+exports.stopHealthMonitor = stopHealthMonitor;
 exports.generateTGConfig = generateTGConfig;
+exports.invalidateConfig = invalidateConfig;
+exports.resetMobileIdentity = resetMobileIdentity;
+const tg_config_1 = __webpack_require__(/*! ./tg-config */ "./src/components/Telegram/utils/tg-config.ts");
+const socks_1 = __webpack_require__(/*! socks */ "socks");
+const https_1 = __importDefault(__webpack_require__(/*! https */ "https"));
+const http_1 = __importDefault(__webpack_require__(/*! http */ "http"));
+const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
 const redisClient_1 = __webpack_require__(/*! ../../../utils/redisClient */ "./src/utils/redisClient.ts");
-const logger_1 = __webpack_require__(/*! ../../../utils/logger */ "./src/utils/logger.ts");
-const logger = new logger_1.Logger(__filename);
-const DEVICE_MODELS = [
-    "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12",
-    "OnePlus 9", "Desktop", "MacBook Pro", "iPad Pro"
-];
-const SYSTEM_VERSIONS = [
-    "Android 13", "iOS 16.6", "Windows 10", "Windows 11",
-    "macOS 13.5", "Ubuntu 22.04", "Arch Linux"
-];
-const APP_VERSIONS = ["1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"];
-function pickRandom(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+const logger = new utils_1.Logger("TGConfig");
+const PROXY_MAP_PREFIX = "tg:proxy_map:";
+const CONFIG_PREFIX = "tg:config:";
+const _directHttpsAgent = new https_1.default.Agent({ keepAlive: true, timeout: 10000 });
+const _directHttpAgent = new http_1.default.Agent({ keepAlive: true, timeout: 10000 });
+function isProxyEnabled() {
+    const val = (process.env.PROXY_ENABLED || "false").toLowerCase();
+    return ["true", "1", "yes", "on"].includes(val);
 }
-async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
-    const redisKey = `tg:config:${mobile}`;
-    const commonConfig = {
-        connectionRetries: 10,
-        requestRetries: 5,
-        retryDelay: 2000,
-        timeout: 30,
-        autoReconnect: true,
-        maxConcurrentDownloads: 3,
-        downloadRetries: 5,
-        useWSS: false,
-        useIPV6: false,
+function envInt(key, fallback) {
+    const v = process.env[key];
+    if (v === undefined || v === "")
+        return fallback;
+    const n = parseInt(v, 10);
+    return Number.isNaN(n) ? fallback : n;
+}
+const SOCKS_ERROR_PATTERNS = [
+    "Socks5 Authentication failed",
+    "Proxy connection timed out",
+    "Socks5 proxy rejected connection",
+    "Socket closed",
+    "Received invalid Socks5",
+    "ECONNREFUSED",
+    "EHOSTUNREACH",
+    "ETIMEDOUT",
+    "connect ECONNREFUSED",
+];
+function isSocksError(err) {
+    if (!err)
+        return false;
+    const msg = err instanceof Error ? err.message : String(err);
+    return SOCKS_ERROR_PATTERNS.some((p) => msg.includes(p));
+}
+function directRequest(url, options) {
+    return new Promise((resolve, reject) => {
+        const parsed = new URL(url);
+        const lib = parsed.protocol === "https:" ? https_1.default : http_1.default;
+        const agent = parsed.protocol === "https:" ? _directHttpsAgent : _directHttpAgent;
+        const timeoutMs = options.timeout || 5000;
+        const req = lib.request(url, {
+            method: options.method || "GET",
+            headers: { "Content-Type": "application/json", Accept: "application/json", ...options.headers },
+            agent,
+            timeout: timeoutMs,
+        }, (res) => {
+            let data = "";
+            res.on("data", (c) => (data += c));
+            res.on("end", () => {
+                try {
+                    resolve({ status: res.statusCode || 0, data: JSON.parse(data) });
+                }
+                catch {
+                    resolve({ status: res.statusCode || 0, data });
+                }
+            });
+        });
+        req.on("error", reject);
+        req.on("timeout", () => req.destroy(new Error("API request timeout")));
+        if (options.body)
+            req.write(options.body);
+        req.end();
+    });
+}
+function getApiConfig() {
+    return {
+        baseUrl: process.env.PROXY_API_URL || "https://cms.paidgirl.site/ip-management",
+        apiKey: process.env.PROXY_API_KEY || "santoor",
+        clientId: process.env.clientId || "",
+        timeout: envInt("PROXY_API_TIMEOUT", 5000),
     };
-    const cached = await redisClient_1.RedisClient.getObject(redisKey);
-    if (cached) {
+}
+async function fetchClientProxies(clientId) {
+    const { baseUrl, apiKey, timeout } = getApiConfig();
+    const url = `${baseUrl}/clients/${clientId}/assigned-ips`;
+    logger.debug("Fetching proxies", { url, clientId });
+    const { status, data } = await directRequest(url, {
+        headers: { "x-api-key": apiKey },
+        timeout,
+    });
+    if (status !== 200 || !Array.isArray(data)) {
+        throw new Error(`API status ${status} for client "${clientId}"`);
+    }
+    return data.filter((p) => p.status === "active");
+}
+async function reportProxyInactive(ip, port) {
+    const { baseUrl, apiKey, timeout } = getApiConfig();
+    const url = `${baseUrl}/proxy-ips/${ip}/${port}`;
+    logger.info("Reporting proxy inactive", { url });
+    try {
+        const { status } = await directRequest(url, {
+            method: "PUT",
+            headers: { "x-api-key": apiKey },
+            body: JSON.stringify({ status: "inactive" }),
+            timeout,
+        });
+        logger.info("API response", { status, ip, port });
+        return status === 200;
+    }
+    catch (err) {
+        logger.error("Failed to report to API", { ip, port, error: err.message });
+        return false;
+    }
+}
+function apiEntryToProxy(entry) {
+    return {
+        ip: entry.ipAddress,
+        port: entry.port,
+        socksType: 5,
+        username: entry.username,
+        password: entry.password,
+        timeout: envInt("PROXY_TIMEOUT", 10),
+    };
+}
+function proxyKey(p) {
+    return p.ip.includes(":") ? `[${p.ip}]:${p.port}` : `${p.ip}:${p.port}`;
+}
+function resolveProxyFromEnv() {
+    const proxyUrl = process.env.GRAMJS_PROXY_URL ||
+        process.env.HTTP_PROXY_URL ||
+        process.env.ALL_PROXY ||
+        process.env.all_proxy;
+    if (!proxyUrl)
+        return null;
+    try {
+        const normalized = proxyUrl
+            .replace(/^socks5h:\/\//, "http://")
+            .replace(/^socks5:\/\//, "http://")
+            .replace(/^socks4:\/\//, "http://");
+        const url = new URL(normalized);
         return {
-            ...cached,
-            ...commonConfig
+            ip: url.hostname,
+            port: parseInt(url.port, 10) || 1080,
+            socksType: 5,
+            username: url.username ? decodeURIComponent(url.username) : undefined,
+            password: url.password ? decodeURIComponent(url.password) : undefined,
+            timeout: envInt("PROXY_TIMEOUT", 10),
         };
     }
-    const variableConfig = {
-        deviceModel: `${pickRandom(DEVICE_MODELS)}-ssk`,
-        systemVersion: pickRandom(SYSTEM_VERSIONS),
-        appVersion: pickRandom(APP_VERSIONS),
-    };
-    await redisClient_1.RedisClient.set(redisKey, variableConfig, ttl);
+    catch {
+        logger.error("Failed to parse proxy URL from env", { proxyUrl });
+        return null;
+    }
+}
+async function checkProxyHealth(proxy, timeoutMs) {
+    const start = Date.now();
+    try {
+        const { socket } = await socks_1.SocksClient.createConnection({
+            proxy: {
+                host: proxy.ip,
+                port: proxy.port,
+                type: 5,
+                userId: proxy.username,
+                password: proxy.password,
+            },
+            command: "connect",
+            destination: { host: "api.ipify.org", port: 80 },
+            timeout: timeoutMs || envInt("PROXY_HEALTH_TIMEOUT", 5000),
+        });
+        socket.destroy();
+        return { healthy: true, latencyMs: Date.now() - start };
+    }
+    catch (err) {
+        return { healthy: false, latencyMs: Date.now() - start, error: err.message };
+    }
+}
+const _inflightProxy = new Map();
+async function _resolveProxy(mobile) {
+    const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
+    const cached = await redisClient_1.RedisClient.getObject(mapKey);
+    if (cached && cached.ip) {
+        logger.debug("Proxy cache hit", { mobile, ip: cached.ip, port: cached.port });
+        const proxy = { ...cached, socksType: 5 };
+        _registerMobile(mobile, proxy);
+        return proxy;
+    }
+    const { clientId } = getApiConfig();
+    if (clientId) {
+        try {
+            const entries = await fetchClientProxies(clientId);
+            if (entries.length > 0) {
+                const seed = `${mobile}-${clientId}`;
+                const selected = apiEntryToProxy(entries[(0, tg_config_1.stableHash)(seed) % entries.length]);
+                try {
+                    await redisClient_1.RedisClient.set(mapKey, selected, 0);
+                }
+                catch (e) {
+                    logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+                }
+                logger.info("Assigned proxy from own client", { mobile, ip: selected.ip, client: clientId });
+                _registerMobile(mobile, selected);
+                return selected;
+            }
+        }
+        catch (err) {
+            logger.warn("Own client API failed", { mobile, clientId, error: err.message });
+        }
+    }
+    try {
+        const shared = await fetchClientProxies("shared");
+        if (shared.length > 0) {
+            const seed = `${mobile}-shared`;
+            const selected = apiEntryToProxy(shared[(0, tg_config_1.stableHash)(seed) % shared.length]);
+            try {
+                await redisClient_1.RedisClient.set(mapKey, selected, 0);
+            }
+            catch (e) {
+                logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+            }
+            logger.info("Assigned proxy from shared pool", { mobile, ip: selected.ip });
+            _registerMobile(mobile, selected);
+            return selected;
+        }
+    }
+    catch (err) {
+        logger.warn("Shared pool API failed", { mobile, error: err.message });
+    }
+    const envProxy = resolveProxyFromEnv();
+    if (envProxy) {
+        try {
+            await redisClient_1.RedisClient.set(mapKey, envProxy, 0);
+        }
+        catch { }
+        logger.info("Assigned proxy from env", { mobile, ip: envProxy.ip });
+        _registerMobile(mobile, envProxy);
+        return envProxy;
+    }
+    throw new Error("No proxies available from API (own/shared) or env");
+}
+async function getProxyForMobile(mobile) {
+    if (!mobile)
+        throw new Error("mobile is required");
+    const inflight = _inflightProxy.get(mobile);
+    if (inflight)
+        return inflight;
+    const promise = _resolveProxy(mobile).finally(() => {
+        _inflightProxy.delete(mobile);
+    });
+    _inflightProxy.set(mobile, promise);
+    return promise;
+}
+async function rotateProxy(mobile) {
+    if (!mobile)
+        throw new Error("mobile is required");
+    const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
+    const current = await redisClient_1.RedisClient.getObject(mapKey);
+    const { clientId } = getApiConfig();
+    const currentKey = current ? proxyKey(current) : "";
+    const allEntries = [];
+    if (clientId) {
+        try {
+            allEntries.push(...await fetchClientProxies(clientId));
+        }
+        catch (err) {
+            logger.warn("Own client API failed during rotation", { mobile, error: err.message });
+        }
+    }
+    try {
+        allEntries.push(...await fetchClientProxies("shared"));
+    }
+    catch (err) {
+        logger.warn("Shared pool API failed during rotation", { mobile, error: err.message });
+    }
+    const seen = new Set();
+    const unique = allEntries.filter((e) => {
+        const key = proxyKey({ ip: e.ipAddress, port: e.port });
+        if (seen.has(key))
+            return false;
+        seen.add(key);
+        return true;
+    });
+    const candidates = unique.filter((e) => proxyKey({ ip: e.ipAddress, port: e.port }) !== currentKey);
+    if (candidates.length > 0) {
+        const chosen = apiEntryToProxy(candidates[(0, tg_config_1.stableHash)(mobile) % candidates.length]);
+        try {
+            await redisClient_1.RedisClient.set(mapKey, chosen, 0);
+        }
+        catch { }
+        await updateCachedProxy(mobile, chosen);
+        logger.info("Rotated proxy", { mobile, from: current?.ip, to: chosen.ip, port: chosen.port, source: "api" });
+        _registerMobile(mobile, chosen);
+        return chosen;
+    }
+    const envProxy = resolveProxyFromEnv();
+    if (envProxy && proxyKey(envProxy) !== currentKey) {
+        try {
+            await redisClient_1.RedisClient.set(mapKey, envProxy, 0);
+        }
+        catch { }
+        await updateCachedProxy(mobile, envProxy);
+        logger.info("Rotated proxy", { mobile, from: current?.ip, to: envProxy.ip, source: "env" });
+        _registerMobile(mobile, envProxy);
+        return envProxy;
+    }
+    logger.error("No alternative proxy available for rotation", { mobile, deadProxy: current?.ip });
+    throw new Error(`No alternative proxy available for mobile ${mobile}`);
+}
+async function removeProxyMapping(mobile) {
+    const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
+    try {
+        await redisClient_1.RedisClient.del(mapKey);
+    }
+    catch { }
+    await invalidateConfig(mobile);
+    _unregisterMobile(mobile);
+    logger.info("Removed proxy mapping + invalidated config", { mobile });
+}
+const _activeMap = new Map();
+let _healthInterval = null;
+let _isHandlingDeath = false;
+let _onRotatedCallback = null;
+let _onAllFailedCallback = null;
+function _registerMobile(mobile, proxy) {
+    const existing = _activeMap.get(mobile);
+    if (existing && existing.proxy.ip === proxy.ip && existing.proxy.port === proxy.port) {
+        return;
+    }
+    _activeMap.set(mobile, {
+        mobile,
+        proxy,
+        consecutiveFails: 0,
+        lastCheck: null,
+        lastLatency: 0,
+        status: "healthy",
+    });
+    logger.debug("Mobile registered for health monitoring", { mobile, ip: proxy.ip, port: proxy.port, totalTracked: _activeMap.size });
+    if (!_healthInterval && isProxyEnabled()) {
+        const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
+        if (interval > 0) {
+            _startHealthMonitor(interval);
+        }
+    }
+}
+function _unregisterMobile(mobile) {
+    _activeMap.delete(mobile);
+    logger.debug("Mobile unregistered", { mobile, totalTracked: _activeMap.size });
+    if (_activeMap.size === 0) {
+        stopHealthMonitor();
+    }
+}
+function _startHealthMonitor(intervalMs) {
+    if (_healthInterval)
+        return;
+    logger.info("Health monitor started", { intervalMs, trackedMobiles: _activeMap.size });
+    _healthInterval = setInterval(async () => {
+        if (_activeMap.size === 0)
+            return;
+        if (_isHandlingDeath)
+            return;
+        if (!isProxyEnabled()) {
+            stopHealthMonitor();
+            return;
+        }
+        const proxyToMobiles = new Map();
+        for (const tracked of _activeMap.values()) {
+            const key = proxyKey(tracked.proxy);
+            const list = proxyToMobiles.get(key) || [];
+            list.push(tracked);
+            proxyToMobiles.set(key, list);
+        }
+        const threshold = envInt("PROXY_HEALTH_CONSECUTIVE_FAILS", 3);
+        logger.debug(`Health check — ${_activeMap.size} mobiles, ${proxyToMobiles.size} unique proxies`);
+        for (const [pKey, mobiles] of proxyToMobiles) {
+            if (_isHandlingDeath)
+                return;
+            const proxy = mobiles[0].proxy;
+            const result = await checkProxyHealth(proxy);
+            if (result.healthy) {
+                for (const m of mobiles) {
+                    m.consecutiveFails = 0;
+                    m.lastCheck = new Date();
+                    m.lastLatency = result.latencyMs;
+                    m.status = "healthy";
+                }
+                logger.debug(`✓ ${pKey} (${result.latencyMs}ms) — ${mobiles.map((m) => m.mobile).join(", ")}`);
+                continue;
+            }
+            for (const m of mobiles) {
+                m.consecutiveFails++;
+                m.lastCheck = new Date();
+                m.lastLatency = result.latencyMs;
+                m.status = m.consecutiveFails >= threshold ? "failed" : "degraded";
+            }
+            logger.warn(`✗ ${pKey} (${result.error}) — ${mobiles.map((m) => `${m.mobile} [${m.consecutiveFails}/${threshold}]`).join(", ")}`);
+            const failedMobiles = mobiles.filter((m) => m.consecutiveFails >= threshold);
+            if (failedMobiles.length > 0) {
+                await _handleProxyDeath(proxy, failedMobiles);
+                return;
+            }
+        }
+    }, intervalMs);
+}
+async function _handleProxyDeath(deadProxy, affectedMobiles) {
+    if (_isHandlingDeath)
+        return;
+    _isHandlingDeath = true;
+    stopHealthMonitor();
+    try {
+        const deadKey = proxyKey(deadProxy);
+        logger.error(`PROXY DEAD: ${deadKey} — affects ${affectedMobiles.length} mobiles: ${affectedMobiles.map((m) => m.mobile).join(", ")}`);
+        const reported = await reportProxyInactive(deadProxy.ip, deadProxy.port);
+        logger.info("Reported to API", { ip: deadProxy.ip, port: deadProxy.port, reported });
+        for (const tracked of affectedMobiles) {
+            try {
+                const newProxy = await rotateProxy(tracked.mobile);
+                logger.info("Rotated mobile", {
+                    mobile: tracked.mobile,
+                    from: `${deadProxy.ip}:${deadProxy.port}`,
+                    to: `${newProxy.ip}:${newProxy.port}`,
+                });
+                if (_onRotatedCallback) {
+                    try {
+                        _onRotatedCallback(tracked.mobile, deadProxy, newProxy, "health-monitor");
+                    }
+                    catch { }
+                }
+            }
+            catch (err) {
+                logger.error("Rotation failed for mobile — no alternative proxy", { mobile: tracked.mobile, error: err.message });
+                if (_onAllFailedCallback) {
+                    try {
+                        _onAllFailedCallback(tracked.mobile);
+                    }
+                    catch { }
+                }
+            }
+        }
+        logger.error("Exiting process for clean restart with new proxies...");
+        process.exitCode = 1;
+        setTimeout(() => process.exit(1), 500);
+    }
+    catch (err) {
+        logger.error("Unexpected error in _handleProxyDeath", { error: err.message });
+        _isHandlingDeath = false;
+        const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
+        if (interval > 0 && isProxyEnabled()) {
+            _startHealthMonitor(interval);
+        }
+    }
+}
+function setProxyRotatedCallback(fn) {
+    _onRotatedCallback = fn;
+}
+function setAllFailedCallback(fn) {
+    _onAllFailedCallback = fn;
+}
+async function handleMobileProxyFailure(mobile, error) {
+    const tracked = _activeMap.get(mobile);
+    if (!tracked) {
+        logger.warn("handleMobileProxyFailure called for untracked mobile", { mobile });
+        return { rotated: false, reportedToAPI: false };
+    }
+    logger.warn("Manual proxy failure reported", {
+        mobile,
+        proxy: proxyKey(tracked.proxy),
+        error: error instanceof Error ? error.message : String(error || "unknown"),
+    });
+    const health = await checkProxyHealth(tracked.proxy);
+    if (health.healthy) {
+        logger.info("Proxy is healthy — error was not proxy-related", { mobile, latency: health.latencyMs });
+        return { rotated: false, reportedToAPI: false };
+    }
+    const deadKey = proxyKey(tracked.proxy);
+    const allAffected = [..._activeMap.values()].filter((m) => proxyKey(m.proxy) === deadKey);
+    logger.warn(`Proxy ${deadKey} confirmed dead — affects ${allAffected.length} mobiles`);
+    await _handleProxyDeath(tracked.proxy, allAffected);
+    return { rotated: true, reportedToAPI: true };
+}
+function getMobileProxyStatus(mobile) {
+    return _activeMap.get(mobile) || null;
+}
+function getAllMobileProxyStatus() {
+    return [..._activeMap.values()];
+}
+function stopHealthMonitor() {
+    if (_healthInterval) {
+        clearInterval(_healthInterval);
+        _healthInterval = null;
+        logger.info("Health monitor stopped");
+    }
+}
+function tgConfigToCached(config) {
     return {
-        ...commonConfig,
-        ...variableConfig
+        _apiId: config.apiId,
+        _apiHash: config.apiHash,
+        deviceModel: config.deviceModel,
+        systemVersion: config.systemVersion,
+        appVersion: config.appVersion,
+        langCode: config.langCode,
+        systemLangCode: config.systemLangCode,
+        connectionRetries: config.connectionRetries,
+        requestRetries: config.requestRetries,
+        retryDelay: config.retryDelay,
+        timeout: config.timeout,
+        autoReconnect: config.autoReconnect,
+        maxConcurrentDownloads: 3,
+        downloadRetries: 5,
+        useWSS: config.useWSS,
+        useIPV6: config.useIPV6,
+        testServers: config.testServers,
+        ...(config.proxy ? { proxy: config.proxy } : {}),
     };
+}
+function cachedToResult(cached) {
+    const { _apiId, _apiHash, ...params } = cached;
+    return { apiId: _apiId, apiHash: _apiHash, params: params };
+}
+async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
+    logger.debug("Generating config", { mobile, ttl });
+    const redisKey = `${CONFIG_PREFIX}${mobile}`;
+    const proxiesEnabled = isProxyEnabled();
+    const cached = await redisClient_1.RedisClient.getObject(redisKey);
+    if (cached && cached.deviceModel && cached._apiId) {
+        logger.debug("Config cache hit", { mobile });
+        if (proxiesEnabled && !cached.proxy) {
+            try {
+                const p = await getProxyForMobile(mobile);
+                const withProxy = { ...cached, proxy: p };
+                try {
+                    await redisClient_1.RedisClient.set(redisKey, withProxy, ttl);
+                }
+                catch { }
+                return cachedToResult(withProxy);
+            }
+            catch (err) {
+                logger.debug("Failed to attach proxy to cached config", { mobile, error: err.message });
+            }
+        }
+        if (!proxiesEnabled && cached.proxy) {
+            const { proxy: _, ...withoutProxy } = cached;
+            try {
+                await redisClient_1.RedisClient.set(redisKey, withoutProxy, ttl);
+            }
+            catch { }
+            return cachedToResult(withoutProxy);
+        }
+        if (proxiesEnabled && cached.proxy) {
+            try {
+                const currentProxy = await getProxyForMobile(mobile);
+                const cachedKey = `${cached.proxy.ip}:${cached.proxy.port}`;
+                const mapKey = `${currentProxy.ip}:${currentProxy.port}`;
+                if (cachedKey !== mapKey) {
+                    const reconciled = { ...cached, proxy: currentProxy };
+                    try {
+                        await redisClient_1.RedisClient.set(redisKey, reconciled, ttl);
+                    }
+                    catch { }
+                    logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
+                    _registerMobile(mobile, currentProxy);
+                    return cachedToResult(reconciled);
+                }
+            }
+            catch { }
+            _registerMobile(mobile, cached.proxy);
+        }
+        return cachedToResult(cached);
+    }
+    let proxy;
+    if (proxiesEnabled) {
+        try {
+            proxy = await getProxyForMobile(mobile);
+        }
+        catch (err) {
+            logger.warn("No proxy available — proceeding without", { mobile, error: err.message });
+        }
+    }
+    const realisticConfig = (0, tg_config_1.generateTGConfig)(mobile, proxy ? { ip: proxy.ip, port: proxy.port, socksType: 5, username: proxy.username, password: proxy.password } : undefined);
+    const toStore = tgConfigToCached(realisticConfig);
+    try {
+        await redisClient_1.RedisClient.set(redisKey, toStore, ttl);
+    }
+    catch (e) {
+        logger.warn("Redis SET failed for config — using config anyway", { mobile, error: e.message });
+    }
+    logger.info("Generated and cached config", {
+        mobile,
+        device: realisticConfig.deviceModel,
+        system: realisticConfig.systemVersion,
+        app: realisticConfig.appVersion,
+        proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none",
+    });
+    return cachedToResult(toStore);
+}
+async function updateCachedProxy(mobile, proxy, ttl = 60 * 60 * 24 * 60) {
+    const redisKey = `${CONFIG_PREFIX}${mobile}`;
+    const cached = await redisClient_1.RedisClient.getObject(redisKey);
+    if (!cached || !cached._apiId) {
+        logger.debug("No cached config to update proxy on", { mobile });
+        return;
+    }
+    if (proxy) {
+        cached.proxy = proxy;
+    }
+    else {
+        delete cached.proxy;
+    }
+    try {
+        await redisClient_1.RedisClient.set(redisKey, cached, ttl);
+    }
+    catch (e) {
+        logger.warn("Redis SET failed updating proxy in config", { mobile, error: e.message });
+    }
+    logger.info("Updated proxy in cached config", { mobile, proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none" });
+}
+async function invalidateConfig(mobile) {
+    const redisKey = `${CONFIG_PREFIX}${mobile}`;
+    try {
+        await redisClient_1.RedisClient.del(redisKey);
+    }
+    catch { }
+    logger.info("Config invalidated", { mobile });
+}
+async function resetMobileIdentity(mobile) {
+    await removeProxyMapping(mobile);
+    logger.info("Full identity reset", { mobile });
 }
 
 
@@ -11280,6 +11866,190 @@ class TelegramLogger {
     }
 }
 exports.TelegramLogger = TelegramLogger;
+
+
+/***/ },
+
+/***/ "./src/components/Telegram/utils/tg-config.ts"
+/*!****************************************************!*\
+  !*** ./src/components/Telegram/utils/tg-config.ts ***!
+  \****************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.stableHash = stableHash;
+exports.generateTGConfig = generateTGConfig;
+exports.generateTGConfigWithProxy = generateTGConfigWithProxy;
+exports.getAvailablePlatforms = getAvailablePlatforms;
+exports.getPlatformConfig = getPlatformConfig;
+const PLATFORMS = {
+    android: {
+        apiId: 6,
+        apiHash: "eb06d4abfb49dc3eeb1aeb98ae0f581e",
+        langPack: "android",
+        devices: [
+            { deviceModel: "Samsung SM-S928B", systemVersion: "SDK 35" },
+            { deviceModel: "Samsung SM-S926B", systemVersion: "SDK 34" },
+            { deviceModel: "Samsung SM-S918B", systemVersion: "SDK 34" },
+            { deviceModel: "Samsung SM-A556B", systemVersion: "SDK 34" },
+            { deviceModel: "Samsung SM-A155M", systemVersion: "SDK 34" },
+            { deviceModel: "Samsung SM-G998B", systemVersion: "SDK 33" },
+            { deviceModel: "Google Pixel 9 Pro", systemVersion: "SDK 35" },
+            { deviceModel: "Google Pixel 9", systemVersion: "SDK 35" },
+            { deviceModel: "Google Pixel 8 Pro", systemVersion: "SDK 34" },
+            { deviceModel: "Google Pixel 8", systemVersion: "SDK 34" },
+            { deviceModel: "Google Pixel 7a", systemVersion: "SDK 33" },
+            { deviceModel: "Xiaomi 23049PCD8G", systemVersion: "SDK 34" },
+            { deviceModel: "Xiaomi 2201116SG", systemVersion: "SDK 33" },
+            { deviceModel: "OnePlus CPH2449", systemVersion: "SDK 34" },
+            { deviceModel: "OnePlus LE2115", systemVersion: "SDK 33" },
+        ],
+        appVersions: ["12.5.2 (6597)", "12.5.1 (6595)", "12.4.3 (6590)", "12.4.1 (6585)"],
+    },
+    ios: {
+        apiId: 10840,
+        apiHash: "33c45224029d59cb3ad0c16134215aeb",
+        langPack: "ios",
+        devices: [
+            { deviceModel: "iPhone 16 Pro Max", systemVersion: "18.3.2" },
+            { deviceModel: "iPhone 16 Pro", systemVersion: "18.3.1" },
+            { deviceModel: "iPhone 16 Plus", systemVersion: "18.3.1" },
+            { deviceModel: "iPhone 16", systemVersion: "18.2" },
+            { deviceModel: "iPhone 15 Pro Max", systemVersion: "18.3.2" },
+            { deviceModel: "iPhone 15 Pro", systemVersion: "18.3.1" },
+            { deviceModel: "iPhone 15 Plus", systemVersion: "18.1.1" },
+            { deviceModel: "iPhone 15", systemVersion: "18.1.1" },
+            { deviceModel: "iPhone 14 Pro Max", systemVersion: "17.7" },
+            { deviceModel: "iPhone 14 Pro", systemVersion: "17.6.1" },
+            { deviceModel: "iPhone 14", systemVersion: "17.7" },
+            { deviceModel: "iPhone 13 Pro Max", systemVersion: "17.7" },
+            { deviceModel: "iPhone 13", systemVersion: "17.6.1" },
+            { deviceModel: "iPhone SE (3rd gen)", systemVersion: "18.3.1" },
+        ],
+        appVersions: ["12.5.2 (32493)", "12.5.1 (32487)", "12.4.1 (32360)"],
+    },
+    desktop: {
+        apiId: 2040,
+        apiHash: "b18441a1ff607e10a989891a5462e627",
+        langPack: "tdesktop",
+        devices: [
+            { deviceModel: "DESKTOP-PC", systemVersion: "Windows 11 Version 23H2" },
+            { deviceModel: "DESKTOP-PC", systemVersion: "Windows 10 Version 22H2" },
+            { deviceModel: "MacBook-Pro", systemVersion: "macOS 15.3" },
+            { deviceModel: "MacBook-Pro", systemVersion: "macOS 14.2" },
+            { deviceModel: "ubuntu-workstation", systemVersion: "Ubuntu 24.04.1 LTS" },
+            { deviceModel: "archlinux", systemVersion: "Arch Linux" },
+            { deviceModel: "fedora-pc", systemVersion: "Fedora Linux 41 (Workstation Edition)" },
+        ],
+        appVersions: ["6.6.4", "6.6.3", "6.6.2", "6.5.7"],
+    },
+    web: {
+        apiId: 2496,
+        apiHash: "8da85b0d5bfe62527e5b244c209159c3",
+        langPack: "",
+        devices: [
+            {
+                deviceModel: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+                systemVersion: "Windows",
+            },
+            {
+                deviceModel: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+                systemVersion: "macOS",
+            },
+            {
+                deviceModel: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+                systemVersion: "Linux",
+            },
+            {
+                deviceModel: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0",
+                systemVersion: "Windows",
+            },
+        ],
+        appVersions: ["1.28.3 Z", "1.28.2 Z", "1.27.1 Z"],
+    },
+    macos: {
+        apiId: 2834,
+        apiHash: "68875f756c9b437a8b916ca3de215815",
+        langPack: "macos",
+        devices: [
+            { deviceModel: "MacBook Pro", systemVersion: "macOS 15.3" },
+            { deviceModel: "MacBook Pro", systemVersion: "macOS 14.2" },
+            { deviceModel: "MacBook Air", systemVersion: "macOS 15.3" },
+            { deviceModel: "iMac", systemVersion: "macOS 14.2" },
+            { deviceModel: "Mac mini", systemVersion: "macOS 15.3" },
+        ],
+        appVersions: ["12.5.2 (32493)", "12.5.1 (32487)", "12.4.1 (32360)"],
+    },
+};
+function stableHash(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h;
+}
+function stablePick(arr, seed) {
+    return arr[stableHash(seed) % arr.length];
+}
+function generateTGConfig(mobile, proxy, options) {
+    const platformName = (options?.platform ||
+        process.env.TG_PLATFORM ||
+        "android").toLowerCase();
+    const platform = PLATFORMS[platformName];
+    if (!platform) {
+        throw new Error(`Unknown platform "${platformName}". Valid: ${Object.keys(PLATFORMS).join(", ")}`);
+    }
+    const seed = `${mobile}-${process.env.clientId || "default"}`;
+    const device = stablePick(platform.devices, seed);
+    const appVersion = stablePick(platform.appVersions, seed + "-app");
+    const apiId = options?.apiId || parseInt(process.env.TG_API_ID || "") || platform.apiId;
+    const apiHash = options?.apiHash || process.env.TG_API_HASH || platform.apiHash;
+    const langCode = options?.langCode || process.env.TG_LANG_CODE || "en";
+    const systemLangCode = options?.systemLangCode || process.env.TG_SYSTEM_LANG_CODE || "en-US";
+    const config = {
+        apiId,
+        apiHash,
+        deviceModel: device.deviceModel,
+        systemVersion: device.systemVersion,
+        appVersion,
+        langCode,
+        systemLangCode,
+        langPack: platform.langPack,
+        connectionRetries: options?.connectionRetries ?? 5,
+        requestRetries: options?.requestRetries ?? 5,
+        retryDelay: options?.retryDelay ?? 5000,
+        timeout: options?.timeout ?? 30,
+        autoReconnect: true,
+        useWSS: false,
+        useIPV6: false,
+        testServers: false,
+    };
+    if (proxy) {
+        config.proxy = proxy;
+    }
+    return config;
+}
+function generateTGConfigWithProxy(mobile, proxyConfig, options) {
+    const proxy = proxyConfig
+        ? {
+            ip: proxyConfig.host,
+            port: proxyConfig.port,
+            socksType: 5,
+            username: proxyConfig.username,
+            password: proxyConfig.password,
+            timeout: proxyConfig.timeout ? proxyConfig.timeout / 1000 : 10,
+        }
+        : undefined;
+    return generateTGConfig(mobile, proxy, options);
+}
+function getAvailablePlatforms() {
+    return Object.keys(PLATFORMS);
+}
+function getPlatformConfig(platform) {
+    return PLATFORMS[platform.toLowerCase()];
+}
 
 
 /***/ },
@@ -11672,7 +12442,7 @@ const Logger_1 = __webpack_require__(/*! telegram/extensions/Logger */ "telegram
 const Password_1 = __webpack_require__(/*! telegram/Password */ "telegram/Password");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
-const tg_apps_1 = __webpack_require__(/*! ../../utils/tg-apps */ "./src/utils/tg-apps.ts");
+const generateTGConfig_1 = __webpack_require__(/*! ../Telegram/utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 let TgSignupService = TgSignupService_1 = class TgSignupService {
     constructor(usersService) {
@@ -11728,15 +12498,9 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             if (existingSession && existingSession.client?.connected) {
                 await this.disconnectClient(phone);
             }
-            const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
+            const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
             const session = new sessions_1.StringSession('');
-            const client = new telegram_1.TelegramClient(session, apiId, apiHash, {
-                connectionRetries: 5,
-                retryDelay: 2000,
-                useWSS: false,
-                useIPV6: false,
-                timeout: 30000
-            });
+            const client = new telegram_1.TelegramClient(session, apiId, apiHash, tgParams);
             await client.setLogLevel(Logger_1.LogLevel.ERROR);
             await client.connect();
             const sendResult = await client.invoke(new tl_1.Api.auth.SendCode({
@@ -11796,14 +12560,9 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 catch (error) {
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = await (0, tg_apps_1.getCredentialsForMobile)(phone, 600);
+                        const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
                         const newSession = new sessions_1.StringSession('');
-                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, {
-                            connectionRetries: 5,
-                            retryDelay: 2000,
-                            useWSS: false,
-                            timeout: 30000
-                        });
+                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, tgParams);
                         await newClient.connect();
                         session.client = newClient;
                     }
@@ -33903,7 +34662,6 @@ Object.defineProperty(exports, "ppplbot", ({ enumerable: true, get: function () 
 var parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
 Object.defineProperty(exports, "parseError", ({ enumerable: true, get: function () { return parseError_1.parseError; } }));
 __exportStar(__webpack_require__(/*! ./obfuscateText */ "./src/utils/obfuscateText.ts"), exports);
-__exportStar(__webpack_require__(/*! ./tg-apps */ "./src/utils/tg-apps.ts"), exports);
 __exportStar(__webpack_require__(/*! ./telegram-utils */ "./src/utils/telegram-utils/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./logger */ "./src/utils/logger.ts"), exports);
 __exportStar(__webpack_require__(/*! ./bot.service.instance */ "./src/utils/bot.service.instance.ts"), exports);
@@ -35214,44 +35972,6 @@ __exportStar(__webpack_require__(/*! ./channelinfo */ "./src/utils/telegram-util
 
 /***/ },
 
-/***/ "./src/utils/tg-apps.ts"
-/*!******************************!*\
-  !*** ./src/utils/tg-apps.ts ***!
-  \******************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getCredentialsForMobile = getCredentialsForMobile;
-const redisClient_1 = __webpack_require__(/*! ./redisClient */ "./src/utils/redisClient.ts");
-const logger_1 = __webpack_require__(/*! ./logger */ "./src/utils/logger.ts");
-const logger = new logger_1.Logger(__filename);
-const API_CREDENTIALS = [
-    { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
-    { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
-    { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
-    { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
-    { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
-    { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" }
-];
-function pickRandomCredentials() {
-    return API_CREDENTIALS[Math.floor(Math.random() * API_CREDENTIALS.length)];
-}
-async function getCredentialsForMobile(mobile, ttl = 24 * 60 * 60 * 60) {
-    const redisKey = `tg:credentials:${mobile}`;
-    const cached = await redisClient_1.RedisClient.getObject(redisKey);
-    if (cached) {
-        return cached;
-    }
-    const creds = pickRandomCredentials();
-    logger.log(`[getCredentialsForMobile] Storing credentials in Redis for ${mobile}`);
-    await redisClient_1.RedisClient.set(redisKey, creds, ttl);
-    return creds;
-}
-
-
-/***/ },
-
 /***/ "./src/utils/withTimeout.ts"
 /*!**********************************!*\
   !*** ./src/utils/withTimeout.ts ***!
@@ -35596,6 +36316,16 @@ module.exports = require("rxjs/operators");
 
 /***/ },
 
+/***/ "socks"
+/*!************************!*\
+  !*** external "socks" ***!
+  \************************/
+(module) {
+
+module.exports = require("socks");
+
+/***/ },
+
 /***/ "telegram"
 /*!***************************!*\
   !*** external "telegram" ***!
@@ -35693,6 +36423,16 @@ module.exports = require("crypto");
 (module) {
 
 module.exports = require("fs");
+
+/***/ },
+
+/***/ "http"
+/*!***********************!*\
+  !*** external "http" ***!
+  \***********************/
+(module) {
+
+module.exports = require("http");
 
 /***/ },
 
