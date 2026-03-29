@@ -6601,6 +6601,67 @@
         ]
       }
     },
+    "/ip-management/proxy-ips/next": {
+      "get": {
+        "description": "Serves the next active proxy IP using global round-robin. Optionally filter by clientId (falls back to full pool if no client IPs found), countryCode, or protocol.",
+        "operationId": "IpManagementController_getNextIp",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Client ID to prefer IPs assigned to this client",
+            "schema": {
+              "example": "client1",
+              "type": "string"
+            }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "description": "ISO country code filter",
+            "schema": {
+              "example": "US",
+              "type": "string"
+            }
+          },
+          {
+            "name": "protocol",
+            "required": false,
+            "in": "query",
+            "description": "Protocol filter",
+            "schema": {
+              "enum": [
+                "http",
+                "https",
+                "socks5"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Next proxy IP served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyIp"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No active proxy IPs available"
+          }
+        },
+        "summary": "Get next available proxy IP (round-robin)",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
     "/ip-management/proxy-ips/{ipAddress}/{port}": {
       "put": {
         "operationId": "IpManagementController_updateProxyIp",
@@ -6750,6 +6811,21 @@
         ]
       }
     },
+    "/ip-management/stats": {
+      "get": {
+        "operationId": "IpManagementController_getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Stats retrieved successfully"
+          }
+        },
+        "summary": "Get IP pool statistics including source breakdown",
+        "tags": [
+          "IP Management"
+        ]
+      }
+    },
     "/ip-management/clients/{clientId}/assigned-ips": {
       "get": {
         "operationId": "IpManagementController_getClientAssignedIps",
@@ -6797,6 +6873,137 @@
         "summary": "Get count of available IPs",
         "tags": [
           "IP Management"
+        ]
+      }
+    },
+    "/webshare-proxy/status": {
+      "get": {
+        "description": "Returns API key validity, proxy counts in Webshare vs DB, last sync timestamp and errors",
+        "operationId": "WebshareProxyController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebshareStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get Webshare integration status",
+        "tags": [
+          "Webshare Proxy"
+        ]
+      }
+    },
+    "/webshare-proxy/sync": {
+      "post": {
+        "description": "Fetches all proxies from Webshare API and upserts them into the local IP pool. Optionally removes stale proxies no longer in Webshare.",
+        "operationId": "WebshareProxyController_syncProxies",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncProxiesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sync completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Webshare not configured or sync failed"
+          }
+        },
+        "summary": "Sync proxies from Webshare",
+        "tags": [
+          "Webshare Proxy"
+        ]
+      }
+    },
+    "/webshare-proxy/refresh": {
+      "post": {
+        "description": "Triggers Webshare to refresh their proxy list, waits briefly, then syncs the updated list to local DB",
+        "operationId": "WebshareProxyController_refreshAndSync",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Refresh and sync completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Refresh proxy list on Webshare and sync",
+        "tags": [
+          "Webshare Proxy"
+        ]
+      }
+    },
+    "/webshare-proxy/replace": {
+      "post": {
+        "description": "Marks the proxy as inactive locally and requests Webshare to provide a replacement. Only works for proxies sourced from Webshare.",
+        "operationId": "WebshareProxyController_replaceProxy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceProxyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replacement result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplaceResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Replace a dead Webshare proxy",
+        "tags": [
+          "Webshare Proxy"
+        ]
+      }
+    },
+    "/webshare-proxy/config": {
+      "get": {
+        "description": "Fetches the proxy configuration directly from Webshare API (username, timeout settings, authorized IPs, etc.)",
+        "operationId": "WebshareProxyController_getProxyConfig",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Webshare config retrieved"
+          }
+        },
+        "summary": "Get current Webshare proxy configuration",
+        "tags": [
+          "Webshare Proxy"
         ]
       }
     },
@@ -12966,6 +13173,16 @@
             "type": "boolean",
             "description": "Whether the channel is private",
             "example": false
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "Starred status",
+            "default": false
+          },
+          "score": {
+            "type": "number",
+            "description": "Channel score",
+            "default": 0
           }
         },
         "required": [
@@ -13050,6 +13267,16 @@
             "type": "boolean",
             "description": "Whether the channel is private",
             "example": false
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "Starred status",
+            "default": false
+          },
+          "score": {
+            "type": "number",
+            "description": "Channel score",
+            "default": 0
           }
         }
       },
@@ -13480,10 +13707,39 @@
               "inactive"
             ]
           },
+          "isAssigned": {
+            "type": "boolean",
+            "example": false,
+            "description": "Whether this IP is currently assigned"
+          },
           "assignedToClient": {
             "type": "string",
             "example": "client1",
             "description": "Client ID that owns this IP"
+          },
+          "source": {
+            "type": "string",
+            "example": "manual",
+            "description": "Source of the proxy",
+            "enum": [
+              "manual",
+              "webshare"
+            ]
+          },
+          "webshareId": {
+            "type": "string",
+            "example": "abc123",
+            "description": "Webshare proxy ID"
+          },
+          "countryCode": {
+            "type": "string",
+            "example": "US",
+            "description": "Country code"
+          },
+          "cityName": {
+            "type": "string",
+            "example": "New York",
+            "description": "City name"
           }
         },
         "required": [
@@ -13543,6 +13799,50 @@
             "type": "string",
             "example": "client1",
             "description": "Client ID that owns this IP"
+          },
+          "source": {
+            "type": "string",
+            "example": "manual",
+            "description": "Source of the proxy",
+            "enum": [
+              "manual",
+              "webshare"
+            ]
+          },
+          "webshareId": {
+            "type": "string",
+            "example": "abc123",
+            "description": "Webshare proxy ID for replacement API"
+          },
+          "countryCode": {
+            "type": "string",
+            "example": "US",
+            "description": "ISO 3166-1 two-letter country code"
+          },
+          "cityName": {
+            "type": "string",
+            "example": "New York",
+            "description": "City name of the proxy location"
+          },
+          "lastVerified": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last time the proxy was verified healthy"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Last time the proxy was served via getNextIp"
+          },
+          "consecutiveFails": {
+            "type": "number",
+            "example": 0,
+            "description": "Number of consecutive health check failures"
+          },
+          "roundRobinIndex": {
+            "type": "number",
+            "example": 0,
+            "description": "Index used for round-robin ordering"
           }
         },
         "required": [
@@ -13553,7 +13853,15 @@
           "password",
           "status",
           "isAssigned",
-          "assignedToClient"
+          "assignedToClient",
+          "source",
+          "webshareId",
+          "countryCode",
+          "cityName",
+          "lastVerified",
+          "lastUsed",
+          "consecutiveFails",
+          "roundRobinIndex"
         ]
       },
       "UpdateProxyIpDto": {
@@ -13598,12 +13906,171 @@
               "inactive"
             ]
           },
+          "isAssigned": {
+            "type": "boolean",
+            "example": false,
+            "description": "Whether this IP is currently assigned"
+          },
           "assignedToClient": {
             "type": "string",
             "example": "client1",
             "description": "Client ID that owns this IP"
+          },
+          "source": {
+            "type": "string",
+            "example": "manual",
+            "description": "Source of the proxy",
+            "enum": [
+              "manual",
+              "webshare"
+            ]
+          },
+          "webshareId": {
+            "type": "string",
+            "example": "abc123",
+            "description": "Webshare proxy ID"
+          },
+          "countryCode": {
+            "type": "string",
+            "example": "US",
+            "description": "Country code"
+          },
+          "cityName": {
+            "type": "string",
+            "example": "New York",
+            "description": "City name"
           }
         }
+      },
+      "WebshareStatusDto": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "example": true
+          },
+          "apiKeyValid": {
+            "type": "boolean",
+            "example": true
+          },
+          "totalProxiesInWebshare": {
+            "type": "number",
+            "example": 100
+          },
+          "totalProxiesInDb": {
+            "type": "number",
+            "example": 95
+          },
+          "lastSyncAt": {
+            "type": "string",
+            "example": "2026-03-29T10:00:00Z"
+          },
+          "lastSyncError": {
+            "type": "string",
+            "example": null
+          }
+        },
+        "required": [
+          "configured",
+          "apiKeyValid",
+          "totalProxiesInWebshare",
+          "totalProxiesInDb"
+        ]
+      },
+      "SyncProxiesDto": {
+        "type": "object",
+        "properties": {
+          "removeStale": {
+            "type": "boolean",
+            "description": "Whether to remove proxies from DB that are no longer in the Webshare list",
+            "example": true,
+            "default": true
+          }
+        }
+      },
+      "SyncResultDto": {
+        "type": "object",
+        "properties": {
+          "totalFetched": {
+            "type": "number",
+            "example": 100
+          },
+          "created": {
+            "type": "number",
+            "example": 80
+          },
+          "updated": {
+            "type": "number",
+            "example": 15
+          },
+          "removed": {
+            "type": "number",
+            "example": 5
+          },
+          "errors": {
+            "example": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "durationMs": {
+            "type": "number",
+            "example": 2345
+          }
+        },
+        "required": [
+          "totalFetched",
+          "created",
+          "updated",
+          "removed",
+          "errors",
+          "durationMs"
+        ]
+      },
+      "ReplaceProxyDto": {
+        "type": "object",
+        "properties": {
+          "ipAddress": {
+            "type": "string",
+            "description": "IP address of the proxy to replace",
+            "example": "1.2.3.4"
+          },
+          "port": {
+            "type": "number",
+            "description": "Port of the proxy to replace",
+            "example": 8080
+          },
+          "preferredCountry": {
+            "type": "string",
+            "description": "Preferred country code for replacement",
+            "example": "US"
+          }
+        },
+        "required": [
+          "ipAddress",
+          "port"
+        ]
+      },
+      "ReplaceResultDto": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Replacement initiated"
+          },
+          "replacementId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ]
       },
       "CreateUserDataDto": {
         "type": "object",
@@ -14165,11 +14632,6 @@
             "description": "Indicates if the channel can send messages",
             "example": true
           },
-          "megagroup": {
-            "type": "boolean",
-            "description": "Whether the channel is a megagroup",
-            "example": null
-          },
           "participantsCount": {
             "type": "number",
             "description": "Number of participants in the channel",
@@ -14204,6 +14666,48 @@
             "type": "boolean",
             "default": false,
             "example": false
+          },
+          "megagroup": {
+            "type": "boolean",
+            "description": "Whether the channel is a megagroup",
+            "default": true
+          },
+          "reactRestricted": {
+            "type": "boolean",
+            "description": "Whether react is restricted",
+            "default": false
+          },
+          "wordRestriction": {
+            "type": "number",
+            "description": "Word restriction count",
+            "default": 0
+          },
+          "dMRestriction": {
+            "type": "number",
+            "description": "DM restriction count",
+            "default": 0
+          },
+          "availableMsgs": {
+            "description": "Available messages",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "banned": {
+            "type": "boolean",
+            "description": "Whether the channel is banned",
+            "default": false
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "Starred status",
+            "default": false
+          },
+          "score": {
+            "type": "number",
+            "description": "Channel score",
+            "default": 0
           }
         },
         "required": [
@@ -14231,11 +14735,6 @@
             "description": "Indicates if the channel can send messages",
             "example": true
           },
-          "megagroup": {
-            "type": "boolean",
-            "description": "Whether the channel is a megagroup",
-            "example": null
-          },
           "participantsCount": {
             "type": "number",
             "description": "Number of participants in the channel",
@@ -14270,6 +14769,48 @@
             "type": "boolean",
             "default": false,
             "example": false
+          },
+          "megagroup": {
+            "type": "boolean",
+            "description": "Whether the channel is a megagroup",
+            "default": true
+          },
+          "reactRestricted": {
+            "type": "boolean",
+            "description": "Whether react is restricted",
+            "default": false
+          },
+          "wordRestriction": {
+            "type": "number",
+            "description": "Word restriction count",
+            "default": 0
+          },
+          "dMRestriction": {
+            "type": "number",
+            "description": "DM restriction count",
+            "default": 0
+          },
+          "availableMsgs": {
+            "description": "Available messages",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "banned": {
+            "type": "boolean",
+            "description": "Whether the channel is banned",
+            "default": false
+          },
+          "starred": {
+            "type": "boolean",
+            "description": "Starred status",
+            "default": false
+          },
+          "score": {
+            "type": "number",
+            "description": "Channel score",
+            "default": 0
           }
         }
       },

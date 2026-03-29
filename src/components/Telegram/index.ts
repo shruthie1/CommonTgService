@@ -2,8 +2,12 @@ export * from './Telegram.controller';
 export * from './Telegram.service';
 export * from './Telegram.module';
 export * from './manager';
-export * from './dto/update-profile.dto';
-export * from './dto/channel-operation.dto';
+export * from './dto';
 export * from './utils/connection-manager';
 export * from './utils/telegram-logger';
 export * from './utils/rate-limiter';
+export * from './utils/generateTGConfig';
+
+// Types and platform utilities from tg-config (not the low-level generateTGConfig which collides)
+export type { TGPlatformConfig, TGProxyConfig, TGClientConfig } from './utils/tg-config';
+export { getAvailablePlatforms, getPlatformConfig } from './utils/tg-config';

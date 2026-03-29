@@ -1,6 +1,6 @@
 import { TelegramClientParams } from "telegram/client/telegramBaseClient";
 import { ProxyInterface } from "telegram/network/connection/TCPMTProxy";
-import { generateTGConfig as generateRealisticConfig, stableHash, type TGClientConfig } from "./tg-config";
+import { generateTGConfig as generateRealisticConfig, type TGClientConfig } from "./tg-config";
 import { SocksClient } from "socks";
 import https from "https";
 import http from "http";
@@ -59,20 +59,8 @@ export function isSocksError(err: unknown): boolean {
 }
 
 // ════════════════════════════════════════════════════════════
-// CMS API — direct HTTP (bypasses global proxy)
+// IP Management API — direct HTTP (bypasses global proxy)
 // ════════════════════════════════════════════════════════════
-
-interface ApiProxyEntry {
-  _id: string;
-  ipAddress: string;
-  port: number;
-  protocol: string;
-  username: string;
-  password: string;
-  status: "active" | "inactive";
-  isAssigned: boolean;
-  assignedToClient: string;
-}
 
 function directRequest(
   url: string,
@@ -113,21 +101,35 @@ function getApiConfig() {
   };
 }
 
-async function fetchClientProxies(clientId: string): Promise<ApiProxyEntry[]> {
+/**
+ * Fetch the next available proxy via round-robin from IP Management /next endpoint.
+ * Optionally filters by clientId (falls back to full pool if no client IPs found).
+ */
+async function fetchNextProxy(clientId?: string): Promise<ProxyInterface> {
   const { baseUrl, apiKey, timeout } = getApiConfig();
-  const url = `${baseUrl}/clients/${clientId}/assigned-ips`;
-  logger.debug("Fetching proxies", { url, clientId });
+  const params = new URLSearchParams();
+  if (clientId) params.set("clientId", clientId);
+  params.set("protocol", "socks5");
+  const url = `${baseUrl}/proxy-ips/next${params.toString() ? `?${params}` : ""}`;
+  logger.debug("Fetching next proxy", { url, clientId });
 
   const { status, data } = await directRequest(url, {
     headers: { "x-api-key": apiKey },
     timeout,
   });
 
-  if (status !== 200 || !Array.isArray(data)) {
-    throw new Error(`API status ${status} for client "${clientId}"`);
+  if (status !== 200 || !data || !data.ipAddress) {
+    throw new Error(`API /next status ${status}${clientId ? ` for client "${clientId}"` : ""}`);
   }
 
-  return data.filter((p: ApiProxyEntry) => p.status === "active");
+  return {
+    ip: data.ipAddress,
+    port: data.port,
+    socksType: 5 as 5,
+    username: data.username,
+    password: data.password,
+    timeout: envInt("PROXY_TIMEOUT", 10),
+  };
 }
 
 async function reportProxyInactive(ip: string, port: number): Promise<boolean> {
@@ -148,17 +150,6 @@ async function reportProxyInactive(ip: string, port: number): Promise<boolean> {
     logger.error("Failed to report to API", { ip, port, error: err.message });
     return false;
   }
-}
-
-function apiEntryToProxy(entry: ApiProxyEntry): ProxyInterface {
-  return {
-    ip: entry.ipAddress,
-    port: entry.port,
-    socksType: 5 as 5,
-    username: entry.username,
-    password: entry.password,
-    timeout: envInt("PROXY_TIMEOUT", 10),
-  };
 }
 
 function proxyKey(p: { ip: string; port: number }): string {
@@ -250,44 +241,21 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
     return proxy;
   }
 
-  // 2. Own client proxies from API
+  // 2. Round-robin from IP Management /next (handles clientId → shared fallback internally)
   const { clientId } = getApiConfig();
-  if (clientId) {
-    try {
-      const entries = await fetchClientProxies(clientId);
-      if (entries.length > 0) {
-        const seed = `${mobile}-${clientId}`;
-        const selected = apiEntryToProxy(entries[stableHash(seed) % entries.length]);
-        try { await RedisClient.set(mapKey, selected, 0); } catch (e: any) {
-          logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
-        }
-        logger.info("Assigned proxy from own client", { mobile, ip: selected.ip, client: clientId });
-        _registerMobile(mobile, selected);
-        return selected;
-      }
-    } catch (err: any) {
-      logger.warn("Own client API failed", { mobile, clientId, error: err.message });
-    }
-  }
-
-  // 3. Shared pool from API
   try {
-    const shared = await fetchClientProxies("shared");
-    if (shared.length > 0) {
-      const seed = `${mobile}-shared`;
-      const selected = apiEntryToProxy(shared[stableHash(seed) % shared.length]);
-      try { await RedisClient.set(mapKey, selected, 0); } catch (e: any) {
-        logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
-      }
-      logger.info("Assigned proxy from shared pool", { mobile, ip: selected.ip });
-      _registerMobile(mobile, selected);
-      return selected;
+    const proxy = await fetchNextProxy(clientId || undefined);
+    try { await RedisClient.set(mapKey, proxy, 0); } catch (e: any) {
+      logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
     }
+    logger.info("Assigned proxy via /next", { mobile, ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
+    _registerMobile(mobile, proxy);
+    return proxy;
   } catch (err: any) {
-    logger.warn("Shared pool API failed", { mobile, error: err.message });
+    logger.warn("IP Management /next failed", { mobile, error: err.message });
   }
 
-  // 4. Env fallback
+  // 3. Env fallback
   const envProxy = resolveProxyFromEnv();
   if (envProxy) {
     try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
@@ -296,7 +264,7 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
     return envProxy;
   }
 
-  throw new Error("No proxies available from API (own/shared) or env");
+  throw new Error("No proxies available from /next or env");
 }
 
 /**
@@ -319,9 +287,9 @@ export async function getProxyForMobile(mobile: string): Promise<ProxyInterface>
 
 /**
  * Manually rotate proxy for mobile.
- * Tries own client → shared pool → env.
- * Skips the dead proxy if only one exists.
- * Invalidates config cache — fingerprint stays same on next generateTGConfig.
+ * Uses /next round-robin to get a different proxy.
+ * Retries up to MAX_ROTATION_ATTEMPTS to avoid getting the same dead proxy.
+ * Updates config cache — fingerprint stays intact.
  */
 export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
   if (!mobile) throw new Error("mobile is required");
@@ -330,44 +298,25 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
   const { clientId } = getApiConfig();
   const currentKey = current ? proxyKey(current) : "";
 
-  // Collect all available proxies: own client + shared
-  const allEntries: ApiProxyEntry[] = [];
-  if (clientId) {
+  // Try /next up to 3 times to get a different proxy than the dead one
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      allEntries.push(...await fetchClientProxies(clientId));
+      const candidate = await fetchNextProxy(clientId || undefined);
+      if (proxyKey(candidate) !== currentKey) {
+        try { await RedisClient.set(mapKey, candidate, 0); } catch { }
+        await updateCachedProxy(mobile, candidate);
+        logger.info("Rotated proxy", { mobile, from: current?.ip, to: candidate.ip, port: candidate.port, attempt });
+        _registerMobile(mobile, candidate);
+        return candidate;
+      }
+      logger.debug("Got same proxy from /next, retrying", { mobile, attempt, ip: candidate.ip });
     } catch (err: any) {
-      logger.warn("Own client API failed during rotation", { mobile, error: err.message });
+      logger.warn("IP Management /next failed during rotation", { mobile, attempt, error: err.message });
     }
   }
-  try {
-    allEntries.push(...await fetchClientProxies("shared"));
-  } catch (err: any) {
-    logger.warn("Shared pool API failed during rotation", { mobile, error: err.message });
-  }
 
-  // Deduplicate by ip:port
-  const seen = new Set<string>();
-  const unique = allEntries.filter((e) => {
-    const key = proxyKey({ ip: e.ipAddress, port: e.port });
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  // Filter out the dead proxy
-  const candidates = unique.filter((e) => proxyKey({ ip: e.ipAddress, port: e.port }) !== currentKey);
-
-  if (candidates.length > 0) {
-    // Pick next available (not the dead one)
-    const chosen = apiEntryToProxy(candidates[stableHash(mobile) % candidates.length]);
-    try { await RedisClient.set(mapKey, chosen, 0); } catch { }
-    await updateCachedProxy(mobile, chosen);
-    logger.info("Rotated proxy", { mobile, from: current?.ip, to: chosen.ip, port: chosen.port, source: "api" });
-    _registerMobile(mobile, chosen);
-    return chosen;
-  }
-
-  // No candidates from API — try env fallback
+  // Env fallback
   const envProxy = resolveProxyFromEnv();
   if (envProxy && proxyKey(envProxy) !== currentKey) {
     try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
@@ -377,7 +326,6 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
     return envProxy;
   }
 
-  // Nothing available — log and throw (don't store dead proxy back)
   logger.error("No alternative proxy available for rotation", { mobile, deadProxy: current?.ip });
   throw new Error(`No alternative proxy available for mobile ${mobile}`);
 }

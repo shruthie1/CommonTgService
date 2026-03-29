@@ -1,14 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, IsArray, IsBoolean, Min, Max, IsEnum } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-
-export enum MediaType {
-    PHOTO = 'photo',
-    VIDEO = 'video',
-    DOCUMENT = 'document',
-    VOICE = 'voice',
-    ALL = 'all' // Special value to get all types grouped
-}
+import { MediaType } from './media-operations.dto';
 
 export class MediaItemDto {
     @ApiProperty({ description: 'Message ID', example: 12345 })

@@ -7,7 +7,8 @@ export enum MediaType {
   VIDEO = 'video',
   DOCUMENT = 'document',
   VOICE = 'voice',
-  AUDIO = 'audio'
+  AUDIO = 'audio',
+  ALL = 'all',
 }
 
 // Base class for media operations
