@@ -11528,6 +11528,10 @@ function isProxyEnabled() {
     const val = (process.env.PROXY_ENABLED || "false").toLowerCase();
     return ["true", "1", "yes", "on"].includes(val);
 }
+function isHealthCheckEnabled() {
+    const val = (process.env.PROXY_HEALTH_CHECK_ENABLED || "false").toLowerCase();
+    return ["true", "1", "yes", "on"].includes(val);
+}
 function envInt(key, fallback) {
     const v = process.env[key];
     if (v === undefined || v === "")
@@ -11805,7 +11809,7 @@ function _registerMobile(mobile, proxy) {
         status: "healthy",
     });
     logger.debug("Mobile registered for health monitoring", { mobile, ip: proxy.ip, port: proxy.port, totalTracked: _activeMap.size });
-    if (!_healthInterval && isProxyEnabled()) {
+    if (!_healthInterval && isProxyEnabled() && isHealthCheckEnabled()) {
         const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
         if (interval > 0) {
             _startHealthMonitor(interval);
@@ -11828,7 +11832,7 @@ function _startHealthMonitor(intervalMs) {
             return;
         if (_isHandlingDeath)
             return;
-        if (!isProxyEnabled()) {
+        if (!isProxyEnabled() || !isHealthCheckEnabled()) {
             stopHealthMonitor();
             return;
         }
@@ -11914,7 +11918,7 @@ async function _handleProxyDeath(deadProxy, affectedMobiles) {
         logger.error("Unexpected error in _handleProxyDeath", { error: err.message });
         _isHandlingDeath = false;
         const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
-        if (interval > 0 && isProxyEnabled()) {
+        if (interval > 0 && isProxyEnabled() && isHealthCheckEnabled()) {
             _startHealthMonitor(interval);
         }
     }
