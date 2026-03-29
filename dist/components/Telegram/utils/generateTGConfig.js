@@ -25,6 +25,7 @@ const redisClient_1 = require("../../../utils/redisClient");
 const logger = new utils_1.Logger("TGConfig");
 const PROXY_MAP_PREFIX = "tg:proxy_map:";
 const CONFIG_PREFIX = "tg:config:";
+const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 365 * 0.5;
 const _directHttpsAgent = new https_1.default.Agent({ keepAlive: true, timeout: 10000 });
 const _directHttpAgent = new http_1.default.Agent({ keepAlive: true, timeout: 10000 });
 function isProxyEnabled() {
@@ -528,7 +529,7 @@ function cachedToResult(cached) {
     const { _apiId, _apiHash, ...params } = cached;
     return { apiId: _apiId, apiHash: _apiHash, params: params };
 }
-async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
+async function generateTGConfig(mobile, ttl = CONFIG_TTL_SECONDS) {
     logger.debug("Generating config", { mobile, ttl });
     const redisKey = `${CONFIG_PREFIX}${mobile}`;
     const proxiesEnabled = isProxyEnabled();
@@ -551,10 +552,6 @@ async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
         }
         if (!proxiesEnabled && cached.proxy) {
             const { proxy: _, ...withoutProxy } = cached;
-            try {
-                await redisClient_1.RedisClient.set(redisKey, withoutProxy, ttl);
-            }
-            catch { }
             return cachedToResult(withoutProxy);
         }
         if (proxiesEnabled && cached.proxy) {
@@ -604,7 +601,7 @@ async function generateTGConfig(mobile, ttl = 60 * 60 * 24 * 60) {
     });
     return cachedToResult(toStore);
 }
-async function updateCachedProxy(mobile, proxy, ttl = 60 * 60 * 24 * 60) {
+async function updateCachedProxy(mobile, proxy, ttl = CONFIG_TTL_SECONDS) {
     const redisKey = `${CONFIG_PREFIX}${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(redisKey);
     if (!cached || !cached._apiId) {
