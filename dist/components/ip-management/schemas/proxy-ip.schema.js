@@ -47,7 +47,7 @@ __decorate([
 ], ProxyIp.prototype, "status", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned to a mobile number' }),
-    (0, mongoose_1.Prop)({ required: true, default: false }),
+    (0, mongoose_1.Prop)({ required: false, default: false }),
     __metadata("design:type", Boolean)
 ], ProxyIp.prototype, "isAssigned", void 0);
 __decorate([
@@ -55,6 +55,46 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "assignedToClient", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'] }),
+    (0, mongoose_1.Prop)({ required: false, default: 'manual', enum: ['manual', 'webshare'] }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "source", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'abc123', description: 'Webshare proxy ID for replacement API' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "webshareId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'ISO 3166-1 two-letter country code' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "countryCode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'New York', description: 'City name of the proxy location' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "cityName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time the proxy was verified healthy' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], ProxyIp.prototype, "lastVerified", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time the proxy was served via getNextIp' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], ProxyIp.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'Number of consecutive health check failures' }),
+    (0, mongoose_1.Prop)({ required: false, default: 0 }),
+    __metadata("design:type", Number)
+], ProxyIp.prototype, "consecutiveFails", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'Index used for round-robin ordering' }),
+    (0, mongoose_1.Prop)({ required: false, default: 0 }),
+    __metadata("design:type", Number)
+], ProxyIp.prototype, "roundRobinIndex", void 0);
 exports.ProxyIp = ProxyIp = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'proxy_ips',
@@ -73,4 +113,7 @@ exports.ProxyIpSchema = mongoose_1.SchemaFactory.createForClass(ProxyIp);
 exports.ProxyIpSchema.index({ ipAddress: 1, port: 1 }, { unique: true });
 exports.ProxyIpSchema.index({ status: 1, isAssigned: 1 });
 exports.ProxyIpSchema.index({ assignedToClient: 1 });
+exports.ProxyIpSchema.index({ source: 1 });
+exports.ProxyIpSchema.index({ status: 1, lastUsed: 1 });
+exports.ProxyIpSchema.index({ webshareId: 1 }, { sparse: true });
 //# sourceMappingURL=proxy-ip.schema.js.map

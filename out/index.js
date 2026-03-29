@@ -498,6 +498,7 @@ const timestamp_module_1 = __webpack_require__(/*! ./components/timestamps/times
 const dynamic_data_module_1 = __webpack_require__(/*! ./components/dynamic-data/dynamic-data.module */ "./src/components/dynamic-data/dynamic-data.module.ts");
 const session_manager_1 = __webpack_require__(/*! ./components/session-manager */ "./src/components/session-manager/index.ts");
 const ip_management_module_1 = __webpack_require__(/*! ./components/ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
+const webshare_proxy_module_1 = __webpack_require__(/*! ./components/webshare-proxy/webshare-proxy.module */ "./src/components/webshare-proxy/webshare-proxy.module.ts");
 const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const guards_1 = __webpack_require__(/*! ./guards */ "./src/guards/index.ts");
 const components_1 = __webpack_require__(/*! ./components */ "./src/components/index.ts");
@@ -518,6 +519,7 @@ exports.AppModule = AppModule = __decorate([
             client_module_1.ClientModule,
             session_manager_1.SessionModule,
             ip_management_module_1.IpManagementModule,
+            webshare_proxy_module_1.WebshareProxyModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,
@@ -5217,23 +5219,27 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AdminPermission = exports.MediaType = exports.BatchOperationType = void 0;
 __exportStar(__webpack_require__(/*! ../manager/types */ "./src/components/Telegram/manager/types.ts"), exports);
 __exportStar(__webpack_require__(/*! ./batch-operations.dto */ "./src/components/Telegram/dto/batch-operations.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./media-operations.dto */ "./src/components/Telegram/dto/media-operations.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./schedule-operations.dto */ "./src/components/Telegram/dto/schedule-operations.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./metadata-operations.dto */ "./src/components/Telegram/dto/metadata-operations.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./group-operations.dto */ "./src/components/Telegram/dto/group-operations.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./channel-operation.dto */ "./src/components/Telegram/dto/channel-operation.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./connection-management.dto */ "./src/components/Telegram/dto/connection-management.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./contact-management.dto */ "./src/components/Telegram/dto/contact-management.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./profile-settings.dto */ "./src/components/Telegram/dto/profile-settings.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./view-once-media.dto */ "./src/components/Telegram/dto/view-once-media.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./create-bot.dto */ "./src/components/Telegram/dto/create-bot.dto.ts"), exports);
-var batch_operations_dto_1 = __webpack_require__(/*! ./batch-operations.dto */ "./src/components/Telegram/dto/batch-operations.dto.ts");
-Object.defineProperty(exports, "BatchOperationType", ({ enumerable: true, get: function () { return batch_operations_dto_1.BatchOperationType; } }));
-var media_operations_dto_1 = __webpack_require__(/*! ./media-operations.dto */ "./src/components/Telegram/dto/media-operations.dto.ts");
-Object.defineProperty(exports, "MediaType", ({ enumerable: true, get: function () { return media_operations_dto_1.MediaType; } }));
-var group_operations_dto_1 = __webpack_require__(/*! ./group-operations.dto */ "./src/components/Telegram/dto/group-operations.dto.ts");
-Object.defineProperty(exports, "AdminPermission", ({ enumerable: true, get: function () { return group_operations_dto_1.AdminPermission; } }));
+__exportStar(__webpack_require__(/*! ./create-chat-folder.dto */ "./src/components/Telegram/dto/create-chat-folder.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./delete-chat.dto */ "./src/components/Telegram/dto/delete-chat.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./group-operations.dto */ "./src/components/Telegram/dto/group-operations.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./media-operations.dto */ "./src/components/Telegram/dto/media-operations.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./media-pagination.dto */ "./src/components/Telegram/dto/media-pagination.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./metadata-operations.dto */ "./src/components/Telegram/dto/metadata-operations.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./notification-settings.dto */ "./src/components/Telegram/dto/notification-settings.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./profile-settings.dto */ "./src/components/Telegram/dto/profile-settings.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./response-validation.dto */ "./src/components/Telegram/dto/response-validation.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./schedule-operations.dto */ "./src/components/Telegram/dto/schedule-operations.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./send-message.dto */ "./src/components/Telegram/dto/send-message.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-profile.dto */ "./src/components/Telegram/dto/update-profile.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./update-username.dto */ "./src/components/Telegram/dto/update-username.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./view-once-media.dto */ "./src/components/Telegram/dto/view-once-media.dto.ts"), exports);
 
 
 /***/ },
@@ -5266,6 +5272,7 @@ var MediaType;
     MediaType["DOCUMENT"] = "document";
     MediaType["VOICE"] = "voice";
     MediaType["AUDIO"] = "audio";
+    MediaType["ALL"] = "all";
 })(MediaType || (exports.MediaType = MediaType = {}));
 class BaseMediaOperationDto {
 }
@@ -5395,6 +5402,239 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], VoiceMessageDto.prototype, "caption", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/Telegram/dto/media-pagination.dto.ts"
+/*!*************************************************************!*\
+  !*** ./src/components/Telegram/dto/media-pagination.dto.ts ***!
+  \*************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.MediaMetadataQueryDto = exports.PaginatedMediaResponseDto = exports.MediaGroupDto = exports.MediaFiltersDto = exports.PaginationDto = exports.MediaItemDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+const media_operations_dto_1 = __webpack_require__(/*! ./media-operations.dto */ "./src/components/Telegram/dto/media-operations.dto.ts");
+class MediaItemDto {
+}
+exports.MediaItemDto = MediaItemDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Message ID', example: 12345 }),
+    __metadata("design:type", Number)
+], MediaItemDto.prototype, "messageId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID', example: 'me' }),
+    __metadata("design:type", String)
+], MediaItemDto.prototype, "chatId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
+    __metadata("design:type", String)
+], MediaItemDto.prototype, "type", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Message date (Unix timestamp)', example: 1704067200 }),
+    __metadata("design:type", Number)
+], MediaItemDto.prototype, "date", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Caption text', example: 'Beautiful sunset' }),
+    __metadata("design:type", String)
+], MediaItemDto.prototype, "caption", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'File size in bytes', example: 1024000 }),
+    __metadata("design:type", Number)
+], MediaItemDto.prototype, "fileSize", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'MIME type', example: 'image/jpeg' }),
+    __metadata("design:type", String)
+], MediaItemDto.prototype, "mimeType", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filename', example: 'photo.jpg' }),
+    __metadata("design:type", String)
+], MediaItemDto.prototype, "filename", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Thumbnail (base64 encoded)', example: 'data:image/jpeg;base64,...' }),
+    __metadata("design:type", String)
+], MediaItemDto.prototype, "thumbnail", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Width in pixels (for images/videos)', example: 1920 }),
+    __metadata("design:type", Number)
+], MediaItemDto.prototype, "width", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Height in pixels (for images/videos)', example: 1080 }),
+    __metadata("design:type", Number)
+], MediaItemDto.prototype, "height", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Duration in seconds (for video/voice)', example: 120 }),
+    __metadata("design:type", Number)
+], MediaItemDto.prototype, "duration", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Additional media details' }),
+    __metadata("design:type", Object)
+], MediaItemDto.prototype, "mediaDetails", void 0);
+class PaginationDto {
+}
+exports.PaginationDto = PaginationDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Current page number (1-indexed)', example: 1 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "page", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Items per page', example: 50 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total number of items in current page', example: 50 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "total", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total number of pages (if known, -1 for unknown)', example: 5 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "totalPages", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether there are more items available', example: true }),
+    __metadata("design:type", Boolean)
+], PaginationDto.prototype, "hasMore", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)', example: 12345 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "nextMaxId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for previous page', example: 12000 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "prevMaxId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First message ID in current page', example: 12345 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "firstMessageId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last message ID in current page', example: 12300 }),
+    __metadata("design:type", Number)
+], PaginationDto.prototype, "lastMessageId", void 0);
+class MediaFiltersDto {
+}
+exports.MediaFiltersDto = MediaFiltersDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID', example: 'me' }),
+    __metadata("design:type", String)
+], MediaFiltersDto.prototype, "chatId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: media_operations_dto_1.MediaType, example: ['photo', 'video'] }),
+    __metadata("design:type", Array)
+], MediaFiltersDto.prototype, "types", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date filter (ISO 8601)', example: '2024-01-01' }),
+    __metadata("design:type", String)
+], MediaFiltersDto.prototype, "startDate", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'End date filter (ISO 8601)', example: '2024-12-31' }),
+    __metadata("design:type", String)
+], MediaFiltersDto.prototype, "endDate", void 0);
+class MediaGroupDto {
+}
+exports.MediaGroupDto = MediaGroupDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
+    __metadata("design:type", String)
+], MediaGroupDto.prototype, "type", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Number of items of this type', example: 25 }),
+    __metadata("design:type", Number)
+], MediaGroupDto.prototype, "count", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Media items of this type', type: [MediaItemDto] }),
+    __metadata("design:type", Array)
+], MediaGroupDto.prototype, "items", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pagination information for this type', type: PaginationDto }),
+    __metadata("design:type", PaginationDto)
+], MediaGroupDto.prototype, "pagination", void 0);
+class PaginatedMediaResponseDto {
+}
+exports.PaginatedMediaResponseDto = PaginatedMediaResponseDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Array of media items (when single type or multiple types without grouping)', type: [MediaItemDto] }),
+    __metadata("design:type", Array)
+], PaginatedMediaResponseDto.prototype, "data", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Media grouped by type (when "all" is in types)', type: [MediaGroupDto] }),
+    __metadata("design:type", Array)
+], PaginatedMediaResponseDto.prototype, "groups", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pagination information (for single type or overall)', type: PaginationDto }),
+    __metadata("design:type", PaginationDto)
+], PaginatedMediaResponseDto.prototype, "pagination", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Applied filters', type: MediaFiltersDto }),
+    __metadata("design:type", MediaFiltersDto)
+], PaginatedMediaResponseDto.prototype, "filters", void 0);
+class MediaMetadataQueryDto {
+}
+exports.MediaMetadataQueryDto = MediaMetadataQueryDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID or username', example: 'me' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], MediaMetadataQueryDto.prototype, "chatId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: media_operations_dto_1.MediaType, isArray: true, example: ['photo', 'video'] }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsEnum)(media_operations_dto_1.MediaType, { each: true }),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (typeof value === 'string') {
+            return value.split(',').map(v => v.trim());
+        }
+        return Array.isArray(value) ? value : [value];
+    }),
+    __metadata("design:type", Array)
+], MediaMetadataQueryDto.prototype, "types", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date (ISO 8601)', example: '2024-01-01' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], MediaMetadataQueryDto.prototype, "startDate", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'End date (ISO 8601)', example: '2024-12-31' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], MediaMetadataQueryDto.prototype, "endDate", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum number of items (1-1000)', example: 50, minimum: 1, maximum: 1000 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(1000),
+    __metadata("design:type", Number)
+], MediaMetadataQueryDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)', example: 12345 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], MediaMetadataQueryDto.prototype, "maxId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Minimum message ID to include', example: 1000 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], MediaMetadataQueryDto.prototype, "minId", void 0);
 
 
 /***/ },
@@ -5747,6 +5987,75 @@ __decorate([
 
 /***/ },
 
+/***/ "./src/components/Telegram/dto/notification-settings.dto.ts"
+/*!******************************************************************!*\
+  !*** ./src/components/Telegram/dto/notification-settings.dto.ts ***!
+  \******************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ChatNotificationSettingsDto = exports.NotificationSettingsDto = exports.NotificationSound = void 0;
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+var NotificationSound;
+(function (NotificationSound) {
+    NotificationSound["DEFAULT"] = "default";
+    NotificationSound["NONE"] = "none";
+    NotificationSound["CUSTOM"] = "custom";
+})(NotificationSound || (exports.NotificationSound = NotificationSound = {}));
+class NotificationSettingsDto {
+}
+exports.NotificationSettingsDto = NotificationSettingsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Show message previews in notifications', default: true }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], NotificationSettingsDto.prototype, "showPreviews", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Silent notifications', default: false }),
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], NotificationSettingsDto.prototype, "silent", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Notification sound', enum: NotificationSound, default: NotificationSound.DEFAULT }),
+    (0, class_validator_1.IsEnum)(NotificationSound),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], NotificationSettingsDto.prototype, "sound", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Mute until specific timestamp', required: false }),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Number)
+], NotificationSettingsDto.prototype, "muteUntil", void 0);
+class ChatNotificationSettingsDto {
+}
+exports.ChatNotificationSettingsDto = ChatNotificationSettingsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID to update settings for' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ChatNotificationSettingsDto.prototype, "chatId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: NotificationSettingsDto }),
+    __metadata("design:type", NotificationSettingsDto)
+], ChatNotificationSettingsDto.prototype, "settings", void 0);
+
+
+/***/ },
+
 /***/ "./src/components/Telegram/dto/profile-settings.dto.ts"
 /*!*************************************************************!*\
   !*** ./src/components/Telegram/dto/profile-settings.dto.ts ***!
@@ -5829,6 +6138,52 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], ProfilePhotoDto.prototype, "name", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/Telegram/dto/response-validation.dto.ts"
+/*!****************************************************************!*\
+  !*** ./src/components/Telegram/dto/response-validation.dto.ts ***!
+  \****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PaginatedResponseDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class PaginatedResponseDto {
+}
+exports.PaginatedResponseDto = PaginatedResponseDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Array of items' }),
+    __metadata("design:type", Array)
+], PaginatedResponseDto.prototype, "items", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total number of items' }),
+    __metadata("design:type", Number)
+], PaginatedResponseDto.prototype, "total", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Current page number' }),
+    __metadata("design:type", Number)
+], PaginatedResponseDto.prototype, "page", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Number of items per page' }),
+    __metadata("design:type", Number)
+], PaginatedResponseDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Has more items to fetch' }),
+    __metadata("design:type", Boolean)
+], PaginatedResponseDto.prototype, "hasMore", void 0);
 
 
 /***/ },
@@ -6192,15 +6547,19 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getPlatformConfig = exports.getAvailablePlatforms = void 0;
 __exportStar(__webpack_require__(/*! ./Telegram.controller */ "./src/components/Telegram/Telegram.controller.ts"), exports);
 __exportStar(__webpack_require__(/*! ./Telegram.service */ "./src/components/Telegram/Telegram.service.ts"), exports);
 __exportStar(__webpack_require__(/*! ./Telegram.module */ "./src/components/Telegram/Telegram.module.ts"), exports);
 __exportStar(__webpack_require__(/*! ./manager */ "./src/components/Telegram/manager/index.ts"), exports);
-__exportStar(__webpack_require__(/*! ./dto/update-profile.dto */ "./src/components/Telegram/dto/update-profile.dto.ts"), exports);
-__exportStar(__webpack_require__(/*! ./dto/channel-operation.dto */ "./src/components/Telegram/dto/channel-operation.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/Telegram/dto/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts"), exports);
 __exportStar(__webpack_require__(/*! ./utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts"), exports);
 __exportStar(__webpack_require__(/*! ./utils/rate-limiter */ "./src/components/Telegram/utils/rate-limiter.ts"), exports);
+__exportStar(__webpack_require__(/*! ./utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts"), exports);
+var tg_config_1 = __webpack_require__(/*! ./utils/tg-config */ "./src/components/Telegram/utils/tg-config.ts");
+Object.defineProperty(exports, "getAvailablePlatforms", ({ enumerable: true, get: function () { return tg_config_1.getAvailablePlatforms; } }));
+Object.defineProperty(exports, "getPlatformConfig", ({ enumerable: true, get: function () { return tg_config_1.getPlatformConfig; } }));
 
 
 /***/ },
@@ -11231,18 +11590,29 @@ function getApiConfig() {
         timeout: envInt("PROXY_API_TIMEOUT", 5000),
     };
 }
-async function fetchClientProxies(clientId) {
+async function fetchNextProxy(clientId) {
     const { baseUrl, apiKey, timeout } = getApiConfig();
-    const url = `${baseUrl}/clients/${clientId}/assigned-ips`;
-    logger.debug("Fetching proxies", { url, clientId });
+    const params = new URLSearchParams();
+    if (clientId)
+        params.set("clientId", clientId);
+    params.set("protocol", "socks5");
+    const url = `${baseUrl}/proxy-ips/next${params.toString() ? `?${params}` : ""}`;
+    logger.debug("Fetching next proxy", { url, clientId });
     const { status, data } = await directRequest(url, {
         headers: { "x-api-key": apiKey },
         timeout,
     });
-    if (status !== 200 || !Array.isArray(data)) {
-        throw new Error(`API status ${status} for client "${clientId}"`);
+    if (status !== 200 || !data || !data.ipAddress) {
+        throw new Error(`API /next status ${status}${clientId ? ` for client "${clientId}"` : ""}`);
     }
-    return data.filter((p) => p.status === "active");
+    return {
+        ip: data.ipAddress,
+        port: data.port,
+        socksType: 5,
+        username: data.username,
+        password: data.password,
+        timeout: envInt("PROXY_TIMEOUT", 10),
+    };
 }
 async function reportProxyInactive(ip, port) {
     const { baseUrl, apiKey, timeout } = getApiConfig();
@@ -11262,16 +11632,6 @@ async function reportProxyInactive(ip, port) {
         logger.error("Failed to report to API", { ip, port, error: err.message });
         return false;
     }
-}
-function apiEntryToProxy(entry) {
-    return {
-        ip: entry.ipAddress,
-        port: entry.port,
-        socksType: 5,
-        username: entry.username,
-        password: entry.password,
-        timeout: envInt("PROXY_TIMEOUT", 10),
-    };
 }
 function proxyKey(p) {
     return p.ip.includes(":") ? `[${p.ip}]:${p.port}` : `${p.ip}:${p.port}`;
@@ -11336,45 +11696,20 @@ async function _resolveProxy(mobile) {
         return proxy;
     }
     const { clientId } = getApiConfig();
-    if (clientId) {
-        try {
-            const entries = await fetchClientProxies(clientId);
-            if (entries.length > 0) {
-                const seed = `${mobile}-${clientId}`;
-                const selected = apiEntryToProxy(entries[(0, tg_config_1.stableHash)(seed) % entries.length]);
-                try {
-                    await redisClient_1.RedisClient.set(mapKey, selected, 0);
-                }
-                catch (e) {
-                    logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
-                }
-                logger.info("Assigned proxy from own client", { mobile, ip: selected.ip, client: clientId });
-                _registerMobile(mobile, selected);
-                return selected;
-            }
-        }
-        catch (err) {
-            logger.warn("Own client API failed", { mobile, clientId, error: err.message });
-        }
-    }
     try {
-        const shared = await fetchClientProxies("shared");
-        if (shared.length > 0) {
-            const seed = `${mobile}-shared`;
-            const selected = apiEntryToProxy(shared[(0, tg_config_1.stableHash)(seed) % shared.length]);
-            try {
-                await redisClient_1.RedisClient.set(mapKey, selected, 0);
-            }
-            catch (e) {
-                logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
-            }
-            logger.info("Assigned proxy from shared pool", { mobile, ip: selected.ip });
-            _registerMobile(mobile, selected);
-            return selected;
+        const proxy = await fetchNextProxy(clientId || undefined);
+        try {
+            await redisClient_1.RedisClient.set(mapKey, proxy, 0);
         }
+        catch (e) {
+            logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+        }
+        logger.info("Assigned proxy via /next", { mobile, ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
+        _registerMobile(mobile, proxy);
+        return proxy;
     }
     catch (err) {
-        logger.warn("Shared pool API failed", { mobile, error: err.message });
+        logger.warn("IP Management /next failed", { mobile, error: err.message });
     }
     const envProxy = resolveProxyFromEnv();
     if (envProxy) {
@@ -11386,7 +11721,7 @@ async function _resolveProxy(mobile) {
         _registerMobile(mobile, envProxy);
         return envProxy;
     }
-    throw new Error("No proxies available from API (own/shared) or env");
+    throw new Error("No proxies available from /next or env");
 }
 async function getProxyForMobile(mobile) {
     if (!mobile)
@@ -11407,40 +11742,25 @@ async function rotateProxy(mobile) {
     const current = await redisClient_1.RedisClient.getObject(mapKey);
     const { clientId } = getApiConfig();
     const currentKey = current ? proxyKey(current) : "";
-    const allEntries = [];
-    if (clientId) {
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-            allEntries.push(...await fetchClientProxies(clientId));
+            const candidate = await fetchNextProxy(clientId || undefined);
+            if (proxyKey(candidate) !== currentKey) {
+                try {
+                    await redisClient_1.RedisClient.set(mapKey, candidate, 0);
+                }
+                catch { }
+                await updateCachedProxy(mobile, candidate);
+                logger.info("Rotated proxy", { mobile, from: current?.ip, to: candidate.ip, port: candidate.port, attempt });
+                _registerMobile(mobile, candidate);
+                return candidate;
+            }
+            logger.debug("Got same proxy from /next, retrying", { mobile, attempt, ip: candidate.ip });
         }
         catch (err) {
-            logger.warn("Own client API failed during rotation", { mobile, error: err.message });
+            logger.warn("IP Management /next failed during rotation", { mobile, attempt, error: err.message });
         }
-    }
-    try {
-        allEntries.push(...await fetchClientProxies("shared"));
-    }
-    catch (err) {
-        logger.warn("Shared pool API failed during rotation", { mobile, error: err.message });
-    }
-    const seen = new Set();
-    const unique = allEntries.filter((e) => {
-        const key = proxyKey({ ip: e.ipAddress, port: e.port });
-        if (seen.has(key))
-            return false;
-        seen.add(key);
-        return true;
-    });
-    const candidates = unique.filter((e) => proxyKey({ ip: e.ipAddress, port: e.port }) !== currentKey);
-    if (candidates.length > 0) {
-        const chosen = apiEntryToProxy(candidates[(0, tg_config_1.stableHash)(mobile) % candidates.length]);
-        try {
-            await redisClient_1.RedisClient.set(mapKey, chosen, 0);
-        }
-        catch { }
-        await updateCachedProxy(mobile, chosen);
-        logger.info("Rotated proxy", { mobile, from: current?.ip, to: chosen.ip, port: chosen.port, source: "api" });
-        _registerMobile(mobile, chosen);
-        return chosen;
     }
     const envProxy = resolveProxyFromEnv();
     if (envProxy && proxyKey(envProxy) !== currentKey) {
@@ -22038,6 +22358,7 @@ __exportStar(__webpack_require__(/*! ./users */ "./src/components/users/index.ts
 __exportStar(__webpack_require__(/*! ./Telegram */ "./src/components/Telegram/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./TgSignup */ "./src/components/TgSignup/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./ip-management */ "./src/components/ip-management/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./webshare-proxy */ "./src/components/webshare-proxy/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./timestamps */ "./src/components/timestamps/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./transactions */ "./src/components/transactions/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./upi-ids */ "./src/components/upi-ids/index.ts"), exports);
@@ -22079,6 +22400,8 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
     (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(1),
+    (0, class_validator_1.Max)(65535),
     __metadata("design:type", Number)
 ], CreateProxyIpDto.prototype, "port", void 0);
 __decorate([
@@ -22105,11 +22428,86 @@ __decorate([
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "status", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateProxyIpDto.prototype, "isAssigned", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "assignedToClient", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['manual', 'webshare']),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "source", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'abc123', description: 'Webshare proxy ID', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "webshareId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Country code', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "countryCode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'New York', description: 'City name', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreateProxyIpDto.prototype, "cityName", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/ip-management/dto/get-next-ip.dto.ts"
+/*!*************************************************************!*\
+  !*** ./src/components/ip-management/dto/get-next-ip.dto.ts ***!
+  \*************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GetNextIpDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class GetNextIpDto {
+}
+exports.GetNextIpDto = GetNextIpDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Optional client ID to filter IPs by assignment', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GetNextIpDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Optional country code filter', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], GetNextIpDto.prototype, "countryCode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'socks5', description: 'Optional protocol filter', enum: ['http', 'https', 'socks5'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
+    __metadata("design:type", String)
+], GetNextIpDto.prototype, "protocol", void 0);
 
 
 /***/ },
@@ -22263,6 +22661,7 @@ __exportStar(__webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/compone
 __exportStar(__webpack_require__(/*! ./dto/create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./dto/update-proxy-ip.dto */ "./src/components/ip-management/dto/update-proxy-ip.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./dto/search-ip.dto */ "./src/components/ip-management/dto/search-ip.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/get-next-ip.dto */ "./src/components/ip-management/dto/get-next-ip.dto.ts"), exports);
 
 
 /***/ },
@@ -22293,6 +22692,7 @@ const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
 const create_proxy_ip_dto_1 = __webpack_require__(/*! ./dto/create-proxy-ip.dto */ "./src/components/ip-management/dto/create-proxy-ip.dto.ts");
 const update_proxy_ip_dto_1 = __webpack_require__(/*! ./dto/update-proxy-ip.dto */ "./src/components/ip-management/dto/update-proxy-ip.dto.ts");
+const get_next_ip_dto_1 = __webpack_require__(/*! ./dto/get-next-ip.dto */ "./src/components/ip-management/dto/get-next-ip.dto.ts");
 const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
 let IpManagementController = class IpManagementController {
     constructor(ipManagementService) {
@@ -22322,6 +22722,16 @@ let IpManagementController = class IpManagementController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async getNextIp(filters) {
+        try {
+            return await this.ipManagementService.getNextIp(filters);
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException)
+                throw error;
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+        }
+    }
     async updateProxyIp(ipAddress, port, updateProxyIpDto) {
         try {
             return await this.ipManagementService.updateProxyIp(ipAddress, parseInt(port), updateProxyIpDto);
@@ -22342,6 +22752,14 @@ let IpManagementController = class IpManagementController {
     async getHealthStatus() {
         try {
             return await this.ipManagementService.healthCheck();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async getStats() {
+        try {
+            return await this.ipManagementService.getStats();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -22405,6 +22823,22 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], IpManagementController.prototype, "getAllProxyIps", null);
 __decorate([
+    (0, common_1.Get)('proxy-ips/next'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get next available proxy IP (round-robin)',
+        description: 'Serves the next active proxy IP using global round-robin. Optionally filter by clientId (falls back to full pool if no client IPs found), countryCode, or protocol.'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID to prefer IPs assigned to this client' }),
+    (0, swagger_1.ApiQuery)({ name: 'countryCode', required: false, description: 'ISO country code filter' }),
+    (0, swagger_1.ApiQuery)({ name: 'protocol', required: false, description: 'Protocol filter', enum: ['http', 'https', 'socks5'] }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Next proxy IP served', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'No active proxy IPs available' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [get_next_ip_dto_1.GetNextIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getNextIp", null);
+__decorate([
     (0, common_1.Put)('proxy-ips/:ipAddress/:port'),
     (0, swagger_1.ApiOperation)({ summary: 'Update a proxy IP' }),
     (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
@@ -22441,6 +22875,14 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], IpManagementController.prototype, "getHealthStatus", null);
+__decorate([
+    (0, common_1.Get)('stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP pool statistics including source breakdown' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Stats retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Get)('proxy-ips/:ipAddress/:port'),
     (0, swagger_1.ApiOperation)({ summary: 'Get a specific proxy IP' }),
@@ -22501,8 +22943,6 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const ip_management_controller_1 = __webpack_require__(/*! ./ip-management.controller */ "./src/components/ip-management/ip-management.controller.ts");
 const ip_management_service_1 = __webpack_require__(/*! ./ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
 const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
-const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./src/components/clients/client.module.ts");
-const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
 let IpManagementModule = class IpManagementModule {
 };
 exports.IpManagementModule = IpManagementModule;
@@ -22512,8 +22952,6 @@ exports.IpManagementModule = IpManagementModule = __decorate([
             mongoose_1.MongooseModule.forFeature([
                 { name: proxy_ip_schema_1.ProxyIp.name, schema: proxy_ip_schema_1.ProxyIpSchema },
             ]),
-            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
-            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule)
         ],
         controllers: [ip_management_controller_1.IpManagementController],
         providers: [ip_management_service_1.IpManagementService],
@@ -22551,6 +22989,8 @@ const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const proxy_ip_schema_1 = __webpack_require__(/*! ./schemas/proxy-ip.schema */ "./src/components/ip-management/schemas/proxy-ip.schema.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const redisClient_1 = __webpack_require__(/*! ../../utils/redisClient */ "./src/utils/redisClient.ts");
+const ROUND_ROBIN_KEY = 'ip-mgmt:round-robin:counter';
 let IpManagementService = IpManagementService_1 = class IpManagementService {
     constructor(proxyIpModel) {
         this.proxyIpModel = proxyIpModel;
@@ -22641,26 +23081,6 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
         }
         this.logger.log(`Deleted proxy IP: ${ipAddress}:${port}`);
     }
-    async getStats() {
-        try {
-            const [total, available, assigned, inactive] = await Promise.all([
-                this.proxyIpModel.countDocuments(),
-                this.proxyIpModel.countDocuments({ status: 'active', isAssigned: false }),
-                this.proxyIpModel.countDocuments({ isAssigned: true }),
-                this.proxyIpModel.countDocuments({ status: 'inactive' })
-            ]);
-            return {
-                total,
-                available,
-                assigned,
-                inactive
-            };
-        }
-        catch (error) {
-            this.logger.error(`Error getting statistics: ${error.message}`);
-            throw new common_1.BadRequestException(`Failed to get statistics: ${error.message}`);
-        }
-    }
     async findProxyIpById(ipAddress, port) {
         if (!ipAddress || !port) {
             throw new common_1.BadRequestException('IP address and port are required');
@@ -22723,6 +23143,171 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
         catch (error) {
             this.logger.error(`Error getting available IP count: ${error.message}`);
             return 0;
+        }
+    }
+    async getNextIp(filters) {
+        const query = { status: 'active' };
+        if (filters?.countryCode) {
+            query.countryCode = filters.countryCode;
+        }
+        if (filters?.protocol) {
+            query.protocol = filters.protocol;
+        }
+        if (filters?.clientId) {
+            const clientQuery = {
+                ...query,
+                assignedToClient: filters.clientId,
+                isAssigned: true,
+            };
+            const clientIps = await this.proxyIpModel
+                .find(clientQuery)
+                .sort({ _id: 1 })
+                .lean();
+            if (clientIps.length > 0) {
+                return this._pickAndMark(clientIps);
+            }
+            this.logger.debug(`No IPs found for client ${filters.clientId}, falling back to full pool`);
+        }
+        const allIps = await this.proxyIpModel
+            .find(query)
+            .sort({ _id: 1 })
+            .lean();
+        if (allIps.length === 0) {
+            throw new common_1.NotFoundException('No active proxy IPs available in the pool');
+        }
+        return this._pickAndMark(allIps);
+    }
+    async _pickAndMark(ips) {
+        let index = 0;
+        try {
+            const counter = await redisClient_1.RedisClient.incr(ROUND_ROBIN_KEY);
+            index = (counter - 1) % ips.length;
+        }
+        catch (err) {
+            index = Date.now() % ips.length;
+            this.logger.warn(`Redis unavailable for round-robin counter, using timestamp fallback`);
+        }
+        const selected = ips[index];
+        this.proxyIpModel.updateOne({ ipAddress: selected.ipAddress, port: selected.port }, { $set: { lastUsed: new Date() } }).exec().catch(err => {
+            this.logger.warn(`Failed to update lastUsed for ${selected.ipAddress}:${selected.port}: ${err.message}`);
+        });
+        this.logger.debug(`Round-robin served: ${selected.ipAddress}:${selected.port} (index=${index}/${ips.length})`);
+        return selected;
+    }
+    async syncFromExternal(source, proxies, removeStale = true) {
+        this.logger.log(`Sync from "${source}": ${proxies.length} proxies, removeStale=${removeStale}`);
+        let created = 0;
+        let updated = 0;
+        let removed = 0;
+        const errors = [];
+        const incomingKeys = new Set();
+        const bulkOps = proxies.map(proxy => {
+            const key = `${proxy.ipAddress}:${proxy.port}`;
+            incomingKeys.add(key);
+            return {
+                updateOne: {
+                    filter: { ipAddress: proxy.ipAddress, port: proxy.port },
+                    update: {
+                        $set: {
+                            protocol: proxy.protocol,
+                            username: proxy.username,
+                            password: proxy.password,
+                            status: proxy.status || 'active',
+                            source,
+                            webshareId: proxy.webshareId,
+                            countryCode: proxy.countryCode,
+                            cityName: proxy.cityName,
+                            consecutiveFails: 0,
+                        },
+                        $setOnInsert: {
+                            isAssigned: proxy.isAssigned || false,
+                            roundRobinIndex: 0,
+                        },
+                    },
+                    upsert: true,
+                },
+            };
+        });
+        if (bulkOps.length > 0) {
+            try {
+                const result = await this.proxyIpModel.bulkWrite(bulkOps, { ordered: false });
+                created = result.upsertedCount;
+                updated = result.modifiedCount;
+            }
+            catch (error) {
+                if (error.result) {
+                    created = error.result.upsertedCount || 0;
+                    updated = error.result.modifiedCount || 0;
+                }
+                errors.push(`Bulk upsert errors: ${error.message}`);
+                this.logger.warn(`Bulk upsert had errors: ${error.message}`);
+            }
+        }
+        if (removeStale) {
+            const result = await this.proxyIpModel.deleteMany({
+                source,
+                $nor: proxies.map(p => ({ ipAddress: p.ipAddress, port: p.port })),
+            });
+            removed = result.deletedCount;
+            if (removed > 0) {
+                this.logger.debug(`Removed ${removed} stale ${source} proxies`);
+            }
+        }
+        this.logger.log(`Sync "${source}" complete: created=${created}, updated=${updated}, removed=${removed}, errors=${errors.length}`);
+        return { created, updated, removed, errors };
+    }
+    async removeBySource(source) {
+        const result = await this.proxyIpModel.deleteMany({ source });
+        this.logger.log(`Removed ${result.deletedCount} proxies from source "${source}"`);
+        return result.deletedCount;
+    }
+    async markLastUsed(ipAddress, port) {
+        await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { lastUsed: new Date() } });
+    }
+    async updateHealthStatus(ipAddress, port, healthy) {
+        if (healthy) {
+            await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { lastVerified: new Date(), consecutiveFails: 0 } });
+        }
+        else {
+            await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { lastVerified: new Date() }, $inc: { consecutiveFails: 1 } });
+        }
+    }
+    async markInactive(ipAddress, port) {
+        await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { status: 'inactive' } });
+        this.logger.log(`Marked proxy inactive: ${ipAddress}:${port}`);
+    }
+    async findBySource(source) {
+        return this.proxyIpModel.find({ source }).lean();
+    }
+    async countBySource(source) {
+        return this.proxyIpModel.countDocuments({ source });
+    }
+    async getStats() {
+        try {
+            const [total, available, assigned, inactive] = await Promise.all([
+                this.proxyIpModel.countDocuments(),
+                this.proxyIpModel.countDocuments({ status: 'active', isAssigned: false }),
+                this.proxyIpModel.countDocuments({ isAssigned: true }),
+                this.proxyIpModel.countDocuments({ status: 'inactive' })
+            ]);
+            const sourceAgg = await this.proxyIpModel.aggregate([
+                { $group: { _id: '$source', count: { $sum: 1 } } }
+            ]);
+            const bySource = {};
+            for (const entry of sourceAgg) {
+                bySource[entry._id || 'manual'] = entry.count;
+            }
+            return {
+                total,
+                available,
+                assigned,
+                inactive,
+                bySource,
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error getting statistics: ${error.message}`);
+            throw new common_1.BadRequestException(`Failed to get statistics: ${error.message}`);
         }
     }
     async healthCheck() {
@@ -22832,7 +23417,7 @@ __decorate([
 ], ProxyIp.prototype, "status", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned to a mobile number' }),
-    (0, mongoose_1.Prop)({ required: true, default: false }),
+    (0, mongoose_1.Prop)({ required: false, default: false }),
     __metadata("design:type", Boolean)
 ], ProxyIp.prototype, "isAssigned", void 0);
 __decorate([
@@ -22840,6 +23425,46 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "assignedToClient", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'] }),
+    (0, mongoose_1.Prop)({ required: false, default: 'manual', enum: ['manual', 'webshare'] }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "source", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'abc123', description: 'Webshare proxy ID for replacement API' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "webshareId", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'ISO 3166-1 two-letter country code' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "countryCode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'New York', description: 'City name of the proxy location' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], ProxyIp.prototype, "cityName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time the proxy was verified healthy' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], ProxyIp.prototype, "lastVerified", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last time the proxy was served via getNextIp' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", Date)
+], ProxyIp.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'Number of consecutive health check failures' }),
+    (0, mongoose_1.Prop)({ required: false, default: 0 }),
+    __metadata("design:type", Number)
+], ProxyIp.prototype, "consecutiveFails", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 0, description: 'Index used for round-robin ordering' }),
+    (0, mongoose_1.Prop)({ required: false, default: 0 }),
+    __metadata("design:type", Number)
+], ProxyIp.prototype, "roundRobinIndex", void 0);
 exports.ProxyIp = ProxyIp = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'proxy_ips',
@@ -22858,6 +23483,9 @@ exports.ProxyIpSchema = mongoose_1.SchemaFactory.createForClass(ProxyIp);
 exports.ProxyIpSchema.index({ ipAddress: 1, port: 1 }, { unique: true });
 exports.ProxyIpSchema.index({ status: 1, isAssigned: 1 });
 exports.ProxyIpSchema.index({ assignedToClient: 1 });
+exports.ProxyIpSchema.index({ source: 1 });
+exports.ProxyIpSchema.index({ status: 1, lastUsed: 1 });
+exports.ProxyIpSchema.index({ webshareId: 1 }, { sparse: true });
 
 
 /***/ },
@@ -33317,6 +33945,661 @@ exports.UsersService = UsersService = __decorate([
         client_service_1.ClientService,
         bots_1.BotsService])
 ], UsersService);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/dto/replace-proxy.dto.ts"
+/*!****************************************************************!*\
+  !*** ./src/components/webshare-proxy/dto/replace-proxy.dto.ts ***!
+  \****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ReplaceResultDto = exports.ReplaceProxyDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class ReplaceProxyDto {
+}
+exports.ReplaceProxyDto = ReplaceProxyDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy to replace', example: '1.2.3.4' }),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ReplaceProxyDto.prototype, "ipAddress", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Port of the proxy to replace', example: 8080 }),
+    (0, class_validator_1.IsNumber)(),
+    __metadata("design:type", Number)
+], ReplaceProxyDto.prototype, "port", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Preferred country code for replacement', required: false, example: 'US' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ReplaceProxyDto.prototype, "preferredCountry", void 0);
+class ReplaceResultDto {
+}
+exports.ReplaceResultDto = ReplaceResultDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true }),
+    __metadata("design:type", Boolean)
+], ReplaceResultDto.prototype, "success", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'Replacement initiated' }),
+    __metadata("design:type", String)
+], ReplaceResultDto.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false }),
+    __metadata("design:type", String)
+], ReplaceResultDto.prototype, "replacementId", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/dto/sync-proxies.dto.ts"
+/*!***************************************************************!*\
+  !*** ./src/components/webshare-proxy/dto/sync-proxies.dto.ts ***!
+  \***************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SyncResultDto = exports.SyncProxiesDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class SyncProxiesDto {
+}
+exports.SyncProxiesDto = SyncProxiesDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether to remove proxies from DB that are no longer in the Webshare list',
+        example: true,
+        required: false,
+        default: true,
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], SyncProxiesDto.prototype, "removeStale", void 0);
+class SyncResultDto {
+}
+exports.SyncResultDto = SyncResultDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 100 }),
+    __metadata("design:type", Number)
+], SyncResultDto.prototype, "totalFetched", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 80 }),
+    __metadata("design:type", Number)
+], SyncResultDto.prototype, "created", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 15 }),
+    __metadata("design:type", Number)
+], SyncResultDto.prototype, "updated", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 5 }),
+    __metadata("design:type", Number)
+], SyncResultDto.prototype, "removed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: [] }),
+    __metadata("design:type", Array)
+], SyncResultDto.prototype, "errors", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 2345 }),
+    __metadata("design:type", Number)
+], SyncResultDto.prototype, "durationMs", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/dto/webshare-config.dto.ts"
+/*!******************************************************************!*\
+  !*** ./src/components/webshare-proxy/dto/webshare-config.dto.ts ***!
+  \******************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebshareStatusDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class WebshareStatusDto {
+}
+exports.WebshareStatusDto = WebshareStatusDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true }),
+    __metadata("design:type", Boolean)
+], WebshareStatusDto.prototype, "configured", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true }),
+    __metadata("design:type", Boolean)
+], WebshareStatusDto.prototype, "apiKeyValid", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 100 }),
+    __metadata("design:type", Number)
+], WebshareStatusDto.prototype, "totalProxiesInWebshare", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 95 }),
+    __metadata("design:type", Number)
+], WebshareStatusDto.prototype, "totalProxiesInDb", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: '2026-03-29T10:00:00Z', required: false }),
+    __metadata("design:type", String)
+], WebshareStatusDto.prototype, "lastSyncAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: null, required: false }),
+    __metadata("design:type", String)
+], WebshareStatusDto.prototype, "lastSyncError", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/index.ts"
+/*!************************************************!*\
+  !*** ./src/components/webshare-proxy/index.ts ***!
+  \************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./webshare-proxy.module */ "./src/components/webshare-proxy/webshare-proxy.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./webshare-proxy.service */ "./src/components/webshare-proxy/webshare-proxy.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./webshare-proxy.controller */ "./src/components/webshare-proxy/webshare-proxy.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/sync-proxies.dto */ "./src/components/webshare-proxy/dto/sync-proxies.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/replace-proxy.dto */ "./src/components/webshare-proxy/dto/replace-proxy.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto/webshare-config.dto */ "./src/components/webshare-proxy/dto/webshare-config.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./interfaces/webshare-types */ "./src/components/webshare-proxy/interfaces/webshare-types.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/interfaces/webshare-types.ts"
+/*!********************************************************************!*\
+  !*** ./src/components/webshare-proxy/interfaces/webshare-types.ts ***!
+  \********************************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/webshare-proxy.controller.ts"
+/*!********************************************************************!*\
+  !*** ./src/components/webshare-proxy/webshare-proxy.controller.ts ***!
+  \********************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebshareProxyController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const webshare_proxy_service_1 = __webpack_require__(/*! ./webshare-proxy.service */ "./src/components/webshare-proxy/webshare-proxy.service.ts");
+const sync_proxies_dto_1 = __webpack_require__(/*! ./dto/sync-proxies.dto */ "./src/components/webshare-proxy/dto/sync-proxies.dto.ts");
+const replace_proxy_dto_1 = __webpack_require__(/*! ./dto/replace-proxy.dto */ "./src/components/webshare-proxy/dto/replace-proxy.dto.ts");
+const webshare_config_dto_1 = __webpack_require__(/*! ./dto/webshare-config.dto */ "./src/components/webshare-proxy/dto/webshare-config.dto.ts");
+let WebshareProxyController = class WebshareProxyController {
+    constructor(webshareProxyService) {
+        this.webshareProxyService = webshareProxyService;
+    }
+    async getStatus() {
+        try {
+            return await this.webshareProxyService.getStatus();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async syncProxies(dto) {
+        try {
+            const removeStale = dto?.removeStale !== false;
+            return await this.webshareProxyService.syncProxies(removeStale);
+        }
+        catch (error) {
+            throw new common_1.HttpException(`Sync failed: ${error.message}`, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async refreshAndSync() {
+        try {
+            return await this.webshareProxyService.refreshAndSync();
+        }
+        catch (error) {
+            throw new common_1.HttpException(`Refresh failed: ${error.message}`, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async replaceProxy(dto) {
+        try {
+            return await this.webshareProxyService.replaceProxy(dto.ipAddress, dto.port, dto.preferredCountry);
+        }
+        catch (error) {
+            throw new common_1.HttpException(`Replace failed: ${error.message}`, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+    async getProxyConfig() {
+        try {
+            return await this.webshareProxyService.getProxyConfig();
+        }
+        catch (error) {
+            throw new common_1.HttpException(`Failed to get config: ${error.message}`, common_1.HttpStatus.BAD_REQUEST);
+        }
+    }
+};
+exports.WebshareProxyController = WebshareProxyController;
+__decorate([
+    (0, common_1.Get)('status'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get Webshare integration status',
+        description: 'Returns API key validity, proxy counts in Webshare vs DB, last sync timestamp and errors'
+    }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Status retrieved', type: webshare_config_dto_1.WebshareStatusDto }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], WebshareProxyController.prototype, "getStatus", null);
+__decorate([
+    (0, common_1.Post)('sync'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Sync proxies from Webshare',
+        description: 'Fetches all proxies from Webshare API and upserts them into the local IP pool. Optionally removes stale proxies no longer in Webshare.'
+    }),
+    (0, swagger_1.ApiBody)({ type: sync_proxies_dto_1.SyncProxiesDto, required: false }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Sync completed', type: sync_proxies_dto_1.SyncResultDto }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Webshare not configured or sync failed' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [sync_proxies_dto_1.SyncProxiesDto]),
+    __metadata("design:returntype", Promise)
+], WebshareProxyController.prototype, "syncProxies", null);
+__decorate([
+    (0, common_1.Post)('refresh'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Refresh proxy list on Webshare and sync',
+        description: 'Triggers Webshare to refresh their proxy list, waits briefly, then syncs the updated list to local DB'
+    }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Refresh and sync completed', type: sync_proxies_dto_1.SyncResultDto }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], WebshareProxyController.prototype, "refreshAndSync", null);
+__decorate([
+    (0, common_1.Post)('replace'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Replace a dead Webshare proxy',
+        description: 'Marks the proxy as inactive locally and requests Webshare to provide a replacement. Only works for proxies sourced from Webshare.'
+    }),
+    (0, swagger_1.ApiBody)({ type: replace_proxy_dto_1.ReplaceProxyDto }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Replacement result', type: replace_proxy_dto_1.ReplaceResultDto }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [replace_proxy_dto_1.ReplaceProxyDto]),
+    __metadata("design:returntype", Promise)
+], WebshareProxyController.prototype, "replaceProxy", null);
+__decorate([
+    (0, common_1.Get)('config'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get current Webshare proxy configuration',
+        description: 'Fetches the proxy configuration directly from Webshare API (username, timeout settings, authorized IPs, etc.)'
+    }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Webshare config retrieved' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], WebshareProxyController.prototype, "getProxyConfig", null);
+exports.WebshareProxyController = WebshareProxyController = __decorate([
+    (0, swagger_1.ApiTags)('Webshare Proxy'),
+    (0, common_1.Controller)('webshare-proxy'),
+    __metadata("design:paramtypes", [webshare_proxy_service_1.WebshareProxyService])
+], WebshareProxyController);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/webshare-proxy.module.ts"
+/*!****************************************************************!*\
+  !*** ./src/components/webshare-proxy/webshare-proxy.module.ts ***!
+  \****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebshareProxyModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const webshare_proxy_controller_1 = __webpack_require__(/*! ./webshare-proxy.controller */ "./src/components/webshare-proxy/webshare-proxy.controller.ts");
+const webshare_proxy_service_1 = __webpack_require__(/*! ./webshare-proxy.service */ "./src/components/webshare-proxy/webshare-proxy.service.ts");
+const ip_management_module_1 = __webpack_require__(/*! ../ip-management/ip-management.module */ "./src/components/ip-management/ip-management.module.ts");
+let WebshareProxyModule = class WebshareProxyModule {
+};
+exports.WebshareProxyModule = WebshareProxyModule;
+exports.WebshareProxyModule = WebshareProxyModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            ip_management_module_1.IpManagementModule,
+        ],
+        controllers: [webshare_proxy_controller_1.WebshareProxyController],
+        providers: [webshare_proxy_service_1.WebshareProxyService],
+        exports: [webshare_proxy_service_1.WebshareProxyService],
+    })
+], WebshareProxyModule);
+
+
+/***/ },
+
+/***/ "./src/components/webshare-proxy/webshare-proxy.service.ts"
+/*!*****************************************************************!*\
+  !*** ./src/components/webshare-proxy/webshare-proxy.service.ts ***!
+  \*****************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var WebshareProxyService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.WebshareProxyService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const ip_management_service_1 = __webpack_require__(/*! ../ip-management/ip-management.service */ "./src/components/ip-management/ip-management.service.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const redisClient_1 = __webpack_require__(/*! ../../utils/redisClient */ "./src/utils/redisClient.ts");
+const REDIS_LAST_SYNC_KEY = 'webshare:last-sync';
+const REDIS_LAST_SYNC_ERROR_KEY = 'webshare:last-sync-error';
+const SOURCE_NAME = 'webshare';
+let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
+    constructor(ipManagementService) {
+        this.ipManagementService = ipManagementService;
+        this.logger = new utils_1.Logger(WebshareProxyService_1.name);
+        this.configured = false;
+    }
+    onModuleInit() {
+        const apiKey = process.env.WEBSHARE_API_KEY;
+        const baseUrl = process.env.WEBSHARE_API_URL || 'https://proxy.webshare.io/api/v2';
+        const timeout = parseInt(process.env.WEBSHARE_API_TIMEOUT || '10000', 10);
+        if (!apiKey) {
+            this.logger.warn('WEBSHARE_API_KEY not set — Webshare proxy module is disabled');
+            return;
+        }
+        this.client = axios_1.default.create({
+            baseURL: baseUrl,
+            timeout,
+            headers: {
+                'Authorization': `Token ${apiKey}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        this.configured = true;
+        this.logger.log(`Webshare proxy module initialized (baseUrl=${baseUrl})`);
+    }
+    isConfigured() {
+        return this.configured;
+    }
+    async fetchAllProxies() {
+        this.ensureConfigured();
+        const allProxies = [];
+        let page = 1;
+        const pageSize = 100;
+        this.logger.log('Fetching all proxies from Webshare...');
+        while (true) {
+            try {
+                const response = await this.client.get('/proxy/list/', { params: { page, page_size: pageSize, mode: 'direct' } });
+                const { results, next, count } = response.data;
+                allProxies.push(...results);
+                this.logger.debug(`Fetched page ${page}: ${results.length} proxies (total so far: ${allProxies.length}/${count})`);
+                if (!next || allProxies.length >= count) {
+                    break;
+                }
+                page++;
+            }
+            catch (error) {
+                this.logger.error(`Failed to fetch page ${page}: ${error.message}`);
+                if (allProxies.length > 0) {
+                    this.logger.warn(`Partial fetch: returning ${allProxies.length} proxies fetched before error`);
+                    break;
+                }
+                throw error;
+            }
+        }
+        this.logger.log(`Fetched ${allProxies.length} proxies from Webshare`);
+        return allProxies;
+    }
+    async syncProxies(removeStale = true) {
+        this.ensureConfigured();
+        const startTime = Date.now();
+        try {
+            this.logger.log(`Starting Webshare proxy sync (removeStale=${removeStale})`);
+            const webshareProxies = await this.fetchAllProxies();
+            const dtos = webshareProxies
+                .filter(p => p.proxy_address && p.valid)
+                .map(p => this.webshareToDto(p));
+            this.logger.log(`Converting ${dtos.length} valid proxies (filtered from ${webshareProxies.length} total)`);
+            const result = await this.ipManagementService.syncFromExternal(SOURCE_NAME, dtos, removeStale);
+            const syncResult = {
+                totalFetched: webshareProxies.length,
+                created: result.created,
+                updated: result.updated,
+                removed: result.removed,
+                errors: result.errors,
+                durationMs: Date.now() - startTime,
+            };
+            try {
+                await redisClient_1.RedisClient.set(REDIS_LAST_SYNC_KEY, new Date().toISOString());
+                await redisClient_1.RedisClient.del(REDIS_LAST_SYNC_ERROR_KEY);
+            }
+            catch { }
+            this.logger.log(`Webshare sync complete in ${syncResult.durationMs}ms: ` +
+                `fetched=${syncResult.totalFetched}, created=${syncResult.created}, ` +
+                `updated=${syncResult.updated}, removed=${syncResult.removed}, errors=${syncResult.errors.length}`);
+            return syncResult;
+        }
+        catch (error) {
+            const durationMs = Date.now() - startTime;
+            this.logger.error(`Webshare sync failed after ${durationMs}ms: ${error.message}`);
+            try {
+                await redisClient_1.RedisClient.set(REDIS_LAST_SYNC_ERROR_KEY, error.message);
+            }
+            catch { }
+            return {
+                totalFetched: 0,
+                created: 0,
+                updated: 0,
+                removed: 0,
+                errors: [error.message],
+                durationMs,
+            };
+        }
+    }
+    async replaceProxy(ipAddress, port, preferredCountry) {
+        this.ensureConfigured();
+        try {
+            const proxy = await this.ipManagementService.findProxyIpById(ipAddress, port);
+            if (proxy.source !== SOURCE_NAME) {
+                return {
+                    success: false,
+                    message: `Proxy ${ipAddress}:${port} is not from Webshare (source: ${proxy.source || 'manual'})`,
+                };
+            }
+            await this.ipManagementService.markInactive(ipAddress, port);
+            const body = {
+                proxy_address: ipAddress,
+            };
+            if (preferredCountry) {
+                body.country_code = preferredCountry;
+            }
+            const response = await this.client.post('/proxy/replacement/', body);
+            this.logger.log(`Replacement requested for ${ipAddress}:${port} — Webshare response: ${response.status}`);
+            return {
+                success: true,
+                message: `Replacement initiated for ${ipAddress}:${port}`,
+                replacementId: response.data?.id,
+            };
+        }
+        catch (error) {
+            this.logger.error(`Failed to replace proxy ${ipAddress}:${port}: ${error.message}`);
+            return {
+                success: false,
+                message: `Replacement failed: ${error.message}`,
+            };
+        }
+    }
+    async refreshAndSync() {
+        this.ensureConfigured();
+        try {
+            this.logger.log('Requesting Webshare proxy list refresh...');
+            await this.client.post('/proxy/refresh/');
+            this.logger.log('Webshare refresh triggered, waiting 5s for propagation...');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            return await this.syncProxies(true);
+        }
+        catch (error) {
+            this.logger.error(`Refresh and sync failed: ${error.message}`);
+            throw error;
+        }
+    }
+    async getStatus() {
+        if (!this.configured) {
+            return {
+                configured: false,
+                apiKeyValid: false,
+                totalProxiesInWebshare: 0,
+                totalProxiesInDb: 0,
+                lastSyncAt: null,
+                lastSyncError: 'WEBSHARE_API_KEY not configured',
+            };
+        }
+        let apiKeyValid = false;
+        let totalProxiesInWebshare = 0;
+        try {
+            const response = await this.client.get('/proxy/list/', { params: { page: 1, page_size: 1, mode: 'direct' } });
+            apiKeyValid = true;
+            totalProxiesInWebshare = response.data.count;
+        }
+        catch (error) {
+            this.logger.warn(`Webshare API check failed: ${error.message}`);
+        }
+        const totalProxiesInDb = await this.ipManagementService.countBySource(SOURCE_NAME);
+        let lastSyncAt = null;
+        let lastSyncError = null;
+        try {
+            lastSyncAt = await redisClient_1.RedisClient.get(REDIS_LAST_SYNC_KEY);
+            lastSyncError = await redisClient_1.RedisClient.get(REDIS_LAST_SYNC_ERROR_KEY);
+        }
+        catch { }
+        return {
+            configured: true,
+            apiKeyValid,
+            totalProxiesInWebshare,
+            totalProxiesInDb,
+            lastSyncAt,
+            lastSyncError,
+        };
+    }
+    async getProxyConfig() {
+        this.ensureConfigured();
+        try {
+            const response = await this.client.get('/proxy/config/');
+            return response.data;
+        }
+        catch (error) {
+            this.logger.error(`Failed to fetch proxy config: ${error.message}`);
+            throw error;
+        }
+    }
+    ensureConfigured() {
+        if (!this.configured) {
+            throw new common_1.BadRequestException('Webshare proxy module is not configured. Set WEBSHARE_API_KEY environment variable.');
+        }
+    }
+    webshareToDto(proxy) {
+        return {
+            ipAddress: proxy.proxy_address,
+            port: proxy.port,
+            protocol: 'socks5',
+            username: proxy.username,
+            password: proxy.password,
+            status: proxy.valid ? 'active' : 'inactive',
+            source: SOURCE_NAME,
+            webshareId: proxy.id,
+            countryCode: proxy.country_code,
+            cityName: proxy.city_name,
+        };
+    }
+};
+exports.WebshareProxyService = WebshareProxyService;
+exports.WebshareProxyService = WebshareProxyService = WebshareProxyService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [ip_management_service_1.IpManagementService])
+], WebshareProxyService);
 
 
 /***/ },

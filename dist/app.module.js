@@ -32,6 +32,7 @@ const timestamp_module_1 = require("./components/timestamps/timestamp.module");
 const dynamic_data_module_1 = require("./components/dynamic-data/dynamic-data.module");
 const session_manager_1 = require("./components/session-manager");
 const ip_management_module_1 = require("./components/ip-management/ip-management.module");
+const webshare_proxy_module_1 = require("./components/webshare-proxy/webshare-proxy.module");
 const core_1 = require("@nestjs/core");
 const guards_1 = require("./guards");
 const components_1 = require("./components");
@@ -52,6 +53,7 @@ exports.AppModule = AppModule = __decorate([
             client_module_1.ClientModule,
             session_manager_1.SessionModule,
             ip_management_module_1.IpManagementModule,
+            webshare_proxy_module_1.WebshareProxyModule,
             user_data_module_1.UserDataModule,
             users_module_1.UsersModule,
             buffer_client_module_1.BufferClientModule,

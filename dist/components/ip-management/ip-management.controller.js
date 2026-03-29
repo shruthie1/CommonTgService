@@ -18,6 +18,7 @@ const swagger_1 = require("@nestjs/swagger");
 const ip_management_service_1 = require("./ip-management.service");
 const create_proxy_ip_dto_1 = require("./dto/create-proxy-ip.dto");
 const update_proxy_ip_dto_1 = require("./dto/update-proxy-ip.dto");
+const get_next_ip_dto_1 = require("./dto/get-next-ip.dto");
 const proxy_ip_schema_1 = require("./schemas/proxy-ip.schema");
 let IpManagementController = class IpManagementController {
     constructor(ipManagementService) {
@@ -47,6 +48,16 @@ let IpManagementController = class IpManagementController {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+    async getNextIp(filters) {
+        try {
+            return await this.ipManagementService.getNextIp(filters);
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException)
+                throw error;
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.NOT_FOUND);
+        }
+    }
     async updateProxyIp(ipAddress, port, updateProxyIpDto) {
         try {
             return await this.ipManagementService.updateProxyIp(ipAddress, parseInt(port), updateProxyIpDto);
@@ -67,6 +78,14 @@ let IpManagementController = class IpManagementController {
     async getHealthStatus() {
         try {
             return await this.ipManagementService.healthCheck();
+        }
+        catch (error) {
+            throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    async getStats() {
+        try {
+            return await this.ipManagementService.getStats();
         }
         catch (error) {
             throw new common_1.HttpException(error.message, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
@@ -130,6 +149,22 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], IpManagementController.prototype, "getAllProxyIps", null);
 __decorate([
+    (0, common_1.Get)('proxy-ips/next'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get next available proxy IP (round-robin)',
+        description: 'Serves the next active proxy IP using global round-robin. Optionally filter by clientId (falls back to full pool if no client IPs found), countryCode, or protocol.'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID to prefer IPs assigned to this client' }),
+    (0, swagger_1.ApiQuery)({ name: 'countryCode', required: false, description: 'ISO country code filter' }),
+    (0, swagger_1.ApiQuery)({ name: 'protocol', required: false, description: 'Protocol filter', enum: ['http', 'https', 'socks5'] }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Next proxy IP served', type: proxy_ip_schema_1.ProxyIp }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'No active proxy IPs available' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [get_next_ip_dto_1.GetNextIpDto]),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getNextIp", null);
+__decorate([
     (0, common_1.Put)('proxy-ips/:ipAddress/:port'),
     (0, swagger_1.ApiOperation)({ summary: 'Update a proxy IP' }),
     (0, swagger_1.ApiParam)({ name: 'ipAddress', description: 'IP address' }),
@@ -166,6 +201,14 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], IpManagementController.prototype, "getHealthStatus", null);
+__decorate([
+    (0, common_1.Get)('stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get IP pool statistics including source breakdown' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Stats retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], IpManagementController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Get)('proxy-ips/:ipAddress/:port'),
     (0, swagger_1.ApiOperation)({ summary: 'Get a specific proxy IP' }),

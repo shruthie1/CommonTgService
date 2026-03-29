@@ -9,6 +9,14 @@ export declare class ProxyIp {
     status: string;
     isAssigned: boolean;
     assignedToClient?: string;
+    source: string;
+    webshareId?: string;
+    countryCode?: string;
+    cityName?: string;
+    lastVerified?: Date;
+    lastUsed?: Date;
+    consecutiveFails: number;
+    roundRobinIndex: number;
 }
 export declare const ProxyIpSchema: import("mongoose").Schema<ProxyIp, import("mongoose").Model<ProxyIp, any, any, any, (Document<unknown, any, ProxyIp, any, import("mongoose").DefaultSchemaOptions> & ProxyIp & {
     _id: import("mongoose").Types.ObjectId;
@@ -93,6 +101,78 @@ export declare const ProxyIpSchema: import("mongoose").Schema<ProxyIp, import("m
         id: string;
     }>;
     assignedToClient?: import("mongoose").SchemaDefinitionProperty<string, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    source?: import("mongoose").SchemaDefinitionProperty<string, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    webshareId?: import("mongoose").SchemaDefinitionProperty<string, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    countryCode?: import("mongoose").SchemaDefinitionProperty<string, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    cityName?: import("mongoose").SchemaDefinitionProperty<string, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    lastVerified?: import("mongoose").SchemaDefinitionProperty<Date, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    lastUsed?: import("mongoose").SchemaDefinitionProperty<Date, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    consecutiveFails?: import("mongoose").SchemaDefinitionProperty<number, ProxyIp, Document<unknown, {}, ProxyIp, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    roundRobinIndex?: import("mongoose").SchemaDefinitionProperty<number, ProxyIp, Document<unknown, {}, ProxyIp, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ProxyIp & {
         _id: import("mongoose").Types.ObjectId;

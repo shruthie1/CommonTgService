@@ -3,7 +3,8 @@ export declare enum MediaType {
     VIDEO = "video",
     DOCUMENT = "document",
     VOICE = "voice",
-    AUDIO = "audio"
+    AUDIO = "audio",
+    ALL = "all"
 }
 export declare class BaseMediaOperationDto {
     chatId: string;

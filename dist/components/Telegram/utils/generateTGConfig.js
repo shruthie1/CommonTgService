@@ -94,18 +94,29 @@ function getApiConfig() {
         timeout: envInt("PROXY_API_TIMEOUT", 5000),
     };
 }
-async function fetchClientProxies(clientId) {
+async function fetchNextProxy(clientId) {
     const { baseUrl, apiKey, timeout } = getApiConfig();
-    const url = `${baseUrl}/clients/${clientId}/assigned-ips`;
-    logger.debug("Fetching proxies", { url, clientId });
+    const params = new URLSearchParams();
+    if (clientId)
+        params.set("clientId", clientId);
+    params.set("protocol", "socks5");
+    const url = `${baseUrl}/proxy-ips/next${params.toString() ? `?${params}` : ""}`;
+    logger.debug("Fetching next proxy", { url, clientId });
     const { status, data } = await directRequest(url, {
         headers: { "x-api-key": apiKey },
         timeout,
     });
-    if (status !== 200 || !Array.isArray(data)) {
-        throw new Error(`API status ${status} for client "${clientId}"`);
+    if (status !== 200 || !data || !data.ipAddress) {
+        throw new Error(`API /next status ${status}${clientId ? ` for client "${clientId}"` : ""}`);
     }
-    return data.filter((p) => p.status === "active");
+    return {
+        ip: data.ipAddress,
+        port: data.port,
+        socksType: 5,
+        username: data.username,
+        password: data.password,
+        timeout: envInt("PROXY_TIMEOUT", 10),
+    };
 }
 async function reportProxyInactive(ip, port) {
     const { baseUrl, apiKey, timeout } = getApiConfig();
@@ -125,16 +136,6 @@ async function reportProxyInactive(ip, port) {
         logger.error("Failed to report to API", { ip, port, error: err.message });
         return false;
     }
-}
-function apiEntryToProxy(entry) {
-    return {
-        ip: entry.ipAddress,
-        port: entry.port,
-        socksType: 5,
-        username: entry.username,
-        password: entry.password,
-        timeout: envInt("PROXY_TIMEOUT", 10),
-    };
 }
 function proxyKey(p) {
     return p.ip.includes(":") ? `[${p.ip}]:${p.port}` : `${p.ip}:${p.port}`;
@@ -199,45 +200,20 @@ async function _resolveProxy(mobile) {
         return proxy;
     }
     const { clientId } = getApiConfig();
-    if (clientId) {
-        try {
-            const entries = await fetchClientProxies(clientId);
-            if (entries.length > 0) {
-                const seed = `${mobile}-${clientId}`;
-                const selected = apiEntryToProxy(entries[(0, tg_config_1.stableHash)(seed) % entries.length]);
-                try {
-                    await redisClient_1.RedisClient.set(mapKey, selected, 0);
-                }
-                catch (e) {
-                    logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
-                }
-                logger.info("Assigned proxy from own client", { mobile, ip: selected.ip, client: clientId });
-                _registerMobile(mobile, selected);
-                return selected;
-            }
-        }
-        catch (err) {
-            logger.warn("Own client API failed", { mobile, clientId, error: err.message });
-        }
-    }
     try {
-        const shared = await fetchClientProxies("shared");
-        if (shared.length > 0) {
-            const seed = `${mobile}-shared`;
-            const selected = apiEntryToProxy(shared[(0, tg_config_1.stableHash)(seed) % shared.length]);
-            try {
-                await redisClient_1.RedisClient.set(mapKey, selected, 0);
-            }
-            catch (e) {
-                logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
-            }
-            logger.info("Assigned proxy from shared pool", { mobile, ip: selected.ip });
-            _registerMobile(mobile, selected);
-            return selected;
+        const proxy = await fetchNextProxy(clientId || undefined);
+        try {
+            await redisClient_1.RedisClient.set(mapKey, proxy, 0);
         }
+        catch (e) {
+            logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+        }
+        logger.info("Assigned proxy via /next", { mobile, ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
+        _registerMobile(mobile, proxy);
+        return proxy;
     }
     catch (err) {
-        logger.warn("Shared pool API failed", { mobile, error: err.message });
+        logger.warn("IP Management /next failed", { mobile, error: err.message });
     }
     const envProxy = resolveProxyFromEnv();
     if (envProxy) {
@@ -249,7 +225,7 @@ async function _resolveProxy(mobile) {
         _registerMobile(mobile, envProxy);
         return envProxy;
     }
-    throw new Error("No proxies available from API (own/shared) or env");
+    throw new Error("No proxies available from /next or env");
 }
 async function getProxyForMobile(mobile) {
     if (!mobile)
@@ -270,40 +246,25 @@ async function rotateProxy(mobile) {
     const current = await redisClient_1.RedisClient.getObject(mapKey);
     const { clientId } = getApiConfig();
     const currentKey = current ? proxyKey(current) : "";
-    const allEntries = [];
-    if (clientId) {
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-            allEntries.push(...await fetchClientProxies(clientId));
+            const candidate = await fetchNextProxy(clientId || undefined);
+            if (proxyKey(candidate) !== currentKey) {
+                try {
+                    await redisClient_1.RedisClient.set(mapKey, candidate, 0);
+                }
+                catch { }
+                await updateCachedProxy(mobile, candidate);
+                logger.info("Rotated proxy", { mobile, from: current?.ip, to: candidate.ip, port: candidate.port, attempt });
+                _registerMobile(mobile, candidate);
+                return candidate;
+            }
+            logger.debug("Got same proxy from /next, retrying", { mobile, attempt, ip: candidate.ip });
         }
         catch (err) {
-            logger.warn("Own client API failed during rotation", { mobile, error: err.message });
+            logger.warn("IP Management /next failed during rotation", { mobile, attempt, error: err.message });
         }
-    }
-    try {
-        allEntries.push(...await fetchClientProxies("shared"));
-    }
-    catch (err) {
-        logger.warn("Shared pool API failed during rotation", { mobile, error: err.message });
-    }
-    const seen = new Set();
-    const unique = allEntries.filter((e) => {
-        const key = proxyKey({ ip: e.ipAddress, port: e.port });
-        if (seen.has(key))
-            return false;
-        seen.add(key);
-        return true;
-    });
-    const candidates = unique.filter((e) => proxyKey({ ip: e.ipAddress, port: e.port }) !== currentKey);
-    if (candidates.length > 0) {
-        const chosen = apiEntryToProxy(candidates[(0, tg_config_1.stableHash)(mobile) % candidates.length]);
-        try {
-            await redisClient_1.RedisClient.set(mapKey, chosen, 0);
-        }
-        catch { }
-        await updateCachedProxy(mobile, chosen);
-        logger.info("Rotated proxy", { mobile, from: current?.ip, to: chosen.ip, port: chosen.port, source: "api" });
-        _registerMobile(mobile, chosen);
-        return chosen;
     }
     const envProxy = resolveProxyFromEnv();
     if (envProxy && proxyKey(envProxy) !== currentKey) {

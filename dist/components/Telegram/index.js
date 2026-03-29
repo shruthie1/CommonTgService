@@ -14,13 +14,17 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getPlatformConfig = exports.getAvailablePlatforms = void 0;
 __exportStar(require("./Telegram.controller"), exports);
 __exportStar(require("./Telegram.service"), exports);
 __exportStar(require("./Telegram.module"), exports);
 __exportStar(require("./manager"), exports);
-__exportStar(require("./dto/update-profile.dto"), exports);
-__exportStar(require("./dto/channel-operation.dto"), exports);
+__exportStar(require("./dto"), exports);
 __exportStar(require("./utils/connection-manager"), exports);
 __exportStar(require("./utils/telegram-logger"), exports);
 __exportStar(require("./utils/rate-limiter"), exports);
+__exportStar(require("./utils/generateTGConfig"), exports);
+var tg_config_1 = require("./utils/tg-config");
+Object.defineProperty(exports, "getAvailablePlatforms", { enumerable: true, get: function () { return tg_config_1.getAvailablePlatforms; } });
+Object.defineProperty(exports, "getPlatformConfig", { enumerable: true, get: function () { return tg_config_1.getPlatformConfig; } });
 //# sourceMappingURL=index.js.map

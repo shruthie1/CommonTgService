@@ -1,10 +1,4 @@
-export declare enum MediaType {
-    PHOTO = "photo",
-    VIDEO = "video",
-    DOCUMENT = "document",
-    VOICE = "voice",
-    ALL = "all"
-}
+import { MediaType } from './media-operations.dto';
 export declare class MediaItemDto {
     messageId: number;
     chatId: string;
