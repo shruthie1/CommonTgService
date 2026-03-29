@@ -31,7 +31,9 @@ function isProxyEnabled(): boolean {
 
 function isHealthCheckEnabled(): boolean {
   const val = (process.env.PROXY_HEALTH_CHECK_ENABLED || "false").toLowerCase();
-  return ["true", "1", "yes", "on"].includes(val);
+  const  result = ["true", "1", "yes", "on"].includes(val);
+  logger.debug("Health check enabled?: ", { result });
+  return result;
 }
 
 function envInt(key: string, fallback: number): number {
@@ -115,7 +117,7 @@ async function fetchNextProxy(clientId?: string): Promise<ProxyInterface> {
   const params = new URLSearchParams();
   if (clientId) params.set("clientId", clientId);
   params.set("protocol", "socks5");
-  const url = `${baseUrl}/proxy-ips/next${params.toString() ? `?${params}` : ""}`;
+  const url = `${baseUrl}/proxy-ips/next`;
   logger.debug("Fetching next proxy", { url, clientId });
 
   const { status, data } = await directRequest(url, {
