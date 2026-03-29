@@ -23,6 +23,7 @@ import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { SessionModule } from './components/session-manager';
 import { IpManagementModule } from './components/ip-management/ip-management.module';
+import { WebshareProxyModule } from './components/webshare-proxy/webshare-proxy.module';
 import { APP_GUARD , APP_FILTER} from '@nestjs/core';
 import { AuthGuard } from './guards';
 import { BotsModule } from './components';
@@ -37,6 +38,7 @@ import { ExceptionsFilter } from './interceptors';
     ClientModule,
     SessionModule,
     IpManagementModule,
+    WebshareProxyModule,
     UserDataModule,
     UsersModule,
     BufferClientModule,

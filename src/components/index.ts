@@ -28,6 +28,9 @@ export * from './TgSignup';
 // IP Management
 export * from './ip-management';
 
+// Webshare Proxy Integration
+export * from './webshare-proxy';
+
 // System components
 export * from './timestamps';
 export * from './transactions';
