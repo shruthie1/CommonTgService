@@ -12,8 +12,6 @@ const mongoose_1 = require("@nestjs/mongoose");
 const ip_management_controller_1 = require("./ip-management.controller");
 const ip_management_service_1 = require("./ip-management.service");
 const proxy_ip_schema_1 = require("./schemas/proxy-ip.schema");
-const client_module_1 = require("../clients/client.module");
-const promote_client_module_1 = require("../promote-clients/promote-client.module");
 let IpManagementModule = class IpManagementModule {
 };
 exports.IpManagementModule = IpManagementModule;
@@ -23,8 +21,6 @@ exports.IpManagementModule = IpManagementModule = __decorate([
             mongoose_1.MongooseModule.forFeature([
                 { name: proxy_ip_schema_1.ProxyIp.name, schema: proxy_ip_schema_1.ProxyIpSchema },
             ]),
-            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
-            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule)
         ],
         controllers: [ip_management_controller_1.IpManagementController],
         providers: [ip_management_service_1.IpManagementService],

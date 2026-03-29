@@ -5,3 +5,4 @@ export * from './schemas/proxy-ip.schema';
 export * from './dto/create-proxy-ip.dto';
 export * from './dto/update-proxy-ip.dto';
 export * from './dto/search-ip.dto';
+export * from './dto/get-next-ip.dto';

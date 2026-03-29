@@ -21,4 +21,5 @@ __exportStar(require("./schemas/proxy-ip.schema"), exports);
 __exportStar(require("./dto/create-proxy-ip.dto"), exports);
 __exportStar(require("./dto/update-proxy-ip.dto"), exports);
 __exportStar(require("./dto/search-ip.dto"), exports);
+__exportStar(require("./dto/get-next-ip.dto"), exports);
 //# sourceMappingURL=index.js.map

@@ -5,5 +5,10 @@ export declare class CreateProxyIpDto {
     username?: string;
     password?: string;
     status?: string;
+    isAssigned?: boolean;
     assignedToClient?: string;
+    source?: string;
+    webshareId?: string;
+    countryCode?: string;
+    cityName?: string;
 }

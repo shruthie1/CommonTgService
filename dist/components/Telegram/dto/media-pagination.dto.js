@@ -9,18 +9,11 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MediaMetadataQueryDto = exports.PaginatedMediaResponseDto = exports.MediaGroupDto = exports.MediaFiltersDto = exports.PaginationDto = exports.MediaItemDto = exports.MediaType = void 0;
+exports.MediaMetadataQueryDto = exports.PaginatedMediaResponseDto = exports.MediaGroupDto = exports.MediaFiltersDto = exports.PaginationDto = exports.MediaItemDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
-var MediaType;
-(function (MediaType) {
-    MediaType["PHOTO"] = "photo";
-    MediaType["VIDEO"] = "video";
-    MediaType["DOCUMENT"] = "document";
-    MediaType["VOICE"] = "voice";
-    MediaType["ALL"] = "all";
-})(MediaType || (exports.MediaType = MediaType = {}));
+const media_operations_dto_1 = require("./media-operations.dto");
 class MediaItemDto {
 }
 exports.MediaItemDto = MediaItemDto;
@@ -33,7 +26,7 @@ __decorate([
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: MediaType, example: 'photo' }),
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "type", void 0);
 __decorate([
@@ -123,7 +116,7 @@ __decorate([
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: MediaType, example: ['photo', 'video'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: media_operations_dto_1.MediaType, example: ['photo', 'video'] }),
     __metadata("design:type", Array)
 ], MediaFiltersDto.prototype, "types", void 0);
 __decorate([
@@ -138,7 +131,7 @@ class MediaGroupDto {
 }
 exports.MediaGroupDto = MediaGroupDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: MediaType, example: 'photo' }),
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
     __metadata("design:type", String)
 ], MediaGroupDto.prototype, "type", void 0);
 __decorate([
@@ -181,10 +174,10 @@ __decorate([
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: MediaType, isArray: true, example: ['photo', 'video'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: media_operations_dto_1.MediaType, isArray: true, example: ['photo', 'video'] }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.IsEnum)(MediaType, { each: true }),
+    (0, class_validator_1.IsEnum)(media_operations_dto_1.MediaType, { each: true }),
     (0, class_transformer_1.Transform)(({ value }) => {
         if (typeof value === 'string') {
             return value.split(',').map(v => v.trim());
