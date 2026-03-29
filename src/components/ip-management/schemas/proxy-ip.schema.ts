@@ -42,12 +42,46 @@ export class ProxyIp {
     status: string;
 
     @ApiProperty({ example: false, description: 'Whether this IP is currently assigned to a mobile number' })
-    @Prop({ required: true, default: false })
+    @Prop({ required: false, default: false })
     isAssigned: boolean;
 
     @ApiProperty({ example: 'client1', description: 'Client ID that owns this IP' })
     @Prop({ required: false })
     assignedToClient?: string;
+
+    // ==================== NEW FIELDS ====================
+
+    @ApiProperty({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'] })
+    @Prop({ required: false, default: 'manual', enum: ['manual', 'webshare'] })
+    source: string;
+
+    @ApiProperty({ example: 'abc123', description: 'Webshare proxy ID for replacement API' })
+    @Prop({ required: false })
+    webshareId?: string;
+
+    @ApiProperty({ example: 'US', description: 'ISO 3166-1 two-letter country code' })
+    @Prop({ required: false })
+    countryCode?: string;
+
+    @ApiProperty({ example: 'New York', description: 'City name of the proxy location' })
+    @Prop({ required: false })
+    cityName?: string;
+
+    @ApiProperty({ description: 'Last time the proxy was verified healthy' })
+    @Prop({ required: false })
+    lastVerified?: Date;
+
+    @ApiProperty({ description: 'Last time the proxy was served via getNextIp' })
+    @Prop({ required: false })
+    lastUsed?: Date;
+
+    @ApiProperty({ example: 0, description: 'Number of consecutive health check failures' })
+    @Prop({ required: false, default: 0 })
+    consecutiveFails: number;
+
+    @ApiProperty({ example: 0, description: 'Index used for round-robin ordering' })
+    @Prop({ required: false, default: 0 })
+    roundRobinIndex: number;
 }
 
 export const ProxyIpSchema = SchemaFactory.createForClass(ProxyIp);
@@ -56,3 +90,6 @@ export const ProxyIpSchema = SchemaFactory.createForClass(ProxyIp);
 ProxyIpSchema.index({ ipAddress: 1, port: 1 }, { unique: true });
 ProxyIpSchema.index({ status: 1, isAssigned: 1 });
 ProxyIpSchema.index({ assignedToClient: 1 });
+ProxyIpSchema.index({ source: 1 });
+ProxyIpSchema.index({ status: 1, lastUsed: 1 }); // For round-robin queries
+ProxyIpSchema.index({ webshareId: 1 }, { sparse: true });
