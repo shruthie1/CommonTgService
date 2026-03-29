@@ -6616,22 +6616,26 @@ const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../../utils/logbots */ "./src/utils/logbots.ts");
 const generateTGConfig_1 = __webpack_require__(/*! ../utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
+const tg_config_1 = __webpack_require__(/*! ../utils/tg-config */ "./src/components/Telegram/utils/tg-config.ts");
 const IMap_1 = __webpack_require__(/*! ../../../IMap/IMap */ "./src/IMap/IMap.ts");
-function isOwnAuth(auth) {
-    const authCriteria = [
-        { field: 'country', value: 'singapore' },
-        { field: 'deviceModel', values: ['oneplus 11', 'cli', 'linux', 'windows'] },
-        { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] },
-    ];
-    return authCriteria.some(criterion => {
-        const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
-        if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk'))
-            return true;
-        if ('values' in criterion) {
-            return criterion.values.some(value => fieldValue.includes(value.toLowerCase()));
+const _ownDeviceModels = (() => {
+    const models = [];
+    for (const name of (0, tg_config_1.getAvailablePlatforms)()) {
+        const platform = (0, tg_config_1.getPlatformConfig)(name);
+        if (platform) {
+            for (const device of platform.devices) {
+                models.push(device.deviceModel.toLowerCase());
+            }
         }
-        return fieldValue.includes(criterion.value.toLowerCase());
-    });
+    }
+    return models;
+})();
+function isOwnAuth(auth) {
+    const deviceModel = (auth.deviceModel || '').toLowerCase();
+    if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
+        return true;
+    }
+    return false;
 }
 async function removeOtherAuths(ctx) {
     if (!ctx.client)
