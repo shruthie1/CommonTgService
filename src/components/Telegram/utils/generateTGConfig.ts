@@ -12,6 +12,10 @@ const logger = new Logger("TGConfig");
 const PROXY_MAP_PREFIX = "tg:proxy_map:";
 const CONFIG_PREFIX = "tg:config:";
 
+// Default TTL for config cache — 1 year. Fingerprints should be near-permanent;
+// only explicit invalidation or identity reset should clear them.
+const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 365 * 0.5; // HALF YEAR
+
 // Reusable direct agents (bypass global proxy, avoid per-request agent leak)
 const _directHttpsAgent = new https.Agent({ keepAlive: true, timeout: 10000 });
 const _directHttpAgent = new http.Agent({ keepAlive: true, timeout: 10000 });
@@ -286,7 +290,7 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
   // 4. Env fallback
   const envProxy = resolveProxyFromEnv();
   if (envProxy) {
-    try { await RedisClient.set(mapKey, envProxy, 0); } catch {}
+    try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
     logger.info("Assigned proxy from env", { mobile, ip: envProxy.ip });
     _registerMobile(mobile, envProxy);
     return envProxy;
@@ -356,7 +360,7 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
   if (candidates.length > 0) {
     // Pick next available (not the dead one)
     const chosen = apiEntryToProxy(candidates[stableHash(mobile) % candidates.length]);
-    try { await RedisClient.set(mapKey, chosen, 0); } catch {}
+    try { await RedisClient.set(mapKey, chosen, 0); } catch { }
     await updateCachedProxy(mobile, chosen);
     logger.info("Rotated proxy", { mobile, from: current?.ip, to: chosen.ip, port: chosen.port, source: "api" });
     _registerMobile(mobile, chosen);
@@ -366,7 +370,7 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
   // No candidates from API — try env fallback
   const envProxy = resolveProxyFromEnv();
   if (envProxy && proxyKey(envProxy) !== currentKey) {
-    try { await RedisClient.set(mapKey, envProxy, 0); } catch {}
+    try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
     await updateCachedProxy(mobile, envProxy);
     logger.info("Rotated proxy", { mobile, from: current?.ip, to: envProxy.ip, source: "env" });
     _registerMobile(mobile, envProxy);
@@ -380,7 +384,7 @@ export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
 
 export async function removeProxyMapping(mobile: string): Promise<void> {
   const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
-  try { await RedisClient.del(mapKey); } catch {}
+  try { await RedisClient.del(mapKey); } catch { }
   await invalidateConfig(mobile);
   _unregisterMobile(mobile);
   logger.info("Removed proxy mapping + invalidated config", { mobile });
@@ -528,12 +532,12 @@ async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: Tra
         });
 
         if (_onRotatedCallback) {
-          try { _onRotatedCallback(tracked.mobile, deadProxy, newProxy, "health-monitor"); } catch {}
+          try { _onRotatedCallback(tracked.mobile, deadProxy, newProxy, "health-monitor"); } catch { }
         }
       } catch (err: any) {
         logger.error("Rotation failed for mobile — no alternative proxy", { mobile: tracked.mobile, error: err.message });
         if (_onAllFailedCallback) {
-          try { _onAllFailedCallback(tracked.mobile); } catch {}
+          try { _onAllFailedCallback(tracked.mobile); } catch { }
         }
       }
     }
@@ -683,7 +687,7 @@ function cachedToResult(cached: CachedTGConfig): TGConfigResult {
  */
 export async function generateTGConfig(
   mobile: string,
-  ttl: number = 60 * 60 * 24 * 60
+  ttl: number = CONFIG_TTL_SECONDS
 ): Promise<TGConfigResult> {
   logger.debug("Generating config", { mobile, ttl });
   const redisKey = `${CONFIG_PREFIX}${mobile}`;
@@ -698,7 +702,7 @@ export async function generateTGConfig(
       try {
         const p = await getProxyForMobile(mobile);
         const withProxy = { ...cached, proxy: p };
-        try { await RedisClient.set(redisKey, withProxy, ttl); } catch {}
+        try { await RedisClient.set(redisKey, withProxy, ttl); } catch { }
         return cachedToResult(withProxy);
       } catch (err: any) {
         logger.debug("Failed to attach proxy to cached config", { mobile, error: err.message });
@@ -706,8 +710,9 @@ export async function generateTGConfig(
     }
 
     if (!proxiesEnabled && cached.proxy) {
+      // Strip proxy from returned config but keep it in Redis cache —
+      // when PROXY_ENABLED flips back on, the proxy is still there.
       const { proxy: _, ...withoutProxy } = cached;
-      try { await RedisClient.set(redisKey, withoutProxy, ttl); } catch {}
       return cachedToResult(withoutProxy as CachedTGConfig);
     }
 
@@ -720,12 +725,12 @@ export async function generateTGConfig(
         if (cachedKey !== mapKey) {
           // Proxy map was updated (rotation) but config cache is stale
           const reconciled = { ...cached, proxy: currentProxy };
-          try { await RedisClient.set(redisKey, reconciled, ttl); } catch {}
+          try { await RedisClient.set(redisKey, reconciled, ttl); } catch { }
           logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
           _registerMobile(mobile, currentProxy);
           return cachedToResult(reconciled);
         }
-      } catch {}
+      } catch { }
       _registerMobile(mobile, cached.proxy as ProxyInterface);
     }
 
@@ -764,7 +769,7 @@ export async function generateTGConfig(
 }
 
 /** Update only the proxy in the cached config. Fingerprint + credentials stay intact. */
-async function updateCachedProxy(mobile: string, proxy: ProxyInterface | null, ttl: number = 60 * 60 * 24 * 60): Promise<void> {
+async function updateCachedProxy(mobile: string, proxy: ProxyInterface | null, ttl: number = CONFIG_TTL_SECONDS): Promise<void> {
   const redisKey = `${CONFIG_PREFIX}${mobile}`;
   const cached = await RedisClient.getObject<CachedTGConfig>(redisKey);
   if (!cached || !cached._apiId) {
@@ -785,7 +790,7 @@ async function updateCachedProxy(mobile: string, proxy: ProxyInterface | null, t
 /** Invalidate config cache entirely. Use resetMobileIdentity for full reset. */
 export async function invalidateConfig(mobile: string): Promise<void> {
   const redisKey = `${CONFIG_PREFIX}${mobile}`;
-  try { await RedisClient.del(redisKey); } catch {}
+  try { await RedisClient.del(redisKey); } catch { }
   logger.info("Config invalidated", { mobile });
 }
 
