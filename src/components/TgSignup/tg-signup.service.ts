@@ -8,7 +8,7 @@ import { UsersService } from "../users/users.service";
 import { TgSignupResponse } from "./dto/tg-signup.dto";
 import { CreateUserDto } from "../users/dto/create-user.dto";
 import { parseError } from "../../utils/parseError";
-import { getCredentialsForMobile } from "../../utils/tg-apps";
+import { generateTGConfig } from "../Telegram/utils/generateTGConfig";
 import { Logger } from "../../utils";
 
 @Injectable()
@@ -93,15 +93,9 @@ export class TgSignupService implements OnModuleDestroy {
                 await this.disconnectClient(phone);
             }
 
-            const { apiId, apiHash } = await getCredentialsForMobile(phone, 600);
+            const { apiId, apiHash, params: tgParams } = await generateTGConfig(phone);
             const session = new StringSession('');
-            const client = new TelegramClient(session, apiId, apiHash, {
-                connectionRetries: 5,
-                retryDelay: 2000,
-                useWSS: false,
-                useIPV6: false,
-                timeout: 30000
-            });
+            const client = new TelegramClient(session, apiId, apiHash, tgParams);
 
             await client.setLogLevel(LogLevel.ERROR);
 
@@ -175,14 +169,9 @@ export class TgSignupService implements OnModuleDestroy {
                     // Don't disconnect, just try to reconnect
                     this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
                     try {
-                        const { apiId, apiHash } = await getCredentialsForMobile(phone, 600);
+                        const { apiId, apiHash, params: tgParams } = await generateTGConfig(phone);
                         const newSession = new StringSession('');
-                        const newClient = new TelegramClient(newSession, apiId, apiHash, {
-                            connectionRetries: 5,
-                            retryDelay: 2000,
-                            useWSS: false,
-                            timeout: 30000
-                        });
+                        const newClient = new TelegramClient(newSession, apiId, apiHash, tgParams);
                         await newClient.connect();
                         session.client = newClient;
                     } catch (reconnectError) {

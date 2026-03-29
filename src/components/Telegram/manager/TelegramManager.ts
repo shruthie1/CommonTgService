@@ -71,12 +71,10 @@ import { Dialog } from 'telegram/tl/custom/dialog';
         }
 
         async createClient(handler: boolean = true, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient> {
-            const { getCredentialsForMobile } = require('../../../utils');
-            const tgCreds = await getCredentialsForMobile(this.phoneNumber);
-            this.apiHash = tgCreds.apiHash;
-            this.apiId = tgCreds.apiId;
-
-            this.client = await clientOps.createClient(this.ctx, this.session, handler, handlerFn);
+            const { client, apiId, apiHash } = await clientOps.createClient(this.ctx, this.session, handler, handlerFn);
+            this.apiId = apiId;
+            this.apiHash = apiHash;
+            this.client = client;
             return this.client;
         }
 

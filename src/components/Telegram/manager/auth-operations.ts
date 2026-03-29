@@ -167,11 +167,12 @@ export async function createNewSession(ctx: TgContext): Promise<string> {
         const me = <Api.User>await ctx.client.getMe();
         ctx.logger.info(ctx.phoneNumber, 'Creating new session for: ', me.phone);
 
+        const { apiId, apiHash, params: tgParams } = await generateTGConfig(ctx.phoneNumber);
         const newClient = new TelegramClient(
             new StringSession(''),
-            parseInt(process.env.API_ID),
-            process.env.API_HASH,
-            await generateTGConfig(ctx.phoneNumber)
+            apiId,
+            apiHash,
+            tgParams
         );
 
         ctx.logger.info(ctx.phoneNumber, 'Starting Session Creation...');

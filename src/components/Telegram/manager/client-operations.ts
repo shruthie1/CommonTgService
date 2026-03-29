@@ -4,7 +4,6 @@ import { NewMessage, NewMessageEvent } from 'telegram/events';
 import { LogLevel } from 'telegram/extensions/Logger';
 import { sleep } from 'telegram/Helpers';
 import { TgContext } from './types';
-import { getCredentialsForMobile } from '../../../utils';
 import { parseError } from '../../../utils/parseError';
 import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
 import { notifbot } from '../../../utils/logbots';
@@ -17,11 +16,8 @@ export async function createClient(
     session: StringSession,
     handler: boolean = true,
     handlerFn?: (event: NewMessageEvent) => Promise<void>
-): Promise<TelegramClient> {
-    const tgCreds = await getCredentialsForMobile(ctx.phoneNumber);
-    const apiHash = tgCreds.apiHash;
-    const apiId = tgCreds.apiId;
-    const tgConfiguration = await generateTGConfig(ctx.phoneNumber);
+): Promise<{ client: TelegramClient; apiId: number; apiHash: string }> {
+    const { apiId, apiHash, params: tgConfiguration } = await generateTGConfig(ctx.phoneNumber);
 
     let client: TelegramClient | null = null;
 
@@ -54,7 +50,7 @@ export async function createClient(
             }
         }
 
-        return client;
+        return { client, apiId, apiHash };
     } catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Client creation failed', error);
         if (client) {

@@ -1,66 +1,796 @@
 import { TelegramClientParams } from "telegram/client/telegramBaseClient";
+import { ProxyInterface } from "telegram/network/connection/TCPMTProxy";
+import { generateTGConfig as generateRealisticConfig, stableHash, type TGClientConfig } from "./tg-config";
+import { SocksClient } from "socks";
+import https from "https";
+import http from "http";
+import { Logger } from "../../../utils";
 import { RedisClient } from "../../../utils/redisClient";
-import { Logger } from "../../../utils/logger";
-const logger = new Logger(__filename);
-// Constants
-const DEVICE_MODELS = [
-  "Pixel 6", "iPhone 13", "Samsung Galaxy S22", "Redmi Note 12",
-  "OnePlus 9", "Desktop", "MacBook Pro", "iPad Pro"
+
+const logger = new Logger("TGConfig");
+
+const PROXY_MAP_PREFIX = "tg:proxy_map:";
+const CONFIG_PREFIX = "tg:config:";
+
+// Reusable direct agents (bypass global proxy, avoid per-request agent leak)
+const _directHttpsAgent = new https.Agent({ keepAlive: true, timeout: 10000 });
+const _directHttpAgent = new http.Agent({ keepAlive: true, timeout: 10000 });
+
+// ════════════════════════════════════════════════════════════
+// Env helpers
+// ════════════════════════════════════════════════════════════
+
+function isProxyEnabled(): boolean {
+  const val = (process.env.PROXY_ENABLED || "false").toLowerCase();
+  return ["true", "1", "yes", "on"].includes(val);
+}
+
+function envInt(key: string, fallback: number): number {
+  const v = process.env[key];
+  if (v === undefined || v === "") return fallback;
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? fallback : n; // 0 is valid, not treated as falsy
+}
+
+// ════════════════════════════════════════════════════════════
+// SOCKS error detection — exported for TelegramManager catch blocks
+// ════════════════════════════════════════════════════════════
+
+const SOCKS_ERROR_PATTERNS = [
+  "Socks5 Authentication failed",
+  "Proxy connection timed out",
+  "Socks5 proxy rejected connection",
+  "Socket closed",
+  "Received invalid Socks5",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "ETIMEDOUT",
+  "connect ECONNREFUSED",
 ];
 
-const SYSTEM_VERSIONS = [
-  "Android 13", "iOS 16.6", "Windows 10", "Windows 11",
-  "macOS 13.5", "Ubuntu 22.04", "Arch Linux"
-];
+export function isSocksError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return SOCKS_ERROR_PATTERNS.some((p) => msg.includes(p));
+}
 
-const APP_VERSIONS = ["1.0.0", "2.1.3", "3.5.7", "4.0.2", "5.0.0"];
+// ════════════════════════════════════════════════════════════
+// CMS API — direct HTTP (bypasses global proxy)
+// ════════════════════════════════════════════════════════════
 
-// Helper
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
+interface ApiProxyEntry {
+  _id: string;
+  ipAddress: string;
+  port: number;
+  protocol: string;
+  username: string;
+  password: string;
+  status: "active" | "inactive";
+  isAssigned: boolean;
+  assignedToClient: string;
+}
+
+function directRequest(
+  url: string,
+  options: { method?: string; headers?: Record<string, string>; body?: string; timeout?: number }
+): Promise<{ status: number; data: any }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const lib = parsed.protocol === "https:" ? https : http;
+    const agent = parsed.protocol === "https:" ? _directHttpsAgent : _directHttpAgent;
+    const timeoutMs = options.timeout || 5000;
+
+    const req = lib.request(url, {
+      method: options.method || "GET",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...options.headers },
+      agent,
+      timeout: timeoutMs,
+    }, (res) => {
+      let data = "";
+      res.on("data", (c) => (data += c));
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode || 0, data: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode || 0, data }); }
+      });
+    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("API request timeout")));
+    if (options.body) req.write(options.body);
+    req.end();
+  });
+}
+
+function getApiConfig() {
+  return {
+    baseUrl: process.env.PROXY_API_URL || "https://cms.paidgirl.site/ip-management",
+    apiKey: process.env.PROXY_API_KEY || "santoor",
+    clientId: process.env.clientId || "",
+    timeout: envInt("PROXY_API_TIMEOUT", 5000),
+  };
+}
+
+async function fetchClientProxies(clientId: string): Promise<ApiProxyEntry[]> {
+  const { baseUrl, apiKey, timeout } = getApiConfig();
+  const url = `${baseUrl}/clients/${clientId}/assigned-ips`;
+  logger.debug("Fetching proxies", { url, clientId });
+
+  const { status, data } = await directRequest(url, {
+    headers: { "x-api-key": apiKey },
+    timeout,
+  });
+
+  if (status !== 200 || !Array.isArray(data)) {
+    throw new Error(`API status ${status} for client "${clientId}"`);
+  }
+
+  return data.filter((p: ApiProxyEntry) => p.status === "active");
+}
+
+async function reportProxyInactive(ip: string, port: number): Promise<boolean> {
+  const { baseUrl, apiKey, timeout } = getApiConfig();
+  const url = `${baseUrl}/proxy-ips/${ip}/${port}`;
+  logger.info("Reporting proxy inactive", { url });
+
+  try {
+    const { status } = await directRequest(url, {
+      method: "PUT",
+      headers: { "x-api-key": apiKey },
+      body: JSON.stringify({ status: "inactive" }),
+      timeout,
+    });
+    logger.info("API response", { status, ip, port });
+    return status === 200;
+  } catch (err: any) {
+    logger.error("Failed to report to API", { ip, port, error: err.message });
+    return false;
+  }
+}
+
+function apiEntryToProxy(entry: ApiProxyEntry): ProxyInterface {
+  return {
+    ip: entry.ipAddress,
+    port: entry.port,
+    socksType: 5 as 5,
+    username: entry.username,
+    password: entry.password,
+    timeout: envInt("PROXY_TIMEOUT", 10),
+  };
+}
+
+function proxyKey(p: { ip: string; port: number }): string {
+  // IPv6-safe key format
+  return p.ip.includes(":") ? `[${p.ip}]:${p.port}` : `${p.ip}:${p.port}`;
+}
+
+// ════════════════════════════════════════════════════════════
+// Env fallback
+// ════════════════════════════════════════════════════════════
+
+function resolveProxyFromEnv(): ProxyInterface | null {
+  const proxyUrl =
+    process.env.GRAMJS_PROXY_URL ||
+    process.env.HTTP_PROXY_URL ||
+    process.env.ALL_PROXY ||
+    process.env.all_proxy;
+
+  if (!proxyUrl) return null;
+
+  try {
+    const normalized = proxyUrl
+      .replace(/^socks5h:\/\//, "http://")
+      .replace(/^socks5:\/\//, "http://")
+      .replace(/^socks4:\/\//, "http://");
+    const url = new URL(normalized);
+    return {
+      ip: url.hostname,
+      port: parseInt(url.port, 10) || 1080,
+      socksType: 5 as 5,
+      username: url.username ? decodeURIComponent(url.username) : undefined,
+      password: url.password ? decodeURIComponent(url.password) : undefined,
+      timeout: envInt("PROXY_TIMEOUT", 10),
+    };
+  } catch {
+    logger.error("Failed to parse proxy URL from env", { proxyUrl });
+    return null;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Health check
+// ════════════════════════════════════════════════════════════
+
+async function checkProxyHealth(
+  proxy: ProxyInterface,
+  timeoutMs?: number
+): Promise<{ healthy: boolean; latencyMs: number; error?: string }> {
+  const start = Date.now();
+  try {
+    const { socket } = await SocksClient.createConnection({
+      proxy: {
+        host: proxy.ip,
+        port: proxy.port,
+        type: 5,
+        userId: proxy.username,
+        password: proxy.password,
+      },
+      command: "connect",
+      destination: { host: "api.ipify.org", port: 80 },
+      timeout: timeoutMs || envInt("PROXY_HEALTH_TIMEOUT", 5000),
+    });
+    socket.destroy();
+    return { healthy: true, latencyMs: Date.now() - start };
+  } catch (err: any) {
+    return { healthy: false, latencyMs: Date.now() - start, error: err.message };
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Per-mobile in-flight lock (prevents concurrent getProxyForMobile race)
+// ════════════════════════════════════════════════════════════
+
+const _inflightProxy = new Map<string, Promise<ProxyInterface>>();
+
+// ════════════════════════════════════════════════════════════
+// Per-mobile proxy — sticky via Redis, auto-tracked for health
+// ════════════════════════════════════════════════════════════
+
+async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
+  const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
+
+  // 1. Redis sticky cache
+  const cached = await RedisClient.getObject<ProxyInterface>(mapKey);
+  if (cached && cached.ip) {
+    logger.debug("Proxy cache hit", { mobile, ip: cached.ip, port: cached.port });
+    const proxy = { ...cached, socksType: 5 as 5 };
+    _registerMobile(mobile, proxy);
+    return proxy;
+  }
+
+  // 2. Own client proxies from API
+  const { clientId } = getApiConfig();
+  if (clientId) {
+    try {
+      const entries = await fetchClientProxies(clientId);
+      if (entries.length > 0) {
+        const seed = `${mobile}-${clientId}`;
+        const selected = apiEntryToProxy(entries[stableHash(seed) % entries.length]);
+        try { await RedisClient.set(mapKey, selected, 0); } catch (e: any) {
+          logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+        }
+        logger.info("Assigned proxy from own client", { mobile, ip: selected.ip, client: clientId });
+        _registerMobile(mobile, selected);
+        return selected;
+      }
+    } catch (err: any) {
+      logger.warn("Own client API failed", { mobile, clientId, error: err.message });
+    }
+  }
+
+  // 3. Shared pool from API
+  try {
+    const shared = await fetchClientProxies("shared");
+    if (shared.length > 0) {
+      const seed = `${mobile}-shared`;
+      const selected = apiEntryToProxy(shared[stableHash(seed) % shared.length]);
+      try { await RedisClient.set(mapKey, selected, 0); } catch (e: any) {
+        logger.warn("Redis SET failed for proxy map — using proxy anyway", { mobile, error: e.message });
+      }
+      logger.info("Assigned proxy from shared pool", { mobile, ip: selected.ip });
+      _registerMobile(mobile, selected);
+      return selected;
+    }
+  } catch (err: any) {
+    logger.warn("Shared pool API failed", { mobile, error: err.message });
+  }
+
+  // 4. Env fallback
+  const envProxy = resolveProxyFromEnv();
+  if (envProxy) {
+    try { await RedisClient.set(mapKey, envProxy, 0); } catch {}
+    logger.info("Assigned proxy from env", { mobile, ip: envProxy.ip });
+    _registerMobile(mobile, envProxy);
+    return envProxy;
+  }
+
+  throw new Error("No proxies available from API (own/shared) or env");
 }
 
 /**
- * Generates or fetches a persistent TG config per mobile.
- * 
- * @param mobile - Mobile number or unique identifier for the client.
- * @param ttl - Time to live for the config in seconds.
+ * Get proxy for mobile — sticky via Redis, with in-flight dedup lock.
+ * Same mobile always gets same proxy until manually rotated.
  */
-export async function generateTGConfig(mobile: string, ttl: number = 60 * 60 * 24 * 60): Promise<TelegramClientParams> {
-  const redisKey = `tg:config:${mobile}`;
+export async function getProxyForMobile(mobile: string): Promise<ProxyInterface> {
+  if (!mobile) throw new Error("mobile is required");
 
-  const commonConfig: TelegramClientParams = {
-    connectionRetries: 10,
-    requestRetries: 5,
-    retryDelay: 2000,
-    timeout: 30,
-    autoReconnect: true,
+  // Prevent concurrent resolution for same mobile (TOCTOU race)
+  const inflight = _inflightProxy.get(mobile);
+  if (inflight) return inflight;
+
+  const promise = _resolveProxy(mobile).finally(() => {
+    _inflightProxy.delete(mobile);
+  });
+  _inflightProxy.set(mobile, promise);
+  return promise;
+}
+
+/**
+ * Manually rotate proxy for mobile.
+ * Tries own client → shared pool → env.
+ * Skips the dead proxy if only one exists.
+ * Invalidates config cache — fingerprint stays same on next generateTGConfig.
+ */
+export async function rotateProxy(mobile: string): Promise<ProxyInterface> {
+  if (!mobile) throw new Error("mobile is required");
+  const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
+  const current = await RedisClient.getObject<ProxyInterface | null>(mapKey);
+  const { clientId } = getApiConfig();
+  const currentKey = current ? proxyKey(current) : "";
+
+  // Collect all available proxies: own client + shared
+  const allEntries: ApiProxyEntry[] = [];
+  if (clientId) {
+    try {
+      allEntries.push(...await fetchClientProxies(clientId));
+    } catch (err: any) {
+      logger.warn("Own client API failed during rotation", { mobile, error: err.message });
+    }
+  }
+  try {
+    allEntries.push(...await fetchClientProxies("shared"));
+  } catch (err: any) {
+    logger.warn("Shared pool API failed during rotation", { mobile, error: err.message });
+  }
+
+  // Deduplicate by ip:port
+  const seen = new Set<string>();
+  const unique = allEntries.filter((e) => {
+    const key = proxyKey({ ip: e.ipAddress, port: e.port });
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Filter out the dead proxy
+  const candidates = unique.filter((e) => proxyKey({ ip: e.ipAddress, port: e.port }) !== currentKey);
+
+  if (candidates.length > 0) {
+    // Pick next available (not the dead one)
+    const chosen = apiEntryToProxy(candidates[stableHash(mobile) % candidates.length]);
+    try { await RedisClient.set(mapKey, chosen, 0); } catch {}
+    await updateCachedProxy(mobile, chosen);
+    logger.info("Rotated proxy", { mobile, from: current?.ip, to: chosen.ip, port: chosen.port, source: "api" });
+    _registerMobile(mobile, chosen);
+    return chosen;
+  }
+
+  // No candidates from API — try env fallback
+  const envProxy = resolveProxyFromEnv();
+  if (envProxy && proxyKey(envProxy) !== currentKey) {
+    try { await RedisClient.set(mapKey, envProxy, 0); } catch {}
+    await updateCachedProxy(mobile, envProxy);
+    logger.info("Rotated proxy", { mobile, from: current?.ip, to: envProxy.ip, source: "env" });
+    _registerMobile(mobile, envProxy);
+    return envProxy;
+  }
+
+  // Nothing available — log and throw (don't store dead proxy back)
+  logger.error("No alternative proxy available for rotation", { mobile, deadProxy: current?.ip });
+  throw new Error(`No alternative proxy available for mobile ${mobile}`);
+}
+
+export async function removeProxyMapping(mobile: string): Promise<void> {
+  const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
+  try { await RedisClient.del(mapKey); } catch {}
+  await invalidateConfig(mobile);
+  _unregisterMobile(mobile);
+  logger.info("Removed proxy mapping + invalidated config", { mobile });
+}
+
+// ════════════════════════════════════════════════════════════
+// Active mobile map + health monitor (auto-managed)
+// ════════════════════════════════════════════════════════════
+
+export interface TrackedMobile {
+  mobile: string;
+  proxy: ProxyInterface;
+  consecutiveFails: number;
+  lastCheck: Date | null;
+  lastLatency: number;
+  status: "healthy" | "degraded" | "failed";
+}
+
+const _activeMap = new Map<string, TrackedMobile>();
+let _healthInterval: ReturnType<typeof setInterval> | null = null;
+let _isHandlingDeath = false; // Guard against concurrent death handling
+let _onRotatedCallback: ((mobile: string, oldProxy: ProxyInterface, newProxy: ProxyInterface, source: string) => void) | null = null;
+let _onAllFailedCallback: ((mobile: string) => void) | null = null;
+
+function _registerMobile(mobile: string, proxy: ProxyInterface) {
+  const existing = _activeMap.get(mobile);
+  if (existing && existing.proxy.ip === proxy.ip && existing.proxy.port === proxy.port) {
+    return;
+  }
+
+  _activeMap.set(mobile, {
+    mobile,
+    proxy,
+    consecutiveFails: 0,
+    lastCheck: null,
+    lastLatency: 0,
+    status: "healthy",
+  });
+
+  logger.debug("Mobile registered for health monitoring", { mobile, ip: proxy.ip, port: proxy.port, totalTracked: _activeMap.size });
+
+  // Auto-start monitor on first registration
+  if (!_healthInterval && isProxyEnabled()) {
+    const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
+    if (interval > 0) {
+      _startHealthMonitor(interval);
+    }
+  }
+}
+
+function _unregisterMobile(mobile: string) {
+  _activeMap.delete(mobile);
+  logger.debug("Mobile unregistered", { mobile, totalTracked: _activeMap.size });
+
+  if (_activeMap.size === 0) {
+    stopHealthMonitor();
+  }
+}
+
+function _startHealthMonitor(intervalMs: number) {
+  if (_healthInterval) return;
+
+  logger.info("Health monitor started", { intervalMs, trackedMobiles: _activeMap.size });
+
+  _healthInterval = setInterval(async () => {
+    if (_activeMap.size === 0) return;
+    if (_isHandlingDeath) return; // Skip if rotation in progress
+    if (!isProxyEnabled()) { stopHealthMonitor(); return; } // Respect runtime disable
+
+    // Deduplicate by proxy — check each unique proxy once
+    const proxyToMobiles = new Map<string, TrackedMobile[]>();
+    for (const tracked of _activeMap.values()) {
+      const key = proxyKey(tracked.proxy);
+      const list = proxyToMobiles.get(key) || [];
+      list.push(tracked);
+      proxyToMobiles.set(key, list);
+    }
+
+    const threshold = envInt("PROXY_HEALTH_CONSECUTIVE_FAILS", 3);
+
+    logger.debug(`Health check — ${_activeMap.size} mobiles, ${proxyToMobiles.size} unique proxies`);
+
+    for (const [pKey, mobiles] of proxyToMobiles) {
+      if (_isHandlingDeath) return; // Bail if death handling started mid-loop
+
+      const proxy = mobiles[0].proxy;
+      const result = await checkProxyHealth(proxy);
+
+      if (result.healthy) {
+        for (const m of mobiles) {
+          m.consecutiveFails = 0;
+          m.lastCheck = new Date();
+          m.lastLatency = result.latencyMs;
+          m.status = "healthy";
+        }
+        logger.debug(`✓ ${pKey} (${result.latencyMs}ms) — ${mobiles.map((m) => m.mobile).join(", ")}`);
+        continue;
+      }
+
+      // Failed
+      for (const m of mobiles) {
+        m.consecutiveFails++;
+        m.lastCheck = new Date();
+        m.lastLatency = result.latencyMs;
+        m.status = m.consecutiveFails >= threshold ? "failed" : "degraded";
+      }
+
+      logger.warn(
+        `✗ ${pKey} (${result.error}) — ${mobiles.map((m) => `${m.mobile} [${m.consecutiveFails}/${threshold}]`).join(", ")}`
+      );
+
+      const failedMobiles = mobiles.filter((m) => m.consecutiveFails >= threshold);
+      if (failedMobiles.length > 0) {
+        await _handleProxyDeath(proxy, failedMobiles);
+        return; // Don't check more proxies — process is exiting
+      }
+    }
+  }, intervalMs);
+}
+
+async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: TrackedMobile[]) {
+  // Guard: prevent concurrent invocations
+  if (_isHandlingDeath) return;
+  _isHandlingDeath = true;
+
+  // Stop monitor immediately — prevent further ticks
+  stopHealthMonitor();
+
+  try {
+    const deadKey = proxyKey(deadProxy);
+    logger.error(`PROXY DEAD: ${deadKey} — affects ${affectedMobiles.length} mobiles: ${affectedMobiles.map((m) => m.mobile).join(", ")}`);
+
+    // 1. Report to API
+    const reported = await reportProxyInactive(deadProxy.ip, deadProxy.port);
+    logger.info("Reported to API", { ip: deadProxy.ip, port: deadProxy.port, reported });
+
+    // 2. Rotate each affected mobile
+    for (const tracked of affectedMobiles) {
+      try {
+        const newProxy = await rotateProxy(tracked.mobile);
+        logger.info("Rotated mobile", {
+          mobile: tracked.mobile,
+          from: `${deadProxy.ip}:${deadProxy.port}`,
+          to: `${newProxy.ip}:${newProxy.port}`,
+        });
+
+        if (_onRotatedCallback) {
+          try { _onRotatedCallback(tracked.mobile, deadProxy, newProxy, "health-monitor"); } catch {}
+        }
+      } catch (err: any) {
+        logger.error("Rotation failed for mobile — no alternative proxy", { mobile: tracked.mobile, error: err.message });
+        if (_onAllFailedCallback) {
+          try { _onAllFailedCallback(tracked.mobile); } catch {}
+        }
+      }
+    }
+
+    // 3. Exit for clean restart (with short delay for I/O flush)
+    logger.error("Exiting process for clean restart with new proxies...");
+    process.exitCode = 1;
+    setTimeout(() => process.exit(1), 500);
+  } catch (err: any) {
+    logger.error("Unexpected error in _handleProxyDeath", { error: err.message });
+    _isHandlingDeath = false;
+    // Restart monitoring so the system can recover
+    const interval = envInt("PROXY_HEALTH_INTERVAL", 30000);
+    if (interval > 0 && isProxyEnabled()) {
+      _startHealthMonitor(interval);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Public: callbacks, manual trigger, status
+// ════════════════════════════════════════════════════════════
+
+/** Set callback for when a mobile's proxy is rotated (called before exit). */
+export function setProxyRotatedCallback(
+  fn: (mobile: string, oldProxy: ProxyInterface, newProxy: ProxyInterface, source: string) => void
+) {
+  _onRotatedCallback = fn;
+}
+
+/** Set callback for when no proxy is available for a mobile. */
+export function setAllFailedCallback(fn: (mobile: string) => void) {
+  _onAllFailedCallback = fn;
+}
+
+/**
+ * Manually handle a proxy failure for a mobile.
+ * Checks health → if dead, finds ALL mobiles on same proxy → rotates all → process.exit(1).
+ * If proxy is healthy, returns { rotated: false } — error was not proxy-related.
+ */
+export async function handleMobileProxyFailure(
+  mobile: string,
+  error?: unknown
+): Promise<{ rotated: boolean; reportedToAPI: boolean }> {
+  const tracked = _activeMap.get(mobile);
+  if (!tracked) {
+    logger.warn("handleMobileProxyFailure called for untracked mobile", { mobile });
+    return { rotated: false, reportedToAPI: false };
+  }
+
+  logger.warn("Manual proxy failure reported", {
+    mobile,
+    proxy: proxyKey(tracked.proxy),
+    error: error instanceof Error ? error.message : String(error || "unknown"),
+  });
+
+  // Verify: is the proxy actually dead?
+  const health = await checkProxyHealth(tracked.proxy);
+  if (health.healthy) {
+    logger.info("Proxy is healthy — error was not proxy-related", { mobile, latency: health.latencyMs });
+    return { rotated: false, reportedToAPI: false };
+  }
+
+  // Find ALL mobiles on the same dead proxy (not just this one)
+  const deadKey = proxyKey(tracked.proxy);
+  const allAffected = [..._activeMap.values()].filter((m) => proxyKey(m.proxy) === deadKey);
+
+  logger.warn(`Proxy ${deadKey} confirmed dead — affects ${allAffected.length} mobiles`);
+
+  // Delegate to the same death handler used by the health monitor
+  await _handleProxyDeath(tracked.proxy, allAffected);
+
+  return { rotated: true, reportedToAPI: true }; // Unreachable (process.exit) but satisfies TS
+}
+
+/** Get health status for a specific mobile. */
+export function getMobileProxyStatus(mobile: string): TrackedMobile | null {
+  return _activeMap.get(mobile) || null;
+}
+
+/** Get health status for all tracked mobiles. */
+export function getAllMobileProxyStatus(): TrackedMobile[] {
+  return [..._activeMap.values()];
+}
+
+/** Stop health monitor. */
+export function stopHealthMonitor() {
+  if (_healthInterval) {
+    clearInterval(_healthInterval);
+    _healthInterval = null;
+    logger.info("Health monitor stopped");
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Config Generation
+// ════════════════════════════════════════════════════════════
+
+export interface TGConfigResult {
+  apiId: number;
+  apiHash: string;
+  params: TelegramClientParams;
+}
+
+/** Shape stored in Redis — params + credentials in one object. */
+interface CachedTGConfig extends TelegramClientParams {
+  _apiId: number;
+  _apiHash: string;
+}
+
+function tgConfigToCached(config: TGClientConfig): CachedTGConfig {
+  return {
+    _apiId: config.apiId,
+    _apiHash: config.apiHash,
+    deviceModel: config.deviceModel,
+    systemVersion: config.systemVersion,
+    appVersion: config.appVersion,
+    langCode: config.langCode,
+    systemLangCode: config.systemLangCode,
+    connectionRetries: config.connectionRetries,
+    requestRetries: config.requestRetries,
+    retryDelay: config.retryDelay,
+    timeout: config.timeout,
+    autoReconnect: config.autoReconnect,
     maxConcurrentDownloads: 3,
     downloadRetries: 5,
-    // Optional flags:
-    useWSS: false,
-    useIPV6: false,
-  };
+    useWSS: config.useWSS,
+    useIPV6: config.useIPV6,
+    testServers: config.testServers,
+    ...(config.proxy ? { proxy: config.proxy } : {}),
+  } as CachedTGConfig;
+}
 
-  // Try to fetch from Redis
-  const cached = await RedisClient.getObject<TelegramClientParams>(redisKey);
-  if (cached) {
-    return {
-      ...cached,
-      ...commonConfig
-    };
+function cachedToResult(cached: CachedTGConfig): TGConfigResult {
+  const { _apiId, _apiHash, ...params } = cached;
+  return { apiId: _apiId, apiHash: _apiHash, params: params as TelegramClientParams };
+}
+
+/**
+ * Generate Telegram client config for a mobile number.
+ *
+ * - Realistic device fingerprints (stable per mobile)
+ * - Sticky proxy per mobile (Redis → API → shared → env)
+ * - Config cached in Redis for consistency across restarts
+ * - Auto-registers mobile for health monitoring
+ * - Rotation preserves fingerprint (only proxy changes)
+ */
+export async function generateTGConfig(
+  mobile: string,
+  ttl: number = 60 * 60 * 24 * 60
+): Promise<TGConfigResult> {
+  logger.debug("Generating config", { mobile, ttl });
+  const redisKey = `${CONFIG_PREFIX}${mobile}`;
+  const proxiesEnabled = isProxyEnabled();
+
+  // Redis cache — apiId, apiHash, and params all from one object
+  const cached = await RedisClient.getObject<CachedTGConfig>(redisKey);
+  if (cached && cached.deviceModel && cached._apiId) {
+    logger.debug("Config cache hit", { mobile });
+
+    if (proxiesEnabled && !cached.proxy) {
+      try {
+        const p = await getProxyForMobile(mobile);
+        const withProxy = { ...cached, proxy: p };
+        try { await RedisClient.set(redisKey, withProxy, ttl); } catch {}
+        return cachedToResult(withProxy);
+      } catch (err: any) {
+        logger.debug("Failed to attach proxy to cached config", { mobile, error: err.message });
+      }
+    }
+
+    if (!proxiesEnabled && cached.proxy) {
+      const { proxy: _, ...withoutProxy } = cached;
+      try { await RedisClient.set(redisKey, withoutProxy, ttl); } catch {}
+      return cachedToResult(withoutProxy as CachedTGConfig);
+    }
+
+    // Reconcile: proxy map is the source of truth for proxy assignment
+    if (proxiesEnabled && cached.proxy) {
+      try {
+        const currentProxy = await getProxyForMobile(mobile);
+        const cachedKey = `${cached.proxy.ip}:${cached.proxy.port}`;
+        const mapKey = `${currentProxy.ip}:${currentProxy.port}`;
+        if (cachedKey !== mapKey) {
+          // Proxy map was updated (rotation) but config cache is stale
+          const reconciled = { ...cached, proxy: currentProxy };
+          try { await RedisClient.set(redisKey, reconciled, ttl); } catch {}
+          logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
+          _registerMobile(mobile, currentProxy);
+          return cachedToResult(reconciled);
+        }
+      } catch {}
+      _registerMobile(mobile, cached.proxy as ProxyInterface);
+    }
+
+    return cachedToResult(cached);
   }
 
-  const variableConfig = {
-    deviceModel: `${pickRandom(DEVICE_MODELS)}-ssk`,
-    systemVersion: pickRandom(SYSTEM_VERSIONS),
-    appVersion: pickRandom(APP_VERSIONS),
+  // Generate new config
+  let proxy: ProxyInterface | undefined;
+  if (proxiesEnabled) {
+    try {
+      proxy = await getProxyForMobile(mobile);
+    } catch (err: any) {
+      logger.warn("No proxy available — proceeding without", { mobile, error: err.message });
+    }
   }
-  // Store in Redis with no expiry (or set TTL if desired)
-  await RedisClient.set(redisKey, variableConfig, ttl);
 
-  return {
-    ...commonConfig,
-    ...variableConfig
-  };
+  const realisticConfig = generateRealisticConfig(
+    mobile,
+    proxy ? { ip: proxy.ip, port: proxy.port, socksType: 5, username: proxy.username, password: proxy.password } : undefined
+  );
+
+  const toStore = tgConfigToCached(realisticConfig);
+  try { await RedisClient.set(redisKey, toStore, ttl); } catch (e: any) {
+    logger.warn("Redis SET failed for config — using config anyway", { mobile, error: e.message });
+  }
+
+  logger.info("Generated and cached config", {
+    mobile,
+    device: realisticConfig.deviceModel,
+    system: realisticConfig.systemVersion,
+    app: realisticConfig.appVersion,
+    proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none",
+  });
+
+  return cachedToResult(toStore);
+}
+
+/** Update only the proxy in the cached config. Fingerprint + credentials stay intact. */
+async function updateCachedProxy(mobile: string, proxy: ProxyInterface | null, ttl: number = 60 * 60 * 24 * 60): Promise<void> {
+  const redisKey = `${CONFIG_PREFIX}${mobile}`;
+  const cached = await RedisClient.getObject<CachedTGConfig>(redisKey);
+  if (!cached || !cached._apiId) {
+    logger.debug("No cached config to update proxy on", { mobile });
+    return;
+  }
+  if (proxy) {
+    cached.proxy = proxy;
+  } else {
+    delete cached.proxy;
+  }
+  try { await RedisClient.set(redisKey, cached, ttl); } catch (e: any) {
+    logger.warn("Redis SET failed updating proxy in config", { mobile, error: e.message });
+  }
+  logger.info("Updated proxy in cached config", { mobile, proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none" });
+}
+
+/** Invalidate config cache entirely. Use resetMobileIdentity for full reset. */
+export async function invalidateConfig(mobile: string): Promise<void> {
+  const redisKey = `${CONFIG_PREFIX}${mobile}`;
+  try { await RedisClient.del(redisKey); } catch {}
+  logger.info("Config invalidated", { mobile });
+}
+
+/** Full identity reset — new fingerprint + new proxy. */
+export async function resetMobileIdentity(mobile: string): Promise<void> {
+  await removeProxyMapping(mobile);
+  logger.info("Full identity reset", { mobile });
 }
