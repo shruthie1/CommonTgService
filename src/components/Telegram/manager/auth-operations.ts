@@ -7,26 +7,32 @@ import { parseError } from '../../../utils/parseError';
 import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
 import { notifbot } from '../../../utils/logbots';
 import { generateTGConfig } from '../utils/generateTGConfig';
+import { getAvailablePlatforms, getPlatformConfig } from '../utils/tg-config';
 import { MailReader } from '../../../IMap/IMap';
 
-export function isOwnAuth(auth: Api.Authorization): boolean {
-    const authCriteria = [
-        { field: 'country', value: 'singapore' },
-        { field: 'deviceModel', values: ['oneplus 11', 'cli', 'linux', 'windows'] },
-        { field: 'appName', values: ['likki', 'rams', 'sru', 'shru', 'hanslnz'] },
-    ];
-
-    return authCriteria.some(criterion => {
-        const fieldValue = auth[criterion.field]?.toLowerCase?.() || '';
-
-        if (criterion.field === 'deviceModel' && fieldValue.endsWith('ssk')) return true;
-
-        if ('values' in criterion) {
-            return criterion.values.some(value => fieldValue.includes(value.toLowerCase()));
+// Build device model list from tg-config platforms (computed once at module load)
+const _ownDeviceModels: string[] = (() => {
+    const models: string[] = [];
+    for (const name of getAvailablePlatforms()) {
+        const platform = getPlatformConfig(name);
+        if (platform) {
+            for (const device of platform.devices) {
+                models.push(device.deviceModel.toLowerCase());
+            }
         }
+    }
+    return models;
+})();
 
-        return fieldValue.includes(criterion.value.toLowerCase());
-    });
+export function isOwnAuth(auth: Api.Authorization): boolean {
+    const deviceModel = (auth.deviceModel || '').toLowerCase();
+
+    // Match against all device models from tg-config platforms
+    if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
+        return true;
+    }
+
+    return false;
 }
 
 export async function removeOtherAuths(ctx: TgContext): Promise<void> {
