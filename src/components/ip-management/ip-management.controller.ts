@@ -14,7 +14,7 @@ import {
 import { IpManagementService } from './ip-management.service';
 import { CreateProxyIpDto } from './dto/create-proxy-ip.dto';
 import { UpdateProxyIpDto } from './dto/update-proxy-ip.dto';
-import { SearchProxyIpDto, SearchIpMobileMappingDto } from './dto/search-ip.dto';
+import { GetNextIpDto } from './dto/get-next-ip.dto';
 import { ProxyIp } from './schemas/proxy-ip.schema';
 
 @ApiTags('IP Management')
@@ -61,40 +61,24 @@ export class IpManagementController {
         }
     }
 
-    // Search functionality temporarily disabled for simplification
-    // @Get('proxy-ips/search')
-    // @ApiOperation({ summary: 'Search proxy IPs with filters' })
-    // @ApiQuery({ name: 'ipAddress', required: false, description: 'IP address to search for' })
-    // @ApiQuery({ name: 'port', required: false, description: 'Port number to search for' })
-    // @ApiQuery({ name: 'protocol', required: false, description: 'Protocol type', enum: ['http', 'https', 'socks5'] })
-    // @ApiQuery({ name: 'country', required: false, description: 'Country code' })
-    // @ApiQuery({ name: 'status', required: false, description: 'Status', enum: ['active', 'inactive', 'blocked', 'maintenance'] })
-    // @ApiQuery({ name: 'isAssigned', required: false, description: 'Assignment status' })
-    // @ApiQuery({ name: 'assignedToClient', required: false, description: 'Client ID' })
-    // @ApiQuery({ name: 'provider', required: false, description: 'Provider name' })
-    // @ApiOkResponse({ description: 'Search results', type: [ProxyIp] })
-    // async searchProxyIps(@Query() searchDto: SearchProxyIpDto): Promise<ProxyIp[]> {
-    //     try {
-    //         return await this.ipManagementService.searchProxyIps(searchDto);
-    //     } catch (error) {
-    //         throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    //     }
-    // }
-
-    // Get specific proxy IP functionality temporarily disabled for simplification
-    // @Get('proxy-ips/:ipAddress/:port')
-    // @ApiOperation({ summary: 'Get a specific proxy IP' })
-    // @ApiParam({ name: 'ipAddress', description: 'IP address' })
-    // @ApiParam({ name: 'port', description: 'Port number' })
-    // @ApiOkResponse({ description: 'Proxy IP found', type: ProxyIp })
-    // @ApiNotFoundResponse({ description: 'Proxy IP not found' })
-    // async getProxyIpById(@Param('ipAddress') ipAddress: string, @Param('port') port: string): Promise<ProxyIp> {
-    //     try {
-    //         return await this.ipManagementService.findProxyIpById(ipAddress, parseInt(port));
-    //     } catch (error) {
-    //         throw new HttpException(error.message, HttpStatus.NOT_FOUND);
-    //     }
-    // }
+    @Get('proxy-ips/next')
+    @ApiOperation({
+        summary: 'Get next available proxy IP (round-robin)',
+        description: 'Serves the next active proxy IP using global round-robin. Optionally filter by clientId (falls back to full pool if no client IPs found), countryCode, or protocol.'
+    })
+    @ApiQuery({ name: 'clientId', required: false, description: 'Client ID to prefer IPs assigned to this client' })
+    @ApiQuery({ name: 'countryCode', required: false, description: 'ISO country code filter' })
+    @ApiQuery({ name: 'protocol', required: false, description: 'Protocol filter', enum: ['http', 'https', 'socks5'] })
+    @ApiOkResponse({ description: 'Next proxy IP served', type: ProxyIp })
+    @ApiNotFoundResponse({ description: 'No active proxy IPs available' })
+    async getNextIp(@Query() filters: GetNextIpDto): Promise<ProxyIp> {
+        try {
+            return await this.ipManagementService.getNextIp(filters);
+        } catch (error) {
+            if (error instanceof HttpException) throw error;
+            throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+        }
+    }
 
     @Put('proxy-ips/:ipAddress/:port')
     @ApiOperation({ summary: 'Update a proxy IP' })
@@ -131,65 +115,23 @@ export class IpManagementController {
         }
     }
 
-    // ==================== IP-MOBILE MAPPING MANAGEMENT ====================
-
-    // Get all mappings functionality temporarily disabled for simplification
-    // Use getClientMappings with specific clientId instead
-    // @Get('mappings')
-    // @ApiOperation({ summary: 'Get all IP-mobile mappings' })
-    // @ApiOkResponse({ description: 'Mappings retrieved successfully', type: [IpMobileMapping] })
-    // async getAllMappings(): Promise<IpMobileMapping[]> {
-    //     try {
-    //         // For simplified system, return all active mappings across all clients
-    //         const allMappings = await this.ipMobileMappingModel.find({ status: 'active' }).lean();
-    //         return allMappings;
-    //     } catch (error) {
-    //         throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
-    //     }
-    // }
-
-    // Search functionality temporarily disabled for simplification
-    // @Get('mappings/search')
-    // @ApiOperation({ summary: 'Search IP-mobile mappings with filters' })
-    // @ApiQuery({ name: 'mobile', required: false, description: 'Mobile number to search for' })
-    // @ApiQuery({ name: 'ipAddress', required: false, description: 'IP address to search for' })
-    // @ApiQuery({ name: 'clientId', required: false, description: 'Client ID to search for' })
-    // @ApiQuery({ name: 'status', required: false, description: 'Status', enum: ['active', 'inactive'] })
-    // @ApiOkResponse({ description: 'Search results', type: [IpMobileMapping] })
-    // async searchMappings(@Query() searchDto: SearchIpMobileMappingDto): Promise<IpMobileMapping[]> {
-    //     try {
-    //         return await this.ipManagementService.searchMappings(searchDto);
-    //     } catch (error) {
-    //         throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    //     }
-    // }
-
-    // Create mapping functionality disabled for simplification - use assign endpoint instead
-    // @Post('mappings')
-    // @ApiOperation({ summary: 'Create a new IP-mobile mapping' })
-    // @ApiBody({ type: CreateIpMobileMappingDto })
-    // @ApiOkResponse({ description: 'Mapping created successfully', type: IpMobileMapping })
-    // @ApiBadRequestResponse({ description: 'Invalid input data' })
-    // async createMapping(@Body() createMappingDto: CreateIpMobileMappingDto): Promise<IpMobileMapping> {
-    //     try {
-    //         return await this.ipManagementService.createIpMobileMapping(createMappingDto);
-    //     } catch (error) {
-    //         throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
-    //     }
-    // }
-
     @Get('health')
     @ApiOperation({ summary: 'Get IP management health status' })
     @ApiOkResponse({ description: 'Health status retrieved successfully' })
-    async getHealthStatus(): Promise<{
-        status: 'healthy' | 'warning' | 'critical';
-        availableIps: number;
-        totalActiveIps: number;
-        utilizationRate: number;
-        issues: string[];
-    }> {
+    async getHealthStatus() {
         try {
             return await this.ipManagementService.healthCheck();
+        } catch (error) {
+            throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @Get('stats')
+    @ApiOperation({ summary: 'Get IP pool statistics including source breakdown' })
+    @ApiOkResponse({ description: 'Stats retrieved successfully' })
+    async getStats() {
+        try {
+            return await this.ipManagementService.getStats();
         } catch (error) {
             throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -232,17 +174,4 @@ export class IpManagementController {
             throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
-
-    // Cleanup functionality temporarily disabled for simplification
-    // @Post('maintenance/cleanup-expired')
-    // @ApiOperation({ summary: 'Clean up expired IP mappings' })
-    // @ApiOkResponse({ description: 'Cleanup completed' })
-    // async cleanupExpiredMappings(): Promise<{ message: string; cleanedCount: number }> {
-    //     try {
-    //         const cleanedCount = await this.ipManagementService.cleanupExpiredMappings();
-    //         return { message: 'Cleanup completed', cleanedCount };
-    //     } catch (error) {
-    //         throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
-    //     }
-    // }
 }
