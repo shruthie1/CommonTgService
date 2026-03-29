@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, BadRequestException } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
 import { IpManagementService } from '../ip-management/ip-management.service';
 import { CreateProxyIpDto } from '../ip-management/dto/create-proxy-ip.dto';
@@ -172,10 +172,9 @@ export class WebshareProxyService implements OnModuleInit {
 
             await this.ipManagementService.markInactive(ipAddress, port);
 
-            const body: Record<string, string> = {};
-            if (proxy.webshareId) {
-                body.proxy_address = ipAddress;
-            }
+            const body: Record<string, string> = {
+                proxy_address: ipAddress,
+            };
             if (preferredCountry) {
                 body.country_code = preferredCountry;
             }
@@ -252,7 +251,7 @@ export class WebshareProxyService implements OnModuleInit {
             this.logger.warn(`Webshare API check failed: ${error.message}`);
         }
 
-        const dbProxies = await this.ipManagementService.findBySource(SOURCE_NAME);
+        const totalProxiesInDb = await this.ipManagementService.countBySource(SOURCE_NAME);
         let lastSyncAt: string | null = null;
         let lastSyncError: string | null = null;
 
@@ -265,7 +264,7 @@ export class WebshareProxyService implements OnModuleInit {
             configured: true,
             apiKeyValid,
             totalProxiesInWebshare,
-            totalProxiesInDb: dbProxies.length,
+            totalProxiesInDb,
             lastSyncAt,
             lastSyncError,
         };
@@ -289,7 +288,7 @@ export class WebshareProxyService implements OnModuleInit {
 
     private ensureConfigured(): void {
         if (!this.configured) {
-            throw new Error('Webshare proxy module is not configured. Set WEBSHARE_API_KEY environment variable.');
+            throw new BadRequestException('Webshare proxy module is not configured. Set WEBSHARE_API_KEY environment variable.');
         }
     }
 

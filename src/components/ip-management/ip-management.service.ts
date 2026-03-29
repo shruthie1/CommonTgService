@@ -231,7 +231,7 @@ export class IpManagementService {
 
             const clientIps = await this.proxyIpModel
                 .find(clientQuery)
-                .sort({ lastUsed: 1, roundRobinIndex: 1 })
+                .sort({ _id: 1 })
                 .lean();
 
             if (clientIps.length > 0) {
@@ -244,7 +244,7 @@ export class IpManagementService {
         // Full pool — all active IPs (regardless of assignment)
         const allIps = await this.proxyIpModel
             .find(query)
-            .sort({ lastUsed: 1, roundRobinIndex: 1 })
+            .sort({ _id: 1 })
             .lean();
 
         if (allIps.length === 0) {
@@ -302,59 +302,61 @@ export class IpManagementService {
         const errors: string[] = [];
         const incomingKeys = new Set<string>();
 
-        for (const proxy of proxies) {
+        // Use bulkWrite for performance — single DB round-trip for upserts
+        const bulkOps = proxies.map(proxy => {
             const key = `${proxy.ipAddress}:${proxy.port}`;
             incomingKeys.add(key);
 
-            try {
-                const existing = await this.proxyIpModel.findOne({
-                    ipAddress: proxy.ipAddress,
-                    port: proxy.port,
-                });
+            return {
+                updateOne: {
+                    filter: { ipAddress: proxy.ipAddress, port: proxy.port },
+                    update: {
+                        $set: {
+                            protocol: proxy.protocol,
+                            username: proxy.username,
+                            password: proxy.password,
+                            status: proxy.status || 'active',
+                            source,
+                            webshareId: proxy.webshareId,
+                            countryCode: proxy.countryCode,
+                            cityName: proxy.cityName,
+                            consecutiveFails: 0,
+                        },
+                        $setOnInsert: {
+                            isAssigned: proxy.isAssigned || false,
+                            roundRobinIndex: 0,
+                        },
+                    },
+                    upsert: true,
+                },
+            };
+        });
 
-                if (existing) {
-                    await this.proxyIpModel.updateOne(
-                        { ipAddress: proxy.ipAddress, port: proxy.port },
-                        {
-                            $set: {
-                                protocol: proxy.protocol,
-                                username: proxy.username,
-                                password: proxy.password,
-                                status: proxy.status || 'active',
-                                source,
-                                webshareId: proxy.webshareId,
-                                countryCode: proxy.countryCode,
-                                cityName: proxy.cityName,
-                                consecutiveFails: 0,
-                            },
-                        }
-                    );
-                    updated++;
-                } else {
-                    await this.proxyIpModel.create({
-                        ...proxy,
-                        source,
-                        status: proxy.status || 'active',
-                        isAssigned: proxy.isAssigned || false,
-                        consecutiveFails: 0,
-                        roundRobinIndex: 0,
-                    });
-                    created++;
-                }
+        if (bulkOps.length > 0) {
+            try {
+                const result = await this.proxyIpModel.bulkWrite(bulkOps, { ordered: false });
+                created = result.upsertedCount;
+                updated = result.modifiedCount;
             } catch (error) {
-                errors.push(`${key}: ${error.message}`);
+                // bulkWrite with ordered:false continues on errors; partial results available
+                if (error.result) {
+                    created = error.result.upsertedCount || 0;
+                    updated = error.result.modifiedCount || 0;
+                }
+                errors.push(`Bulk upsert errors: ${error.message}`);
+                this.logger.warn(`Bulk upsert had errors: ${error.message}`);
             }
         }
 
+        // Remove stale proxies from this source that weren't in the incoming list
         if (removeStale) {
-            const staleProxies = await this.proxyIpModel.find({ source }).lean();
-            for (const stale of staleProxies) {
-                const key = `${stale.ipAddress}:${stale.port}`;
-                if (!incomingKeys.has(key)) {
-                    await this.proxyIpModel.deleteOne({ ipAddress: stale.ipAddress, port: stale.port });
-                    removed++;
-                    this.logger.debug(`Removed stale ${source} proxy: ${key}`);
-                }
+            const result = await this.proxyIpModel.deleteMany({
+                source,
+                $nor: proxies.map(p => ({ ipAddress: p.ipAddress, port: p.port })),
+            });
+            removed = result.deletedCount;
+            if (removed > 0) {
+                this.logger.debug(`Removed ${removed} stale ${source} proxies`);
             }
         }
 
@@ -411,6 +413,13 @@ export class IpManagementService {
      */
     async findBySource(source: string): Promise<ProxyIp[]> {
         return this.proxyIpModel.find({ source }).lean();
+    }
+
+    /**
+     * Count proxies from a specific source (efficient — no document loading).
+     */
+    async countBySource(source: string): Promise<number> {
+        return this.proxyIpModel.countDocuments({ source });
     }
 
     // ==================== STATS ====================
