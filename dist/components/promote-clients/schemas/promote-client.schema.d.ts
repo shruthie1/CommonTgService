@@ -21,6 +21,15 @@ export declare class PromoteClient {
     lastUpdateAttempt: Date;
     failedUpdateAttempts: number;
     lastUpdateFailure: Date;
+    session: string;
+    inUse: boolean;
+    twoFASetAt: Date;
+    otherAuthsRemovedAt: Date;
+    warmupPhase: string;
+    warmupJitter: number;
+    enrolledAt: Date;
+    organicActivityAt: Date;
+    sessionRotatedAt: Date;
 }
 export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClient, import("mongoose").Model<PromoteClient, any, any, any, (Document<unknown, any, PromoteClient, any, import("mongoose").DefaultSchemaOptions> & PromoteClient & {
     _id: import("mongoose").Types.ObjectId;
@@ -213,6 +222,87 @@ export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClien
         id: string;
     }>;
     lastUpdateFailure?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    session?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    inUse?: import("mongoose").SchemaDefinitionProperty<boolean, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    twoFASetAt?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    otherAuthsRemovedAt?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    warmupPhase?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    warmupJitter?: import("mongoose").SchemaDefinitionProperty<number, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    enrolledAt?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    organicActivityAt?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    sessionRotatedAt?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
         _id: import("mongoose").Types.ObjectId;

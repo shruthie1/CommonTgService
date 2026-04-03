@@ -33,9 +33,10 @@ __decorate([
 ], CreateBufferClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date of the session',
-        example: '2023-06-22',
+        description: 'Date when the client becomes available for assignment.',
+        example: '2026-04-03',
     }),
+    (0, class_validator_1.IsDateString)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "availableDate", void 0);
@@ -49,7 +50,7 @@ __decorate([
 ], CreateBufferClientDto.prototype, "session", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Channel Count',
+        description: 'Current joined channel count.',
         example: 23,
         type: Number
     }),
@@ -65,32 +66,29 @@ __decorate([
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status of the buffer client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Operational status of the buffer client.',
         example: 'active',
         enum: ['active', 'inactive'],
         default: 'active',
-        required: false,
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status message for the promote client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional operator note attached to the buffer client.',
         example: 'Account is functioning properly',
         default: 'Account is functioning properly',
-        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "message", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Last used timestamp for the promote client',
-        example: '2023-06-22T10:30:00.000Z',
-        required: false
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Timestamp when the client was last used in a live workflow.',
+        example: '2026-04-01T10:30:00.000Z',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),

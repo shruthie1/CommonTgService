@@ -17,50 +17,50 @@ class SearchBufferClientDto {
 }
 exports.SearchBufferClientDto = SearchBufferClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.', example: '+15551234567' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Client ID to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning client ID to filter by.', example: 'client-a' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for.', example: 'sample_user' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Name to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Display name to search for.', example: 'Jane Doe' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for.', example: 'https://t.me/example' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "channelLink", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for.', example: 'https://replit.com/@team/demo' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "repl", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status.', example: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     __metadata("design:type", Boolean)
 ], SearchBufferClientDto.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by tgId' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Telegram account ID.', example: '123456789' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

@@ -33,9 +33,10 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date of the session',
-        example: '2023-06-22',
+        description: 'Date when the client becomes available for assignment.',
+        example: '2026-04-03',
     }),
+    (0, class_validator_1.IsDateString)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "availableDate", void 0);
@@ -57,45 +58,51 @@ __decorate([
     __metadata("design:type", Number)
 ], CreatePromoteClientDto.prototype, "channels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Client ID this promote mobile belongs to',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Owning client ID for this promote mobile.',
         example: 'client123',
-        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status of the promote client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Operational status of the promote client.',
         example: 'active',
         default: 'active',
-        required: false
+        enum: ['active', 'inactive'],
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status message for the promote client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional operator note attached to the promote client.',
         example: 'Account is functioning properly',
         default: 'Account is functioning properly',
-        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "message", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Last used timestamp for the promote client',
-        example: '2023-06-22T10:30:00.000Z',
-        required: false
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Timestamp when the client was last used in a live workflow.',
+        example: '2026-04-01T10:30:00.000Z',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
     __metadata("design:type", Date)
 ], CreatePromoteClientDto.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Session string for Telegram connection.',
+        example: 'session123',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "session", void 0);
 //# sourceMappingURL=create-promote-client.dto.js.map
