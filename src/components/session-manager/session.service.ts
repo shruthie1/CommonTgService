@@ -399,7 +399,8 @@ export class SessionManager {
     private isRetryableError(errorMessage: string): boolean {
         const nonRetryableErrors = [
             'user_deactivated_ban', 'auth_key_unregistered', 'session_revoked',
-            'phone_number_banned', 'user_deactivated', 'phone_number_invalid',
+            'auth_key_duplicated', 'session_expired', 'frozen_method_invalid',
+            'frozen_participant_missing', 'phone_number_banned', 'user_deactivated', 'phone_number_invalid',
             'session_password_needed'
         ];
 

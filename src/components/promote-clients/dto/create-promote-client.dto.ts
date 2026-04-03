@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import {  IsNumber, IsString, IsOptional, IsDateString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsString, IsOptional, IsDateString } from 'class-validator';
 
 export class CreatePromoteClientDto {
   @ApiProperty({
@@ -17,9 +17,10 @@ export class CreatePromoteClientDto {
   readonly mobile: string;
 
   @ApiProperty({
-    description: 'Date of the session',
-    example: '2023-06-22',
+    description: 'Date when the client becomes available for assignment.',
+    example: '2026-04-03',
   })
+  @IsDateString()
   @IsString()
   readonly availableDate: string;
 
@@ -38,41 +39,46 @@ export class CreatePromoteClientDto {
   @IsNumber()
   readonly channels: number;
 
-  @ApiProperty({
-    description: 'Client ID this promote mobile belongs to',
+  @ApiPropertyOptional({
+    description: 'Owning client ID for this promote mobile.',
     example: 'client123',
-    required: false
   })
   @IsOptional()
   @IsString()
   readonly clientId?: string;
 
-  @ApiProperty({
-    description: 'Status of the promote client',
+  @ApiPropertyOptional({
+    description: 'Operational status of the promote client.',
     example: 'active',
     default: 'active',
-    required: false
+    enum: ['active', 'inactive'],
   })
   @IsOptional()
   @IsString()
   readonly status?: string;
 
-  @ApiProperty({
-    description: 'Status message for the promote client',
+  @ApiPropertyOptional({
+    description: 'Optional operator note attached to the promote client.',
     example: 'Account is functioning properly',
     default: 'Account is functioning properly',
-    required: false
   })
   @IsOptional()
   @IsString()
   message?: string;
 
-  @ApiProperty({
-    description: 'Last used timestamp for the promote client',
-    example: '2023-06-22T10:30:00.000Z',
-    required: false
+  @ApiPropertyOptional({
+    description: 'Timestamp when the client was last used in a live workflow.',
+    example: '2026-04-01T10:30:00.000Z',
   })
   @IsOptional()
   @IsDateString()
   readonly lastUsed?: Date;
+
+  @ApiPropertyOptional({
+    description: 'Session string for Telegram connection.',
+    example: 'session123',
+  })
+  @IsOptional()
+  @IsString()
+  readonly session?: string;
 }

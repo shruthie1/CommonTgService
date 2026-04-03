@@ -8164,6 +8164,7 @@
     },
     "/bufferclients": {
       "post": {
+        "description": "Creates a buffer client directly from supplied data.",
         "operationId": "BufferClientController_create",
         "parameters": [],
         "requestBody": {
@@ -8177,7 +8178,7 @@
           }
         },
         "responses": {
-          "default": {
+          "201": {
             "description": "",
             "content": {
               "application/json": {
@@ -8186,14 +8187,18 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Request body validation failed."
           }
         },
-        "summary": "Create user data",
+        "summary": "Create a buffer client record",
         "tags": [
           "Buffer Clients"
         ]
       },
       "get": {
+        "description": "Returns all buffer clients, optionally filtered by status.",
         "operationId": "BufferClientController_findAll",
         "parameters": [
           {
@@ -8207,7 +8212,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8221,7 +8226,7 @@
             }
           }
         },
-        "summary": "Get all buffer client data",
+        "summary": "List buffer clients",
         "tags": [
           "Buffer Clients"
         ]
@@ -8229,6 +8234,7 @@
     },
     "/bufferclients/search": {
       "get": {
+        "description": "Searches buffer client records by indexed and operational fields.",
         "operationId": "BufferClientController_search",
         "parameters": [
           {
@@ -8237,6 +8243,7 @@
             "in": "query",
             "description": "Mobile number",
             "schema": {
+              "example": "+15551234567",
               "type": "string"
             }
           },
@@ -8246,6 +8253,7 @@
             "in": "query",
             "description": "Client ID",
             "schema": {
+              "example": "client-a",
               "type": "string"
             }
           },
@@ -8255,6 +8263,7 @@
             "in": "query",
             "description": "Username",
             "schema": {
+              "example": "sample_user",
               "type": "string"
             }
           },
@@ -8264,6 +8273,7 @@
             "in": "query",
             "description": "Name",
             "schema": {
+              "example": "Jane Doe",
               "type": "string"
             }
           },
@@ -8273,6 +8283,7 @@
             "in": "query",
             "description": "Channel link",
             "schema": {
+              "example": "https://t.me/example",
               "type": "string"
             }
           },
@@ -8282,6 +8293,7 @@
             "in": "query",
             "description": "Repl link",
             "schema": {
+              "example": "https://replit.com/@team/demo",
               "type": "string"
             }
           },
@@ -8291,6 +8303,7 @@
             "in": "query",
             "description": "Filter by active status",
             "schema": {
+              "example": true,
               "type": "boolean"
             }
           },
@@ -8298,14 +8311,15 @@
             "name": "tgId",
             "required": false,
             "in": "query",
-            "description": "Filter by tgId",
+            "description": "Filter by Telegram account ID.",
             "schema": {
+              "example": "123456789",
               "type": "string"
             }
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8319,7 +8333,7 @@
             }
           }
         },
-        "summary": "Search buffer client data",
+        "summary": "Search buffer clients",
         "tags": [
           "Buffer Clients"
         ]
@@ -8327,21 +8341,23 @@
     },
     "/bufferclients/updateInfo": {
       "get": {
+        "description": "Starts a background refresh of buffer client metadata and channel counts.",
         "operationId": "BufferClientController_updateInfo",
         "parameters": [],
         "responses": {
-          "default": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "initiated Checking"
                 }
               }
             }
           }
         },
-        "summary": "Update promote Clients Info",
+        "summary": "Refresh buffer client metadata",
         "tags": [
           "Buffer Clients"
         ]
@@ -8349,6 +8365,7 @@
     },
     "/bufferclients/joinChannelsForBufferClients": {
       "get": {
+        "description": "Builds the next join queue for eligible buffer clients.",
         "operationId": "BufferClientController_joinChannelsforBufferClients",
         "parameters": [
           {
@@ -8362,18 +8379,19 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "Join channels initiated successfully"
                 }
               }
             }
           }
         },
-        "summary": "Join Channels for BufferClients",
+        "summary": "Prepare channel joins for buffer clients",
         "tags": [
           "Buffer Clients"
         ]
@@ -8381,21 +8399,23 @@
     },
     "/bufferclients/checkBufferClients": {
       "get": {
+        "description": "Starts the background warmup processor for eligible buffer clients.",
         "operationId": "BufferClientController_checkbufferClients",
         "parameters": [],
         "responses": {
-          "default": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "initiated Checking"
                 }
               }
             }
           }
         },
-        "summary": "Check Buffer Clients",
+        "summary": "Run buffer warmup processing",
         "tags": [
           "Buffer Clients"
         ]
@@ -8403,6 +8423,7 @@
     },
     "/bufferclients/addNewUserstoBufferClients": {
       "post": {
+        "description": "Starts background enrollment of candidate users into the buffer client pool.",
         "operationId": "BufferClientController_addNewUserstoBufferClients",
         "parameters": [],
         "requestBody": {
@@ -8410,44 +8431,28 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "goodIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "badIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "clientsNeedingBufferClients": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                }
+                "$ref": "#/components/schemas/BulkEnrollBufferClientsRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "initiated Checking"
                 }
               }
             }
+          },
+          "400": {
+            "description": "goodIds, badIds, or clientsNeedingBufferClients were not valid arrays."
           }
         },
-        "summary": "Add New Users to Buffer Clients",
+        "summary": "Bulk enroll users into buffer warmup",
         "tags": [
           "Buffer Clients"
         ]
@@ -8455,6 +8460,7 @@
     },
     "/bufferclients/SetAsBufferClient/{mobile}/{clientId}": {
       "post": {
+        "description": "Converts an existing user account into a warmup-managed buffer client.",
         "operationId": "BufferClientController_setAsBufferClient",
         "parameters": [
           {
@@ -8477,18 +8483,25 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "Client enrolled as buffer successfully"
                 }
               }
             }
+          },
+          "400": {
+            "description": "The user was not found or is already an active main client."
+          },
+          "409": {
+            "description": "A buffer client record already exists for this mobile."
           }
         },
-        "summary": "Set as Buffer Client",
+        "summary": "Enroll a user as a buffer client",
         "tags": [
           "Buffer Clients"
         ]
@@ -8496,6 +8509,7 @@
     },
     "/bufferclients/query": {
       "post": {
+        "description": "Executes a direct MongoDB-style filter against the buffer client collection.",
         "operationId": "BufferClientController_executeQuery",
         "parameters": [],
         "requestBody": {
@@ -8503,24 +8517,32 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "default": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+                "type": "object",
+                "additionalProperties": true,
+                "example": {
+                  "status": "active",
+                  "clientId": "client-a"
                 }
               }
             }
           }
         },
-        "summary": "Execute a custom MongoDB query",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BufferClient"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Execute a raw buffer client query",
         "tags": [
           "Buffer Clients"
         ]
@@ -8531,12 +8553,13 @@
         "operationId": "BufferClientController_getBufferClientDistribution",
         "parameters": [],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": true
                 }
               }
             }
@@ -8572,7 +8595,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8607,7 +8630,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8646,26 +8669,13 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "description": "New status (active/inactive)"
-                  },
-                  "message": {
-                    "type": "string",
-                    "description": "Status message (optional)"
-                  }
-                },
-                "required": [
-                  "status"
-                ]
+                "$ref": "#/components/schemas/StatusUpdateRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8674,6 +8684,12 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Status must be either active or inactive."
+          },
+          "404": {
+            "description": "Buffer client not found."
           }
         },
         "summary": "Update status of a buffer client",
@@ -8701,19 +8717,13 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "message": {
-                    "type": "string",
-                    "description": "Activation message (optional)"
-                  }
-                }
+                "$ref": "#/components/schemas/ActivationRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8749,22 +8759,13 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "reason": {
-                    "type": "string",
-                    "description": "Reason for deactivation"
-                  }
-                },
-                "required": [
-                  "reason"
-                ]
+                "$ref": "#/components/schemas/DeactivationRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8800,20 +8801,21 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "message": {
-                    "type": "string",
-                    "description": "Usage message (optional)"
-                  }
-                }
+                "$ref": "#/components/schemas/MarkUsedRequestDto"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BufferClient"
+                }
+              }
+            }
           }
         },
         "summary": "Mark a buffer client as used (update lastUsed timestamp)",
@@ -8837,7 +8839,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8878,7 +8880,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8913,7 +8915,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8922,6 +8924,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Buffer client not found."
           }
         },
         "summary": "Get user data by ID",
@@ -8953,7 +8958,7 @@
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -8962,6 +8967,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Buffer client not found."
           }
         },
         "summary": "Update user data by ID",
@@ -8993,7 +9001,7 @@
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9023,8 +9031,18 @@
           }
         ],
         "responses": {
-          "default": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Buffer client not found."
           }
         },
         "summary": "Delete user data by ID",
@@ -9297,6 +9315,7 @@
     },
     "/promoteclients": {
       "post": {
+        "description": "Creates a promote client directly from supplied data.",
         "operationId": "PromoteClientController_create",
         "parameters": [],
         "requestBody": {
@@ -9310,7 +9329,7 @@
           }
         },
         "responses": {
-          "default": {
+          "201": {
             "description": "",
             "content": {
               "application/json": {
@@ -9319,14 +9338,18 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Request body validation failed."
           }
         },
-        "summary": "Create user data",
+        "summary": "Create a promote client record",
         "tags": [
           "Promote Clients"
         ]
       },
       "get": {
+        "description": "Returns all promote clients, optionally filtered by status.",
         "operationId": "PromoteClientController_findAll",
         "parameters": [
           {
@@ -9340,7 +9363,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9354,7 +9377,7 @@
             }
           }
         },
-        "summary": "Get all user data",
+        "summary": "List promote clients",
         "tags": [
           "Promote Clients"
         ]
@@ -9362,13 +9385,14 @@
     },
     "/promoteclients/search": {
       "get": {
+        "description": "Searches promote client records by supported fields.",
         "operationId": "PromoteClientController_search",
         "parameters": [
           {
             "name": "tgId",
             "required": false,
             "in": "query",
-            "description": "Telegram ID of the client",
+            "description": "Telegram account identifier.",
             "schema": {
               "example": "123456789",
               "type": "string"
@@ -9388,9 +9412,9 @@
             "name": "availableDate",
             "required": false,
             "in": "query",
-            "description": "availableDate of the promoteClient",
+            "description": "Availability date filter.",
             "schema": {
-              "example": "2023-06-22",
+              "example": "2026-04-03",
               "type": "string"
             }
           },
@@ -9398,7 +9422,7 @@
             "name": "channels",
             "required": false,
             "in": "query",
-            "description": "Channel Count",
+            "description": "Exact channel count filter.",
             "schema": {
               "example": 23,
               "type": "number"
@@ -9427,7 +9451,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9441,7 +9465,7 @@
             }
           }
         },
-        "summary": "Search user data",
+        "summary": "Search promote clients",
         "tags": [
           "Promote Clients"
         ]
@@ -9449,21 +9473,23 @@
     },
     "/promoteclients/joinChannelsForPromoteClients": {
       "get": {
+        "description": "Builds the next join queue for eligible promote clients.",
         "operationId": "PromoteClientController_joinChannelsforPromoteClients",
         "parameters": [],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "Join channels initiated successfully"
                 }
               }
             }
           }
         },
-        "summary": "Join Channels for PromoteClients",
+        "summary": "Prepare channel joins for promote clients",
         "tags": [
           "Promote Clients"
         ]
@@ -9471,21 +9497,23 @@
     },
     "/promoteclients/updateInfo": {
       "get": {
+        "description": "Starts a background refresh of promote client metadata and channel counts.",
         "operationId": "PromoteClientController_updateInfo",
         "parameters": [],
         "responses": {
-          "default": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "initiated Checking"
                 }
               }
             }
           }
         },
-        "summary": "Update promote Clients Info",
+        "summary": "Refresh promote client metadata",
         "tags": [
           "Promote Clients"
         ]
@@ -9493,21 +9521,23 @@
     },
     "/promoteclients/checkPromoteClients": {
       "get": {
+        "description": "Starts the background warmup processor for eligible promote clients.",
         "operationId": "PromoteClientController_checkpromoteClients",
         "parameters": [],
         "responses": {
-          "default": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "initiated Checking"
                 }
               }
             }
           }
         },
-        "summary": "Check Promote Clients",
+        "summary": "Run promote warmup processing",
         "tags": [
           "Promote Clients"
         ]
@@ -9515,6 +9545,7 @@
     },
     "/promoteclients/addNewUserstoPromoteClients": {
       "post": {
+        "description": "Starts background enrollment of candidate users into the promote client pool.",
         "operationId": "PromoteClientController_addNewUserstoPromoteClients",
         "parameters": [],
         "requestBody": {
@@ -9522,44 +9553,28 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "goodIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "badIds": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "clientsNeedingPromoteClients": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                }
+                "$ref": "#/components/schemas/BulkEnrollPromoteClientsRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "example": "initiated Checking"
                 }
               }
             }
+          },
+          "400": {
+            "description": "goodIds, badIds, or clientsNeedingPromoteClients were not valid arrays."
           }
         },
-        "summary": "Add New Users to Promote Clients",
+        "summary": "Bulk enroll users into promote warmup",
         "tags": [
           "Promote Clients"
         ]
@@ -9567,6 +9582,7 @@
     },
     "/promoteclients/SetAsPromoteClient/{mobile}": {
       "get": {
+        "description": "Converts an existing user account into a warmup-managed promote client.",
         "operationId": "PromoteClientController_setAsPromoteClient",
         "parameters": [
           {
@@ -9580,18 +9596,25 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PromoteClient"
+                  "type": "string",
+                  "example": "Client enrolled as promote successfully"
                 }
               }
             }
+          },
+          "400": {
+            "description": "The user was not found or is already an active main client."
+          },
+          "409": {
+            "description": "A promote client record already exists for this mobile."
           }
         },
-        "summary": "Set as Promote Client",
+        "summary": "Enroll a user as a promote client",
         "tags": [
           "Promote Clients"
         ]
@@ -9612,7 +9635,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9621,6 +9644,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Promote client not found."
           }
         },
         "summary": "Get user data by ID",
@@ -9652,7 +9678,7 @@
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9661,6 +9687,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Promote client not found."
           }
         },
         "summary": "Update user data by ID",
@@ -9692,7 +9721,7 @@
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9722,8 +9751,18 @@
           }
         ],
         "responses": {
-          "default": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Promote client not found."
           }
         },
         "summary": "Delete user data by ID",
@@ -9734,6 +9773,7 @@
     },
     "/promoteclients/query": {
       "post": {
+        "description": "Executes a direct MongoDB-style filter against the promote client collection.",
         "operationId": "PromoteClientController_executeQuery",
         "parameters": [],
         "requestBody": {
@@ -9741,24 +9781,32 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "default": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
+                "type": "object",
+                "additionalProperties": true,
+                "example": {
+                  "status": "active",
+                  "clientId": "client-a"
                 }
               }
             }
           }
         },
-        "summary": "Execute a custom MongoDB query",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoteClient"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Execute a raw promote client query",
         "tags": [
           "Promote Clients"
         ]
@@ -9769,12 +9817,13 @@
         "operationId": "PromoteClientController_getPromoteClientDistribution",
         "parameters": [],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "additionalProperties": true
                 }
               }
             }
@@ -9801,7 +9850,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9855,26 +9904,13 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "description": "New status (active/inactive)"
-                  },
-                  "message": {
-                    "type": "string",
-                    "description": "Status message (optional)"
-                  }
-                },
-                "required": [
-                  "status"
-                ]
+                "$ref": "#/components/schemas/StatusUpdateRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9883,6 +9919,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Status must be either active or inactive."
           }
         },
         "summary": "Update status of a promote client",
@@ -9910,19 +9949,13 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "message": {
-                    "type": "string",
-                    "description": "Activation message (optional)"
-                  }
-                }
+                "$ref": "#/components/schemas/ActivationRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -9958,22 +9991,13 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "reason": {
-                    "type": "string",
-                    "description": "Reason for deactivation"
-                  }
-                },
-                "required": [
-                  "reason"
-                ]
+                "$ref": "#/components/schemas/DeactivationRequestDto"
               }
             }
           }
         },
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -10009,20 +10033,21 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "message": {
-                    "type": "string",
-                    "description": "Usage message (optional)"
-                  }
-                }
+                "$ref": "#/components/schemas/MarkUsedRequestDto"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoteClient"
+                }
+              }
+            }
           }
         },
         "summary": "Mark a promote client as used (update lastUsed timestamp)",
@@ -10046,7 +10071,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -10087,7 +10112,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -10122,7 +10147,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -10163,7 +10188,7 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
@@ -10198,29 +10223,12 @@
           }
         ],
         "responses": {
-          "default": {
+          "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "totalClients": {
-                      "type": "number"
-                    },
-                    "neverUsed": {
-                      "type": "number"
-                    },
-                    "usedInLast24Hours": {
-                      "type": "number"
-                    },
-                    "usedInLastWeek": {
-                      "type": "number"
-                    },
-                    "averageUsageGap": {
-                      "type": "number"
-                    }
-                  }
+                  "$ref": "#/components/schemas/UsageStatisticsDto"
                 }
               }
             }
@@ -11939,7 +11947,8 @@
               "video",
               "document",
               "voice",
-              "audio"
+              "audio",
+              "all"
             ]
           }
         },
@@ -11965,7 +11974,8 @@
               "video",
               "document",
               "voice",
-              "audio"
+              "audio",
+              "all"
             ]
           },
           "caption": {
@@ -14503,8 +14513,8 @@
           },
           "availableDate": {
             "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
+            "description": "Date when the client becomes available for assignment.",
+            "example": "2026-04-03"
           },
           "session": {
             "type": "string",
@@ -14513,7 +14523,7 @@
           },
           "channels": {
             "type": "number",
-            "description": "Channel Count",
+            "description": "Current joined channel count.",
             "example": 23
           },
           "clientId": {
@@ -14523,7 +14533,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Status of the buffer client",
+            "description": "Operational status of the buffer client.",
             "example": "active",
             "enum": [
               "active",
@@ -14533,15 +14543,15 @@
           },
           "message": {
             "type": "string",
-            "description": "Status message for the promote client",
+            "description": "Optional operator note attached to the buffer client.",
             "example": "Account is functioning properly",
             "default": "Account is functioning properly"
           },
           "lastUsed": {
             "format": "date-time",
             "type": "string",
-            "description": "Last used timestamp for the promote client",
-            "example": "2023-06-22T10:30:00.000Z"
+            "description": "Timestamp when the client was last used in a live workflow.",
+            "example": "2026-04-01T10:30:00.000Z"
           }
         },
         "required": [
@@ -14555,7 +14565,287 @@
       },
       "BufferClient": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "tgId": {
+            "type": "string",
+            "description": "Telegram account identifier.",
+            "example": "123456789"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Unique mobile number for the Telegram account.",
+            "example": "+15551234567"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session string currently stored for this buffer client.",
+            "example": "1AQAOMT..."
+          },
+          "availableDate": {
+            "type": "string",
+            "description": "Date when this client becomes available for assignment.",
+            "example": "2026-04-03"
+          },
+          "channels": {
+            "type": "number",
+            "description": "Current joined channel count.",
+            "example": 187
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Owning main client identifier.",
+            "example": "client-a"
+          },
+          "message": {
+            "type": "string",
+            "description": "Operational note attached to the client.",
+            "example": "Enrolled for warmup"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when this account was last consumed by live usage.",
+            "example": "2026-04-01T12:30:00.000Z"
+          },
+          "lastChecked": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent periodic health check.",
+            "example": "2026-04-02T09:15:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "description": "Operational status for the record.",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "example": "active"
+          },
+          "inUse": {
+            "type": "boolean",
+            "description": "Whether the account is currently reserved by an active workflow.",
+            "example": false
+          },
+          "privacyUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when privacy settings were updated during warmup.",
+            "example": "2026-03-10T08:00:00.000Z"
+          },
+          "profilePicsUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the final profile photo was uploaded.",
+            "example": "2026-03-28T08:00:00.000Z"
+          },
+          "nameBioUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when display name and bio were updated.",
+            "example": "2026-03-18T08:00:00.000Z"
+          },
+          "profilePicsDeletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when legacy profile photos were removed.",
+            "example": "2026-03-14T08:00:00.000Z"
+          },
+          "usernameUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when username was updated.",
+            "example": "2026-03-20T08:00:00.000Z"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Record creation timestamp.",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Record last update timestamp.",
+            "example": "2026-04-03T08:00:00.000Z"
+          },
+          "lastUpdateAttempt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent warmup processing attempt.",
+            "example": "2026-04-03T10:30:00.000Z"
+          },
+          "failedUpdateAttempts": {
+            "type": "number",
+            "description": "Current consecutive warmup failure count.",
+            "example": 0,
+            "default": 0
+          },
+          "lastUpdateFailure": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the last failed warmup attempt.",
+            "example": "2026-04-01T08:00:00.000Z"
+          },
+          "twoFASetAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when 2FA was verified or configured.",
+            "example": "2026-03-12T08:00:00.000Z"
+          },
+          "otherAuthsRemovedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when other Telegram sessions were revoked.",
+            "example": "2026-03-15T08:00:00.000Z"
+          },
+          "warmupPhase": {
+            "type": "string",
+            "description": "Current warmup lifecycle phase.",
+            "enum": [
+              "enrolled",
+              "settling",
+              "identity",
+              "growing",
+              "maturing",
+              "ready",
+              "session_rotated"
+            ],
+            "example": "growing"
+          },
+          "warmupJitter": {
+            "type": "number",
+            "description": "Per-account warmup jitter in days.",
+            "example": 2,
+            "default": 0
+          },
+          "enrolledAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the account entered warmup enrollment.",
+            "example": "2026-03-03T08:00:00.000Z"
+          },
+          "organicActivityAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the latest organic activity execution.",
+            "example": "2026-04-03T09:45:00.000Z"
+          },
+          "sessionRotatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when a backup session was created and recorded.",
+            "example": "2026-04-02T07:00:00.000Z"
+          }
+        },
+        "required": [
+          "tgId",
+          "mobile",
+          "session",
+          "availableDate",
+          "channels",
+          "clientId",
+          "status",
+          "inUse",
+          "failedUpdateAttempts",
+          "warmupJitter"
+        ]
+      },
+      "BulkEnrollBufferClientsRequestDto": {
+        "type": "object",
+        "properties": {
+          "goodIds": {
+            "description": "Candidate user identifiers that passed upstream validation.",
+            "example": [
+              "10001",
+              "10002"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "badIds": {
+            "description": "Candidate user identifiers that failed upstream validation and should be excluded.",
+            "example": [
+              "99999"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clientsNeedingBufferClients": {
+            "description": "Specific client IDs that currently need more buffer accounts.",
+            "example": [
+              "client-a",
+              "client-b"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "goodIds",
+          "badIds"
+        ]
+      },
+      "StatusUpdateRequestDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Lifecycle status to assign to the client record.",
+            "enum": [
+              "active",
+              "inactive"
+            ],
+            "example": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional operator note explaining why the status changed.",
+            "example": "Re-enabled after manual review"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ActivationRequestDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Optional operator note recorded when activating the client.",
+            "example": "Returned to active pool"
+          }
+        }
+      },
+      "DeactivationRequestDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Reason for deactivating the client.",
+            "example": "Health check failed repeatedly"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "MarkUsedRequestDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Optional note describing where or why the client was consumed.",
+            "example": "Assigned to live campaign rotation"
+          }
+        }
       },
       "UpdateBufferClientDto": {
         "type": "object",
@@ -14572,8 +14862,8 @@
           },
           "availableDate": {
             "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
+            "description": "Date when the client becomes available for assignment.",
+            "example": "2026-04-03"
           },
           "session": {
             "type": "string",
@@ -14582,7 +14872,7 @@
           },
           "channels": {
             "type": "number",
-            "description": "Channel Count",
+            "description": "Current joined channel count.",
             "example": 23
           },
           "clientId": {
@@ -14592,7 +14882,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Status of the buffer client",
+            "description": "Operational status of the buffer client.",
             "example": "active",
             "enum": [
               "active",
@@ -14602,15 +14892,121 @@
           },
           "message": {
             "type": "string",
-            "description": "Status message for the promote client",
+            "description": "Optional operator note attached to the buffer client.",
             "example": "Account is functioning properly",
             "default": "Account is functioning properly"
           },
           "lastUsed": {
             "format": "date-time",
             "type": "string",
-            "description": "Last used timestamp for the promote client",
-            "example": "2023-06-22T10:30:00.000Z"
+            "description": "Timestamp when the client was last used.",
+            "example": "2026-04-01T10:30:00.000Z"
+          },
+          "inUse": {
+            "type": "boolean",
+            "description": "Whether the client is currently reserved by an active workflow.",
+            "example": false
+          },
+          "privacyUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when privacy settings were updated.",
+            "example": "2026-03-10T08:00:00.000Z"
+          },
+          "profilePicsUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the final profile photo was uploaded.",
+            "example": "2026-03-28T08:00:00.000Z"
+          },
+          "nameBioUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when display name and bio were updated.",
+            "example": "2026-03-18T08:00:00.000Z"
+          },
+          "profilePicsDeletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when legacy profile photos were deleted.",
+            "example": "2026-03-14T08:00:00.000Z"
+          },
+          "usernameUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when username was updated.",
+            "example": "2026-03-20T08:00:00.000Z"
+          },
+          "lastChecked": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent health check.",
+            "example": "2026-04-02T09:15:00.000Z"
+          },
+          "lastUpdateAttempt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent warmup processing attempt.",
+            "example": "2026-04-03T10:30:00.000Z"
+          },
+          "failedUpdateAttempts": {
+            "type": "number",
+            "description": "Current consecutive warmup failure count.",
+            "example": 1
+          },
+          "lastUpdateFailure": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the last failed warmup attempt.",
+            "example": "2026-04-01T08:00:00.000Z"
+          },
+          "twoFASetAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when 2FA was verified or configured.",
+            "example": "2026-03-12T08:00:00.000Z"
+          },
+          "otherAuthsRemovedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when other sessions were revoked.",
+            "example": "2026-03-15T08:00:00.000Z"
+          },
+          "warmupPhase": {
+            "type": "string",
+            "enum": [
+              "enrolled",
+              "settling",
+              "identity",
+              "growing",
+              "maturing",
+              "ready",
+              "session_rotated"
+            ],
+            "example": "growing"
+          },
+          "warmupJitter": {
+            "type": "number",
+            "description": "Per-account warmup jitter in days.",
+            "example": 2
+          },
+          "enrolledAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the account entered warmup enrollment.",
+            "example": "2026-03-03T08:00:00.000Z"
+          },
+          "organicActivityAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the latest organic activity execution.",
+            "example": "2026-04-03T09:45:00.000Z"
+          },
+          "sessionRotatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when a backup session was created.",
+            "example": "2026-04-02T07:00:00.000Z"
           }
         }
       },
@@ -14829,8 +15225,8 @@
           },
           "availableDate": {
             "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
+            "description": "Date when the client becomes available for assignment.",
+            "example": "2026-04-03"
           },
           "lastActive": {
             "type": "string",
@@ -14844,26 +15240,35 @@
           },
           "clientId": {
             "type": "string",
-            "description": "Client ID this promote mobile belongs to",
+            "description": "Owning client ID for this promote mobile.",
             "example": "client123"
           },
           "status": {
             "type": "string",
-            "description": "Status of the promote client",
+            "description": "Operational status of the promote client.",
             "example": "active",
-            "default": "active"
+            "default": "active",
+            "enum": [
+              "active",
+              "inactive"
+            ]
           },
           "message": {
             "type": "string",
-            "description": "Status message for the promote client",
+            "description": "Optional operator note attached to the promote client.",
             "example": "Account is functioning properly",
             "default": "Account is functioning properly"
           },
           "lastUsed": {
             "format": "date-time",
             "type": "string",
-            "description": "Last used timestamp for the promote client",
-            "example": "2023-06-22T10:30:00.000Z"
+            "description": "Timestamp when the client was last used in a live workflow.",
+            "example": "2026-04-01T10:30:00.000Z"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session string for Telegram connection.",
+            "example": "session123"
           }
         },
         "required": [
@@ -14876,7 +15281,232 @@
       },
       "PromoteClient": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "tgId": {
+            "type": "string",
+            "description": "Telegram account identifier.",
+            "example": "123456789"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Unique mobile number for the Telegram account.",
+            "example": "+15551234567"
+          },
+          "lastActive": {
+            "type": "string",
+            "description": "Provider-specific last-active indicator recorded for the source user.",
+            "example": "2026-04-03"
+          },
+          "availableDate": {
+            "type": "string",
+            "description": "Date when this client becomes available for assignment.",
+            "example": "2026-04-03"
+          },
+          "channels": {
+            "type": "number",
+            "description": "Current joined channel count.",
+            "example": 191
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Owning main client identifier.",
+            "example": "client-a"
+          },
+          "status": {
+            "type": "string",
+            "description": "Operational status for the record.",
+            "example": "active"
+          },
+          "message": {
+            "type": "string",
+            "description": "Operational note attached to the client.",
+            "example": "Enrolled for warmup"
+          },
+          "lastUsed": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when this account was last consumed by live usage.",
+            "example": "2026-04-01T12:30:00.000Z"
+          },
+          "privacyUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when privacy settings were updated during warmup.",
+            "example": "2026-03-10T08:00:00.000Z"
+          },
+          "profilePicsUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the final profile photo was uploaded.",
+            "example": "2026-03-28T08:00:00.000Z"
+          },
+          "nameBioUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when display name and bio were updated.",
+            "example": "2026-03-18T08:00:00.000Z"
+          },
+          "profilePicsDeletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when legacy profile photos were removed.",
+            "example": "2026-03-14T08:00:00.000Z"
+          },
+          "usernameUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when username was updated or cleared.",
+            "example": "2026-03-20T08:00:00.000Z"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Record creation timestamp.",
+            "example": "2026-03-01T08:00:00.000Z"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Record last update timestamp.",
+            "example": "2026-04-03T08:00:00.000Z"
+          },
+          "lastChecked": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent periodic health check.",
+            "example": "2026-04-02T09:15:00.000Z"
+          },
+          "lastUpdateAttempt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent warmup processing attempt.",
+            "example": "2026-04-03T10:30:00.000Z"
+          },
+          "failedUpdateAttempts": {
+            "type": "number",
+            "description": "Current consecutive warmup failure count.",
+            "example": 0,
+            "default": 0
+          },
+          "lastUpdateFailure": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the last failed warmup attempt.",
+            "example": "2026-04-01T08:00:00.000Z"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session string currently stored for this promote client.",
+            "example": "1AQAOMT..."
+          },
+          "inUse": {
+            "type": "boolean",
+            "description": "Whether the account is currently reserved by an active workflow.",
+            "example": false
+          },
+          "twoFASetAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when 2FA was verified or configured.",
+            "example": "2026-03-12T08:00:00.000Z"
+          },
+          "otherAuthsRemovedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when other Telegram sessions were revoked.",
+            "example": "2026-03-15T08:00:00.000Z"
+          },
+          "warmupPhase": {
+            "type": "string",
+            "description": "Current warmup lifecycle phase.",
+            "enum": [
+              "enrolled",
+              "settling",
+              "identity",
+              "growing",
+              "maturing",
+              "ready",
+              "session_rotated"
+            ],
+            "example": "growing"
+          },
+          "warmupJitter": {
+            "type": "number",
+            "description": "Per-account warmup jitter in days.",
+            "example": 2,
+            "default": 0
+          },
+          "enrolledAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the account entered warmup enrollment.",
+            "example": "2026-03-03T08:00:00.000Z"
+          },
+          "organicActivityAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the latest organic activity execution.",
+            "example": "2026-04-03T09:45:00.000Z"
+          },
+          "sessionRotatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when a backup session was created and recorded.",
+            "example": "2026-04-02T07:00:00.000Z"
+          }
+        },
+        "required": [
+          "tgId",
+          "mobile",
+          "lastActive",
+          "availableDate",
+          "channels",
+          "status",
+          "failedUpdateAttempts",
+          "inUse",
+          "warmupJitter"
+        ]
+      },
+      "BulkEnrollPromoteClientsRequestDto": {
+        "type": "object",
+        "properties": {
+          "goodIds": {
+            "description": "Candidate user identifiers that passed upstream validation.",
+            "example": [
+              "10001",
+              "10002"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "badIds": {
+            "description": "Candidate user identifiers that failed upstream validation and should be excluded.",
+            "example": [
+              "99999"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "clientsNeedingPromoteClients": {
+            "description": "Specific client IDs that currently need more promote accounts.",
+            "example": [
+              "client-a",
+              "client-b"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "goodIds",
+          "badIds"
+        ]
       },
       "UpdatePromoteClientDto": {
         "type": "object",
@@ -14893,8 +15523,8 @@
           },
           "availableDate": {
             "type": "string",
-            "description": "Date of the session",
-            "example": "2023-06-22"
+            "description": "Date when the client becomes available for assignment.",
+            "example": "2026-04-03"
           },
           "lastActive": {
             "type": "string",
@@ -14908,28 +15538,180 @@
           },
           "clientId": {
             "type": "string",
-            "description": "Client ID this promote mobile belongs to",
+            "description": "Owning client ID for this promote mobile.",
             "example": "client123"
           },
           "status": {
             "type": "string",
-            "description": "Status of the promote client",
+            "description": "Operational status of the promote client.",
             "example": "active",
-            "default": "active"
+            "default": "active",
+            "enum": [
+              "active",
+              "inactive"
+            ]
           },
           "message": {
             "type": "string",
-            "description": "Status message for the promote client",
+            "description": "Optional operator note attached to the promote client.",
             "example": "Account is functioning properly",
             "default": "Account is functioning properly"
           },
           "lastUsed": {
             "format": "date-time",
             "type": "string",
-            "description": "Last used timestamp for the promote client",
-            "example": "2023-06-22T10:30:00.000Z"
+            "description": "Timestamp when the client was last used.",
+            "example": "2026-04-01T10:30:00.000Z"
+          },
+          "session": {
+            "type": "string",
+            "description": "Session string for Telegram connection.",
+            "example": "session123"
+          },
+          "inUse": {
+            "type": "boolean",
+            "description": "Whether the client is currently reserved by an active workflow.",
+            "example": false
+          },
+          "privacyUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when privacy settings were updated.",
+            "example": "2026-03-10T08:00:00.000Z"
+          },
+          "profilePicsUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the final profile photo was uploaded.",
+            "example": "2026-03-28T08:00:00.000Z"
+          },
+          "nameBioUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when display name and bio were updated.",
+            "example": "2026-03-18T08:00:00.000Z"
+          },
+          "profilePicsDeletedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when legacy profile photos were deleted.",
+            "example": "2026-03-14T08:00:00.000Z"
+          },
+          "usernameUpdatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when username was updated or cleared.",
+            "example": "2026-03-20T08:00:00.000Z"
+          },
+          "lastChecked": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent health check.",
+            "example": "2026-04-02T09:15:00.000Z"
+          },
+          "lastUpdateAttempt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the most recent warmup processing attempt.",
+            "example": "2026-04-03T10:30:00.000Z"
+          },
+          "failedUpdateAttempts": {
+            "type": "number",
+            "description": "Current consecutive warmup failure count.",
+            "example": 1
+          },
+          "lastUpdateFailure": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the last failed warmup attempt.",
+            "example": "2026-04-01T08:00:00.000Z"
+          },
+          "twoFASetAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when 2FA was verified or configured.",
+            "example": "2026-03-12T08:00:00.000Z"
+          },
+          "otherAuthsRemovedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when other sessions were revoked.",
+            "example": "2026-03-15T08:00:00.000Z"
+          },
+          "warmupPhase": {
+            "type": "string",
+            "enum": [
+              "enrolled",
+              "settling",
+              "identity",
+              "growing",
+              "maturing",
+              "ready",
+              "session_rotated"
+            ],
+            "example": "growing"
+          },
+          "warmupJitter": {
+            "type": "number",
+            "description": "Per-account warmup jitter in days.",
+            "example": 2
+          },
+          "enrolledAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when the account entered warmup enrollment.",
+            "example": "2026-03-03T08:00:00.000Z"
+          },
+          "organicActivityAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp of the latest organic activity execution.",
+            "example": "2026-04-03T09:45:00.000Z"
+          },
+          "sessionRotatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "Timestamp when a backup session was created.",
+            "example": "2026-04-02T07:00:00.000Z"
           }
         }
+      },
+      "UsageStatisticsDto": {
+        "type": "object",
+        "properties": {
+          "totalClients": {
+            "type": "number",
+            "description": "Total number of matching client records.",
+            "example": 48
+          },
+          "neverUsed": {
+            "type": "number",
+            "description": "Matching clients that have never been used.",
+            "example": 12
+          },
+          "usedInLast24Hours": {
+            "type": "number",
+            "description": "Matching clients used within the last 24 hours.",
+            "example": 6
+          },
+          "usedInLastWeek": {
+            "type": "number",
+            "description": "Matching clients used within the last 7 days.",
+            "example": 21
+          },
+          "averageUsageGap": {
+            "type": "number",
+            "description": "Average time gap between usages, in hours.",
+            "example": 37.5
+          }
+        },
+        "required": [
+          "totalClients",
+          "neverUsed",
+          "usedInLast24Hours",
+          "usedInLastWeek",
+          "averageUsageGap"
+        ]
       },
       "Map": {
         "type": "object",

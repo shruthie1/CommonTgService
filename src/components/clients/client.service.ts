@@ -525,8 +525,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.notify(
         `Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`,
       );
-      const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+      const errorDetails = parseError(error, `setupClient failed for ${newBufferClient.mobile}`);
+      if (isPermanentError(errorDetails)) {
+        // Account is permanently dead — retire it, don't recycle
+        await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
+        await this.notify(`Buffer ${newBufferClient.mobile} marked INACTIVE (permanent error during setup)`);
+      } else {
+        // Transient error — push availability out so it's not retried immediately
+        const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+      }
       this.telegramService.setActiveClientSetup(undefined);
     } finally {
       await connectionManager.unregisterClient(newBufferClient.mobile);
@@ -570,7 +578,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
       await this.notify('Update finished');
     } catch (error) {
-      parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
+      const errorDetails = parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
+      // Mark buffer inactive on permanent failure so setupClient's catch can distinguish
+      if (isPermanentError(errorDetails)) {
+        try { await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`); } catch { }
+      }
       throw error;
     } finally {
       await connectionManager.unregisterClient(newMobile);
