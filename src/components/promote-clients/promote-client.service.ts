@@ -18,6 +18,7 @@ import {
 } from './schemas/promote-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
+import { Api } from 'telegram';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { ClientService } from '../clients/client.service';
@@ -151,11 +152,20 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                         personaPoolVersion: client.personaPoolVersion,
                     };
 
-                    // Query existing assignments for dedup
-                    const existingAssignments = await this.model.find({
+                    // Query existing assignments for dedup (promote collection)
+                    const existingAssignments: Array<{ assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedPhotoFilenames?: string[] }> = await this.model.find({
                         clientId: doc.clientId, status: 'active',
                         assignedFirstName: { $ne: null }, mobile: { $ne: doc.mobile },
                     }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+
+                    // Cross-collection dedup: also fetch buffer assignments (best-effort)
+                    try {
+                        const bufferAssignments = await this.bufferClientService.model.find({
+                            clientId: doc.clientId, status: 'active',
+                            assignedFirstName: { $ne: null }, mobile: { $ne: doc.mobile },
+                        }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+                        existingAssignments.push(...bufferAssignments);
+                    } catch { /* cross-collection dedup is best-effort */ }
 
                     const usedKeys = new Set(existingAssignments.map(a => personaKey({
                         firstName: a.assignedFirstName,
@@ -206,26 +216,28 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                         const displayName = assignment.assignedLastName
                             ? `${assignment.assignedFirstName} ${assignment.assignedLastName}`
                             : assignment.assignedFirstName;
-                        this.logger.log(`Updating persona name for ${doc.mobile} from "${me.firstName}" to "${displayName}"`);
-                        await telegramClient.updateProfile(
-                            `${obfuscateText(displayName, {
+                        const obfuscatedDisplayName = `${obfuscateText(displayName, {
                                 maintainFormatting: false,
                                 preserveCase: true,
                                 useInvisibleChars: false,
-                            })} ${getCuteEmoji()}`,
-                            ''
-                        );
+                            })} ${getCuteEmoji()}`;
+                        this.logger.log(`Updating persona name for ${doc.mobile} from "${me.firstName}" to "${displayName}"`);
+                        await telegramClient.client.invoke(new Api.account.UpdateProfile({
+                            firstName: obfuscatedDisplayName,
+                            lastName: assignment.assignedLastName || '',
+                        }));
                         updateCount++;
                         await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
                     }
 
                     // 5. Check and update bio if assignedBio is non-null and mismatches
-                    if (assignment.assignedBio != null && (me as any).about !== assignment.assignedBio) {
+                    const fullUser = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
+                    const currentBio = (fullUser as any)?.fullUser?.about || '';
+                    if (assignment.assignedBio != null && currentBio !== assignment.assignedBio) {
                         this.logger.log(`Updating persona bio for ${doc.mobile}`);
-                        await telegramClient.updateProfile(
-                            me.firstName || '',
-                            assignment.assignedBio,
-                        );
+                        await performOrganicActivity(telegramClient, 'light');
+                        await sleep(ClientHelperUtils.gaussianRandom(12500, 3000, 8000, 18000));
+                        await telegramClient.client.invoke(new Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
                 }

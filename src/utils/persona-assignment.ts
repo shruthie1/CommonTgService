@@ -89,13 +89,18 @@ function seededShuffle<T>(arr: T[], prng: () => number): T[] {
  * Returns a base36 string so it is URL-safe and compact.
  * Only hashes the arrays that define the combination space (names, bios, pics).
  */
-export function computePersonaPoolVersion(pool: PersonaPool): string {
-    const payload = JSON.stringify({
-        firstNames: pool.firstNames,
-        lastNames: pool.lastNames,
-        bios: pool.bios,
-        profilePics: pool.profilePics,
-    });
+export function computePersonaPoolVersion(pool: {
+    firstNames?: string[];
+    lastNames?: string[];
+    bios?: string[];
+    profilePics?: Array<{ filename: string; phash?: string } | string>;
+}): string {
+    const payload = JSON.stringify([
+        pool.firstNames || [],
+        pool.lastNames || [],
+        pool.bios || [],
+        (pool.profilePics || []).map((p: any) => typeof p === 'string' ? p : p.filename),
+    ]);
     // djb2 returns a signed 32-bit int; convert to unsigned for base36
     const hash = (djb2(payload) >>> 0);
     return hash.toString(36);
@@ -128,7 +133,8 @@ export function hasAssignment(doc: PersonaAssignment): boolean {
  * - Stored version differs from current pool version → true (pool changed)
  */
 export function needsReassignment(doc: PersonaAssignment, pool: PersonaPool): boolean {
-    const currentVersion = computePersonaPoolVersion(pool);
+    // Use the pre-computed pool version directly (avoids recomputation)
+    const currentVersion = pool.personaPoolVersion;
 
     // Legacy: never had an assignment and never had a pool version tracked
     if (!hasAssignment(doc) && doc.assignedPersonaPoolVersion === null) {

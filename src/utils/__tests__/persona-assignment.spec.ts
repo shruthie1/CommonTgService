@@ -124,6 +124,7 @@ describe('needsReassignment', () => {
     test('returns true when doc has assignment but pool version differs', () => {
         const pool = makePool();
         const poolVersion = computePersonaPoolVersion(pool);
+        pool.personaPoolVersion = poolVersion;
         const doc = makeAssignment({
             assignedFirstName: 'Alice',
             assignedPersonaPoolVersion: 'old-version-xyz',
@@ -134,6 +135,8 @@ describe('needsReassignment', () => {
     test('returns false when doc pool version matches current pool version', () => {
         const pool = makePool();
         const poolVersion = computePersonaPoolVersion(pool);
+        // Set pool.personaPoolVersion to the computed version (as production code does)
+        pool.personaPoolVersion = poolVersion;
         const doc = makeAssignment({
             assignedFirstName: 'Alice',
             assignedPersonaPoolVersion: poolVersion,
@@ -143,6 +146,7 @@ describe('needsReassignment', () => {
 
     test('returns true when doc has no assignment but has an old pool version (was assigned before, pool changed)', () => {
         const pool = makePool();
+        pool.personaPoolVersion = computePersonaPoolVersion(pool);
         const doc = makeAssignment({
             assignedPersonaPoolVersion: 'stale-version',
         });

@@ -983,7 +983,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       mobile: 1, assignedFirstName: 1, assignedLastName: 1,
       assignedBio: 1, assignedPhotoFilenames: 1,
     };
-    const filter = { clientId, assignedFirstName: { $ne: null } };
+    const filter = {
+      clientId,
+      $or: [
+        { assignedFirstName: { $ne: null } },
+        { assignedLastName: { $ne: null } },
+        { assignedBio: { $ne: null } },
+        { 'assignedPhotoFilenames.0': { $exists: true } },
+      ],
+    };
 
     if (scope === 'all' || scope === 'buffer') {
       const buffers = await this.bufferClientService.model
