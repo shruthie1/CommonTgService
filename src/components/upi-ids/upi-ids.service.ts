@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from '@n
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UpiId } from './upi-ids.schema';
-import { NpointService } from '../n-point/npoint.service';
 import { Logger } from '../../utils';
 
 @Injectable()
@@ -17,7 +16,6 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
 
     constructor(
         @InjectModel('UpiIdModule') private readonly upiIdModel: Model<UpiId>,
-        private readonly npointService: NpointService
     ) {}
 
     async onModuleInit(): Promise<void> {
@@ -61,10 +59,7 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
 
         this.checkInterval = setInterval(async () => {
             try {
-                await Promise.all([
-                    this.refreshUPIs(),
-                    this.checkNpoint()
-                ]);
+                await this.refreshUPIs();
             } catch (error) {
                 this.logger.error('Error during periodic check', error.stack);
             }
@@ -86,34 +81,6 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
         } catch (error) {
             this.logger.error('Failed to refresh UPIs', error.stack);
             throw error;
-        }
-    }
-
-    async checkNpoint(): Promise<void> {
-        try {
-            // Uncomment and implement when needed
-            /*
-            const upiIds = await this.executeWithRetry(async () => {
-                const response = await axios.get('https://api.npoint.io/54baf762fd873c55c6b1', {
-                    timeout: 10000, // 10 second timeout
-                    headers: {
-                        'User-Agent': 'UpiIdService/1.0'
-                    }
-                });
-                return response.data;
-            });
-
-            const existingUpiIds = await this.findOne();
-            
-            if (existingUpiIds && areJsonsNotSame(upiIds, existingUpiIds)) {
-                this.logger.log('UPI data mismatch detected, updating npoint...');
-                await this.npointService.updateDocument("54baf762fd873c55c6b1", existingUpiIds);
-                this.logger.log('Npoint updated successfully');
-            }
-            */
-        } catch (error) {
-            this.logger.error('Error checking npoint', error.stack);
-            // Don't throw - this is a background task
         }
     }
 

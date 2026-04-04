@@ -2,10 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, TransformFnParams, Type } from 'class-transformer';
 import { IsOptional, IsString, IsBoolean, IsNumber } from 'class-validator';
 
+const toBoolean = ({ value }: TransformFnParams): boolean => value === 'true' || value === true;
+
 export class SetupClientQueryDto {
     @ApiPropertyOptional({
         type: Number,
-        default: 3
+        default: 0
     })
     @IsOptional()
     @Type(() => Number)
@@ -16,10 +18,7 @@ export class SetupClientQueryDto {
         default: true
     })
     @IsOptional()
-    @Transform(({ value }) => {
-        console.log("archiveOld: ", value)
-        return value === 'true' || value === true
-    })
+    @Transform(toBoolean)
     @IsBoolean()
     archiveOld: boolean = true;
 
@@ -34,10 +33,7 @@ export class SetupClientQueryDto {
         default: true
     })
     @IsOptional()
-    @Transform(({ value }) => {
-        console.log("formalities: ", value)
-        return value === 'true' || value === true
-    })
+    @Transform(toBoolean)
     @IsBoolean()
     formalities: boolean = true;
 }

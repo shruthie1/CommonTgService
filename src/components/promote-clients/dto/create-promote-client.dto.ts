@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsString, IsOptional, IsDateString } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { ClientStatus, ClientStatusType } from '../../shared/base-client.service';
 
 export class CreatePromoteClientDto {
   @ApiProperty({
@@ -54,8 +55,8 @@ export class CreatePromoteClientDto {
     enum: ['active', 'inactive'],
   })
   @IsOptional()
-  @IsString()
-  readonly status?: string;
+  @IsEnum(ClientStatus)
+  readonly status?: ClientStatusType;
 
   @ApiPropertyOptional({
     description: 'Optional operator note attached to the promote client.',

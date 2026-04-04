@@ -7,7 +7,6 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { UsersModule } from '../users/users.module';
 import { InitModule } from '../ConfigurationInit/init.module';
-import { NpointModule } from '../n-point/npoint.module';
 import { TimestampModule } from '../timestamps/timestamp.module';
 import { SessionModule } from '../session-manager';
 import { PromoteClientModule } from '../promote-clients/promote-client.module';
@@ -24,7 +23,6 @@ import { PromoteClient, PromoteClientSchema } from '../promote-clients';
     forwardRef(() => SessionModule),
     forwardRef(() => TimestampModule),
     forwardRef(() => PromoteClientModule),
-    NpointModule
   ],
   controllers: [ClientController],
   providers: [ClientService],

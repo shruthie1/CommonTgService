@@ -72,7 +72,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
  */
 export function getWarmupPhaseAction(
     doc: {
-        warmupPhase?: string;
+        warmupPhase?: WarmupPhaseType;
         warmupJitter?: number;
         enrolledAt?: Date;
         channels?: number;
@@ -83,6 +83,7 @@ export function getWarmupPhaseAction(
         nameBioUpdatedAt?: Date;
         usernameUpdatedAt?: Date;
         profilePicsUpdatedAt?: Date;
+        sessionRotatedAt?: Date;
         organicActivityAt?: Date;
         createdAt?: Date;
         twoFA?: boolean;
@@ -218,7 +219,11 @@ export function getWarmupPhaseAction(
 
     // Phase: READY — all done, eligible for use
     if (phase === WarmupPhase.READY) {
-        return { phase: WarmupPhase.READY, action: 'wait', organicIntensity: 'light' };
+        const sessionRotated = ClientHelperUtils.getTimestamp(doc.sessionRotatedAt) > 0;
+        if (!sessionRotated) {
+            return { phase: WarmupPhase.READY, action: 'rotate_session', organicIntensity: 'light' };
+        }
+        return { phase: WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
     }
 
     // Phase: SESSION_ROTATED — fully operational
@@ -234,7 +239,7 @@ export function getWarmupPhaseAction(
  * Check if a warmup phase indicates the account is ready for active use.
  */
 export function isAccountReady(phase: string | undefined): boolean {
-    return phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED;
+    return phase === WarmupPhase.SESSION_ROTATED;
 }
 
 /**

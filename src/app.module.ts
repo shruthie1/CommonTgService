@@ -18,7 +18,6 @@ import { PromoteStatModule } from './components/promote-stats/promote-stat.modul
 import { PromoteClientModule } from './components/promote-clients/promote-client.module';
 import { TgSignupModule } from './components/TgSignup/tg-signup.module';
 import { TransactionModule } from './components/transactions/transaction.module';
-import { NpointModule } from './components/n-point/npoint.module';
 import { TimestampModule } from './components/timestamps/timestamp.module';
 import { DynamicDataModule } from './components/dynamic-data/dynamic-data.module';
 import { SessionModule } from './components/session-manager';
@@ -52,7 +51,6 @@ import { ExceptionsFilter } from './interceptors';
     Stat2Module,
     TgSignupModule,
     TransactionModule,
-    NpointModule,
     TimestampModule,
     DynamicDataModule,
   ],

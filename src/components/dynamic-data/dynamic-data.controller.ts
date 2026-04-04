@@ -43,15 +43,6 @@ export class DynamicDataController {
     return this.dynamicDataService.findAll();
   }
 
-  @Post('check-npoint')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Check and update npoint data if needed' })
-  @ApiResponse({ status: 200, description: 'Npoint data check completed successfully' })
-  async checkNpoint() {
-    await this.dynamicDataService.checkNpoint();
-    return { message: 'Npoint check completed' };
-  }
-
   @Get(':configKey')
   @ApiOperation({ summary: 'Get dynamic data by configKey' })
   @ApiParam({ name: 'configKey', description: 'Unique identifier for the document' })

@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { WarmupPhaseType } from '../../shared/warmup-phases';
+import { ClientStatusType } from '../../shared/base-client.service';
 
 export type BufferClientDocument = BufferClient & Document;
 @Schema({
@@ -58,7 +60,7 @@ export class BufferClient {
     type: String,
     description: 'Status of the buffer client',
   })
-  status: 'active' | 'inactive';
+  status: ClientStatusType;
 
   @ApiProperty({ description: 'Whether the account is currently reserved by an active workflow.', example: false })
   @Prop({ required: false, type: Boolean, default: false })
@@ -124,7 +126,7 @@ export class BufferClient {
     enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
     default: null,
   })
-  warmupPhase: string;
+  warmupPhase: WarmupPhaseType;
 
   @ApiProperty({ description: 'Per-account warmup jitter in days.', example: 2, default: 0 })
   @Prop({ required: false, type: Number, default: 0 })

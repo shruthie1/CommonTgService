@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -25,6 +25,7 @@ import {
   StatusUpdateRequestDto,
   UsageStatisticsDto,
 } from '../shared/dto/client-swagger.dto';
+import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 
 @ApiTags('Promote Clients')
 @Controller('promoteclients')
@@ -101,7 +102,9 @@ export class PromoteClientController {
   @ApiOperation({ summary: 'List promote clients', description: 'Returns all promote clients, optionally filtered by status.' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (active/inactive)' })
   @ApiOkResponse({ type: [PromoteClient] })
-  async findAll(@Query('status') status?: string): Promise<PromoteClient[]> {
+  async findAll(
+    @Query('status', new ParseEnumPipe(ClientStatus, { optional: true })) status?: ClientStatusType
+  ): Promise<PromoteClient[]> {
     return this.clientService.findAll(status);
   }
 
@@ -171,7 +174,9 @@ export class PromoteClientController {
   @ApiOperation({ summary: 'Get promote clients by status' })
   @ApiParam({ name: 'status', description: 'Status to filter by (active/inactive)', type: String })
   @ApiOkResponse({ type: [PromoteClient] })
-  async getPromoteClientsByStatus(@Param('status') status: string): Promise<PromoteClient[]> {
+  async getPromoteClientsByStatus(
+    @Param('status', new ParseEnumPipe(ClientStatus)) status: ClientStatusType
+  ): Promise<PromoteClient[]> {
     return this.clientService.getPromoteClientsByStatus(status);
   }
 

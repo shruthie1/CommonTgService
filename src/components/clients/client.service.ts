@@ -13,6 +13,7 @@ import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
+import { EnhancedSearchClientDto } from './dto/enhanced-search-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
@@ -28,6 +29,7 @@ import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-clien
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
 import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
+import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
@@ -36,6 +38,7 @@ import {
   PromoteClient,
   PromoteClientDocument,
 } from '../promote-clients/schemas/promote-client.schema';
+import { SortOrder } from 'mongoose';
 import path from 'path';
 import { Api } from 'telegram/tl';
 import isPermanentError from '../../utils/isPermanentError';
@@ -43,6 +46,9 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import TelegramManager from '../Telegram/TelegramManager';
 import { User } from '../users';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
+import { WarmupPhase } from '../shared/warmup-phases';
+import { ClientHelperUtils } from '../shared/client-helper.utils';
+import { ActiveClientSetup } from '../Telegram/manager/types';
 
 // Configuration constants
 const CONFIG = {
@@ -66,6 +72,16 @@ interface SearchResult {
   searchType: 'direct' | 'promoteMobile' | 'mixed';
   promoteMobileMatches?: Array<{ clientId: string; mobile: string }>;
 }
+
+interface SafeSetupBufferCandidate {
+  mobile: string;
+  session: string;
+  backupUser: User;
+}
+
+type ClientSearchFilter = Partial<SearchClientDto & Pick<EnhancedSearchClientDto, 'promoteMobileNumber'>>;
+type ClientMongoQuery = Record<string, unknown>;
+type ClientQuerySort = Record<string, SortOrder | { $meta: unknown }>;
 
 @Injectable()
 export class ClientService implements OnModuleDestroy, OnModuleInit {
@@ -120,11 +136,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (this.isShuttingDown) return;
       await this.performPeriodicRefresh();
     }, CONFIG.REFRESH_INTERVAL);
+    this.checkInterval.unref();
 
     this.refreshInterval = setInterval(() => {
       if (this.isShuttingDown) return;
       this.updateCacheMetadata();
     }, 60000);
+    this.refreshInterval.unref();
   }
 
   private async performPeriodicRefresh(): Promise<void> {
@@ -279,13 +297,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  async search(filter: any): Promise<Client[]> {
+  async search(filter: ClientSearchFilter | ClientMongoQuery): Promise<Client[]> {
     try {
-      if (filter.hasPromoteMobiles !== undefined) {
-        filter = await this.processPromoteMobileFilter(filter);
+      let workingFilter: ClientSearchFilter | ClientMongoQuery = { ...filter };
+      if (workingFilter.hasPromoteMobiles !== undefined) {
+        workingFilter = await this.processPromoteMobileFilter(workingFilter);
       }
-      filter = this.processTextSearchFields(filter);
-      return this.executeWithRetry(() => this.clientModel.find(filter).lean().exec());
+      workingFilter = this.processTextSearchFields(workingFilter);
+      return this.executeWithRetry(() => this.clientModel.find(workingFilter).lean().exec());
     } catch (error) {
       const errorDetails = parseError(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
       throw new InternalServerErrorException(errorDetails.message);
@@ -306,14 +325,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  async enhancedSearch(filter: any): Promise<SearchResult> {
+  async enhancedSearch(filter: ClientSearchFilter): Promise<SearchResult> {
     try {
+      const workingFilter: ClientSearchFilter = { ...filter };
       let searchType: 'direct' | 'promoteMobile' | 'mixed' = 'direct';
       let promoteMobileMatches: Array<{ clientId: string; mobile: string }> = [];
-      if (filter.promoteMobileNumber) {
+      if (workingFilter.promoteMobileNumber) {
         searchType = 'promoteMobile';
-        const mobileNumber = filter.promoteMobileNumber;
-        delete filter.promoteMobileNumber;
+        const mobileNumber = workingFilter.promoteMobileNumber;
+        delete workingFilter.promoteMobileNumber;
         const promoteClients = await this.executeWithRetry(() =>
           this.promoteClientModel
             .find({
@@ -327,9 +347,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           clientId: pc.clientId,
           mobile: pc.mobile,
         }));
-        filter.clientId = { $in: promoteClients.map((pc) => pc.clientId) };
+        (workingFilter as ClientMongoQuery).clientId = { $in: promoteClients.map((pc) => pc.clientId) };
       }
-      const clients = await this.search(filter);
+      const clients = await this.search(workingFilter);
       return {
         clients,
         searchType,
@@ -347,13 +367,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private cleanUpdateObject(updateDto: any): any {
+  private cleanUpdateObject(updateDto: UpdateClientDto): UpdateClientDto {
     const cleaned = { ...updateDto };
-    delete cleaned._id;
-    if (cleaned._doc) {
-      delete cleaned._doc._id;
-      delete cleaned._doc;
-    }
+    delete (cleaned as Partial<{ _id: unknown }>)._id;
     return cleaned;
   }
 
@@ -374,7 +390,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   private performPostUpdateTasks(updatedClient: Client): void {
     setImmediate(async () => {
       try {
-        this.refreshExternalMaps()
+        await this.refreshExternalMaps();
       } catch (error) {
         parseError(error, 'Failed to refresh external maps after client update');
       }
@@ -389,26 +405,32 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     this.logger.debug('External maps refreshed');
   }
 
-  private async processPromoteMobileFilter(filter: any): Promise<any> {
-    const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
-    delete filter.hasPromoteMobiles;
+  private async processPromoteMobileFilter(filter: ClientSearchFilter | ClientMongoQuery): Promise<ClientMongoQuery> {
+    const nextFilter: ClientMongoQuery = { ...(filter as ClientMongoQuery) };
+    const hasPromoteMobilesValue = typeof filter.hasPromoteMobiles === 'string'
+      ? filter.hasPromoteMobiles
+      : String(filter.hasPromoteMobiles);
+    const hasPromoteMobiles = hasPromoteMobilesValue.toLowerCase() === 'true';
+    delete nextFilter.hasPromoteMobiles;
     const clientsWithPromoteMobiles = await this.executeWithRetry(() =>
       this.promoteClientModel.find({ clientId: { $exists: true } }).distinct('clientId').lean(),
     );
-    filter.clientId = hasPromoteMobiles
+    nextFilter.clientId = hasPromoteMobiles
       ? { $in: clientsWithPromoteMobiles }
       : { $nin: clientsWithPromoteMobiles };
-    return filter;
+    return nextFilter;
   }
 
-  private processTextSearchFields(filter: any): any {
-    const textFields = ['firstName', 'name'];
+  private processTextSearchFields(filter: ClientSearchFilter | ClientMongoQuery): ClientMongoQuery {
+    const nextFilter: ClientMongoQuery = { ...(filter as ClientMongoQuery) };
+    const textFields = ['name'];
     textFields.forEach((field) => {
-      if (filter[field]) {
-        filter[field] = { $regex: new RegExp(this.escapeRegex(filter[field]), 'i') };
+      const value = nextFilter[field];
+      if (typeof value === 'string' && value) {
+        nextFilter[field] = { $regex: new RegExp(this.escapeRegex(value), 'i') };
       }
     });
-    return filter;
+    return nextFilter;
   }
 
   private escapeRegex(text: string): string {
@@ -494,19 +516,22 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
     const existingClientMobile = existingClient.mobile;
     this.logger.log('setupClientQueryDto:', setupClientQueryDto);
-    const today = new Date().toISOString().split('T')[0];
-    const query = {
+    const today = ClientHelperUtils.getTodayDateString();
+    const query: ClientMongoQuery = {
       clientId,
       mobile: { $ne: existingClientMobile },
       createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
       availableDate: { $lte: today },
       channels: { $gt: 200 },
-      status: "active"
+      status: 'active',
+      inUse: { $ne: true },
+      warmupPhase: WarmupPhase.SESSION_ROTATED,
     };
-    const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
+    const candidateBufferClients = await this.bufferClientService.executeQuery(query, { availableDate: 1, createdAt: 1 }, 10);
+    const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
     if (!newBufferClient) {
-      await this.notify(`Buffer Clients not available, Requested by ${clientId}`);
-      this.logger.log('Buffer Clients not available');
+      await this.notify(`Buffer Clients not safely available, Requested by ${clientId}`);
+      this.logger.log('Buffer Clients not safely available');
       return;
     }
     try {
@@ -532,7 +557,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.notify(`Buffer ${newBufferClient.mobile} marked INACTIVE (permanent error during setup)`);
       } else {
         // Transient error — push availability out so it's not retried immediately
-        const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const availableDate = ClientHelperUtils.toDateString(Date.now() + 3 * 24 * 60 * 60 * 1000);
         await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
       }
       this.telegramService.setActiveClientSetup(undefined);
@@ -543,7 +568,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   async updateClientSession(newSession: string) {
     const setup = this.telegramService.getActiveClientSetup();
-    const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+    if (!setup) {
+      throw new BadRequestException('No active client setup found');
+    }
+    const { archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+    const days = setup.days ?? 0;
     this.logger.log('Updating Client Session');
     await sleep(2000);
     const existingClient = await this.findOne(clientId);
@@ -571,6 +600,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         me.username,
       );
       await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: @${me.username}\nNewUsername: @${updatedUsername}`);
+      if (!newSession?.trim()) {
+        throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
+      }
       await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
       setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
@@ -600,7 +632,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     try {
       const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
       if (!existingClientUser) return;
-      if (toBoolean(formalities)) {
+      if (formalities) {
         await this.handleFormalities(existingMobile);
       } else {
         this.logger.log('Formalities skipped');
@@ -618,19 +650,22 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
     } catch (e) {
       const errorDetails = parseError(e, `Error in Archiving Old Client: ${existingMobile}`, false);
+      const errorMessage = e instanceof Error ? e.message : String(e);
       if (isPermanentError(errorDetails)) {
-        await this.bufferClientService.markAsInactive(existingMobile, e.errorMessage || e.message);
+        await this.bufferClientService.markAsInactive(existingMobile, errorMessage);
       }
-      await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${e.errorMessage || e.message}`);
+      await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${errorMessage}`);
     }
   }
 
   private async handleFormalities(mobile: string) {
-    const client = await connectionManager.getClient(mobile, { handler: true, autoDisconnect: false });
-    await this.telegramService.updatePrivacyforDeletedAccount(mobile);
-    this.logger.log('Formalities finished');
-    await connectionManager.unregisterClient(mobile);
-    await this.notify('Formalities finished');
+    try {
+      await this.telegramService.updatePrivacyforDeletedAccount(mobile);
+      this.logger.log('Formalities finished');
+      await this.notify('Formalities finished');
+    } finally {
+      await connectionManager.unregisterClient(mobile);
+    }
   }
 
   private async archiveOldClient(
@@ -640,9 +675,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     days: number,
   ) {
     try {
-      const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0];
+      await this.assertDistinctUserBackupSession(existingMobile, existingClient.session);
+      const availableDate = ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
       const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
         clientId: existingClient.clientId,
         mobile: existingMobile,
@@ -652,24 +686,73 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         channels: 170,
         status: days > 35 ? 'inactive' : 'active',
         inUse: false,
+        warmupPhase: WarmupPhase.SESSION_ROTATED,
+        sessionRotatedAt: new Date(),
       };
       const updatedBufferClient = await this.bufferClientService.createOrUpdate(
         existingMobile,
         bufferClientDto,
       );
-      this.logger.log('client Archived: ', updatedBufferClient['_doc']);
+      this.logger.log('client Archived:', updatedBufferClient);
       await this.notify('old Client Archived');
     } catch (error) {
       const errorDetails = parseError(error, `Error in Archiving Old Client: ${existingMobile}`, true);
       await this.notify(errorDetails.message);
       if (isPermanentError(errorDetails)) {
-        this.logger.log('Deleting User: ', existingClientUser.mobile);
+        this.logger.log('Marking archived user inactive:', existingClientUser.mobile);
         await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
         // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
       } else {
         this.logger.log('Not Deleting user');
       }
     }
+  }
+
+  private async findSafeSetupBufferCandidate(
+    candidates: Array<{ mobile: string; session?: string }>,
+    existingClientSession: string,
+  ): Promise<SafeSetupBufferCandidate | null> {
+    for (const candidate of candidates) {
+      if (!candidate?.mobile || !candidate?.session) continue;
+      if (candidate.session === existingClientSession) {
+        this.logger.warn(`Skipping setup candidate ${candidate.mobile}: session matches current main client`);
+        continue;
+      }
+
+      try {
+        const backupUser = await this.assertDistinctUserBackupSession(candidate.mobile, candidate.session);
+        if (!backupUser.session?.trim() || backupUser.session.trim() === candidate.session.trim()) {
+          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: backup session is still duplicated`);
+          continue;
+        }
+        return { mobile: candidate.mobile, session: candidate.session, backupUser };
+      } catch (error) {
+        this.logger.warn(`Skipping setup candidate ${candidate.mobile}: failed to ensure distinct backup session`);
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  private async assertDistinctUserBackupSession(mobile: string, activeSession: string): Promise<User> {
+    let user: User | null;
+    try {
+      user = await this.bufferClientService.getOrEnsureDistinctUsersBackupSession(mobile, activeSession);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw error;
+    }
+    if (!user) {
+      throw new BadRequestException(`Failed to create distinct backup session for ${mobile}`);
+    }
+
+    if (user.session?.trim() && user.session.trim() !== activeSession.trim()) {
+      return user;
+    }
+    throw new BadRequestException(`Distinct backup session was not persisted for ${mobile}`);
   }
 
   async updateClient(clientId: string, message: string = '') {
@@ -696,7 +779,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
       parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
-      this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
+      await this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
     } finally {
       await connectionManager.unregisterClient(client.mobile);
     }
@@ -779,7 +862,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  async executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]> {
+  async executeQuery(query: ExecuteClientQueryDto['query'], sort?: ClientQuerySort, limit?: number, skip?: number): Promise<Client[]> {
     if (!query) throw new BadRequestException('Query is invalid.');
     const queryExec = this.clientModel.find(query);
     if (sort) queryExec.sort(sort);

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, HttpException, HttpStatus, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -6,6 +6,11 @@ import { Client } from './schemas/client.schema';
 import { SearchClientDto } from './dto/search-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
+import { EnhancedSearchClientDto } from './dto/enhanced-search-client.dto';
+import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
+import { PromoteMobileAssignmentDto } from './dto/promote-mobile-assignment.dto';
+import { PromoteMobileSearchQueryDto } from './dto/promote-mobile-search-query.dto';
+import { EnhancedClientSearchResponseDto, PromoteMobileSearchResponseDto } from './dto/client-response.dto';
 import { CloudflareCache } from '../../decorators';
 import { CloudflareCacheInterceptor } from '../../interceptors';
 
@@ -38,25 +43,14 @@ export class ClientController {
   @ApiQuery({ name: 'mobile', required: true, description: 'Promote mobile number to search for' })
   @ApiResponse({
     description: 'Clients with matching promote mobiles returned successfully.',
-    type: Object,
-    schema: {
-      properties: {
-        clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
-        matches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
-        searchedMobile: { type: 'string' },
-      },
-    },
+    type: PromoteMobileSearchResponseDto,
   })
-  async searchByPromoteMobile(@Query('mobile') mobile: string): Promise<{
-    clients: Client[];
-    matches: Array<{ clientId: string; mobile: string }>;
-    searchedMobile: string;
-  }> {
-    const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
+  async searchByPromoteMobile(@Query() query: PromoteMobileSearchQueryDto): Promise<PromoteMobileSearchResponseDto> {
+    const result = await this.clientService.enhancedSearch({ promoteMobileNumber: query.mobile });
     return {
       clients: result.clients,
       matches: result.promoteMobileMatches || [],
-      searchedMobile: mobile,
+      searchedMobile: query.mobile,
     };
   }
 
@@ -66,22 +60,9 @@ export class ClientController {
   @ApiQuery({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' })
   @ApiResponse({
     description: 'Enhanced search results with promote mobile context.',
-    type: Object,
-    schema: {
-      properties: {
-        clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
-        searchType: { type: 'string' },
-        promoteMobileMatches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
-        totalResults: { type: 'number' },
-      },
-    },
+    type: EnhancedClientSearchResponseDto,
   })
-  async enhancedSearch(@Query() query: any): Promise<{
-    clients: Client[];
-    searchType: string;
-    promoteMobileMatches?: Array<{ clientId: string; mobile: string }>;
-    totalResults: number;
-  }> {
+  async enhancedSearch(@Query() query: EnhancedSearchClientDto): Promise<EnhancedClientSearchResponseDto> {
     const result = await this.clientService.enhancedSearch(query);
     return {
       clients: result.clients,
@@ -155,18 +136,9 @@ export class ClientController {
 
   @Post('query')
   @ApiOperation({ summary: 'Execute a custom MongoDB query' })
-  @ApiBody({
-    schema: {
-      properties: {
-        query: { type: 'object' },
-        sort: { type: 'object' },
-        limit: { type: 'number' },
-        skip: { type: 'number' },
-      },
-    },
-  })
-  @ApiResponse({ description: 'Query executed successfully.' })
-  async executeQuery(@Body() requestBody: any): Promise<any> {
+  @ApiBody({ type: ExecuteClientQueryDto })
+  @ApiResponse({ description: 'Query executed successfully.', type: [Client] })
+  async executeQuery(@Body() requestBody: ExecuteClientQueryDto): Promise<Client[]> {
     const { query, sort, limit, skip } = requestBody;
     return await this.clientService.executeQuery(query, sort, limit, skip);
   }
@@ -174,30 +146,18 @@ export class ClientController {
   @Patch(':clientId/promoteMobile/add')
   @ApiOperation({ summary: 'Add a mobile number as a promote mobile for a specific client' })
   @ApiParam({ name: 'clientId', description: 'The unique identifier of the client' })
-  @ApiBody({
-    schema: {
-      properties: {
-        mobileNumber: { type: 'string', example: '916265240911' },
-      },
-    },
-  })
+  @ApiBody({ type: PromoteMobileAssignmentDto })
   @ApiResponse({ description: 'Mobile number assigned as promote mobile successfully.', type: Client })
-  async addPromoteMobile(@Param('clientId') clientId: string, @Body() body: { mobileNumber: string }): Promise<Client> {
+  async addPromoteMobile(@Param('clientId') clientId: string, @Body() body: PromoteMobileAssignmentDto): Promise<Client> {
     return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
   }
 
   @Patch(':clientId/promoteMobile/remove')
   @ApiOperation({ summary: 'Remove a promote mobile assignment from a specific client' })
   @ApiParam({ name: 'clientId', description: 'The unique identifier of the client' })
-  @ApiBody({
-    schema: {
-      properties: {
-        mobileNumber: { type: 'string', example: '916265240911' },
-      },
-    },
-  })
+  @ApiBody({ type: PromoteMobileAssignmentDto })
   @ApiResponse({ description: 'Promote mobile assignment removed successfully.', type: Client })
-  async removePromoteMobile(@Param('clientId') clientId: string, @Body() body: { mobileNumber: string }) {
+  async removePromoteMobile(@Param('clientId') clientId: string, @Body() body: PromoteMobileAssignmentDto) {
     return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
   }
 }

@@ -81,6 +81,14 @@ export class Client {
     @ApiProperty({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' })
     @Prop({ required: false, type: [String], default: [] })
     dedicatedIps?: string[];
+
+    @ApiProperty({ example: 'US', description: 'Preferred country for IP assignment', required: false })
+    @Prop({ required: false, default: null })
+    preferredIpCountry?: string;
+
+    @ApiProperty({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false })
+    @Prop({ required: false, type: Boolean, default: false })
+    autoAssignIps?: boolean;
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);

@@ -1,5 +1,7 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { CreateBufferClientDto } from './create-buffer-client.dto';
+import { IsEnum } from 'class-validator';
+import { WarmupPhase, WarmupPhaseType } from '../../shared/warmup-phases';
 
 export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     @ApiPropertyOptional({ description: 'Whether the client is currently reserved by an active workflow.', example: false })
@@ -30,7 +32,8 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     otherAuthsRemovedAt?: Date;
     // Warmup tracking
     @ApiPropertyOptional({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' })
-    warmupPhase?: string;
+    @IsEnum(WarmupPhase)
+    warmupPhase?: WarmupPhaseType;
     @ApiPropertyOptional({ description: 'Per-account warmup jitter in days.', example: 2 })
     warmupJitter?: number;
     @ApiPropertyOptional({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' })

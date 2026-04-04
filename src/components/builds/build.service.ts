@@ -2,12 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Build } from './builds.schema';
-import { NpointService } from '../n-point/npoint.service';
 
 @Injectable()
 export class BuildService {
-    constructor(@InjectModel('buildModule') private buildModel: Model<Build>,
-        private npointSerive: NpointService) {
+    constructor(@InjectModel('buildModule') private buildModel: Model<Build>) {
     }
 
     async OnModuleInit() {
@@ -29,12 +27,6 @@ export class BuildService {
             { $set: { ...updateClientDto } },
             { new: true, upsert: true }
         ).exec();
-        try {
-            await this.npointSerive.updateDocument("3375d15db1eece560188", updatedUser)
-            console.log("Updated document successfully in npoint")
-        } catch (error) {
-            console.log(error)
-        }
         if (!updatedUser) {
             throw new NotFoundException(`buildModel not found`);
         }

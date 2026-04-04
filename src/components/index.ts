@@ -5,7 +5,6 @@ export * from './builds';
 export * from './channels';
 export * from './clients';
 export * from './ConfigurationInit';
-export * from './n-point';
 export * from './session-manager';
 
 // Stats and Analytics

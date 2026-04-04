@@ -1,4 +1,4 @@
-import { OnModuleDestroy } from '@nestjs/common';
+import { NotFoundException, OnModuleDestroy } from '@nestjs/common';
 import { Model, Document } from 'mongoose';
 import { Channel } from '../channels/schemas/channel.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
@@ -15,6 +15,7 @@ import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import TelegramManager from '../Telegram/TelegramManager';
 import { Client } from '../clients';
+import { User } from '../users';
 import path from 'path';
 import { CloudinaryService } from '../../cloudinary';
 import { Api } from 'telegram';
@@ -26,6 +27,7 @@ import { performOrganicActivity, OrganicIntensity } from './organic-activity';
 import {
     getWarmupPhaseAction,
     WarmupPhase,
+    WarmupPhaseType,
     WarmupAction,
     isAccountReady,
     isAccountWarmingUp,
@@ -46,10 +48,16 @@ export interface ClientConfig {
     maxNewClientsPerTrigger: number;
     minTotalClients: number;
     maxMapSize: number;
-    cleanupInterval: number;
     cooldownHours: number;
     clientProcessingDelay: number;
 }
+
+export const ClientStatus = {
+    ACTIVE: 'active',
+    INACTIVE: 'inactive',
+} as const;
+
+export type ClientStatusType = typeof ClientStatus[keyof typeof ClientStatus];
 
 /**
  * Common document fields shared by buffer and promote client schemas.
@@ -61,7 +69,7 @@ export interface BaseClientDocument extends Document {
     availableDate: string;
     channels: number;
     clientId?: string;
-    status: string;
+    status: ClientStatusType;
     message?: string;
     lastUsed?: Date;
     lastChecked?: Date;
@@ -79,12 +87,42 @@ export interface BaseClientDocument extends Document {
     failedUpdateAttempts?: number;
     lastUpdateFailure?: Date;
     // Warmup fields
-    warmupPhase?: string;
+    warmupPhase?: WarmupPhaseType;
     warmupJitter?: number;
     enrolledAt?: Date;
     organicActivityAt?: Date;
     sessionRotatedAt?: Date;
 }
+
+export type BaseClientUpdate = Partial<Pick<
+    BaseClientDocument,
+    | 'session'
+    | 'availableDate'
+    | 'channels'
+    | 'clientId'
+    | 'status'
+    | 'message'
+    | 'lastUsed'
+    | 'lastChecked'
+    | 'inUse'
+    | 'privacyUpdatedAt'
+    | 'twoFASetAt'
+    | 'otherAuthsRemovedAt'
+    | 'profilePicsUpdatedAt'
+    | 'nameBioUpdatedAt'
+    | 'profilePicsDeletedAt'
+    | 'usernameUpdatedAt'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'lastUpdateAttempt'
+    | 'failedUpdateAttempts'
+    | 'lastUpdateFailure'
+    | 'warmupPhase'
+    | 'warmupJitter'
+    | 'enrolledAt'
+    | 'organicActivityAt'
+    | 'sessionRotatedAt'
+>>;
 
 /**
  * Availability window calculation result.
@@ -102,6 +140,20 @@ export interface AvailabilityNeeds {
     totalNeededForCount: number;
     calculationReason: string;
     priority: number;
+    readyActive: number;
+    warmingPipeline: number;
+    replenishmentWindowNeeds: Array<{
+        window: string;
+        available: number;
+        needed: number;
+        targetDate: string;
+        minRequired: number;
+    }>;
+    projectedWindowCounts: Array<{
+        window: string;
+        available: number;
+        targetDate: string;
+    }>;
 }
 
 // Re-export for subclasses
@@ -123,7 +175,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected isJoinChannelProcessing: boolean = false;
     protected isLeaveChannelProcessing: boolean = false;
     protected activeTimeouts: Set<NodeJS.Timeout> = new Set();
-    protected cleanupIntervalId: NodeJS.Timeout | null = null;
 
     protected readonly ONE_DAY_MS = 24 * 60 * 60 * 1000;
     protected readonly THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
@@ -174,7 +225,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return now - lastAttemptTs < this.getEffectiveCooldownMs(mobile, lastAttemptTs);
     }
 
-    protected inferWarmupPhaseFromProgress(doc: TDoc): string {
+    protected inferWarmupPhaseFromProgress(doc: TDoc): WarmupPhaseType {
         if (doc.warmupPhase) return doc.warmupPhase;
         if (doc.sessionRotatedAt) return WarmupPhase.SESSION_ROTATED;
         if (doc.profilePicsUpdatedAt) return WarmupPhase.MATURING;
@@ -184,7 +235,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return WarmupPhase.ENROLLED;
     }
 
-    protected getWarmupPhaseRank(phase: string | null | undefined): number {
+    protected getWarmupPhaseRank(phase: WarmupPhaseType | null | undefined): number {
         const order: Record<string, number> = {
             [WarmupPhase.ENROLLED]: 0,
             [WarmupPhase.SETTLING]: 1,
@@ -198,8 +249,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return order[phase] ?? -1;
     }
 
-    protected getRecoveryEnrolledAt(phase: string, jitter: number, now: number): Date {
-        const recoveryDaysByPhase: Record<string, number> = {
+    protected getRecoveryEnrolledAt(phase: WarmupPhaseType, jitter: number, now: number): Date {
+        const recoveryDaysByPhase: Record<WarmupPhaseType, number> = {
             [WarmupPhase.ENROLLED]: Math.max(1, WARMUP_PHASE_THRESHOLDS.settling + jitter),
             [WarmupPhase.SETTLING]: WARMUP_PHASE_THRESHOLDS.identity + jitter,
             [WarmupPhase.IDENTITY]: WARMUP_PHASE_THRESHOLDS.growing + jitter,
@@ -214,7 +265,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     protected async repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc> {
-        const updateData: Partial<TDoc> = {};
+        const updateData: BaseClientUpdate = {};
         const progressDoc = { ...doc, warmupPhase: undefined } as TDoc;
         const inferredPhase = this.inferWarmupPhaseFromProgress(progressDoc);
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
@@ -222,11 +273,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         // Recover missing or stale phase metadata, but never move backwards automatically.
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
-            (updateData as any).warmupPhase = inferredPhase;
+            updateData.warmupPhase = inferredPhase;
         }
 
         if (!doc.enrolledAt && !doc.createdAt) {
-            (updateData as any).enrolledAt = this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
+            updateData.enrolledAt = this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -272,13 +323,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     abstract findOne(mobile: string, throwErr?: boolean): Promise<TDoc>;
 
     /** Update a document by mobile */
-    abstract update(mobile: string, updateDto: any): Promise<TDoc>;
+    abstract update(mobile: string, updateDto: BaseClientUpdate): Promise<TDoc>;
 
     /** Mark as inactive */
     abstract markAsInactive(mobile: string, reason: string): Promise<TDoc | null>;
 
     /** Update status */
-    abstract updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<TDoc>;
+    abstract updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc>;
 
     // ---- Lifecycle ----
 
@@ -291,53 +342,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.clearAllTimeouts();
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
-            this.clearMemoryCleanup();
             this.joinChannelMap.clear();
             this.leaveChannelMap.clear();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
         } catch (error) {
             this.logger.error('Error during cleanup:', error);
-        }
-    }
-
-    // ---- Memory Management ----
-
-    protected startMemoryCleanup(): void {
-        if (this.cleanupIntervalId) return;
-        this.cleanupIntervalId = setInterval(() => {
-            this.performMemoryCleanup();
-        }, this.config.cleanupInterval);
-        this.activeTimeouts.add(this.cleanupIntervalId);
-    }
-
-    protected clearMemoryCleanup(): void {
-        if (this.cleanupIntervalId) {
-            clearInterval(this.cleanupIntervalId);
-            this.activeTimeouts.delete(this.cleanupIntervalId);
-            this.cleanupIntervalId = null;
-        }
-    }
-
-    protected performMemoryCleanup(): void {
-        try {
-            for (const [mobile, channels] of this.joinChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`Cleaning up empty joinChannelMap entry for mobile: ${mobile}`);
-                    this.joinChannelMap.delete(mobile);
-                }
-            }
-            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`Cleaning up empty leaveChannelMap entry for mobile: ${mobile}`);
-                    this.leaveChannelMap.delete(mobile);
-                }
-            }
-            this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
-            this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
-            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}`);
-        } catch (error) {
-            this.logger.error('Error during memory cleanup:', error);
         }
     }
 
@@ -488,6 +498,30 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
         this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
+    }
+
+    protected async prepareJoinChannelRefresh(skipExisting: boolean): Promise<Set<string>> {
+        const preservedMobiles = new Set<string>();
+        if (skipExisting) {
+            for (const [mobile, channels] of this.joinChannelMap.entries()) {
+                if (channels && channels.length > 0) {
+                    preservedMobiles.add(mobile);
+                }
+            }
+        }
+
+        for (const key of this.joinChannelMap.keys()) {
+            if (!preservedMobiles.has(key)) {
+                this.joinChannelMap.delete(key);
+            }
+        }
+
+        this.leaveChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
+        await sleep(6000 + Math.random() * 3000);
+
+        return preservedMobiles;
     }
 
     // ---- Health Check (redesigned: organic activity instead of SetPrivacy) ----
@@ -912,8 +946,15 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     return 0;
 
                 case 'rotate_session':
-                    // Session rotation handled separately
-                    return 0;
+                    updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
+                    if (updateCount === 0) {
+                        await this.update(doc.mobile, {
+                            lastUpdateAttempt: new Date(),
+                            failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
+                            lastUpdateFailure: new Date(),
+                        });
+                    }
+                    return updateCount;
 
                 default:
                     await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
@@ -951,7 +992,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         this.logger.log(`Backfilling fields for ${mobile}`);
         const allTimestamps = ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
-        const backfillData: any = {};
+        const backfillData: BaseClientUpdate = {};
 
         // Profile timestamps
         if (!doc.privacyUpdatedAt) backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
@@ -961,10 +1002,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (!doc.profilePicsUpdatedAt) backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
 
         // Warmup fields — migrated used accounts are already warmed
-        if (!doc.warmupPhase) backfillData.warmupPhase = WarmupPhase.READY;
+        const hasDistinctBackupSession = await this.hasDistinctUsersBackupSession(mobile, doc.session || null);
+        if (!doc.warmupPhase) backfillData.warmupPhase = hasDistinctBackupSession ? WarmupPhase.SESSION_ROTATED : WarmupPhase.READY;
         if (!doc.enrolledAt) backfillData.enrolledAt = doc.createdAt || new Date(now - 30 * this.ONE_DAY_MS);
         if (!doc.twoFASetAt) backfillData.twoFASetAt = new Date(now - 28 * this.ONE_DAY_MS);
         if (!doc.otherAuthsRemovedAt) backfillData.otherAuthsRemovedAt = new Date(now - 27 * this.ONE_DAY_MS);
+        if (hasDistinctBackupSession && !doc.sessionRotatedAt) backfillData.sessionRotatedAt = new Date(now - 26 * this.ONE_DAY_MS);
 
         if (Object.keys(backfillData).length > 0) {
             await this.update(mobile, backfillData);
@@ -1092,6 +1135,15 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     }
                 }
 
+                // Increment channel count by successful joins (no extra TG API call)
+                if (joinCount > 0) {
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                    } catch {
+                        // Non-fatal — count will be corrected on next health check
+                    }
+                }
+
                 if (channels.length === 0) {
                     this.removeFromJoinMap(mobile);
                 }
@@ -1148,13 +1200,22 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
 
         if (!this.leaveChannelIntervalId) {
-            this.logger.debug('Starting leave channel interval');
-            this.leaveChannelIntervalId = setInterval(async () => {
-                await this.processLeaveChannelInterval();
-            }, this.config.leaveChannelInterval);
-            this.activeTimeouts.add(this.leaveChannelIntervalId);
-            this.createTimeout(() => this.processLeaveChannelInterval(), 1000);
+            this.logger.debug('Starting leave channel queue');
+            this.scheduleNextLeaveRound();
         }
+    }
+
+    private scheduleNextLeaveRound() {
+        if (this.leaveChannelMap.size === 0) {
+            this.clearLeaveChannelInterval();
+            return;
+        }
+        const baseInterval = this.config.leaveChannelInterval;
+        const jitter = ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
+        const delay = Math.max(30000, baseInterval + jitter);
+        this.leaveChannelIntervalId = this.createTimeout(async () => {
+            await this.processLeaveChannelInterval();
+        }, delay);
     }
 
     protected async processLeaveChannelInterval() {
@@ -1172,9 +1233,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error('Error in leave channel queue', error);
         } finally {
             this.isLeaveChannelProcessing = false;
-            if (this.leaveChannelMap.size === 0) {
-                this.clearLeaveChannelInterval();
-            }
+            this.scheduleNextLeaveRound();
         }
     }
 
@@ -1276,8 +1335,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected async selfHealLegacyWarmupAccounts(clientId?: string, limit: number = 50): Promise<number> {
         const docs = await this.model
             .find({
-                ...this.getMissingWarmupPhaseQuery(clientId),
-                $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
+                $and: [
+                    this.getMissingWarmupPhaseQuery(clientId),
+                    { $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }] },
+                ],
             })
             .sort({ createdAt: 1, _id: 1 })
             .limit(limit)
@@ -1305,36 +1366,204 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     // ---- Availability Calculations ----
 
-    protected async calculateAvailabilityBasedNeeds(clientId: string): Promise<AvailabilityNeeds> {
-        await this.selfHealLegacyOperationalState(clientId);
+    protected async getStoredActiveSession(mobile: string): Promise<string | null> {
+        const doc = await this.model.findOne({ mobile }, { session: 1 }).lean<{ session?: string }>().exec();
+        return doc?.session?.trim() || null;
+    }
 
+    protected async createDistinctSessionString(mobile: string, forbiddenSessions: Array<string | null | undefined>, maxAttempts: number = 2): Promise<string | null> {
+        const forbidden = new Set(
+            forbiddenSessions
+                .map((session) => session?.trim())
+                .filter((session): session is string => !!session),
+        );
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const newSession = (await this.telegramService.createNewSession(mobile))?.trim();
+            if (newSession && !forbidden.has(newSession)) {
+                return newSession;
+            }
+            this.logger.warn(`Rejected duplicate/empty rotated session for ${mobile} on attempt ${attempt + 1}`);
+        }
+
+        return null;
+    }
+
+    protected async hasDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean> {
+        const users = await this.usersService.search({ mobile });
+        if (!users.length) return false;
+
+        const backupSession = users[0].session?.trim();
+        const active = activeSession?.trim();
+        return !!backupSession && !!active && backupSession !== active;
+    }
+
+    public async getOrEnsureDistinctUsersBackupSession(
+        mobile: string,
+        activeSession: string | null | undefined,
+    ): Promise<User | null> {
+        const active = activeSession?.trim();
+        if (!active) return null;
+
+        const users = await this.usersService.search({ mobile });
+        if (!users.length) {
+            throw new NotFoundException(`User not found for ${mobile}`);
+        }
+
+        const user = users[0] as User;
+        const currentBackup = user.session?.trim();
+        if (currentBackup && currentBackup !== active) {
+            return user;
+        }
+
+        const distinctBackup = await this.createDistinctSessionString(mobile, [active, currentBackup]);
+        if (!distinctBackup) {
+            return null;
+        }
+
+        await this.usersService.update(user.tgId, { session: distinctBackup });
+        return {
+            ...user,
+            session: distinctBackup,
+        };
+    }
+
+    public async ensureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean> {
+        const user = await this.getOrEnsureDistinctUsersBackupSession(mobile, activeSession);
+        return !!user?.session?.trim();
+    }
+
+    protected normalizeDateString(dateValue?: string | Date | null): string | null {
+        if (!dateValue) return null;
+        if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            return dateValue;
+        }
+        const timestamp = ClientHelperUtils.getTimestamp(dateValue);
+        return timestamp > 0 ? ClientHelperUtils.toDateString(timestamp) : null;
+    }
+
+    protected maxDateString(...dateStrings: Array<string | null | undefined>): string | null {
+        const validDates = dateStrings.filter((value): value is string => !!value);
+        if (!validDates.length) return null;
+        return validDates.reduce((max, current) => (current > max ? current : max));
+    }
+
+    protected getProjectedReadyDateString(doc: Partial<BaseClientDocument>): string | null {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as TDoc);
+        if (!isAccountWarmingUp(phase)) return null;
+
+        const enrolledTimestamp = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledTimestamp <= 0) return null;
+
+        const jitter = Math.max(0, doc.warmupJitter || 0);
+        const readyTimestamp = enrolledTimestamp + (WARMUP_PHASE_THRESHOLDS.ready + jitter) * this.ONE_DAY_MS;
+        return ClientHelperUtils.toDateString(readyTimestamp);
+    }
+
+    protected getOperationalAvailabilityDateString(doc: Partial<BaseClientDocument>, now: number): string | null {
+        const availableDate = this.normalizeDateString(doc.availableDate);
+        const lastUsedTimestamp = ClientHelperUtils.getTimestamp(doc.lastUsed);
+
+        // Legacy active accounts that were already used are operational now, even if warmup metadata
+        // has not been backfilled yet. Credit them in planning so replenishment does not over-enroll.
+        if (!doc.warmupPhase && lastUsedTimestamp > 0) {
+            return availableDate || ClientHelperUtils.toDateString(now);
+        }
+
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as TDoc);
+        if (isAccountReady(phase)) {
+            return availableDate || ClientHelperUtils.toDateString(now);
+        }
+
+        if (!isAccountWarmingUp(phase)) return null;
+
+        const projectedReadyDate = this.getProjectedReadyDateString({ ...doc, warmupPhase: phase });
+        if (!projectedReadyDate) return null;
+
+        return this.maxDateString(projectedReadyDate, availableDate);
+    }
+
+    protected getReplenishmentWindows(): Array<{ name: string; days: number; minRequired: number }> {
+        return [
+            {
+                name: 'threeWeeks',
+                days: 21,
+                minRequired: Math.max(1, Math.ceil(this.config.minTotalClients * 0.6)),
+            },
+            {
+                name: 'oneMonth',
+                days: 30,
+                minRequired: this.config.minTotalClients,
+            },
+        ];
+    }
+
+    protected async calculateAvailabilityBasedNeedsForCurrentState(clientId: string): Promise<AvailabilityNeeds> {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const windows = this.AVAILABILITY_WINDOWS.map(window => ({
             ...window,
-            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS).toISOString().split('T')[0],
+            targetDate: ClientHelperUtils.toDateString(today.getTime() + window.days * this.ONE_DAY_MS),
         }));
+        const replenishmentWindows = this.getReplenishmentWindows().map(window => ({
+            ...window,
+            targetDate: ClientHelperUtils.toDateString(today.getTime() + window.days * this.ONE_DAY_MS),
+        }));
+        const activeDocs = await this.model.find(
+            { clientId, status: 'active' },
+            {
+                availableDate: 1,
+                warmupPhase: 1,
+                warmupJitter: 1,
+                enrolledAt: 1,
+                createdAt: 1,
+                lastUsed: 1,
+                sessionRotatedAt: 1,
+                profilePicsUpdatedAt: 1,
+                usernameUpdatedAt: 1,
+                nameBioUpdatedAt: 1,
+                profilePicsDeletedAt: 1,
+                otherAuthsRemovedAt: 1,
+                twoFASetAt: 1,
+                privacyUpdatedAt: 1,
+                channels: 1,
+            },
+        ).exec();
 
-        // Only count READY accounts as available — warming accounts can't be used yet
-        const readyFilter = {
-            clientId,
-            status: 'active',
-            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
-        };
-        const totalActive = await this.model.countDocuments(readyFilter);
+        const readyOperationalDates: string[] = [];
+        const pipelineOperationalDates: string[] = [];
+
+        for (const doc of activeDocs) {
+            const operationalDate = this.getOperationalAvailabilityDateString(doc as Partial<BaseClientDocument>, today.getTime());
+            if (!operationalDate) continue;
+
+            const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as TDoc);
+            const isLegacyOperational = !doc.warmupPhase && ClientHelperUtils.getTimestamp(doc.lastUsed) > 0;
+
+            if (isLegacyOperational || isAccountReady(phase)) {
+                readyOperationalDates.push(operationalDate);
+            } else {
+                pipelineOperationalDates.push(operationalDate);
+            }
+        }
+
+        const readyActive = readyOperationalDates.length;
+        const warmingPipeline = pipelineOperationalDates.length;
+        const totalActive = readyActive + warmingPipeline;
 
         const windowNeeds = [];
-        let maxNeeded = 0;
-        let mostUrgentWindow = '';
+        const projectedWindowCounts = [];
+        const replenishmentWindowNeeds = [];
+        let maxEnrollableWindowNeeded = 0;
+        let mostUrgentEnrollableWindow = '';
         let mostUrgentPriority = 999;
+        let hasShortWindowDeficit = false;
 
         for (const window of windows) {
-            const availableCount = await this.model.countDocuments({
-                ...readyFilter,
-                availableDate: { $lte: window.targetDate },
-            });
-
+            const readyAvailableCount = readyOperationalDates.filter((date) => date <= window.targetDate).length;
+            const projectedAvailableCount = pipelineOperationalDates.filter((date) => date <= window.targetDate).length;
+            const availableCount = readyAvailableCount + projectedAvailableCount;
             const needed = Math.max(0, window.minRequired - availableCount);
             windowNeeds.push({
                 window: window.name,
@@ -1343,59 +1572,116 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 targetDate: window.targetDate,
                 minRequired: window.minRequired,
             });
+            projectedWindowCounts.push({
+                window: window.name,
+                available: availableCount,
+                targetDate: window.targetDate,
+            });
+            if (needed > 0) {
+                hasShortWindowDeficit = true;
+            }
+        }
 
-            if (needed > maxNeeded) {
-                maxNeeded = needed;
-                mostUrgentWindow = window.name;
+        for (const window of replenishmentWindows) {
+            const availableCount =
+                readyOperationalDates.filter((date) => date <= window.targetDate).length +
+                pipelineOperationalDates.filter((date) => date <= window.targetDate).length;
+            const needed = Math.max(0, window.minRequired - availableCount);
+            replenishmentWindowNeeds.push({
+                window: window.name,
+                available: availableCount,
+                needed,
+                targetDate: window.targetDate,
+                minRequired: window.minRequired,
+            });
+
+            if (needed > maxEnrollableWindowNeeded) {
+                maxEnrollableWindowNeeded = needed;
+                mostUrgentEnrollableWindow = window.name;
                 mostUrgentPriority = window.days;
             } else if (needed > 0 && window.days < mostUrgentPriority) {
-                mostUrgentWindow = window.name;
+                mostUrgentEnrollableWindow = window.name;
                 mostUrgentPriority = window.days;
             }
         }
 
-        const totalNeededForCount = Math.max(0, this.config.minTotalClients - totalActive);
-        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
+        const oneMonthWindow = replenishmentWindowNeeds.find((window) => window.window === 'oneMonth');
+        const totalNeededForCount = oneMonthWindow?.needed || 0;
+        const totalNeeded = maxEnrollableWindowNeeded;
 
         let priority = 100;
-        if (maxNeeded > 0) {
+        if (maxEnrollableWindowNeeded > 0) {
             priority = mostUrgentPriority;
         }
 
         let calculationReason = '';
-        if (maxNeeded > 0 && totalNeededForCount > 0) {
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
-        } else if (maxNeeded > 0) {
-            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
+        if (maxEnrollableWindowNeeded > 0 && totalNeededForCount > 0) {
+            calculationReason = `Window '${mostUrgentEnrollableWindow}' needs ${maxEnrollableWindowNeeded}, total pipeline count needs ${totalNeededForCount}`;
+        } else if (maxEnrollableWindowNeeded > 0) {
+            const windowConfig = replenishmentWindowNeeds.find(w => w.window === mostUrgentEnrollableWindow);
+            calculationReason = `Window '${mostUrgentEnrollableWindow}' needs ${maxEnrollableWindowNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
         } else if (totalNeededForCount > 0) {
-            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.config.minTotalClients}`;
+            calculationReason = `One-month pipeline needs ${totalNeededForCount} to reach minimum of ${this.config.minTotalClients} (ready=${readyActive}, warming=${warmingPipeline})`;
+        } else if (hasShortWindowDeficit) {
+            calculationReason = `Short-term windows are below target, but current replenishment focuses on the 3-4 week horizon (ready=${readyActive}, warming=${warmingPipeline})`;
         } else {
-            calculationReason = 'All windows satisfied';
+            calculationReason = `Short-term and replenishment horizons satisfied (ready=${readyActive}, warming=${warmingPipeline})`;
         }
 
-        return { totalNeeded, windowNeeds, totalActive, totalNeededForCount, calculationReason, priority };
+        return {
+            totalNeeded,
+            windowNeeds,
+            totalActive,
+            totalNeededForCount,
+            calculationReason,
+            priority,
+            readyActive,
+            warmingPipeline,
+            replenishmentWindowNeeds,
+            projectedWindowCounts,
+        };
+    }
+
+    protected async calculateAvailabilityBasedNeeds(clientId: string): Promise<AvailabilityNeeds> {
+        await this.selfHealLegacyOperationalState(clientId);
+        return this.calculateAvailabilityBasedNeedsForCurrentState(clientId);
     }
 
     // ---- Stats / Query Helpers ----
 
-    async getClientsByStatus(status: string): Promise<TDoc[]> {
+    async getClientsByStatus(status: ClientStatusType): Promise<TDoc[]> {
         return this.model.find({ status }).exec();
     }
 
-    async getClientsWithMessages(): Promise<Array<{ mobile: string; status: string; message?: string; clientId?: string; lastUsed?: Date }>> {
-        return this.model.find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 }).exec() as any;
+    async getClientsWithMessages(): Promise<Array<{ mobile: string; status: ClientStatusType; message?: string; clientId?: string; lastUsed?: Date }>> {
+        const docs = await this.model
+            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
+            .lean()
+            .exec();
+        return docs.map((doc) => ({
+            mobile: doc.mobile,
+            status: doc.status,
+            message: doc.message,
+            clientId: doc.clientId,
+            lastUsed: doc.lastUsed,
+        }));
     }
 
     async getLeastRecentlyUsedClients(clientId: string, limit: number = 1): Promise<TDoc[]> {
         await this.selfHealLegacyOperationalState(clientId);
+        const today = ClientHelperUtils.getTodayDateString();
 
         return this.model
             .find({
                 clientId,
                 status: 'active',
                 inUse: { $ne: true },
-                warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+                warmupPhase: WarmupPhase.SESSION_ROTATED,
+                $or: [
+                    { availableDate: { $lte: today } },
+                    { availableDate: { $exists: false } },
+                    { availableDate: null },
+                ],
             })
             .sort({ lastUsed: 1, _id: 1 })
             .limit(limit)
@@ -1411,14 +1697,26 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         await this.selfHealLegacyOperationalState(clientId);
 
         const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+        const today = ClientHelperUtils.getTodayDateString();
         const filter: Record<string, any> = {
             status: 'active',
             inUse: { $ne: true },
-            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
-            $or: [
-                { lastUsed: { $lt: cutoffDate } },
-                { lastUsed: { $exists: false } },
-                { lastUsed: null },
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
+            $and: [
+                {
+                    $or: [
+                        { availableDate: { $lte: today } },
+                        { availableDate: { $exists: false } },
+                        { availableDate: null },
+                    ],
+                },
+                {
+                    $or: [
+                        { lastUsed: { $lt: cutoffDate } },
+                        { lastUsed: { $exists: false } },
+                        { lastUsed: null },
+                    ],
+                },
             ],
         };
         if (clientId) filter.clientId = clientId;
@@ -1466,7 +1764,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     async markAsUsed(mobile: string, message?: string): Promise<TDoc> {
-        const updateData: any = { lastUsed: new Date() };
+        const updateData: BaseClientUpdate = { lastUsed: new Date() };
         if (message) updateData.message = message;
         return this.update(mobile, updateData);
     }
@@ -1481,16 +1779,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         try {
             this.logger.log(`Starting session rotation for ${mobile}`);
 
-            const newSession = await this.telegramService.createNewSession(mobile);
-            if (!newSession) {
-                this.logger.error(`Failed to create new session for ${mobile}`);
+            const activeSession = await this.getStoredActiveSession(mobile);
+            const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(mobile, activeSession);
+            if (!hasDistinctBackup) {
+                this.logger.error(`Failed to ensure distinct backup session for ${mobile}`);
                 return false;
-            }
-
-            // Store new session as backup in users collection
-            const users = await this.usersService.search({ mobile });
-            if (users.length > 0) {
-                await this.usersService.update(users[0].tgId, { session: newSession });
             }
 
             // Mark session as rotated

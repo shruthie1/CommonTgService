@@ -26,9 +26,16 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
 
     constructor(modelOverrides: any = {}) {
+        const telegramService = {
+            createNewSession: jest.fn(async (mobile: string) => `rotated-${mobile}`),
+        };
+        const usersService = {
+            search: jest.fn(async ({ mobile }: { mobile: string }) => [{ tgId: `tg-${mobile}`, mobile, session: `backup-${mobile}` }]),
+            update: jest.fn(async () => 1),
+        };
         super(
-            {} as any,
-            {} as any,
+            telegramService as any,
+            usersService as any,
             {} as any,
             {} as any,
             {} as any,
@@ -58,7 +65,6 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
             maxNewClientsPerTrigger: 1,
             minTotalClients: 1,
             maxMapSize: 1,
-            cleanupInterval: 1,
             cooldownHours: 2,
             clientProcessingDelay: 1,
         };
@@ -111,13 +117,13 @@ function makeBufferService(bufferModel: any) {
     );
 }
 
-function makePromoteService(promoteModel: any) {
+function makePromoteService(promoteModel: any, clientsList: any[] = [{ clientId: 'client-1', mobile: 'main-1' }]) {
     return new PromoteClientService(
         promoteModel as any,
         { getActiveClientSetup: jest.fn(() => false) } as any,
         {} as any,
         {} as any,
-        { findAll: jest.fn().mockResolvedValue([{ clientId: 'client-1', mobile: 'main-1' }]) } as any,
+        { findAll: jest.fn().mockResolvedValue(clientsList) } as any,
         {} as any,
         { findAll: jest.fn().mockResolvedValue([]) } as any,
         {} as any,
@@ -257,7 +263,7 @@ describe('Service flow reliability', () => {
         expect(reason).toContain('appeal_url=https://example.test/appeal');
     });
 
-    test('joinchannelForBufferClients preserves existing queued mobiles when skipExisting=true', async () => {
+    test('joinchannelForBufferClients preserves mobiles with remaining channels when skipExisting=true', async () => {
         let capturedQuery: Record<string, any> | undefined;
         const bufferModel: any = {
             find: jest.fn((query: Record<string, any>) => {
@@ -274,11 +280,16 @@ describe('Service flow reliability', () => {
         const service = makeBufferService(bufferModel);
         jest.spyOn(service as any, 'clearJoinChannelInterval').mockImplementation(() => {});
         jest.spyOn(service as any, 'clearLeaveChannelInterval').mockImplementation(() => {});
-        (service as any).joinChannelMap.set('existing-mobile', []);
+        // Mobile with remaining channels should be preserved and excluded from query
+        (service as any).joinChannelMap.set('has-channels', [{ username: 'ch1' }]);
+        // Mobile with empty array should be cleaned up and NOT excluded
+        (service as any).joinChannelMap.set('empty-mobile', []);
 
         await service.joinchannelForBufferClients(true);
 
-        expect(capturedQuery?.mobile?.$nin).toEqual(['existing-mobile']);
+        expect(capturedQuery?.mobile?.$nin).toEqual(['has-channels']);
+        expect((service as any).joinChannelMap.has('has-channels')).toBe(true);
+        expect((service as any).joinChannelMap.has('empty-mobile')).toBe(false);
     });
 
     test('joinchannelForBufferClients does not exclude existing queued mobiles when skipExisting=false', async () => {
@@ -306,10 +317,24 @@ describe('Service flow reliability', () => {
     });
 
     test('checkPromoteClients skips health checks for warming accounts but still processes warmup', async () => {
+        const warmDoc = {
+            mobile: '90001',
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.IDENTITY,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+        } as any;
+
         const promoteModel: any = {
-            find: jest.fn(() => ({
-                distinct: jest.fn().mockResolvedValue([]),
-            })),
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true) {
+                    if (query?.clientId?.$ne === null) {
+                        return { exec: jest.fn().mockResolvedValue([warmDoc]) };
+                    }
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
             aggregate: jest.fn().mockResolvedValue([
                 { _id: 'client-1', count: 1, mobiles: ['90001'] },
             ]),
@@ -317,17 +342,9 @@ describe('Service flow reliability', () => {
         };
 
         const service = makePromoteService(promoteModel);
-        const warmDoc = {
-            mobile: '90001',
-            warmupPhase: WarmupPhase.IDENTITY,
-            lastUpdateAttempt: null,
-            lastUsed: null,
-        } as any;
-
-        jest.spyOn(service, 'findOne').mockResolvedValue(warmDoc);
         jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
         jest.spyOn(service as any, 'processClient').mockResolvedValue(1);
-        jest.spyOn(service as any, 'calculateAvailabilityBasedNeeds').mockResolvedValue({
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
             windowNeeds: [],
             totalActive: 0,
@@ -335,6 +352,7 @@ describe('Service flow reliability', () => {
             calculationReason: 'test',
             priority: 0,
         });
+        jest.spyOn(service as any, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue(undefined);
 
         await service.checkPromoteClients();
 
@@ -343,10 +361,25 @@ describe('Service flow reliability', () => {
     });
 
     test('checkPromoteClients performs health checks for ready accounts before processing', async () => {
+        const readyDoc = {
+            mobile: '90002',
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.READY,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+        } as any;
+
         const promoteModel: any = {
-            find: jest.fn(() => ({
-                distinct: jest.fn().mockResolvedValue([]),
-            })),
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true) {
+                    if (query?.clientId?.$ne === null) {
+                        return { exec: jest.fn().mockResolvedValue([readyDoc]) };
+                    }
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
             aggregate: jest.fn().mockResolvedValue([
                 { _id: 'client-1', count: 1, mobiles: ['90002'] },
             ]),
@@ -354,18 +387,9 @@ describe('Service flow reliability', () => {
         };
 
         const service = makePromoteService(promoteModel);
-        const readyDoc = {
-            mobile: '90002',
-            warmupPhase: WarmupPhase.READY,
-            lastChecked: null,
-            lastUpdateAttempt: null,
-            lastUsed: null,
-        } as any;
-
         const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
         const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue(1);
-        jest.spyOn(service, 'findOne').mockResolvedValue(readyDoc);
-        jest.spyOn(service as any, 'calculateAvailabilityBasedNeeds').mockResolvedValue({
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
             windowNeeds: [],
             totalActive: 0,
@@ -373,12 +397,77 @@ describe('Service flow reliability', () => {
             calculationReason: 'test',
             priority: 0,
         });
+        jest.spyOn(service as any, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue(undefined);
 
         await service.checkPromoteClients();
 
         expect(healthSpy).toHaveBeenCalledWith('90002', 0, expect.any(Number));
         expect(processSpy).toHaveBeenCalledWith(readyDoc, { clientId: 'client-1', mobile: 'main-1' });
         expect(healthSpy.mock.invocationCallOrder[0]).toBeLessThan(processSpy.mock.invocationCallOrder[0]);
+    });
+
+    test('checkPromoteClients globally prioritizes warming accounts with older attempts before ready accounts', async () => {
+        const readyDoc = {
+            mobile: '90011',
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.READY,
+            lastChecked: null,
+            lastUpdateAttempt: new Date('2026-04-03T11:00:00.000Z'),
+            lastUsed: null,
+            failedUpdateAttempts: 0,
+        } as any;
+        const warmingDoc = {
+            mobile: '90022',
+            clientId: 'client-2',
+            warmupPhase: WarmupPhase.IDENTITY,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            failedUpdateAttempts: 0,
+        } as any;
+
+        const promoteModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true) {
+                    if (query?.clientId?.$ne === null) {
+                        return {
+                            exec: jest.fn().mockResolvedValue([
+                                readyDoc,
+                                warmingDoc,
+                            ]),
+                        };
+                    }
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([
+                { _id: 'client-1', count: 1, mobiles: ['90011'] },
+                { _id: 'client-2', count: 1, mobiles: ['90022'] },
+            ]),
+            countDocuments: jest.fn().mockResolvedValue(1),
+        };
+
+        const service = makePromoteService(promoteModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+            { clientId: 'client-2', mobile: 'main-2' },
+        ]);
+        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue(1);
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 0,
+            windowNeeds: [],
+            totalActive: 0,
+            totalNeededForCount: 0,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        jest.spyOn(service as any, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue(undefined);
+
+        await service.checkPromoteClients();
+
+        expect(processSpy).toHaveBeenNthCalledWith(1, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+        expect(processSpy).toHaveBeenNthCalledWith(2, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
     });
 
     test('buffer join query only targets warmup phases that are allowed to join', async () => {
@@ -406,20 +495,21 @@ describe('Service flow reliability', () => {
         expect(capturedQuery?.warmupPhase?.$in).toEqual(['growing', 'maturing', 'ready', 'session_rotated']);
     });
 
-    test('ready-only selection self-heals legacy used accounts before querying ready pool', async () => {
+    test('operational selection self-heals legacy used accounts before querying session-rotated pool', async () => {
         let normalized = false;
         const legacyDoc = {
             mobile: '9990005555',
             clientId: 'client-1',
             status: 'active',
+            session: 'active-9990005555',
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
             createdAt: new Date('2025-01-01T12:00:00.000Z'),
         };
-        const readyDoc = {
+        const rotatedDoc = {
             mobile: '9990005555',
             clientId: 'client-1',
             status: 'active',
-            warmupPhase: WarmupPhase.READY,
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
         };
 
@@ -430,14 +520,14 @@ describe('Service flow reliability', () => {
                     query?.clientId === 'client-1' &&
                     query?.lastUsed?.$exists === true;
                 const isReadySelectionQuery =
-                    query?.warmupPhase?.$in?.includes(WarmupPhase.READY) &&
+                    query?.warmupPhase === WarmupPhase.SESSION_ROTATED &&
                     query?.clientId === 'client-1';
 
                 if (isMissingWarmupRepairQuery) {
                     return createQueryChain(() => (normalized ? [] : [legacyDoc]));
                 }
                 if (isReadySelectionQuery) {
-                    return createQueryChain(() => (normalized ? [readyDoc] : []));
+                    return createQueryChain(() => (normalized ? [rotatedDoc] : []));
                 }
                 return createQueryChain(() => []);
             }),
@@ -445,7 +535,7 @@ describe('Service flow reliability', () => {
 
         const service = new TestBaseService(mockModel);
         service.updateMock.mockImplementation(async (_mobile: string, updateDto: any) => {
-            if (updateDto?.warmupPhase === WarmupPhase.READY) {
+            if (updateDto?.warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 normalized = true;
             }
             return updateDto;
@@ -453,11 +543,12 @@ describe('Service flow reliability', () => {
 
         const selected = await service.getNextAvailableClient('client-1');
 
-        expect(selected).toEqual(readyDoc);
+        expect(selected).toEqual(rotatedDoc);
         expect(service.updateMock).toHaveBeenCalledWith(
             '9990005555',
             expect.objectContaining({
-                warmupPhase: WarmupPhase.READY,
+                warmupPhase: WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: expect.any(Date),
                 enrolledAt: expect.any(Date),
                 twoFASetAt: expect.any(Date),
                 otherAuthsRemovedAt: expect.any(Date),
@@ -471,6 +562,7 @@ describe('Service flow reliability', () => {
             mobile: '9990006666',
             clientId: 'client-2',
             status: 'active',
+            session: 'active-9990006666',
             lastUsed: new Date('2026-03-22T12:00:00.000Z'),
             createdAt: new Date('2025-01-01T12:00:00.000Z'),
         };
@@ -484,19 +576,23 @@ describe('Service flow reliability', () => {
                 if (isMissingWarmupRepairQuery) {
                     return createQueryChain(() => (normalized ? [] : [legacyDoc]));
                 }
-                return createQueryChain(() => []);
-            }),
-            countDocuments: jest.fn(async (query: Record<string, any>) => {
-                const isReadyCount =
+                const isActiveClientQuery =
+                    query?.status === 'active' &&
                     query?.clientId === 'client-2' &&
-                    query?.warmupPhase?.$in?.includes(WarmupPhase.READY);
-                return isReadyCount && normalized ? 1 : 0;
+                    query?.lastUsed === undefined;
+                if (isActiveClientQuery) {
+                    return createQueryChain(() => (normalized ? [{
+                        ...legacyDoc,
+                        warmupPhase: WarmupPhase.SESSION_ROTATED,
+                    }] : []));
+                }
+                return createQueryChain(() => []);
             }),
         };
 
         const service = new TestBaseService(mockModel);
         service.updateMock.mockImplementation(async (_mobile: string, updateDto: any) => {
-            if (updateDto?.warmupPhase === WarmupPhase.READY) {
+            if (updateDto?.warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 normalized = true;
             }
             return updateDto;
@@ -507,7 +603,179 @@ describe('Service flow reliability', () => {
         expect(result.totalActive).toBe(1);
         expect(service.updateMock).toHaveBeenCalledWith(
             '9990006666',
-            expect.objectContaining({ warmupPhase: WarmupPhase.READY }),
+            expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
         );
+    });
+
+    test('availability calculation credits warming pipeline without over-enrolling for short windows', async () => {
+        class PipelinePlanningService extends TestBaseService {
+            get config(): ClientConfig {
+                return {
+                    ...super.config,
+                    minTotalClients: 2,
+                };
+            }
+        }
+
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const today = new Date(now).toISOString().split('T')[0];
+        const warmingDocs = [
+            {
+                mobile: '9990007771',
+                clientId: 'client-3',
+                status: 'active',
+                warmupPhase: WarmupPhase.ENROLLED,
+                warmupJitter: 0,
+                enrolledAt: new Date(now - oneDayMs),
+                availableDate: today,
+            },
+            {
+                mobile: '9990007772',
+                clientId: 'client-3',
+                status: 'active',
+                warmupPhase: WarmupPhase.SETTLING,
+                warmupJitter: 0,
+                enrolledAt: new Date(now - 2 * oneDayMs),
+                availableDate: today,
+            },
+        ];
+
+        const mockModel = {
+            find: jest.fn((query: Record<string, any>) => {
+                const isActiveClientQuery =
+                    query?.status === 'active' &&
+                    query?.clientId === 'client-3' &&
+                    query?.lastUsed === undefined &&
+                    !query?.$and;
+                if (isActiveClientQuery) {
+                    return createQueryChain(() => warmingDocs);
+                }
+                return createQueryChain(() => []);
+            }),
+        };
+
+        const service = new PipelinePlanningService(mockModel);
+        const result = await service.availabilityNeeds('client-3');
+
+        expect(result.readyActive).toBe(0);
+        expect(result.warmingPipeline).toBe(2);
+        expect(result.totalActive).toBe(2);
+        expect(result.totalNeededForCount).toBe(0);
+        expect(result.totalNeeded).toBe(0);
+        expect(result.windowNeeds.find((window) => window.window === 'today')?.needed).toBeGreaterThan(0);
+        expect(result.replenishmentWindowNeeds?.find((window) => window.window === 'oneMonth')?.needed).toBe(0);
+        expect(result.calculationReason).toContain('3-4 week horizon');
+    });
+
+    test('availability calculation still adds when near-soon pipeline is below target', async () => {
+        class PipelinePlanningService extends TestBaseService {
+            get config(): ClientConfig {
+                return {
+                    ...super.config,
+                    minTotalClients: 2,
+                };
+            }
+        }
+
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const now = Date.now();
+        const today = new Date(now).toISOString().split('T')[0];
+        const warmingDocs = [
+            {
+                mobile: '9990008881',
+                clientId: 'client-4',
+                status: 'active',
+                warmupPhase: WarmupPhase.SETTLING,
+                warmupJitter: 0,
+                enrolledAt: new Date(now - oneDayMs),
+                availableDate: today,
+            },
+        ];
+
+        const mockModel = {
+            find: jest.fn((query: Record<string, any>) => {
+                const isActiveClientQuery =
+                    query?.status === 'active' &&
+                    query?.clientId === 'client-4' &&
+                    query?.lastUsed === undefined &&
+                    !query?.$and;
+                if (isActiveClientQuery) {
+                    return createQueryChain(() => warmingDocs);
+                }
+                return createQueryChain(() => []);
+            }),
+        };
+
+        const service = new PipelinePlanningService(mockModel);
+        const result = await service.availabilityNeeds('client-4');
+
+        expect(result.readyActive).toBe(0);
+        expect(result.warmingPipeline).toBe(1);
+        expect(result.totalNeededForCount).toBe(1);
+        expect(result.totalNeeded).toBe(1);
+        expect(result.replenishmentWindowNeeds?.find((window) => window.window === 'oneMonth')?.needed).toBe(1);
+        expect(result.calculationReason).toContain('threeWeeks');
+    });
+
+    test('next available selection excludes ready accounts whose availableDate is in the future', async () => {
+        let capturedQuery: Record<string, any> | undefined;
+        const mockModel = {
+            find: jest.fn((query: Record<string, any>) => {
+                capturedQuery = query;
+                return createQueryChain(() => []);
+            }),
+        };
+
+        const service = new TestBaseService(mockModel);
+        const selected = await service.getNextAvailableClient('client-5');
+
+        expect(selected).toBeNull();
+        expect(capturedQuery?.clientId).toBe('client-5');
+        expect(capturedQuery?.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
+        expect(capturedQuery?.$or).toEqual([
+            { availableDate: { $lte: expect.any(String) } },
+            { availableDate: { $exists: false } },
+            { availableDate: null },
+        ]);
+    });
+
+    test('unused selection allows legacy session-rotated accounts with missing availableDate', async () => {
+        let capturedQuery: Record<string, any> | undefined;
+        const legacyReadyDoc = {
+            mobile: '9990009991',
+            clientId: 'client-6',
+            status: 'active',
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
+            lastUsed: null,
+        };
+        const mockModel = {
+            find: jest.fn((query: Record<string, any>) => {
+                capturedQuery = query;
+                return createQueryChain(() => [legacyReadyDoc]);
+            }),
+        };
+
+        const service = new TestBaseService(mockModel);
+        const results = await service.getUnusedClients(24, 'client-6');
+
+        expect(results).toEqual([legacyReadyDoc]);
+        expect(capturedQuery?.clientId).toBe('client-6');
+        expect(capturedQuery?.$and).toEqual([
+            {
+                $or: [
+                    { availableDate: { $lte: expect.any(String) } },
+                    { availableDate: { $exists: false } },
+                    { availableDate: null },
+                ],
+            },
+            {
+                $or: [
+                    { lastUsed: { $lt: expect.any(Date) } },
+                    { lastUsed: { $exists: false } },
+                    { lastUsed: null },
+                ],
+            },
+        ]);
     });
 });

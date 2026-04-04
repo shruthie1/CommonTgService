@@ -4,6 +4,13 @@
  */
 export class ClientHelperUtils {
     /**
+     * Convert a Date or timestamp to a stable UTC YYYY-MM-DD string.
+     */
+    static toDateString(dateOrTimestamp: Date | number): string {
+        return new Date(dateOrTimestamp).toISOString().split('T')[0];
+    }
+
+    /**
      * Get timestamp from date string or Date object
      * Returns 0 if date is null, undefined, or invalid
      */
@@ -21,7 +28,7 @@ export class ClientHelperUtils {
      * Get today's date string in 'YYYY-MM-DD' format
      */
     static getTodayDateString(): string {
-        return new Date().toISOString().split('T')[0];
+        return this.toDateString(new Date());
     }
 
     /**
@@ -30,7 +37,7 @@ export class ClientHelperUtils {
      * @param oneDayMs - Milliseconds in one day (24 * 60 * 60 * 1000)
      */
     static getDateStringDaysAgo(days: number, oneDayMs: number): string {
-        return new Date(Date.now() - days * oneDayMs).toISOString().split('T')[0];
+        return this.toDateString(Date.now() - days * oneDayMs);
     }
 
     /**

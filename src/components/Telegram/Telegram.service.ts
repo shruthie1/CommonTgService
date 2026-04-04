@@ -101,16 +101,12 @@ export class TelegramService implements OnModuleDestroy {
         } catch (error) {
             this.logger.debug(telegramClient.phoneNumber, `Failed to join: `, `@${chatEntity.username}`);
 
-            //To check if Account is Frozen
+            // "No user has" indicates the account may be frozen/deactivated.
+            // Do NOT call SetPrivacy here — it's a write operation that contradicts
+            // the anti-ban strategy. The error will propagate to the caller which
+            // handles permanent errors via isPermanentError → markAsInactive.
             if (error.toString().includes("No user has")) {
-                await telegramClient.client.invoke(
-                    new Api.account.SetPrivacy({
-                        key: new Api.InputPrivacyKeyPhoneCall(),
-                        rules: [
-                            new Api.InputPrivacyValueDisallowAll()
-                        ],
-                    })
-                );
+                this.logger.warn(telegramClient.phoneNumber, `Account may be frozen — "No user has" error on join`);
             }
 
             await this.removeChannels(error, chatEntity.channelId, chatEntity.username, mobile);

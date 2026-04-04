@@ -36,7 +36,9 @@ import isPermanentError from '../../utils/isPermanentError';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
 import { BotsService, ChannelCategory } from '../bots';
 import {
+    BaseClientUpdate,
     BaseClientService,
+    ClientStatusType,
     ClientConfig,
     performOrganicActivity,
     WarmupPhase,
@@ -101,7 +103,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             maxNewClientsPerTrigger: 10,
             minTotalClients: 10,
             maxMapSize: 100,
-            cleanupInterval: 15 * 60 * 1000,           // 15 minutes
             cooldownHours: 2,
             clientProcessingDelay: 10000,               // 10s between clients
         };
@@ -207,7 +208,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return result;
     }
 
-    async findAll(status?: 'active' | 'inactive'): Promise<BufferClientDocument[]> {
+    async findAll(status?: ClientStatusType): Promise<BufferClientDocument[]> {
         const filter = status ? { status } : {};
         return this.bufferClientModel.find(filter).exec();
     }
@@ -220,7 +221,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return bufferClient;
     }
 
-    async update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClientDocument> {
+    async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument> {
         const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
             .exec();
@@ -287,7 +288,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
     }
 
-    async updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<BufferClientDocument> {
+    async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument> {
         const updateData: UpdateBufferClientDto = { status };
         if (message) updateData.message = message;
         await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
@@ -371,11 +372,16 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
         const clients = await this.clientService.findAll();
         const promoteClients = await this.promoteClientService.findAll();
+        const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+        const now = Date.now();
+
+        await this.selfHealLegacyOperationalState();
 
         const clientMainMobiles = clients.map((c) => c.mobile);
-        const assignedBufferMobiles = await this.bufferClientModel
-            .find({ clientId: { $exists: true }, status: 'active' })
-            .distinct('mobile');
+        const assignedBufferClients = await this.bufferClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        const assignedBufferMobiles = assignedBufferClients.map((doc) => doc.mobile);
 
         const goodIds = [
             ...clientMainMobiles,
@@ -384,14 +390,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         ].filter(Boolean);
 
         const bufferClientsPerClient = new Map<string, number>();
-
-        const bufferClientCounts: { _id: string, count: number, mobiles: string[] }[] = await this.bufferClientModel.aggregate([
-            { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-            { $group: { _id: '$clientId', count: { $sum: 1 }, mobiles: { $push: '$mobile' } } },
-        ]);
+        for (const doc of assignedBufferClients) {
+            if (!doc.clientId) continue;
+            bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
 
         let totalUpdates = 0;
-        const now = Date.now();
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
 
         // Collect buffer clients for priority-sorted processing
@@ -402,54 +406,30 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             priority: number;
         }> = [];
 
-        for (const result of bufferClientCounts) {
-            bufferClientsPerClient.set(result._id, result.count);
-            const client = clients.find((c) => c.clientId === result._id);
+        for (const bufferClient of assignedBufferClients) {
+            if (!bufferClient.clientId) continue;
+            const client = clientMap.get(bufferClient.clientId);
             if (!client) continue;
+            if (bufferClient.inUse === true) continue;
 
-            for (const bufferClientMobile of result.mobiles) {
-                const bufferClient = await this.findOne(bufferClientMobile, false);
-                if (!bufferClient) continue;
-                if (bufferClient.inUse === true) continue;
+            const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
+            if (this.isOnCooldown(bufferClient.mobile, bufferClient.lastUpdateAttempt, now)) continue;
 
-                // Check cooldown FIRST (cheap DB check, no TG connection)
-                const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
-                if (this.isOnCooldown(bufferClientMobile, bufferClient.lastUpdateAttempt, now)) continue;
-
-                // Skip if already used (cheap DB check)
-                if (bufferClient.lastUsed) {
-                    const lastUsed = ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
-                    if (lastUsed > 0) {
-                        await this.backfillTimestamps(bufferClientMobile, bufferClient, now);
-                        continue;
-                    }
-                }
-
-                // Determine warmup phase for health check gating and priority calculation
-                const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
-
-                // Health check only for READY accounts (warming accounts get checked via processClient's organic activity)
-                // This avoids double-connecting: health check + processClient in the same cycle
-                if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                    const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
-                    const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
-                    if (!healthCheckPassed) continue;
-                }
-
-                // Priority calculation
-                const failedAttempts = bufferClient.failedUpdateAttempts || 0;
-                const lastAttemptAgeHours = lastUpdateAttempt > 0
-                    ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                    : 10000;
-
-                // warmupPhase already captured above for health check gating
-                // Accounts still warming up get higher priority than ready ones
-                const warmupBoost = warmupPhase !== WarmupPhase.READY && warmupPhase !== WarmupPhase.SESSION_ROTATED ? 5000 : 0;
-
-                const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
-
-                bufferClientsToProcess.push({ bufferClient, client, clientId: result._id, priority });
+            const lastUsed = ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
+            if (lastUsed > 0) {
+                await this.backfillTimestamps(bufferClient.mobile, bufferClient, now);
+                continue;
             }
+
+            const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
+            const failedAttempts = bufferClient.failedUpdateAttempts || 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const warmupBoost = warmupPhase !== WarmupPhase.READY && warmupPhase !== WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+
+            bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }
 
         // Sort by priority (highest first)
@@ -458,6 +438,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Process in priority order using base class processClient
         for (const { bufferClient, client } of bufferClientsToProcess) {
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
+            const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
+            if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) {
+                const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
+                const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
+                if (!healthCheckPassed) continue;
+            }
             const currentUpdates = await this.processClient(bufferClient, client);
             if (currentUpdates > 0) totalUpdates += currentUpdates;
         }
@@ -474,7 +460,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }> = [];
 
         for (const client of clients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
             if (availabilityNeeds.totalNeeded > 0) {
                 clientNeedingBufferClients.push({ clientId: client.clientId, ...availabilityNeeds });
             }
@@ -531,17 +517,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             return 'Join/leave still processing, skipped';
         }
 
-        // Save existing keys BEFORE clearing maps so callers can preserve in-flight queue entries.
-        const existingKeys = skipExisting ? Array.from(this.joinChannelMap.keys()) : [];
-
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-        await sleep(6000 + Math.random() * 3000);
+        const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
         const query: Record<string, any> = {
             channels: { $lt: this.config.channelTarget },
-            mobile: { $nin: existingKeys },
+            mobile: { $nin: Array.from(preservedMobiles) },
             status: 'active',
             warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
         };
@@ -601,7 +580,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         await sleep(6000 + Math.random() * 3000);
 
         if (joinSet.size > 0) {
-            this.startMemoryCleanup();
             this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
         }
         if (leaveSet.size > 0) {
@@ -803,10 +781,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     }
                     await sleep(5000 + Math.random() * 5000);
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
+                    if (!newSession || newSession === bufferClient.session) {
+                        throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
+                    }
+                    const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(bufferClient.mobile, newSession);
+                    if (!hasDistinctBackup) {
+                        throw new Error(`Failed to ensure distinct backup session for ${bufferClient.mobile}`);
+                    }
                     await this.update(bufferClient.mobile, {
                         session: newSession,
                         lastUsed: null,
                         message: 'Session updated successfully',
+                        warmupPhase: WarmupPhase.SESSION_ROTATED,
+                        sessionRotatedAt: new Date(),
                     });
                 } catch (error: unknown) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
@@ -918,7 +905,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         };
     }
 
-    async getBufferClientsByStatus(status: string): Promise<BufferClient[]> {
+    async getBufferClientsByStatus(status: ClientStatusType): Promise<BufferClient[]> {
         return this.bufferClientModel.find({ status }).exec();
     }
 

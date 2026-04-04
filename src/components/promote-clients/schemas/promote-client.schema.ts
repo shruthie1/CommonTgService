@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { WarmupPhaseType } from '../../shared/warmup-phases';
+import { ClientStatusType } from '../../shared/base-client.service';
 
 export type PromoteClientDocument = PromoteClient & Document;
 @Schema({
@@ -40,7 +42,7 @@ export class PromoteClient {
 
   @ApiProperty({ description: 'Operational status for the record.', example: 'active' })
   @Prop({ required: false, default: 'active' })
-  status: string;
+  status: ClientStatusType;
 
   @ApiPropertyOptional({ description: 'Operational note attached to the client.', example: 'Enrolled for warmup' })
   @Prop({ required: false, default: 'Account is functioning properly' })
@@ -124,7 +126,7 @@ export class PromoteClient {
     enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
     default: null,
   })
-  warmupPhase: string;
+  warmupPhase: WarmupPhaseType;
 
   @ApiProperty({ description: 'Per-account warmup jitter in days.', example: 2, default: 0 })
   @Prop({ required: false, type: Number, default: 0 })

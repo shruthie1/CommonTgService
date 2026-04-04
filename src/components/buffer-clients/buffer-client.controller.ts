@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -24,6 +24,7 @@ import {
   MarkUsedRequestDto,
   StatusUpdateRequestDto,
 } from '../shared/dto/client-swagger.dto';
+import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 
 @ApiTags('Buffer Clients')
 @Controller('bufferclients')
@@ -105,8 +106,10 @@ export class BufferClientController {
   @ApiOperation({ summary: 'List buffer clients', description: 'Returns all buffer clients, optionally filtered by status.' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (active/inactive)' })
   @ApiOkResponse({ type: [BufferClient] })
-  async findAll(@Query('status') status?: string): Promise<BufferClient[]> {
-    return this.clientService.findAll(status as 'active' | 'inactive');
+  async findAll(
+    @Query('status', new ParseEnumPipe(ClientStatus, { optional: true })) status?: ClientStatusType
+  ): Promise<BufferClient[]> {
+    return this.clientService.findAll(status);
   }
 
   @Post('SetAsBufferClient/:mobile/:clientId')
@@ -140,7 +143,10 @@ export class BufferClientController {
   @ApiParam({ name: 'clientId', description: 'Client ID to get buffer clients for', type: String })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status (active/inactive)', type: String })
   @ApiOkResponse({ type: [BufferClient] })
-  async getBufferClientsByClientId(@Param('clientId') clientId: string, @Query('status') status?: string): Promise<BufferClient[]> {
+  async getBufferClientsByClientId(
+    @Param('clientId') clientId: string,
+    @Query('status', new ParseEnumPipe(ClientStatus, { optional: true })) status?: ClientStatusType
+  ): Promise<BufferClient[]> {
     return this.clientService.getBufferClientsByClientId(clientId, status);
   }
 
@@ -148,8 +154,10 @@ export class BufferClientController {
   @ApiOperation({ summary: 'Get buffer clients by status' })
   @ApiParam({ name: 'status', description: 'Status to filter by (active/inactive)', type: String })
   @ApiOkResponse({ type: [BufferClient] })
-  async getBufferClientsByStatus(@Param('status') status: string): Promise<BufferClient[]> {
-    return this.clientService.findAll(status as 'active' | 'inactive');
+  async getBufferClientsByStatus(
+    @Param('status', new ParseEnumPipe(ClientStatus)) status: ClientStatusType
+  ): Promise<BufferClient[]> {
+    return this.clientService.findAll(status);
   }
 
   @Patch('status/:mobile')

@@ -380,10 +380,10 @@ describe('getWarmupPhaseAction', () => {
     // ======= READY & SESSION_ROTATED =======
 
     describe('READY and SESSION_ROTATED phases', () => {
-        test('ready → wait', () => {
+        test('ready → rotate_session', () => {
             const doc = makeDoc({ warmupPhase: WarmupPhase.READY });
             const result = getWarmupPhaseAction(doc, now);
-            expect(result.action).toBe('wait');
+            expect(result.action).toBe('rotate_session');
         });
 
         test('session_rotated → wait', () => {
@@ -541,13 +541,13 @@ describe('getWarmupPhaseAction', () => {
 
             // After ready
             doc.warmupPhase = WarmupPhase.READY;
-            expect(getWarmupPhaseAction(doc, simNow).action).toBe('wait');
+            expect(getWarmupPhaseAction(doc, simNow).action).toBe('rotate_session');
         });
     });
 });
 
 describe('isAccountReady', () => {
-    test('ready → true', () => expect(isAccountReady(WarmupPhase.READY)).toBe(true));
+    test('ready → false', () => expect(isAccountReady(WarmupPhase.READY)).toBe(false));
     test('session_rotated → true', () => expect(isAccountReady(WarmupPhase.SESSION_ROTATED)).toBe(true));
     test('enrolled → false', () => expect(isAccountReady(WarmupPhase.ENROLLED)).toBe(false));
     test('growing → false', () => expect(isAccountReady(WarmupPhase.GROWING)).toBe(false));

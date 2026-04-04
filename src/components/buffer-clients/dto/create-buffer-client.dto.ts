@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { ClientStatus, ClientStatusType } from '../../shared/base-client.service';
 
 export class CreateBufferClientDto {
   @ApiProperty({
@@ -52,8 +53,9 @@ export class CreateBufferClientDto {
     enum: ['active', 'inactive'],
     default: 'active',
   })
-  @IsString()
-  readonly status?: 'active' | 'inactive';
+  @IsOptional()
+  @IsEnum(ClientStatus)
+  readonly status?: ClientStatusType;
 
 
   @ApiPropertyOptional({

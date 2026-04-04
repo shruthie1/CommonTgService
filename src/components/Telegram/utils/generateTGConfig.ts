@@ -458,6 +458,7 @@ function _startHealthMonitor(intervalMs: number) {
       }
     }
   }, intervalMs);
+  _healthInterval.unref();
 }
 
 async function _handleProxyDeath(deadProxy: ProxyInterface, affectedMobiles: TrackedMobile[]) {

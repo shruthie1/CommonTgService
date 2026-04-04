@@ -35,7 +35,9 @@ import isPermanentError from '../../utils/isPermanentError';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
 import { BotsService, ChannelCategory } from '../bots';
 import {
+    BaseClientUpdate,
     BaseClientService,
+    ClientStatusType,
     ClientConfig,
     performOrganicActivity,
     WarmupPhase,
@@ -100,7 +102,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             maxNewClientsPerTrigger: 10,
             minTotalClients: 12,
             maxMapSize: 100,
-            cleanupInterval: 10 * 60 * 1000,            // 10 minutes
             cooldownHours: 2,                            // Fixed inconsistency (was 4h in outer check)
             clientProcessingDelay: 8000,                 // 8s between clients
         };
@@ -207,7 +208,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return result;
     }
 
-    async findAll(statusFilter?: string): Promise<PromoteClient[]> {
+    async findAll(statusFilter?: ClientStatusType): Promise<PromoteClient[]> {
         const filter = statusFilter ? { status: statusFilter } : {};
         return this.promoteClientModel.find(filter).exec();
     }
@@ -220,7 +221,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return user as PromoteClientDocument;
     }
 
-    async update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClientDocument> {
+    async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument> {
         const updatedUser = await this.promoteClientModel
             .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
             .exec();
@@ -230,7 +231,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return updatedUser;
     }
 
-    async updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<PromoteClientDocument> {
+    async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument> {
         const updateData: UpdatePromoteClientDto = { status };
         if (message) updateData.message = message;
         await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
@@ -412,20 +413,13 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             return 'Join/leave still processing, skipped';
         }
 
-        // Save existing keys BEFORE clearing maps so callers can preserve in-flight queue entries.
-        const existingKeys = skipExisting ? Array.from(this.joinChannelMap.keys()) : [];
-
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-        await sleep(6000 + Math.random() * 3000);
+        const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
 
         try {
             const clients = await this.promoteClientModel
                 .find({
                     channels: { $lt: this.config.channelTarget },
-                    mobile: { $nin: existingKeys },
+                    mobile: { $nin: Array.from(preservedMobiles) },
                     status: 'active',
                     warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
                 })
@@ -457,16 +451,16 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                             : await this.channelsService.getActiveChannels(25, 0, excludedIds);
 
                         if (!this.joinChannelMap.has(mobile)) {
-                            this.joinChannelMap.set(mobile, result);
-                            this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
-                            joinSet.add(mobile);
+                            if (this.safeSetJoinChannelMap(mobile, result)) {
+                                joinSet.add(mobile);
+                            }
                         }
                         // No session creation during warmup — use existing old session
                     } else {
                         if (!this.leaveChannelMap.has(mobile)) {
-                            this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
-                            this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
-                            leaveSet.add(mobile);
+                            if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
+                                leaveSet.add(mobile);
+                            }
                         }
                     }
 
@@ -488,7 +482,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             await sleep(6000 + Math.random() * 3000);
 
             if (joinSet.size > 0) {
-                this.startMemoryCleanup();
                 this.createTimeout(() => this.joinChannelQueue(), 2000);
             }
             if (leaveSet.size > 0) {
@@ -516,63 +509,75 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
         const clients = await this.clientService.findAll();
         const bufferClients = await this.bufferClientService.findAll();
+        const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+        const now = Date.now();
+
+        await this.selfHealLegacyOperationalState();
 
         const clientMainMobiles = clients.map((c) => c.mobile);
         const bufferClientIds = bufferClients.map((c) => c.mobile);
-        const assignedPromoteMobiles = await this.promoteClientModel
-            .find({ clientId: { $exists: true }, status: 'active' })
-            .distinct('mobile');
+        const assignedPromoteClients = await this.promoteClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        const assignedPromoteMobiles = assignedPromoteClients.map((doc) => doc.mobile);
 
         const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
 
-        const promoteClientCounts = await this.promoteClientModel.aggregate([
-            { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-            { $group: { _id: '$clientId', count: { $sum: 1 }, mobiles: { $push: '$mobile' } } },
-        ]);
-
         const promoteClientsPerClient = new Map<string, number>(
-            promoteClientCounts.map((result: { _id: string; count: number }) => [result._id, result.count]),
+            assignedPromoteClients
+                .filter((doc) => !!doc.clientId)
+                .reduce((acc, doc) => {
+                    acc.set(doc.clientId, (acc.get(doc.clientId) || 0) + 1);
+                    return acc;
+                }, new Map<string, number>()),
         );
 
         let totalUpdates = 0;
-        const now = Date.now();
+        const promoteClientsToProcess: Array<{
+            promoteClient: PromoteClientDocument;
+            client: Client;
+            clientId: string;
+            priority: number;
+        }> = [];
 
-        for (const result of promoteClientCounts) {
-            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
+        for (const promoteClient of assignedPromoteClients) {
+            if (!promoteClient.clientId) continue;
+            const client = clientMap.get(promoteClient.clientId);
+            if (!client) continue;
+            if (promoteClient.inUse === true) continue;
 
-            for (const promoteClientMobile of result.mobiles) {
-                if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
+            const lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
+            if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now)) continue;
 
-                const promoteClient = await this.findOne(promoteClientMobile, false);
-                if (!promoteClient) continue;
-
-                // Check cooldown
-                let lastUpdateAttempt = 0;
-                try { lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0; } catch { lastUpdateAttempt = 0; }
-                if (this.isOnCooldown(promoteClientMobile, promoteClient.lastUpdateAttempt, now)) continue;
-
-                // Skip if lastUsed exists (already in active use)
-                const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
-                if (hasBeenUsed) {
-                    await this.backfillTimestamps(promoteClientMobile, promoteClient as PromoteClientDocument, now);
-                    continue;
-                }
-
-                // Health check only for READY accounts (warming accounts get checked via processClient's organic activity).
-                const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
-                if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                    const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
-                    const healthCheckPassed = await this.performHealthCheck(promoteClientMobile, lastChecked, now);
-                    if (!healthCheckPassed) continue;
-                }
-
-                // Process warmup using base class
-                const client = clients.find((c) => c.clientId === result._id);
-                if (!client) continue;
-
-                const currentUpdates = await this.processClient(promoteClient as PromoteClientDocument, client);
-                if (currentUpdates > 0) totalUpdates += currentUpdates;
+            const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
+            if (hasBeenUsed) {
+                await this.backfillTimestamps(promoteClient.mobile, promoteClient as PromoteClientDocument, now);
+                continue;
             }
+
+            const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
+            const failedAttempts = promoteClient.failedUpdateAttempts || 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const warmupBoost = warmupPhase !== WarmupPhase.READY && warmupPhase !== WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+
+            promoteClientsToProcess.push({ promoteClient: promoteClient as PromoteClientDocument, client, clientId: promoteClient.clientId, priority });
+        }
+
+        promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
+
+        for (const { promoteClient, client } of promoteClientsToProcess) {
+            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
+            const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
+            if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) {
+                const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
+                const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
+                if (!healthCheckPassed) continue;
+            }
+            const currentUpdates = await this.processClient(promoteClient, client);
+            if (currentUpdates > 0) totalUpdates += currentUpdates;
         }
 
         // Dynamic availability: add new promote clients if needed
@@ -587,7 +592,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }> = [];
 
         for (const client of clients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
             if (availabilityNeeds.totalNeeded > 0) {
                 clientNeedingPromoteClients.push({ clientId: client.clientId, ...availabilityNeeds });
             }
@@ -865,7 +870,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         };
     }
 
-    async getPromoteClientsByStatus(status: string): Promise<PromoteClient[]> {
+    async getPromoteClientsByStatus(status: ClientStatusType): Promise<PromoteClient[]> {
         return this.promoteClientModel.find({ status }).exec();
     }
 

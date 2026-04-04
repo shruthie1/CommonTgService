@@ -32,6 +32,7 @@ export class TgSignupService implements OnModuleDestroy {
 
     constructor(private readonly usersService: UsersService) {
         this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), TgSignupService.SESSION_CLEANUP_INTERVAL);
+        this.cleanupInterval.unref();
     }
 
     async onModuleDestroy() {
