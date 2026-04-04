@@ -4,6 +4,7 @@ import { BaseClientDocument, BaseClientService, ClientConfig, WarmupPhase } from
 import { Client } from '../../clients';
 import { connectionManager } from '../../Telegram/utils/connection-manager';
 import * as channelInfoModule from '../../../utils/telegram-utils/channelinfo';
+import { ClientHelperUtils } from '../client-helper.utils';
 
 jest.mock('telegram/Helpers', () => {
     const actual = jest.requireActual('telegram/Helpers');
@@ -780,5 +781,82 @@ describe('Service flow reliability', () => {
                 ],
             },
         ]);
+    });
+
+    test('processJoinChannelSequentially uses round-robin: each mobile gets joinsPerMobilePerRound before rotating', async () => {
+        const mockModel = { find: jest.fn(() => createQueryChain(() => [])), updateOne: jest.fn().mockResolvedValue({}) };
+        const service = new TestBaseService(mockModel);
+
+        jest.spyOn(service, 'config', 'get').mockReturnValue({
+            ...service.config,
+            maxJoinsPerSession: 10,
+            joinsPerMobilePerRound: 2,
+            maxChannelJoinsPerDay: 20,
+            maxMapSize: 100,
+        });
+
+        const joinOrder: string[] = [];
+        (service as any).telegramService = {
+            tryJoiningChannel: jest.fn(async (mobile: string) => { joinOrder.push(mobile); }),
+            getChannelInfo: jest.fn(),
+        };
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null) };
+
+        (service as any).joinChannelMap.set('mobile-A', [
+            { channelId: 'a1', username: 'a1' }, { channelId: 'a2', username: 'a2' },
+            { channelId: 'a3', username: 'a3' }, { channelId: 'a4', username: 'a4' },
+            { channelId: 'a5', username: 'a5' },
+        ]);
+        (service as any).joinChannelMap.set('mobile-B', [
+            { channelId: 'b1', username: 'b1' }, { channelId: 'b2', username: 'b2' },
+            { channelId: 'b3', username: 'b3' }, { channelId: 'b4', username: 'b4' },
+            { channelId: 'b5', username: 'b5' },
+        ]);
+
+        await (service as any).processJoinChannelSequentially();
+
+        expect(joinOrder).toEqual(['mobile-A', 'mobile-A', 'mobile-B', 'mobile-B']);
+        expect((service as any).joinChannelMap.get('mobile-A')?.length).toBe(3);
+        expect((service as any).joinChannelMap.get('mobile-B')?.length).toBe(3);
+    });
+
+    test('processJoinChannelSequentially skips mobiles that hit daily cap', async () => {
+        const mockModel = { find: jest.fn(() => createQueryChain(() => [])), updateOne: jest.fn().mockResolvedValue({}) };
+        const service = new TestBaseService(mockModel);
+
+        jest.spyOn(service, 'config', 'get').mockReturnValue({
+            ...service.config,
+            maxJoinsPerSession: 10,
+            joinsPerMobilePerRound: 5,
+            maxChannelJoinsPerDay: 2,
+            maxMapSize: 100,
+        });
+
+        const joinOrder: string[] = [];
+        (service as any).telegramService = {
+            tryJoiningChannel: jest.fn(async (mobile: string) => { joinOrder.push(mobile); }),
+            getChannelInfo: jest.fn(),
+        };
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null) };
+
+        (service as any).joinChannelMap.set('capped-mobile', [
+            { channelId: 'c1', username: 'c1' }, { channelId: 'c2', username: 'c2' },
+            { channelId: 'c3', username: 'c3' },
+        ]);
+        (service as any).joinChannelMap.set('fresh-mobile', [
+            { channelId: 'f1', username: 'f1' }, { channelId: 'f2', username: 'f2' },
+        ]);
+
+        (service as any).dailyJoinCounts.set('capped-mobile', 2);
+        (service as any).dailyJoinDate = ClientHelperUtils.getTodayDateString();
+
+        await (service as any).processJoinChannelSequentially();
+
+        expect(joinOrder).toEqual(['fresh-mobile', 'fresh-mobile']);
+        expect((service as any).joinChannelMap.has('capped-mobile')).toBe(false);
     });
 });

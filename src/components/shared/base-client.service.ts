@@ -1104,19 +1104,29 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     /**
-     * Redesigned channel joining with human-like pacing:
-     * - Max 8 channels per mobile per run
+     * Round-robin channel joining with human-like pacing:
+     * - Each mobile gets joinsPerMobilePerRound (3) joins before rotating to the next
+     * - Daily cap of maxChannelJoinsPerDay (20) per mobile
      * - 90-180s between joins (Gaussian)
      * - Organic activity interleaved every 2-3 joins
      */
     protected async processJoinChannelSequentially() {
+        this.resetDailyJoinCountersIfNeeded();
+
         const keys = Array.from(this.joinChannelMap.keys());
-        this.logger.debug(`Processing join channel queue for ${keys.length} clients`);
+        this.logger.debug(`Processing join channel queue for ${keys.length} clients (round-robin, ${this.config.joinsPerMobilePerRound}/mobile)`);
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
             let currentChannel: Channel | ActiveChannel | null = null;
             let joinCount = 0;
+
+            // Daily cap check — skip and remove if already at limit
+            if (this.isMobileDailyCapped(mobile)) {
+                this.logger.debug(`${mobile} hit daily cap (${this.config.maxChannelJoinsPerDay}), removing from queue`);
+                this.removeFromJoinMap(mobile);
+                continue;
+            }
 
             try {
                 const channels = this.joinChannelMap.get(mobile);
@@ -1125,8 +1135,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     continue;
                 }
 
-                // Max joins per session
-                while (joinCount < this.config.maxJoinsPerSession && channels.length > 0) {
+                const roundLimit = Math.min(
+                    this.config.joinsPerMobilePerRound,
+                    this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(mobile),
+                    channels.length,
+                );
+
+                while (joinCount < roundLimit) {
                     currentChannel = channels.shift();
                     if (!currentChannel) break;
 
@@ -1147,6 +1162,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
+                    this.incrementDailyJoinCount(mobile);
 
                     // Organic interleaving every 2-3 joins
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
@@ -1159,7 +1175,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     }
 
                     // Human-like delay between joins: Gaussian mean=120s, stddev=30s, min=90s, max=180s
-                    if (channels.length > 0 && joinCount < this.config.maxJoinsPerSession) {
+                    if (joinCount < roundLimit && channels.length > 0) {
                         const delay = ClientHelperUtils.gaussianRandom(120000, 30000, 90000, 180000);
                         await sleep(delay);
                     }
@@ -1174,7 +1190,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     }
                 }
 
-                if (channels.length === 0) {
+                // Remove from map if empty or daily-capped; otherwise leave for next round
+                if (channels.length === 0 || this.isMobileDailyCapped(mobile)) {
                     this.removeFromJoinMap(mobile);
                 }
             } catch (error: any) {
@@ -1189,14 +1206,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.removeFromJoinMap(mobile);
 
                     await sleep(10000 + Math.random() * 5000);
-                    // Always try to get real channel count instead of hard-setting 400
                     try {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     } catch {
-                        // Fallback: only if we can't get real count AND it was CHANNELS_TOO_MUCH
                         if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                            await this.update(mobile, { channels: 500 }); // TG limit, not arbitrary 400
+                            await this.update(mobile, { channels: 500 });
                         }
                     }
                 }
