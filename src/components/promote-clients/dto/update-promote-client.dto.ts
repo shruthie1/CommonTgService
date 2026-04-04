@@ -1,6 +1,6 @@
-import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { CreatePromoteClientDto } from './create-promote-client.dto';
-import { IsEnum } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
 import { WarmupPhase, WarmupPhaseType } from '../../shared/warmup-phases';
 
 export class UpdatePromoteClientDto extends PartialType(CreatePromoteClientDto) {
@@ -42,4 +42,30 @@ export class UpdatePromoteClientDto extends PartialType(CreatePromoteClientDto) 
     organicActivityAt?: Date;
     @ApiPropertyOptional({ description: 'Timestamp when a backup session was created.', example: '2026-04-02T07:00:00.000Z' })
     sessionRotatedAt?: Date;
+
+    @ApiProperty({ description: 'Assigned first name (set during setupClient)', required: false })
+    @IsOptional()
+    @IsString()
+    assignedFirstName?: string;
+
+    @ApiProperty({ description: 'Assigned last name', required: false })
+    @IsOptional()
+    @IsString()
+    assignedLastName?: string;
+
+    @ApiProperty({ description: 'Assigned bio', required: false })
+    @IsOptional()
+    @IsString()
+    assignedBio?: string;
+
+    @ApiProperty({ description: 'Assigned photo filenames', required: false })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    assignedPhotoFilenames?: string[];
+
+    @ApiProperty({ description: 'Pool version at assignment time', required: false })
+    @IsOptional()
+    @IsString()
+    assignedPersonaPoolVersion?: string;
 }

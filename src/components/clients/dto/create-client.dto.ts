@@ -103,4 +103,27 @@ export class CreateClientDto {
     @Type(() => Boolean)
     @IsBoolean()
     readonly autoAssignIps?: boolean;
+
+    @ApiProperty({ description: 'Pool of first names', required: false })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    firstNames?: string[];
+
+    @ApiProperty({ description: 'Pool of last names', required: false })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    lastNames?: string[];
+
+    @ApiProperty({ description: 'Pool of bios', required: false })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    bios?: string[];
+
+    @ApiProperty({ description: 'Pool of profile pics with hashes', required: false })
+    @IsOptional()
+    @IsArray()
+    profilePics?: Array<{ filename: string; phash: string }>;
 }
