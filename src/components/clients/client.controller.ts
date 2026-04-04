@@ -19,6 +19,11 @@ import { CloudflareCacheInterceptor } from '../../interceptors';
 export class ClientController {
   constructor(private readonly clientService: ClientService) { }
 
+  private sanitizeQuery<T extends object>(query: T): T {
+    const { apiKey: _apiKey, ...rest } = query as T & { apiKey?: unknown };
+    return rest as T;
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create user data' })
   @ApiBody({ type: CreateClientDto })
@@ -35,7 +40,7 @@ export class ClientController {
   @ApiQuery({ name: 'link', required: false, description: 'Client link' })
   @ApiResponse({ description: 'Matching user data returned successfully.', type: [Client] })
   async search(@Query() query: SearchClientDto): Promise<Client[]> {
-    return await this.clientService.search(query);
+    return await this.clientService.search(this.sanitizeQuery(query));
   }
 
   @Get('search/promote-mobile')
@@ -63,7 +68,7 @@ export class ClientController {
     type: EnhancedClientSearchResponseDto,
   })
   async enhancedSearch(@Query() query: EnhancedSearchClientDto): Promise<EnhancedClientSearchResponseDto> {
-    const result = await this.clientService.enhancedSearch(query);
+    const result = await this.clientService.enhancedSearch(this.sanitizeQuery(query));
     return {
       clients: result.clients,
       searchType: result.searchType,
@@ -107,6 +112,24 @@ export class ClientController {
   @ApiResponse({ description: 'All user data returned successfully.', type: [Client] })
   async findAll() {
     return await this.clientService.findAll();
+  }
+
+  @Get(':clientId/persona-pool')
+  @ApiOperation({ summary: 'Get persona pool for a client' })
+  @ApiParam({ name: 'clientId', description: 'Client ID' })
+  async getPersonaPool(@Param('clientId') clientId: string) {
+    return await this.clientService.getPersonaPool(clientId);
+  }
+
+  @Get(':clientId/existing-assignments')
+  @ApiOperation({ summary: 'Get existing persona assignments for a client' })
+  @ApiParam({ name: 'clientId', description: 'Client ID' })
+  @ApiQuery({ name: 'scope', required: false, enum: ['all', 'buffer', 'promote', 'activeClient'] })
+  async getExistingAssignments(
+    @Param('clientId') clientId: string,
+    @Query('scope') scope: 'all' | 'buffer' | 'promote' | 'activeClient' = 'all',
+  ) {
+    return await this.clientService.getExistingAssignments(clientId, scope);
   }
 
   @Get(':clientId')
