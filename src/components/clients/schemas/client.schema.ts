@@ -62,10 +62,6 @@ export class Client {
     @Prop({ required: true })
     deployKey: string;
 
-    @ApiProperty({ example: 'ShruthiRedd2', description: 'Main account of the user' })
-    @Prop({ required: true })
-    mainAccount: string;
-
     @ApiProperty({ example: 'booklet_10', description: 'Product associated with the user' })
     @Prop({ required: true })
     product: string;
@@ -109,20 +105,20 @@ export class Client {
 
     @ApiProperty({ description: 'Hash of current pool — changes when any pool field is updated', required: false })
     @Prop({ required: false, default: null })
-    personaPoolVersion: string;
+    personaPoolVersion: string | null;
 
     // ---- Active-account persona assignment (copied from buffer during setupClient) ----
     @ApiProperty({ description: 'Assigned first name from pool', required: false })
     @Prop({ required: false, default: null })
-    assignedFirstName: string;
+    assignedFirstName: string | null;
 
     @ApiProperty({ description: 'Assigned last name from pool', required: false })
     @Prop({ required: false, default: null })
-    assignedLastName: string;
+    assignedLastName: string | null;
 
     @ApiProperty({ description: 'Assigned bio from pool', required: false })
     @Prop({ required: false, default: null })
-    assignedBio: string;
+    assignedBio: string | null;
 
     @ApiProperty({ description: 'Assigned photo filenames from pool', required: false })
     @Prop({ required: false, type: [String], default: [] })
@@ -130,7 +126,7 @@ export class Client {
 
     @ApiProperty({ description: 'Pool version when assignment was made', required: false })
     @Prop({ required: false, default: null })
-    assignedPersonaPoolVersion: string;
+    assignedPersonaPoolVersion: string | null;
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);

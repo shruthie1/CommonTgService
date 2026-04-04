@@ -7,7 +7,7 @@ export async function channelInfo(client: TelegramClient, sendIds = false): Prom
     let canSendTrueCount = 0;
     let canSendFalseCount = 0;
     let totalCount = 0;
-    let channelArray: string[] = [];
+    const channelArray: string[] = [];
     const canSendFalseChats = [];
 
     // Use iterDialogs instead of getDialogs for better performance with large dialog lists

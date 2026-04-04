@@ -38,7 +38,7 @@ import { Client } from '../clients';
 import isPermanentError from '../../utils/isPermanentError';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
 import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
-import { nameMatchesAssignment } from '../../utils/homoglyph-normalizer';
+import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-normalizer';
 import { BotsService, ChannelCategory } from '../bots';
 import {
     BaseClientUpdate,
@@ -127,13 +127,17 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
             let updateCount = 0;
 
-            if (client.firstNames?.length > 0) {
+            if ((client.firstNames?.length > 0) || (client.lastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
                 // ── PERSONA BRANCH ──────────────────────────────────────────
                 let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedPhotoFilenames'> | null = null;
 
-                // 1. Check if doc already has a valid assignment (assignedFirstName set AND pool version matches)
-                const hasValidAssignment = doc.assignedFirstName != null
-                    && doc.assignedPersonaPoolVersion === client.personaPoolVersion;
+                // 1. Check if doc already has a valid assignment (any assigned field set AND pool version matches)
+                const hasValidAssignment = (
+                    doc.assignedFirstName != null ||
+                    doc.assignedLastName != null ||
+                    doc.assignedBio != null ||
+                    (doc.assignedPhotoFilenames?.length || 0) > 0
+                ) && doc.assignedPersonaPoolVersion === client.personaPoolVersion;
 
                 if (hasValidAssignment) {
                     assignment = {
@@ -156,14 +160,26 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     // Query existing assignments for dedup (buffer collection)
                     const existingAssignments: Array<{ assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedPhotoFilenames?: string[] }> = await this.model.find({
                         clientId: doc.clientId, status: 'active',
-                        assignedFirstName: { $ne: null }, mobile: { $ne: doc.mobile },
+                        mobile: { $ne: doc.mobile },
+                        $or: [
+                            { assignedFirstName: { $ne: null } },
+                            { assignedLastName: { $ne: null } },
+                            { assignedBio: { $ne: null } },
+                            { 'assignedPhotoFilenames.0': { $exists: true } },
+                        ],
                     }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
 
                     // Cross-collection dedup: also fetch promote assignments (best-effort)
                     try {
                         const promoteAssignments = await this.promoteClientService.model.find({
                             clientId: doc.clientId, status: 'active',
-                            assignedFirstName: { $ne: null }, mobile: { $ne: doc.mobile },
+                            mobile: { $ne: doc.mobile },
+                            $or: [
+                                { assignedFirstName: { $ne: null } },
+                                { assignedLastName: { $ne: null } },
+                                { assignedBio: { $ne: null } },
+                                { 'assignedPhotoFilenames.0': { $exists: true } },
+                            ],
                         }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
                         existingAssignments.push(...promoteAssignments);
                     } catch { /* cross-collection dedup is best-effort */ }
@@ -185,7 +201,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     const pick = chosen || candidates[0];
                     if (pick) {
                         const result = await this.model.findOneAndUpdate(
-                            { mobile: doc.mobile, $or: [{ assignedFirstName: null }, { assignedPersonaPoolVersion: { $ne: client.personaPoolVersion } }] },
+                            {
+                                mobile: doc.mobile,
+                                $or: [
+                                    {
+                                        assignedFirstName: null,
+                                        assignedLastName: null,
+                                        assignedBio: null,
+                                        'assignedPhotoFilenames.0': { $exists: false },
+                                    },
+                                    { assignedPersonaPoolVersion: { $ne: client.personaPoolVersion } },
+                                ],
+                            },
                             { $set: {
                                 assignedFirstName: pick.firstName,
                                 assignedLastName: pick.lastName || null,
@@ -210,30 +237,48 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     }
                 }
 
-                // 3. Check TG name matches assignment
-                if (assignment?.assignedFirstName) {
-                    if (!nameMatchesAssignment(me.firstName || '', assignment.assignedFirstName)) {
-                        // 4. Update TG profile with obfuscated assigned name
-                        const displayName = assignment.assignedLastName
-                            ? `${assignment.assignedFirstName} ${assignment.assignedLastName}`
-                            : assignment.assignedFirstName;
+                // 3. Apply persona corrections if we have an assignment
+                const hasAnyAssignment = assignment != null && (
+                    assignment.assignedFirstName != null ||
+                    assignment.assignedLastName != null ||
+                    assignment.assignedBio != null ||
+                    (assignment.assignedPhotoFilenames?.length || 0) > 0
+                );
+                if (hasAnyAssignment) {
+                    // Read current TG profile state once (needed for lastName and bio checks)
+                    const fullUser = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
+                    const currentLastName: string = (fullUser as any)?.users?.[0]?.lastName || '';
+                    const currentBio: string = (fullUser as any)?.fullUser?.about || '';
+
+                    // Check firstName mismatch
+                    const firstNameWrong = assignment?.assignedFirstName != null
+                        && !nameMatchesAssignment(me.firstName || '', assignment.assignedFirstName);
+                    // Check lastName mismatch (only when assignedLastName is non-null)
+                    const lastNameWrong = assignment?.assignedLastName != null
+                        && !lastNameMatches(currentLastName, assignment.assignedLastName);
+
+                    if (firstNameWrong || lastNameWrong) {
+                        const displayFirstName = assignment.assignedFirstName || me.firstName || '';
+                        const displayLastName = assignment.assignedLastName || '';
+                        const displayName = displayLastName
+                            ? `${displayFirstName} ${displayLastName}`
+                            : displayFirstName;
                         const obfuscatedDisplayName = `${obfuscateText(displayName, {
-                                maintainFormatting: false,
-                                preserveCase: true,
-                                useInvisibleChars: false,
-                            })} ${getCuteEmoji()}`;
-                        this.logger.log(`Updating persona name for ${doc.mobile} from "${me.firstName}" to "${displayName}"`);
+                            maintainFormatting: false,
+                            preserveCase: true,
+                            useInvisibleChars: false,
+                        })} ${getCuteEmoji()}`;
+                        this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
+                        await performOrganicActivity(telegramClient, 'medium');
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({
                             firstName: obfuscatedDisplayName,
-                            lastName: assignment.assignedLastName || '',
+                            lastName: displayLastName,
                         }));
                         updateCount++;
                         await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
                     }
 
-                    // 5. Check and update bio if assignedBio is non-null and mismatches
-                    const fullUser = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
-                    const currentBio = (fullUser as any)?.fullUser?.about || '';
+                    // Check and update bio if assignedBio is non-null and mismatches
                     if (assignment.assignedBio != null && currentBio !== assignment.assignedBio) {
                         this.logger.log(`Updating persona bio for ${doc.mobile}`);
                         await performOrganicActivity(telegramClient, 'light');
@@ -259,7 +304,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             }
 
             await this.update(doc.mobile, {
-                nameBioUpdatedAt: new Date(),
+                ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
                 lastUpdateFailure: null,
@@ -477,7 +522,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.log(`Refilled join queue with ${added} buffer clients`);
         }
         if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
-            this.createTimeout(() => this.leaveChannelQueue(), 5000 + Math.random() * 3000);
+            this.createTimeout(() => this.leaveChannelQueue(), ClientHelperUtils.gaussianRandom(6500, 1000, 5000, 8000));
         }
 
         return added;
@@ -693,7 +738,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
             await this.performHealthCheck(client.mobile, lastChecked, now);
             if (i < clients.length - 1) {
-                await sleep(12000 + Math.random() * 8000);
+                await sleep(ClientHelperUtils.gaussianRandom(16000, 2500, 12000, 20000));
             }
         }
     }
@@ -770,12 +815,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             } finally {
                 await this.safeUnregisterClient(mobile);
                 if (i < clients.length - 1) {
-                    await sleep(this.config.clientProcessingDelay + Math.random() * 5000);
+                    await sleep(ClientHelperUtils.gaussianRandom(this.config.clientProcessingDelay + 2500, 1500, this.config.clientProcessingDelay, this.config.clientProcessingDelay + 5000));
                 }
             }
         }
 
-        await sleep(6000 + Math.random() * 3000);
+        await sleep(ClientHelperUtils.gaussianRandom(7500, 750, 6000, 9000));
 
         if (joinSet.size > 0) {
             this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);

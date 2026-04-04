@@ -40,6 +40,7 @@ import {
 } from '../promote-clients/schemas/promote-client.schema';
 import { SortOrder } from 'mongoose';
 import path from 'path';
+import * as fs from 'fs';
 import { Api } from 'telegram/tl';
 import isPermanentError from '../../utils/isPermanentError';
 import { TelegramService } from '../Telegram/Telegram.service';
@@ -1019,7 +1020,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
     if (scope === 'all' || scope === 'activeClient') {
       const client = await this.findOne(clientId, false);
-      if (client?.assignedFirstName) {
+      if (client && (client.assignedFirstName || client.assignedLastName || client.assignedBio || client.assignedPhotoFilenames?.length > 0)) {
         assignments.push({
           mobile: client.mobile,
           assignedFirstName: client.assignedFirstName,
@@ -1032,5 +1033,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
 
     return { assignments };
+  }
+
+  findPersonaFile(dir: string, filename: string): string | null {
+    if (!fs.existsSync(dir)) return null;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        const result = this.findPersonaFile(path.join(dir, entry.name), filename);
+        if (result) return result;
+      } else if (entry.name === filename) {
+        return path.join(dir, entry.name);
+      }
+    }
+    return null;
   }
 }

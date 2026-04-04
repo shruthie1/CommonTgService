@@ -29,7 +29,7 @@ export async function forwardSecretMsgs(ctx: TgContext, fromChatId: string, toCh
     let offset = 0;
     const limit = 100;
     let forwardedCount = 0;
-    let messages: Api.Message[] = [];
+    const messages: Api.Message[] = [];
     do {
         const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
         const messageIds = messages.map((message: Api.Message) => {

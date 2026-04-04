@@ -221,7 +221,7 @@ export async function* streamMediaFile(
 export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    let { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
 
     const hasAll = types.includes('all');
     const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
@@ -339,7 +339,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
 
 export async function getAllMediaMetaData(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse> {
     if (!ctx.client) throw new Error('Client not initialized');
-    let { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
+    const { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
 
     const hasAll = types.includes('all');
     const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
@@ -404,7 +404,7 @@ export async function getAllMediaMetaData(ctx: TgContext, params: MediaQueryPara
 export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams): Promise<FilteredMediaListResponse> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    let { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
 
     const hasAll = types.includes('all');
     const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll

@@ -69,12 +69,6 @@ export class SearchClientDto {
     @IsUrl({}, { message: 'Invalid URL format' })
     deployKey?: string;
 
-    @ApiPropertyOptional({ description: 'Main account of the client' })
-    @Transform(({ value }: TransformFnParams) => value?.trim().toLowerCase())
-    @IsOptional()
-    @IsString()
-    mainAccount?: string;
-
     @ApiPropertyOptional({ description: 'Product associated with the client' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()

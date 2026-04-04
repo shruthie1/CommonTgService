@@ -784,7 +784,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
 
             await this.update(doc.mobile, {
-                profilePicsUpdatedAt: new Date(),
+                ...(updateCount > 0 ? { profilePicsUpdatedAt: new Date() } : {}),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
                 lastUpdateFailure: null,
@@ -868,7 +868,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
 
             await telegramClient.set2fa();
-            await sleep(30000 + Math.random() * 30000);
+            await sleep(ClientHelperUtils.gaussianRandom(45000, 7500, 30000, 60000));
 
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),
@@ -910,7 +910,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // removeOtherAuths now includes post-revocation self-check (getMe).
             // If our session was accidentally revoked, it throws.
             await telegramClient.removeOtherAuths();
-            await sleep(20000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(30000, 5000, 20000, 40000));
 
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),

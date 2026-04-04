@@ -63,11 +63,6 @@ export class CreateClientDto {
     @IsUrl({}, { message: 'Invalid deploy key URL format' })
     readonly deployKey: string;
 
-    @ApiProperty({ example: 'ShruthiRedd2', description: 'Main account of the user' })
-    @Transform(({ value }: TransformFnParams) => value?.trim())
-    @IsString()
-    readonly mainAccount: string;
-
     @ApiProperty({ example: 'booklet_10', description: 'Product associated with the user' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsString()

@@ -132,7 +132,7 @@ async function fetchNextProxy(clientId?: string): Promise<ProxyInterface> {
   return {
     ip: data.ipAddress,
     port: data.port,
-    socksType: 5 as 5,
+    socksType: 5 as const,
     username: data.username,
     password: data.password,
     timeout: envInt("PROXY_TIMEOUT", 10),
@@ -186,7 +186,7 @@ function resolveProxyFromEnv(): ProxyInterface | null {
     return {
       ip: url.hostname,
       port: parseInt(url.port, 10) || 1080,
-      socksType: 5 as 5,
+      socksType: 5 as const,
       username: url.username ? decodeURIComponent(url.username) : undefined,
       password: url.password ? decodeURIComponent(url.password) : undefined,
       timeout: envInt("PROXY_TIMEOUT", 10),
@@ -243,7 +243,7 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
   const cached = await RedisClient.getObject<ProxyInterface>(mapKey);
   if (cached && cached.ip) {
     logger.debug("Proxy cache hit", { mobile, ip: cached.ip, port: cached.port });
-    const proxy = { ...cached, socksType: 5 as 5 };
+    const proxy = { ...cached, socksType: 5 as const };
     _registerMobile(mobile, proxy);
     return proxy;
   }

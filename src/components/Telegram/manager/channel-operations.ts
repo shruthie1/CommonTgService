@@ -236,8 +236,7 @@ export async function leaveChannels(ctx: TgContext, chats: string[]): Promise<vo
             const errorDetails = parseError(error, `${ctx.phoneNumber} Failed to leave chat ${id}:`, false);
             if (isPermanentError(errorDetails)) {
                 ctx.logger.error(ctx.phoneNumber, `Permanent error leaving ${id}:`, errorDetails.message);
-                skipCount++;
-                continue;
+                throw new Error(errorDetails.message || `Permanent error leaving ${id}`);
             }
             ctx.logger.warn(ctx.phoneNumber, `Error leaving ${id}:`, errorDetails.message);
             skipCount++;
