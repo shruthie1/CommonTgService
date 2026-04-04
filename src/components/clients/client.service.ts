@@ -49,6 +49,7 @@ import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe
 import { WarmupPhase } from '../shared/warmup-phases';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { ActiveClientSetup } from '../Telegram/manager/types';
+import { computePersonaPoolVersion } from '../../utils/persona-assignment';
 
 // Configuration constants
 const CONFIG = {
@@ -254,6 +255,17 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
     this.ensureInitialized();
     try {
+      // If any pool field is being updated, recompute personaPoolVersion
+      if (updateClientDto.firstNames || updateClientDto.lastNames || updateClientDto.bios || updateClientDto.profilePics) {
+        const existing = await this.findOne(clientId, false);
+        const merged = {
+          firstNames: updateClientDto.firstNames ?? existing?.firstNames ?? [],
+          lastNames: updateClientDto.lastNames ?? existing?.lastNames ?? [],
+          bios: updateClientDto.bios ?? existing?.bios ?? [],
+          profilePics: updateClientDto.profilePics ?? existing?.profilePics ?? [],
+        };
+        updateClientDto.personaPoolVersion = computePersonaPoolVersion(merged as any);
+      }
       const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
       await this.notifyClientUpdate(clientId);
       const updatedClient = await this.executeWithRetry(() =>
@@ -603,7 +615,20 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (!newSession?.trim()) {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
-      await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
+      // Fetch buffer doc to get persona assignment
+      const bufferDoc = await this.bufferClientService.findOne(newMobile);
+      await this.update(clientId, {
+        mobile: newMobile,
+        username: updatedUsername,
+        session: newSession,
+        // Copy persona assignment from buffer doc (same atomic update)
+        name: bufferDoc?.assignedFirstName || existingClient.name,
+        assignedFirstName: bufferDoc?.assignedFirstName || null,
+        assignedLastName: bufferDoc?.assignedLastName || null,
+        assignedBio: bufferDoc?.assignedBio || null,
+        assignedPhotoFilenames: bufferDoc?.assignedPhotoFilenames || [],
+        assignedPersonaPoolVersion: bufferDoc?.assignedPersonaPoolVersion || null,
+      });
       await fetchWithTimeout(existingClient.deployKey, {}, 1);
       setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
       await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days);
@@ -929,5 +954,75 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       );
     }
     return client;
+  }
+
+  async getPersonaPool(clientId: string) {
+    const client = await this.findOne(clientId, false);
+    if (!client) return null;
+    return {
+      firstNames: client.firstNames || [],
+      lastNames: client.lastNames || [],
+      bios: client.bios || [],
+      profilePics: client.profilePics || [],
+      dbcoll: client.dbcoll,
+      personaPoolVersion: client.personaPoolVersion || null,
+    };
+  }
+
+  async getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'promote' | 'activeClient') {
+    const assignments: Array<{
+      mobile: string;
+      assignedFirstName: string | null;
+      assignedLastName: string | null;
+      assignedBio: string | null;
+      assignedPhotoFilenames: string[];
+      source: string;
+    }> = [];
+
+    const projection = {
+      mobile: 1, assignedFirstName: 1, assignedLastName: 1,
+      assignedBio: 1, assignedPhotoFilenames: 1,
+    };
+    const filter = { clientId, assignedFirstName: { $ne: null } };
+
+    if (scope === 'all' || scope === 'buffer') {
+      const buffers = await this.bufferClientService.model
+        .find(filter, projection).lean();
+      assignments.push(...buffers.map(b => ({
+        mobile: b.mobile,
+        assignedFirstName: b.assignedFirstName,
+        assignedLastName: b.assignedLastName || null,
+        assignedBio: b.assignedBio || null,
+        assignedPhotoFilenames: b.assignedPhotoFilenames || [],
+        source: 'buffer',
+      })));
+    }
+    if (scope === 'all' || scope === 'promote') {
+      const promotes = await this.promoteClientModel
+        .find(filter, projection).lean();
+      assignments.push(...promotes.map(p => ({
+        mobile: p.mobile,
+        assignedFirstName: p.assignedFirstName,
+        assignedLastName: p.assignedLastName || null,
+        assignedBio: p.assignedBio || null,
+        assignedPhotoFilenames: p.assignedPhotoFilenames || [],
+        source: 'promote',
+      })));
+    }
+    if (scope === 'all' || scope === 'activeClient') {
+      const client = await this.findOne(clientId, false);
+      if (client?.assignedFirstName) {
+        assignments.push({
+          mobile: client.mobile,
+          assignedFirstName: client.assignedFirstName,
+          assignedLastName: client.assignedLastName || null,
+          assignedBio: client.assignedBio || null,
+          assignedPhotoFilenames: client.assignedPhotoFilenames || [],
+          source: 'activeClient',
+        });
+      }
+    }
+
+    return { assignments };
   }
 }

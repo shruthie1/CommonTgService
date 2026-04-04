@@ -28,4 +28,9 @@ export class UpdateClientDto extends PartialType(CreateClientDto) {
     @IsOptional()
     @IsString()
     assignedPersonaPoolVersion?: string;
+
+    @ApiProperty({ description: 'Computed version hash of the persona pool', required: false })
+    @IsOptional()
+    @IsString()
+    personaPoolVersion?: string;
 }
