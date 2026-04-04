@@ -271,6 +271,7 @@ class ConnectionManager {
         this.cleanupTimer = setInterval(() => {
             this.cleanup().catch(error => this.logger.error('Default', 'Cleanup error', error));
         }, this.CLEANUP_INTERVAL);
+        this.cleanupTimer.unref();
         this.logger.info('Default', `Cleanup started - ${this.CLEANUP_INTERVAL}ms interval`);
     }
     stopCleanup() {

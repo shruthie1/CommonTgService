@@ -21,6 +21,7 @@ const search_promote_client_dto_1 = require("./dto/search-promote-client.dto");
 const promote_client_schema_1 = require("./schemas/promote-client.schema");
 const update_promote_client_dto_1 = require("./dto/update-promote-client.dto");
 const client_swagger_dto_1 = require("../shared/dto/client-swagger.dto");
+const base_client_service_1 = require("../shared/base-client.service");
 let PromoteClientController = class PromoteClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -178,7 +179,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'List promote clients', description: 'Returns all promote clients, optionally filtered by status.' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
     (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
-    __param(0, (0, common_1.Query)('status')),
+    __param(0, (0, common_1.Query)('status', new common_1.ParseEnumPipe(base_client_service_1.ClientStatus, { optional: true }))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
@@ -265,7 +266,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
     (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
     (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
-    __param(0, (0, common_1.Param)('status')),
+    __param(0, (0, common_1.Param)('status', new common_1.ParseEnumPipe(base_client_service_1.ClientStatus))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)

@@ -1,4 +1,5 @@
 export declare class ClientHelperUtils {
+    static toDateString(dateOrTimestamp: Date | number): string;
     static getTimestamp(date: Date | string | null | undefined): number;
     static getTodayDateString(): string;
     static getDateStringDaysAgo(days: number, oneDayMs: number): string;

@@ -1,4 +1,5 @@
 import { CreateBufferClientDto } from './create-buffer-client.dto';
+import { WarmupPhaseType } from '../../shared/warmup-phases';
 declare const UpdateBufferClientDto_base: import("@nestjs/common").Type<Partial<CreateBufferClientDto>>;
 export declare class UpdateBufferClientDto extends UpdateBufferClientDto_base {
     inUse?: boolean;
@@ -14,7 +15,7 @@ export declare class UpdateBufferClientDto extends UpdateBufferClientDto_base {
     lastUpdateFailure?: Date;
     twoFASetAt?: Date;
     otherAuthsRemovedAt?: Date;
-    warmupPhase?: string;
+    warmupPhase?: WarmupPhaseType;
     warmupJitter?: number;
     enrolledAt?: Date;
     organicActivityAt?: Date;

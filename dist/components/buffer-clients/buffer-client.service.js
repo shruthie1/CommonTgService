@@ -62,9 +62,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             maxNewClientsPerTrigger: 10,
             minTotalClients: 10,
             maxMapSize: 100,
-            cleanupInterval: 15 * 60 * 1000,
             cooldownHours: 2,
             clientProcessingDelay: 10000,
+            maxChannelJoinsPerDay: 20,
+            joinsPerMobilePerRound: 3,
         };
     }
     async updateNameAndBio(doc, client, failedAttempts) {
@@ -242,6 +243,75 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return await this.update(mobile, updateData);
     }
+    async refillJoinQueue(clientId) {
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing)
+            return 0;
+        if (this.telegramService.getActiveClientSetup())
+            return 0;
+        this.resetDailyJoinCountersIfNeeded();
+        const query = {
+            status: 'active',
+            channels: { $lt: this.config.channelTarget },
+            mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+        };
+        if (clientId)
+            query.clientId = clientId;
+        const eligible = await this.bufferClientModel
+            .find(query)
+            .sort({ channels: 1 })
+            .limit(this.config.maxMapSize)
+            .exec();
+        let added = 0;
+        let leaveAdded = 0;
+        for (const doc of eligible) {
+            if (this.isMobileDailyCapped(doc.mobile))
+                continue;
+            try {
+                const client = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+                const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
+                await this.update(doc.mobile, { channels: channels.ids.length });
+                if (channels.canSendFalseCount < 10) {
+                    const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
+                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, channels.ids);
+                    if (channelsToJoin.length === 0)
+                        continue;
+                    if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
+                        added++;
+                    }
+                }
+                else if (!this.leaveChannelMap.has(doc.mobile)) {
+                    if (this.safeSetLeaveChannelMap(doc.mobile, channels.canSendFalseChats)) {
+                        leaveAdded++;
+                    }
+                }
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    await this.markAsInactive(doc.mobile, reason);
+                }
+            }
+            finally {
+                await this.safeUnregisterClient(doc.mobile);
+            }
+        }
+        if (added > 0) {
+            this.logger.log(`Refilled join queue with ${added} buffer clients`);
+        }
+        if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
+            this.createTimeout(() => this.leaveChannelQueue(), 5000 + Math.random() * 3000);
+        }
+        return added;
+    }
+    async fetchJoinableChannels(currentChannels, limit, excludedIds) {
+        const capped = Math.min(limit, 25);
+        if (capped <= 0)
+            return [];
+        return currentChannels < 220
+            ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
+            : this.channelsService.getActiveChannels(capped, 0, excludedIds);
+    }
     async markAsInactive(mobile, reason) {
         try {
             this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
@@ -312,72 +382,71 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         const clients = await this.clientService.findAll();
         const promoteClients = await this.promoteClientService.findAll();
+        const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+        const now = Date.now();
+        await this.selfHealLegacyOperationalState();
         const clientMainMobiles = clients.map((c) => c.mobile);
-        const assignedBufferMobiles = await this.bufferClientModel
-            .find({ clientId: { $exists: true }, status: 'active' })
-            .distinct('mobile');
+        const assignedBufferClients = await this.bufferClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        const assignedBufferMobiles = assignedBufferClients.map((doc) => doc.mobile);
         const goodIds = [
             ...clientMainMobiles,
             ...promoteClients.map((c) => c.mobile),
             ...assignedBufferMobiles,
         ].filter(Boolean);
         const bufferClientsPerClient = new Map();
-        const bufferClientCounts = await this.bufferClientModel.aggregate([
-            { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-            { $group: { _id: '$clientId', count: { $sum: 1 }, mobiles: { $push: '$mobile' } } },
-        ]);
+        for (const doc of assignedBufferClients) {
+            if (!doc.clientId)
+                continue;
+            bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
         let totalUpdates = 0;
-        const now = Date.now();
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
         const bufferClientsToProcess = [];
-        for (const result of bufferClientCounts) {
-            bufferClientsPerClient.set(result._id, result.count);
-            const client = clients.find((c) => c.clientId === result._id);
+        for (const bufferClient of assignedBufferClients) {
+            if (!bufferClient.clientId)
+                continue;
+            const client = clientMap.get(bufferClient.clientId);
             if (!client)
                 continue;
-            for (const bufferClientMobile of result.mobiles) {
-                const bufferClient = await this.findOne(bufferClientMobile, false);
-                if (!bufferClient)
-                    continue;
-                if (bufferClient.inUse === true)
-                    continue;
-                const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
-                if (this.isOnCooldown(bufferClientMobile, bufferClient.lastUpdateAttempt, now))
-                    continue;
-                if (bufferClient.lastUsed) {
-                    const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
-                    if (lastUsed > 0) {
-                        await this.backfillTimestamps(bufferClientMobile, bufferClient, now);
-                        continue;
-                    }
-                }
-                const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
-                if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
-                    const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
-                    const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
-                    if (!healthCheckPassed)
-                        continue;
-                }
-                const failedAttempts = bufferClient.failedUpdateAttempts || 0;
-                const lastAttemptAgeHours = lastUpdateAttempt > 0
-                    ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                    : 10000;
-                const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
-                const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
-                bufferClientsToProcess.push({ bufferClient, client, clientId: result._id, priority });
+            if (bufferClient.inUse === true)
+                continue;
+            const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
+            if (this.isOnCooldown(bufferClient.mobile, bufferClient.lastUpdateAttempt, now))
+                continue;
+            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
+            if (lastUsed > 0) {
+                await this.backfillTimestamps(bufferClient.mobile, bufferClient, now);
+                continue;
             }
+            const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            const failedAttempts = bufferClient.failedUpdateAttempts || 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }
         bufferClientsToProcess.sort((a, b) => b.priority - a.priority);
         for (const { bufferClient, client } of bufferClientsToProcess) {
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
                 break;
+            const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+                const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
+                const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
+                if (!healthCheckPassed)
+                    continue;
+            }
             const currentUpdates = await this.processClient(bufferClient, client);
             if (currentUpdates > 0)
                 totalUpdates += currentUpdates;
         }
         const clientNeedingBufferClients = [];
         for (const client of clients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
             if (availabilityNeeds.totalNeeded > 0) {
                 clientNeedingBufferClients.push({ clientId: client.clientId, ...availabilityNeeds });
             }
@@ -421,21 +490,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        const existingKeys = skipExisting ? Array.from(this.joinChannelMap.keys()) : [];
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+        this.joinScopeClientId = clientId || null;
+        const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
         const query = {
             channels: { $lt: this.config.channelTarget },
-            mobile: { $nin: existingKeys },
+            mobile: { $nin: Array.from(preservedMobiles) },
             status: 'active',
-            warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
         };
         if (clientId)
             query.clientId = clientId;
-        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(8);
+        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(this.config.maxMapSize);
         const joinSet = new Set();
         const leaveSet = new Set();
         let successCount = 0;
@@ -484,7 +548,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
         if (joinSet.size > 0) {
-            this.startMemoryCleanup();
             this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
         }
         if (leaveSet.size > 0) {
@@ -625,10 +688,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     }
                     await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
+                    if (!newSession || newSession === bufferClient.session) {
+                        throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
+                    }
+                    const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(bufferClient.mobile, newSession);
+                    if (!hasDistinctBackup) {
+                        throw new Error(`Failed to ensure distinct backup session for ${bufferClient.mobile}`);
+                    }
                     await this.update(bufferClient.mobile, {
                         session: newSession,
                         lastUsed: null,
                         message: 'Session updated successfully',
+                        warmupPhase: base_client_service_1.WarmupPhase.SESSION_ROTATED,
+                        sessionRotatedAt: new Date(),
                     });
                 }
                 catch (error) {

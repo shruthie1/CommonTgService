@@ -56,12 +56,10 @@ const lodash_1 = require("lodash");
 const mongoose_3 = require("@nestjs/mongoose");
 const mongoose = __importStar(require("mongoose"));
 const utils_1 = require("../../utils");
-const npoint_service_1 = require("../n-point/npoint.service");
 let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
-    constructor(dynamicDataModel, connection, npointService) {
+    constructor(dynamicDataModel, connection) {
         this.dynamicDataModel = dynamicDataModel;
         this.connection = connection;
-        this.npointService = npointService;
         this.logger = new utils_1.Logger(DynamicDataService_1.name);
     }
     async create(createDto) {
@@ -280,14 +278,12 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
             throw error;
         }
     }
-    async checkNpoint() {
-    }
 };
 exports.DynamicDataService = DynamicDataService;
 exports.DynamicDataService = DynamicDataService = DynamicDataService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(dynamic_data_schema_1.DynamicData.name)),
     __param(1, (0, mongoose_3.InjectConnection)()),
-    __metadata("design:paramtypes", [mongoose_2.Model, mongoose.Connection, npoint_service_1.NpointService])
+    __metadata("design:paramtypes", [mongoose_2.Model, mongoose.Connection])
 ], DynamicDataService);
 //# sourceMappingURL=dynamic-data.service.js.map

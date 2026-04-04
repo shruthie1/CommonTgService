@@ -11,7 +11,7 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { SessionService } from '../session-manager';
 import { Client } from '../clients/schemas/client.schema';
 import { BotsService } from '../bots';
-import { BaseClientService, ClientConfig } from '../shared/base-client.service';
+import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } from '../shared/base-client.service';
 export declare class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private promoteClientModel;
     private bufferClientService;
@@ -22,10 +22,12 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     updateNameAndBio(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
     updateUsername(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
-    findAll(statusFilter?: string): Promise<PromoteClient[]>;
+    findAll(statusFilter?: ClientStatusType): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClientDocument>;
-    update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClientDocument>;
-    updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<PromoteClientDocument>;
+    update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument>;
+    updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument>;
+    refillJoinQueue(clientId?: string | null): Promise<number>;
+    private fetchJoinableChannels;
     updateLastUsed(mobile: string): Promise<PromoteClient>;
     markAsInactive(mobile: string, reason: string): Promise<PromoteClientDocument | null>;
     markAsActive(mobile: string, message?: string): Promise<PromoteClient>;
@@ -77,7 +79,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
             triggersNeededToSatisfyAll: number;
         };
     }>;
-    getPromoteClientsByStatus(status: string): Promise<PromoteClient[]>;
+    getPromoteClientsByStatus(status: ClientStatusType): Promise<PromoteClient[]>;
     getPromoteClientsWithMessages(): Promise<(import("mongoose").Document<unknown, {}, PromoteClientDocument, {}, import("mongoose").DefaultSchemaOptions> & PromoteClient & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {

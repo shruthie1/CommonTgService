@@ -20,6 +20,11 @@ const create_client_dto_1 = require("./dto/create-client.dto");
 const client_schema_1 = require("./schemas/client.schema");
 const search_client_dto_1 = require("./dto/search-client.dto");
 const update_client_dto_1 = require("./dto/update-client.dto");
+const enhanced_search_client_dto_1 = require("./dto/enhanced-search-client.dto");
+const execute_client_query_dto_1 = require("./dto/execute-client-query.dto");
+const promote_mobile_assignment_dto_1 = require("./dto/promote-mobile-assignment.dto");
+const promote_mobile_search_query_dto_1 = require("./dto/promote-mobile-search-query.dto");
+const client_response_dto_1 = require("./dto/client-response.dto");
 const decorators_1 = require("../../decorators");
 const interceptors_1 = require("../../interceptors");
 let ClientController = class ClientController {
@@ -32,12 +37,12 @@ let ClientController = class ClientController {
     async search(query) {
         return await this.clientService.search(query);
     }
-    async searchByPromoteMobile(mobile) {
-        const result = await this.clientService.enhancedSearch({ promoteMobileNumber: mobile });
+    async searchByPromoteMobile(query) {
+        const result = await this.clientService.enhancedSearch({ promoteMobileNumber: query.mobile });
         return {
             clients: result.clients,
             matches: result.promoteMobileMatches || [],
-            searchedMobile: mobile,
+            searchedMobile: query.mobile,
         };
     }
     async enhancedSearch(query) {
@@ -112,18 +117,11 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
     (0, swagger_1.ApiResponse)({
         description: 'Clients with matching promote mobiles returned successfully.',
-        type: Object,
-        schema: {
-            properties: {
-                clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
-                matches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
-                searchedMobile: { type: 'string' },
-            },
-        },
+        type: client_response_dto_1.PromoteMobileSearchResponseDto,
     }),
-    __param(0, (0, common_1.Query)('mobile')),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [promote_mobile_search_query_dto_1.PromoteMobileSearchQueryDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "searchByPromoteMobile", null);
 __decorate([
@@ -133,19 +131,11 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
     (0, swagger_1.ApiResponse)({
         description: 'Enhanced search results with promote mobile context.',
-        type: Object,
-        schema: {
-            properties: {
-                clients: { type: 'array', items: { $ref: '#/components/schemas/Client' } },
-                searchType: { type: 'string' },
-                promoteMobileMatches: { type: 'array', items: { type: 'object', properties: { clientId: { type: 'string' }, mobile: { type: 'string' } } } },
-                totalResults: { type: 'number' },
-            },
-        },
+        type: client_response_dto_1.EnhancedClientSearchResponseDto,
     }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [enhanced_search_client_dto_1.EnhancedSearchClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "enhancedSearch", null);
 __decorate([
@@ -225,56 +215,35 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            properties: {
-                query: { type: 'object' },
-                sort: { type: 'object' },
-                limit: { type: 'number' },
-                skip: { type: 'number' },
-            },
-        },
-    }),
-    (0, swagger_1.ApiResponse)({ description: 'Query executed successfully.' }),
+    (0, swagger_1.ApiBody)({ type: execute_client_query_dto_1.ExecuteClientQueryDto }),
+    (0, swagger_1.ApiResponse)({ description: 'Query executed successfully.', type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [execute_client_query_dto_1.ExecuteClientQueryDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "executeQuery", null);
 __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/add'),
     (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            properties: {
-                mobileNumber: { type: 'string', example: '916265240911' },
-            },
-        },
-    }),
+    (0, swagger_1.ApiBody)({ type: promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto }),
     (0, swagger_1.ApiResponse)({ description: 'Mobile number assigned as promote mobile successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "addPromoteMobile", null);
 __decorate([
     (0, common_1.Patch)(':clientId/promoteMobile/remove'),
     (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            properties: {
-                mobileNumber: { type: 'string', example: '916265240911' },
-            },
-        },
-    }),
+    (0, swagger_1.ApiBody)({ type: promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto }),
     (0, swagger_1.ApiResponse)({ description: 'Promote mobile assignment removed successfully.', type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "removePromoteMobile", null);
 exports.ClientController = ClientController = __decorate([

@@ -1,4 +1,5 @@
 import { CreatePromoteClientDto } from './create-promote-client.dto';
+import { WarmupPhaseType } from '../../shared/warmup-phases';
 declare const UpdatePromoteClientDto_base: import("@nestjs/common").Type<Partial<CreatePromoteClientDto>>;
 export declare class UpdatePromoteClientDto extends UpdatePromoteClientDto_base {
     inUse?: boolean;
@@ -14,7 +15,7 @@ export declare class UpdatePromoteClientDto extends UpdatePromoteClientDto_base 
     lastUpdateFailure?: Date;
     twoFASetAt?: Date;
     otherAuthsRemovedAt?: Date;
-    warmupPhase?: string;
+    warmupPhase?: WarmupPhaseType;
     warmupJitter?: number;
     enrolledAt?: Date;
     organicActivityAt?: Date;

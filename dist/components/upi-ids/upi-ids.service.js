@@ -17,12 +17,10 @@ exports.UpiIdService = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
-const npoint_service_1 = require("../n-point/npoint.service");
 const utils_1 = require("../../utils");
 let UpiIdService = UpiIdService_1 = class UpiIdService {
-    constructor(upiIdModel, npointService) {
+    constructor(upiIdModel) {
         this.upiIdModel = upiIdModel;
-        this.npointService = npointService;
         this.logger = new utils_1.Logger(UpiIdService_1.name);
         this.checkInterval = null;
         this.upiIds = null;
@@ -63,10 +61,7 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
         }
         this.checkInterval = setInterval(async () => {
             try {
-                await Promise.all([
-                    this.refreshUPIs(),
-                    this.checkNpoint()
-                ]);
+                await this.refreshUPIs();
             }
             catch (error) {
                 this.logger.error('Error during periodic check', error.stack);
@@ -88,13 +83,6 @@ let UpiIdService = UpiIdService_1 = class UpiIdService {
         catch (error) {
             this.logger.error('Failed to refresh UPIs', error.stack);
             throw error;
-        }
-    }
-    async checkNpoint() {
-        try {
-        }
-        catch (error) {
-            this.logger.error('Error checking npoint', error.stack);
         }
     }
     async findOne() {
@@ -186,7 +174,6 @@ exports.UpiIdService = UpiIdService;
 exports.UpiIdService = UpiIdService = UpiIdService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('UpiIdModule')),
-    __metadata("design:paramtypes", [mongoose_2.Model,
-        npoint_service_1.NpointService])
+    __metadata("design:paramtypes", [mongoose_2.Model])
 ], UpiIdService);
 //# sourceMappingURL=upi-ids.service.js.map

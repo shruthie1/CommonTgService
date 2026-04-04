@@ -1,4 +1,6 @@
 import { Document } from 'mongoose';
+import { WarmupPhaseType } from '../../shared/warmup-phases';
+import { ClientStatusType } from '../../shared/base-client.service';
 export type BufferClientDocument = BufferClient & Document;
 export declare class BufferClient {
     tgId: string;
@@ -10,7 +12,7 @@ export declare class BufferClient {
     message: string;
     lastUsed: Date;
     lastChecked: Date;
-    status: 'active' | 'inactive';
+    status: ClientStatusType;
     inUse: boolean;
     privacyUpdatedAt: Date;
     profilePicsUpdatedAt: Date;
@@ -24,7 +26,7 @@ export declare class BufferClient {
     lastUpdateFailure: Date;
     twoFASetAt: Date;
     otherAuthsRemovedAt: Date;
-    warmupPhase: string;
+    warmupPhase: WarmupPhaseType;
     warmupJitter: number;
     enrolledAt: Date;
     organicActivityAt: Date;
@@ -130,7 +132,7 @@ export declare const BufferClientSchema: import("mongoose").Schema<BufferClient,
     }, "id"> & {
         id: string;
     }>;
-    status?: import("mongoose").SchemaDefinitionProperty<"active" | "inactive", BufferClient, Document<unknown, {}, BufferClient, {
+    status?: import("mongoose").SchemaDefinitionProperty<ClientStatusType, BufferClient, Document<unknown, {}, BufferClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
         _id: import("mongoose").Types.ObjectId;
@@ -256,7 +258,7 @@ export declare const BufferClientSchema: import("mongoose").Schema<BufferClient,
     }, "id"> & {
         id: string;
     }>;
-    warmupPhase?: import("mongoose").SchemaDefinitionProperty<string, BufferClient, Document<unknown, {}, BufferClient, {
+    warmupPhase?: import("mongoose").SchemaDefinitionProperty<WarmupPhaseType, BufferClient, Document<unknown, {}, BufferClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
         _id: import("mongoose").Types.ObjectId;

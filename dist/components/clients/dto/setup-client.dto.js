@@ -13,6 +13,7 @@ exports.SetupClientQueryDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
+const toBoolean = ({ value }) => value === 'true' || value === true;
 class SetupClientQueryDto {
     constructor() {
         this.days = 0;
@@ -24,7 +25,7 @@ exports.SetupClientQueryDto = SetupClientQueryDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         type: Number,
-        default: 3
+        default: 0
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
@@ -36,10 +37,7 @@ __decorate([
         default: true
     }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => {
-        console.log("archiveOld: ", value);
-        return value === 'true' || value === true;
-    }),
+    (0, class_transformer_1.Transform)(toBoolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "archiveOld", void 0);
@@ -56,10 +54,7 @@ __decorate([
         default: true
     }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_transformer_1.Transform)(({ value }) => {
-        console.log("formalities: ", value);
-        return value === 'true' || value === true;
-    }),
+    (0, class_transformer_1.Transform)(toBoolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "formalities", void 0);

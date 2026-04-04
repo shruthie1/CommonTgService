@@ -1,3 +1,4 @@
+import { ClientStatusType } from '../../shared/base-client.service';
 export declare class CreateBufferClientDto {
     readonly tgId: string;
     readonly mobile: string;
@@ -5,7 +6,7 @@ export declare class CreateBufferClientDto {
     readonly session: string;
     readonly channels: number;
     readonly clientId: string;
-    readonly status?: 'active' | 'inactive';
+    readonly status?: ClientStatusType;
     message?: string;
     readonly lastUsed?: Date;
 }
