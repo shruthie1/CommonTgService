@@ -67,6 +67,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
             maxMapSize: 1,
             cooldownHours: 2,
             clientProcessingDelay: 1,
+            maxChannelJoinsPerDay: 20,
+            joinsPerMobilePerRound: 3,
         };
     }
 
@@ -76,6 +78,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     async update(mobile: string, updateDto: any): Promise<any> { return this.updateMock(mobile, updateDto); }
     async markAsInactive(): Promise<any> { return null; }
     async updateStatus(): Promise<any> { return null; }
+    async refillJoinQueue(): Promise<number> { return 0; }
 
     public effectiveCooldown(mobile: string, lastUpdateAttempt: number): number {
         return this.getEffectiveCooldownMs(mobile, lastUpdateAttempt);

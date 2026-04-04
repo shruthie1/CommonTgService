@@ -50,6 +50,8 @@ export interface ClientConfig {
     maxMapSize: number;
     cooldownHours: number;
     clientProcessingDelay: number;
+    maxChannelJoinsPerDay: number;
+    joinsPerMobilePerRound: number;
 }
 
 export const ClientStatus = {
@@ -192,6 +194,30 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly MAX_UPDATES_PER_CYCLE = 5;
 
+    protected dailyJoinCounts: Map<string, number> = new Map();
+    protected dailyJoinDate: string = '';
+
+    protected resetDailyJoinCountersIfNeeded(): void {
+        const today = ClientHelperUtils.getTodayDateString();
+        if (today !== this.dailyJoinDate) {
+            this.dailyJoinCounts.clear();
+            this.dailyJoinDate = today;
+        }
+    }
+
+    protected getDailyJoinCount(mobile: string): number {
+        this.resetDailyJoinCountersIfNeeded();
+        return this.dailyJoinCounts.get(mobile) || 0;
+    }
+
+    protected incrementDailyJoinCount(mobile: string): void {
+        this.dailyJoinCounts.set(mobile, this.getDailyJoinCount(mobile) + 1);
+    }
+
+    protected isMobileDailyCapped(mobile: string): boolean {
+        return this.getDailyJoinCount(mobile) >= this.config.maxChannelJoinsPerDay;
+    }
+
     /**
      * Use a stable per-attempt cooldown jitter so scheduler prechecks and processClient()
      * make the same decision for the same mobile + lastUpdateAttempt.
@@ -331,6 +357,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     /** Update status */
     abstract updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc>;
 
+    /** Re-query DB for mobiles below channelTarget not yet daily-capped. Populate joinChannelMap. */
+    abstract refillJoinQueue(): Promise<number>;
+
     // ---- Lifecycle ----
 
     async onModuleDestroy() {
@@ -343,6 +372,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
             this.joinChannelMap.clear();
+            this.dailyJoinCounts.clear();
             this.leaveChannelMap.clear();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;

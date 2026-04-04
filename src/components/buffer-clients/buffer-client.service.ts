@@ -105,6 +105,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             maxMapSize: 100,
             cooldownHours: 2,
             clientProcessingDelay: 10000,               // 10s between clients
+            maxChannelJoinsPerDay: 20,
+            joinsPerMobilePerRound: 3,
         };
     }
 
@@ -293,6 +295,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (message) updateData.message = message;
         await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return await this.update(mobile, updateData);
+    }
+
+    async refillJoinQueue(): Promise<number> {
+        // TODO: Task 4 will implement real refill logic
+        return 0;
     }
 
     async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null> {

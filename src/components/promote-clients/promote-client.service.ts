@@ -104,6 +104,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             maxMapSize: 100,
             cooldownHours: 2,                            // Fixed inconsistency (was 4h in outer check)
             clientProcessingDelay: 8000,                 // 8s between clients
+            maxChannelJoinsPerDay: 20,
+            joinsPerMobilePerRound: 3,
         };
     }
 
@@ -236,6 +238,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         if (message) updateData.message = message;
         await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return this.update(mobile, updateData);
+    }
+
+    async refillJoinQueue(): Promise<number> {
+        // TODO: Task 5 will implement real refill logic
+        return 0;
     }
 
     async updateLastUsed(mobile: string): Promise<PromoteClient> {
