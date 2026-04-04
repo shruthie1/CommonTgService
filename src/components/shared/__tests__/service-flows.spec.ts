@@ -859,4 +859,35 @@ describe('Service flow reliability', () => {
         expect(joinOrder).toEqual(['fresh-mobile', 'fresh-mobile']);
         expect((service as any).joinChannelMap.has('capped-mobile')).toBe(false);
     });
+
+    test('scheduleNextJoinRound calls refillJoinQueue when map is empty and continues if refill adds mobiles', async () => {
+        const mockModel = { find: jest.fn(() => createQueryChain(() => [])) };
+        const service = new TestBaseService(mockModel);
+
+        let refillCalled = false;
+        jest.spyOn(service, 'refillJoinQueue').mockImplementation(async () => {
+            refillCalled = true;
+            (service as any).joinChannelMap.set('refilled-mobile', [{ channelId: 'r1', username: 'r1' }]);
+            return 1;
+        });
+
+        const createTimeoutSpy = jest.spyOn(service as any, 'createTimeout').mockReturnValue(setTimeout(() => {}, 0));
+
+        await (service as any).scheduleNextJoinRound();
+
+        expect(refillCalled).toBe(true);
+        expect(createTimeoutSpy).toHaveBeenCalled();
+    });
+
+    test('scheduleNextJoinRound stops when refillJoinQueue returns 0', async () => {
+        const mockModel = { find: jest.fn(() => createQueryChain(() => [])) };
+        const service = new TestBaseService(mockModel);
+
+        jest.spyOn(service, 'refillJoinQueue').mockResolvedValue(0);
+        const clearSpy = jest.spyOn(service as any, 'clearJoinChannelInterval');
+
+        await (service as any).scheduleNextJoinRound();
+
+        expect(clearSpy).toHaveBeenCalled();
+    });
 });

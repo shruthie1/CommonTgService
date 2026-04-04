@@ -1069,11 +1069,23 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * Schedule the next join processing round with randomized delay.
      * Uses setTimeout chain (not setInterval) to avoid fixed-interval fingerprinting.
      */
-    private scheduleNextJoinRound() {
+    private async scheduleNextJoinRound() {
         if (this.joinChannelMap.size === 0) {
-            this.clearJoinChannelInterval();
-            return;
+            try {
+                const refilled = await this.refillJoinQueue();
+                if (refilled === 0) {
+                    this.logger.debug('No eligible mobiles for channel joining — stopping until next trigger');
+                    this.clearJoinChannelInterval();
+                    return;
+                }
+                this.logger.log(`Refilled join queue with ${refilled} mobiles`);
+            } catch (error) {
+                this.logger.error('Error refilling join queue', error);
+                this.clearJoinChannelInterval();
+                return;
+            }
         }
+
         // Randomize: base interval +/- 50% (e.g., 6min -> 3-9min)
         const baseInterval = this.config.joinChannelInterval;
         const jitter = ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
@@ -1087,7 +1099,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (this.isJoinChannelProcessing) return;
 
         if (this.joinChannelMap.size === 0) {
-            this.clearJoinChannelInterval();
+            await this.scheduleNextJoinRound();
             return;
         }
 
@@ -1099,7 +1111,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         } finally {
             this.isJoinChannelProcessing = false;
             // Schedule next round (randomized) instead of fixed interval
-            this.scheduleNextJoinRound();
+            await this.scheduleNextJoinRound();
         }
     }
 
