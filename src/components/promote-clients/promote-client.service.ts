@@ -33,6 +33,8 @@ import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { Client } from '../clients/schemas/client.schema';
 import isPermanentError from '../../utils/isPermanentError';
 import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
+import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
+import { nameMatchesAssignment } from '../../utils/homoglyph-normalizer';
 import { BotsService, ChannelCategory } from '../bots';
 import {
     BaseClientUpdate,
@@ -122,18 +124,126 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             let updateCount = 0;
-            const expectedName = client?.name.split(' ')[0];
-            if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), expectedName, 2)) {
-                this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(
-                    `${obfuscateText(`${expectedName} ${getRandomPetName()}`, {
-                        maintainFormatting: false,
-                        preserveCase: true,
-                        useInvisibleChars: false
-                    })} ${getCuteEmoji()}`,
-                    ''
-                );
-                updateCount = 1;
+
+            if (client.firstNames?.length > 0) {
+                // ── PERSONA BRANCH ──────────────────────────────────────────
+                let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedPhotoFilenames'> | null = null;
+
+                // 1. Check if doc already has a valid assignment (assignedFirstName set AND pool version matches)
+                const hasValidAssignment = doc.assignedFirstName != null
+                    && doc.assignedPersonaPoolVersion === client.personaPoolVersion;
+
+                if (hasValidAssignment) {
+                    assignment = {
+                        assignedFirstName: doc.assignedFirstName,
+                        assignedLastName: doc.assignedLastName,
+                        assignedBio: doc.assignedBio,
+                        assignedPhotoFilenames: doc.assignedPhotoFilenames,
+                    };
+                } else {
+                    // 2. Atomic assignment via findOneAndUpdate with guard
+                    const pool: PersonaPool = {
+                        firstNames: client.firstNames,
+                        lastNames: client.lastNames || [],
+                        bios: client.bios || [],
+                        profilePics: client.profilePics || [],
+                        dbcoll: client.dbcoll,
+                        personaPoolVersion: client.personaPoolVersion,
+                    };
+
+                    // Query existing assignments for dedup
+                    const existingAssignments = await this.model.find({
+                        clientId: doc.clientId, status: 'active',
+                        assignedFirstName: { $ne: null }, mobile: { $ne: doc.mobile },
+                    }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+
+                    const usedKeys = new Set(existingAssignments.map(a => personaKey({
+                        firstName: a.assignedFirstName,
+                        lastName: a.assignedLastName || '',
+                        bio: a.assignedBio || '',
+                        photoFilenames: a.assignedPhotoFilenames || [],
+                    })));
+
+                    const candidates = generateCandidateCombinations(pool, doc.mobile);
+                    const chosen = candidates.find(c => !usedKeys.has(personaKey(c)));
+
+                    if (!chosen) {
+                        this.logger.warn(`No unique persona candidate available for ${doc.mobile}, falling back to first candidate`);
+                    }
+
+                    const pick = chosen || candidates[0];
+                    if (pick) {
+                        const result = await this.model.findOneAndUpdate(
+                            { mobile: doc.mobile, $or: [{ assignedFirstName: null }, { assignedPersonaPoolVersion: { $ne: client.personaPoolVersion } }] },
+                            { $set: {
+                                assignedFirstName: pick.firstName,
+                                assignedLastName: pick.lastName || null,
+                                assignedBio: pick.bio || null,
+                                assignedPhotoFilenames: pick.photoFilenames,
+                                assignedPersonaPoolVersion: client.personaPoolVersion,
+                            } },
+                            { new: true },
+                        );
+
+                        if (result) {
+                            assignment = {
+                                assignedFirstName: result.assignedFirstName,
+                                assignedLastName: result.assignedLastName,
+                                assignedBio: result.assignedBio,
+                                assignedPhotoFilenames: result.assignedPhotoFilenames,
+                            };
+                            this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
+                        } else {
+                            this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                        }
+                    }
+                }
+
+                // 3. Check TG name matches assignment
+                if (assignment?.assignedFirstName) {
+                    if (!nameMatchesAssignment(me.firstName || '', assignment.assignedFirstName)) {
+                        // 4. Update TG profile with obfuscated assigned name
+                        const displayName = assignment.assignedLastName
+                            ? `${assignment.assignedFirstName} ${assignment.assignedLastName}`
+                            : assignment.assignedFirstName;
+                        this.logger.log(`Updating persona name for ${doc.mobile} from "${me.firstName}" to "${displayName}"`);
+                        await telegramClient.updateProfile(
+                            `${obfuscateText(displayName, {
+                                maintainFormatting: false,
+                                preserveCase: true,
+                                useInvisibleChars: false,
+                            })} ${getCuteEmoji()}`,
+                            ''
+                        );
+                        updateCount++;
+                        await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
+                    }
+
+                    // 5. Check and update bio if assignedBio is non-null and mismatches
+                    if (assignment.assignedBio != null && (me as any).about !== assignment.assignedBio) {
+                        this.logger.log(`Updating persona bio for ${doc.mobile}`);
+                        await telegramClient.updateProfile(
+                            me.firstName || '',
+                            assignment.assignedBio,
+                        );
+                        updateCount++;
+                    }
+                }
+            } else {
+                // ── LEGACY BRANCH ───────────────────────────────────────────
+                const expectedName = client?.name.split(' ')[0];
+                if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), expectedName, 2)) {
+                    this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                    await telegramClient.updateProfile(
+                        `${obfuscateText(`${expectedName} ${getRandomPetName()}`, {
+                            maintainFormatting: false,
+                            preserveCase: true,
+                            useInvisibleChars: false
+                        })} ${getCuteEmoji()}`,
+                        ''
+                    );
+                    updateCount = 1;
+                }
             }
 
             await this.update(doc.mobile, {
