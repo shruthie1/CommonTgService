@@ -3,4 +3,6 @@ export declare class ClientHelperUtils {
     static getTodayDateString(): string;
     static getDateStringDaysAgo(days: number, oneDayMs: number): string;
     static createBackfillTimestamps(now: number, oneDayMs: number): Record<string, Date>;
+    static gaussianRandom(mean: number, stddev: number, min?: number, max?: number): number;
+    static generateWarmupJitter(): number;
 }

@@ -3,6 +3,7 @@ import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { SearchPromoteClientDto } from './dto/search-promote-client.dto';
 import { PromoteClient } from './schemas/promote-client.schema';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
+import { ActivationRequestDto, BulkEnrollPromoteClientsRequestDto, DeactivationRequestDto, MarkUsedRequestDto, StatusUpdateRequestDto } from '../shared/dto/client-swagger.dto';
 export declare class PromoteClientController {
     private readonly clientService;
     constructor(clientService: PromoteClientService);
@@ -11,11 +12,7 @@ export declare class PromoteClientController {
     joinChannelsforPromoteClients(): Promise<string>;
     updateInfo(): Promise<string>;
     checkpromoteClients(): Promise<string>;
-    addNewUserstoPromoteClients(body: {
-        goodIds: string[];
-        badIds: string[];
-        clientsNeedingPromoteClients?: string[];
-    }): Promise<string>;
+    addNewUserstoPromoteClients(body: BulkEnrollPromoteClientsRequestDto): Promise<string>;
     findAll(status?: string): Promise<PromoteClient[]>;
     setAsPromoteClient(mobile: string): Promise<string>;
     findOne(mobile: string): Promise<PromoteClient>;
@@ -31,19 +28,10 @@ export declare class PromoteClientController {
         message: string;
         clientId?: string;
     }>>;
-    updateStatus(mobile: string, body: {
-        status: string;
-        message?: string;
-    }): Promise<PromoteClient>;
-    markAsActive(mobile: string, body?: {
-        message?: string;
-    }): Promise<PromoteClient>;
-    markAsInactive(mobile: string, body: {
-        reason: string;
-    }): Promise<PromoteClient>;
-    markAsUsed(mobile: string, body?: {
-        message?: string;
-    }): Promise<PromoteClient>;
+    updateStatus(mobile: string, body: StatusUpdateRequestDto): Promise<PromoteClient>;
+    markAsActive(mobile: string, body?: ActivationRequestDto): Promise<PromoteClient>;
+    markAsInactive(mobile: string, body: DeactivationRequestDto): Promise<PromoteClient>;
+    markAsUsed(mobile: string, body?: MarkUsedRequestDto): Promise<PromoteClient>;
     updateLastUsed(mobile: string): Promise<PromoteClient>;
     getLeastRecentlyUsed(clientId: string, limit?: number): Promise<PromoteClient[]>;
     getNextAvailable(clientId: string): Promise<PromoteClient | null>;

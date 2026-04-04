@@ -12,5 +12,12 @@ export declare class UpdatePromoteClientDto extends UpdatePromoteClientDto_base 
     lastUpdateAttempt?: Date;
     failedUpdateAttempts?: number;
     lastUpdateFailure?: Date;
+    twoFASetAt?: Date;
+    otherAuthsRemovedAt?: Date;
+    warmupPhase?: string;
+    warmupJitter?: number;
+    enrolledAt?: Date;
+    organicActivityAt?: Date;
+    sessionRotatedAt?: Date;
 }
 export {};

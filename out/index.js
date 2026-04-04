@@ -6990,6 +6990,9 @@ const _ownDeviceModels = (() => {
     return models;
 })();
 function isOwnAuth(auth) {
+    if (auth.current) {
+        return true;
+    }
     const deviceModel = (auth.deviceModel || '').toLowerCase();
     if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
         return true;
@@ -7000,11 +7003,31 @@ async function removeOtherAuths(ctx) {
     if (!ctx.client)
         throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
+    let keptCount = 0;
+    let revokedCount = 0;
     for (const auth of result.authorizations) {
-        if (isOwnAuth(auth))
+        if (isOwnAuth(auth)) {
+            keptCount++;
+            ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
+        }
+        ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Removing Auth : ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
         await resetAuthorization(ctx, auth);
+        revokedCount++;
+        await (0, Helpers_1.sleep)(2000 + Math.random() * 3000);
+    }
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup: kept ${keptCount}, revoked ${revokedCount}`);
+    try {
+        const me = await ctx.client.getMe();
+        if (!me) {
+            throw new Error('Session verification failed after removeOtherAuths — getMe returned null');
+        }
+        ctx.logger.info(ctx.phoneNumber, `Session verified alive after auth cleanup (user: ${me.phone})`);
+    }
+    catch (verifyError) {
+        ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
+        throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
     }
 }
 async function resetAuthorization(ctx, auth) {
@@ -11454,40 +11477,6 @@ async function unregisterClient(mobile) {
 
 /***/ },
 
-/***/ "./src/components/Telegram/utils/deleteProfilePics.ts"
-/*!************************************************************!*\
-  !*** ./src/components/Telegram/utils/deleteProfilePics.ts ***!
-  \************************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.deleteProfilePhotos = deleteProfilePhotos;
-const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
-async function deleteProfilePhotos(client, photos) {
-    try {
-        if (!photos) {
-            const result = await client.invoke(new telegram_1.Api.photos.GetUserPhotos({
-                userId: "me"
-            }));
-            console.info(`Profile Pics found: ${result.photos.length}`);
-            photos = result?.photos;
-        }
-        if (photos?.length > 0) {
-            await client.invoke(new telegram_1.Api.photos.DeletePhotos({
-                id: photos
-            }));
-        }
-        console.info("Deleted profile Photos");
-    }
-    catch (error) {
-        throw error;
-    }
-}
-
-
-/***/ },
-
 /***/ "./src/components/Telegram/utils/generateTGConfig.ts"
 /*!***********************************************************!*\
   !*** ./src/components/Telegram/utils/generateTGConfig.ts ***!
@@ -12096,24 +12085,6 @@ async function invalidateConfig(mobile) {
 async function resetMobileIdentity(mobile) {
     await removeProxyMapping(mobile);
     logger.info("Full identity reset", { mobile });
-}
-
-
-/***/ },
-
-/***/ "./src/components/Telegram/utils/getProfilePics.ts"
-/*!*********************************************************!*\
-  !*** ./src/components/Telegram/utils/getProfilePics.ts ***!
-  \*********************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getProfilePics = getProfilePics;
-const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
-async function getProfilePics(client, user = "me") {
-    const userPhotos = await client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: user }));
-    return userPhotos?.photos;
 }
 
 
@@ -16155,6 +16126,7 @@ const create_buffer_client_dto_1 = __webpack_require__(/*! ./dto/create-buffer-c
 const search_buffer_client_dto_1 = __webpack_require__(/*! ./dto/search-buffer-client.dto */ "./src/components/buffer-clients/dto/search-buffer-client.dto.ts");
 const buffer_client_schema_1 = __webpack_require__(/*! ./schemas/buffer-client.schema */ "./src/components/buffer-clients/schemas/buffer-client.schema.ts");
 const update_buffer_client_dto_1 = __webpack_require__(/*! ./dto/update-buffer-client.dto */ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts");
+const client_swagger_dto_1 = __webpack_require__(/*! ../shared/dto/client-swagger.dto */ "./src/components/shared/dto/client-swagger.dto.ts");
 let BufferClientController = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -16241,9 +16213,10 @@ let BufferClientController = class BufferClientController {
 exports.BufferClientController = BufferClientController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a buffer client record', description: 'Creates a buffer client directly from supplied data.' }),
     (0, swagger_1.ApiBody)({ type: create_buffer_client_dto_1.CreateBufferClientDto }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiCreatedResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Request body validation failed.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_buffer_client_dto_1.CreateBufferClientDto]),
@@ -16251,7 +16224,7 @@ __decorate([
 ], BufferClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search buffer client data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search buffer clients', description: 'Searches buffer client records by indexed and operational fields.' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
     (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
@@ -16259,7 +16232,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
     (0, swagger_1.ApiQuery)({ name: 'repl', required: false, description: 'Repl link' }),
     (0, swagger_1.ApiQuery)({ name: 'isActive', required: false, description: 'Filter by active status' }),
-    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_buffer_client_dto_1.SearchBufferClientDto]),
@@ -16267,17 +16240,17 @@ __decorate([
 ], BufferClientController.prototype, "search", null);
 __decorate([
     (0, common_1.Get)('updateInfo'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh buffer client metadata', description: 'Starts a background refresh of buffer client metadata and channel counts.' }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Join Channels for BufferClients' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Prepare channel joins for buffer clients', description: 'Builds the next join queue for eligible buffer clients.' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Join channels initiated successfully' } }),
     __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -16285,36 +16258,28 @@ __decorate([
 ], BufferClientController.prototype, "joinChannelsforBufferClients", null);
 __decorate([
     (0, common_1.Get)('checkBufferClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Check Buffer Clients' }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Run buffer warmup processing', description: 'Starts the background warmup processor for eligible buffer clients.' }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "checkbufferClients", null);
 __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Buffer Clients' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                goodIds: { type: 'array', items: { type: 'string' } },
-                badIds: { type: 'array', items: { type: 'string' } },
-                clientsNeedingBufferClients: { type: 'array', items: { type: 'string' } }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.BulkEnrollBufferClientsRequestDto }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'goodIds, badIds, or clientsNeedingBufferClients were not valid arrays.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [client_swagger_dto_1.BulkEnrollBufferClientsRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "addNewUserstoBufferClients", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all buffer client data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'List buffer clients', description: 'Returns all buffer clients, optionally filtered by status.' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
-    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -16322,10 +16287,12 @@ __decorate([
 ], BufferClientController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Post)('SetAsBufferClient/:mobile/:clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Set as Buffer Client' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a buffer client', description: 'Converts an existing user account into a warmup-managed buffer client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to assign buffer client to', type: String }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as buffer successfully' } }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
+    (0, swagger_1.ApiConflictResponse)({ description: 'A buffer client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
@@ -16334,9 +16301,9 @@ __decorate([
 ], BufferClientController.prototype, "setAsBufferClient", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute a raw buffer client query', description: 'Executes a direct MongoDB-style filter against the buffer client collection.' }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } }),
+    (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -16345,7 +16312,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('distribution'),
     (0, swagger_1.ApiOperation)({ summary: 'Get buffer client distribution per client' }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -16355,7 +16322,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get buffer clients by client ID' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get buffer clients for', type: String }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)', type: String }),
-    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
@@ -16366,7 +16333,7 @@ __decorate([
     (0, common_1.Get)('status/:status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get buffer clients by status' }),
     (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
-    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Param)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -16376,85 +16343,57 @@ __decorate([
     (0, common_1.Patch)('status/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update status of a buffer client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                status: { type: 'string', description: 'New status (active/inactive)' },
-                message: { type: 'string', description: 'Status message (optional)' }
-            },
-            required: ['status']
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.StatusUpdateRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Status must be either active or inactive.' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.StatusUpdateRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "updateStatus", null);
 __decorate([
     (0, common_1.Patch)('activate/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark a buffer client as active' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                message: { type: 'string', description: 'Activation message (optional)' }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.ActivationRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.ActivationRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "markAsActive", null);
 __decorate([
     (0, common_1.Patch)('deactivate/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark a buffer client as inactive' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                reason: { type: 'string', description: 'Reason for deactivation' }
-            },
-            required: ['reason']
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.DeactivationRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.DeactivationRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "markAsInactive", null);
 __decorate([
     (0, common_1.Patch)('mark-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark a buffer client as used (update lastUsed timestamp)' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                message: { type: 'string', description: 'Usage message (optional)' }
-            }
-        }
-    }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.MarkUsedRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.MarkUsedRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "markAsUsed", null);
 __decorate([
     (0, common_1.Get)('next-available/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get next available buffer client for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available buffer client for', type: String }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -16465,7 +16404,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: "Get buffer clients that haven't been used for a specified time period" }),
     (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
-    (0, swagger_1.ApiResponse)({ type: [buffer_client_schema_1.BufferClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)('hoursAgo')),
     __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
@@ -16476,7 +16415,8 @@ __decorate([
     (0, common_1.Get)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -16487,7 +16427,8 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -16499,7 +16440,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
-    (0, swagger_1.ApiResponse)({ type: buffer_client_schema_1.BufferClient }),
+    (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -16510,7 +16451,8 @@ __decorate([
     (0, common_1.Delete)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiResponse)({ type: null }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'null' } }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -16622,140 +16564,117 @@ const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connectio
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
-const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
-const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
-const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const base_client_service_1 = __webpack_require__(/*! ../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
-let BufferClientService = BufferClientService_1 = class BufferClientService {
-    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientService, sessionService, botsService) {
+let BufferClientService = BufferClientService_1 = class BufferClientService extends base_client_service_1.BaseClientService {
+    constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientServiceRef, sessionService, botsService) {
+        super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
         this.bufferClientModel = bufferClientModel;
-        this.telegramService = telegramService;
-        this.usersService = usersService;
-        this.activeChannelsService = activeChannelsService;
-        this.clientService = clientService;
-        this.channelsService = channelsService;
-        this.promoteClientService = promoteClientService;
-        this.sessionService = sessionService;
-        this.botsService = botsService;
-        this.logger = new utils_1.Logger(BufferClientService_1.name);
-        this.joinChannelMap = new Map();
-        this.joinChannelIntervalId = null;
-        this.leaveChannelMap = new Map();
-        this.leaveChannelIntervalId = null;
-        this.isJoinChannelProcessing = false;
-        this.isLeaveChannelProcessing = false;
-        this.activeTimeouts = new Set();
-        this.JOIN_CHANNEL_INTERVAL = 6 * 60 * 1000;
-        this.LEAVE_CHANNEL_INTERVAL = 120 * 1000;
-        this.LEAVE_CHANNEL_BATCH_SIZE = 10;
-        this.CLIENT_PROCESSING_DELAY = 10000;
-        this.CHANNEL_PROCESSING_DELAY = 20000;
-        this.MAX_MAP_SIZE = 100;
-        this.CLEANUP_INTERVAL = 15 * 60 * 1000;
-        this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER = 10;
-        this.MIN_TOTAL_BUFFER_CLIENTS = 10;
-        this.AVAILABILITY_WINDOWS = [
-            { name: 'today', days: 0, minRequired: 3 },
-            { name: 'tomorrow', days: 1, minRequired: 5 },
-            { name: 'oneWeek', days: 7, minRequired: 7 },
-            { name: 'tenDays', days: 10, minRequired: 9 }
-        ];
-        this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
-        this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
-        this.INACTIVE_USER_CUTOFF_DAYS = 90;
-        this.cleanupIntervalId = null;
+        this.promoteClientService = promoteClientServiceRef;
     }
-    async onModuleDestroy() {
-        await this.cleanup();
+    get model() {
+        return this.bufferClientModel;
     }
-    async cleanup() {
+    get clientType() {
+        return 'buffer';
+    }
+    get config() {
+        return {
+            joinChannelInterval: 6 * 60 * 1000,
+            leaveChannelInterval: 120 * 1000,
+            leaveChannelBatchSize: 10,
+            channelProcessingDelay: 120000,
+            channelTarget: 200,
+            maxJoinsPerSession: 8,
+            maxNewClientsPerTrigger: 10,
+            minTotalClients: 10,
+            maxMapSize: 100,
+            cleanupInterval: 15 * 60 * 1000,
+            cooldownHours: 2,
+            clientProcessingDelay: 10000,
+        };
+    }
+    async updateNameAndBio(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
-            this.clearAllTimeouts();
-            this.clearJoinChannelInterval();
-            this.clearLeaveChannelInterval();
-            this.clearMemoryCleanup();
-            this.clearBufferMap();
-            this.clearLeaveMap();
-            this.isJoinChannelProcessing = false;
-            this.isLeaveChannelProcessing = false;
+            await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'medium');
+            const me = await telegramClient.getMe();
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            let updateCount = 0;
+            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me.firstName), client.name)) {
+                this.logger.log(`Updating name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
+                    maintainFormatting: false,
+                    preserveCase: true,
+                    useInvisibleChars: false
+                })} ${(0, utils_1.getCuteEmoji)()}`, '');
+                updateCount = 1;
+            }
+            await this.update(doc.mobile, {
+                nameBioUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return updateCount;
         }
         catch (error) {
-            this.logger.error('Error during cleanup:', error);
+            const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
         }
     }
-    startMemoryCleanup() {
-        this.cleanupIntervalId = setInterval(() => {
-            this.performMemoryCleanup();
-        }, this.CLEANUP_INTERVAL);
-        this.activeTimeouts.add(this.cleanupIntervalId);
-    }
-    clearMemoryCleanup() {
-        if (this.cleanupIntervalId) {
-            clearInterval(this.cleanupIntervalId);
-            this.activeTimeouts.delete(this.cleanupIntervalId);
-            this.cleanupIntervalId = null;
-        }
-    }
-    performMemoryCleanup() {
+    async updateUsername(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
-            for (const [mobile, channels] of this.joinChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.log(`Cleaning up joinChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
-                    this.joinChannelMap.delete(mobile);
-                }
-            }
-            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.log(`Cleaning up leaveChannelMap entry for mobile: ${mobile} as channels : ${channels}`);
-                    this.leaveChannelMap.delete(mobile);
-                }
-            }
-            if (this.joinChannelMap.size > this.MAX_MAP_SIZE) {
-                const keysToRemove = Array.from(this.joinChannelMap.keys()).slice(this.MAX_MAP_SIZE);
-                keysToRemove.forEach((key) => this.joinChannelMap.delete(key));
-                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from joinChannelMap to prevent memory leak`);
-            }
-            if (this.leaveChannelMap.size > this.MAX_MAP_SIZE) {
-                const keysToRemove = Array.from(this.leaveChannelMap.keys()).slice(this.MAX_MAP_SIZE);
-                keysToRemove.forEach((key) => this.leaveChannelMap.delete(key));
-                this.logger.warn(`Cleaned up ${keysToRemove.length} entries from leaveChannelMap to prevent memory leak`);
-            }
-            this.logger.debug(`Map Memory Check completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}, Active timeouts: ${this.activeTimeouts.size}`);
+            await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
+            const me = await telegramClient.getMe();
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Updated username for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return 1;
         }
         catch (error) {
-            this.logger.error('Error during memory cleanup:', error);
+            const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
         }
-    }
-    createTimeout(callback, delay) {
-        const timeout = setTimeout(() => {
-            this.activeTimeouts.delete(timeout);
-            callback();
-        }, delay);
-        this.activeTimeouts.add(timeout);
-        return timeout;
-    }
-    clearAllTimeouts() {
-        this.activeTimeouts.forEach((timeout) => {
-            clearTimeout(timeout);
-        });
-        this.activeTimeouts.clear();
-        this.logger.debug('Cleared all active timeouts');
-    }
-    async safeUnregisterClient(mobile) {
-        try {
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
         }
-        catch (unregisterError) {
-            const errorMessage = unregisterError instanceof Error ? unregisterError.message : 'Unknown error';
-            this.logger.error(`Error unregistering client ${mobile}: ${errorMessage}`);
-        }
-    }
-    handleError(error, context, mobile) {
-        const contextWithMobile = mobile ? `${context}: ${mobile}` : context;
-        return (0, parseError_1.parseError)(error, contextWithMobile, false);
     }
     async create(bufferClient) {
         const result = await this.bufferClientModel.create({
@@ -16789,11 +16708,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
     async createOrUpdate(mobile, createorUpdateBufferClientDto) {
         const existingBufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingBufferClient) {
-            this.logger.log('Updating existing Client');
             return this.update(existingBufferClient.mobile, createorUpdateBufferClientDto);
         }
         else {
-            this.logger.log('creating new Client');
             const createDto = {
                 ...createorUpdateBufferClientDto,
                 status: createorUpdateBufferClientDto.status || 'active',
@@ -16833,57 +16750,25 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
         try {
             const queryExec = this.bufferClientModel.find(query);
-            if (sort) {
+            if (sort)
                 queryExec.sort(sort);
-            }
-            if (limit) {
+            if (limit)
                 queryExec.limit(limit);
-            }
-            if (skip) {
+            if (skip)
                 queryExec.skip(skip);
-            }
             return await queryExec.exec();
         }
         catch (error) {
-            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException)
                 throw error;
-            }
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             throw new common_1.InternalServerErrorException(`Query execution failed: ${errorMessage}`);
         }
     }
-    removeFromBufferMap(key) {
-        this.joinChannelMap.delete(key);
-    }
-    safeSetJoinChannelMap(mobile, channels) {
-        if (this.joinChannelMap.size >= this.MAX_MAP_SIZE &&
-            !this.joinChannelMap.has(mobile)) {
-            this.logger.warn(`Join channel map size limit reached (${this.MAX_MAP_SIZE}), cannot add ${mobile}`);
-            return false;
-        }
-        this.joinChannelMap.set(mobile, channels);
-        return true;
-    }
-    safeSetLeaveChannelMap(mobile, channels) {
-        if (this.leaveChannelMap.size >= this.MAX_MAP_SIZE &&
-            !this.leaveChannelMap.has(mobile)) {
-            this.logger.warn(`Leave channel map size limit reached (${this.MAX_MAP_SIZE}), cannot add ${mobile}`);
-            return false;
-        }
-        this.leaveChannelMap.set(mobile, channels);
-        return true;
-    }
-    clearBufferMap() {
-        const mapSize = this.joinChannelMap.size;
-        this.joinChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.logger.debug(`BufferMap cleared, removed ${mapSize} entries`);
-    }
     async updateStatus(mobile, status, message) {
         const updateData = { status };
-        if (message) {
+        if (message)
             updateData.message = message;
-        }
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return await this.update(mobile, updateData);
     }
@@ -16898,430 +16783,57 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             return null;
         }
     }
-    async updateInfo() {
-        const clients = await this.bufferClientModel
-            .find({
-            status: 'active',
-            lastChecked: { $lt: new Date(Date.now() - 7 * this.ONE_DAY_MS) }
-        })
-            .sort({ channels: 1 })
-            .limit(25);
-        this.logger.debug(`Updating info for ${clients.length} buffer clients`);
-        const now = Date.now();
-        for (let i = 0; i < clients.length; i++) {
-            const client = clients[i];
-            const mobile = client.mobile;
-            this.logger.info(`Updating info for client ${i + 1}/${clients.length}: ${mobile}`);
-            const lastChecked = client.lastChecked
-                ? new Date(client.lastChecked).getTime()
-                : 0;
-            await this.performHealthCheck(mobile, lastChecked, now);
-            if (i < clients.length - 1) {
-                await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
-            }
-        }
-        this.logger.debug('Completed updating info for all buffer clients');
-    }
-    async joinchannelForBufferClients(skipExisting = true, clientId) {
-        if (this.telegramService.getActiveClientSetup()) {
-            this.logger.warn('Ignored active check buffer channels as active client setup exists');
-            return 'Active client setup exists, skipping buffer promotion';
-        }
-        this.logger.log('Starting join channel process for buffer clients');
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
-        const existingKeys = skipExisting
-            ? []
-            : Array.from(this.joinChannelMap.keys());
-        const query = {
-            channels: { $lt: 350 },
-            mobile: { $nin: existingKeys },
-            status: 'active',
-        };
-        if (clientId) {
-            query.clientId = clientId;
-        }
-        const clients = await this.bufferClientModel
-            .find(query)
-            .sort({ channels: 1 })
-            .limit(8);
-        this.logger.debug(`Found ${clients.length} buffer clients to process`);
-        const joinSet = new Set();
-        const leaveSet = new Set();
-        let successCount = 0;
-        let failCount = 0;
-        for (let i = 0; i < clients.length; i++) {
-            const document = clients[i];
-            const mobile = document.mobile;
-            this.logger.debug(`Processing buffer client ${i + 1}/${clients.length}: ${mobile}`);
-            try {
-                const client = await connection_manager_1.connectionManager.getClient(mobile, {
-                    autoDisconnect: false,
-                    handler: false,
-                });
-                const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
-                this.logger.debug(`Client ${mobile} has ${channels.ids.length} existing channels`);
-                await this.update(mobile, { channels: channels.ids.length });
-                if (channels.canSendFalseCount < 10) {
-                    const excludedIds = channels.ids;
-                    const result = channels.ids.length < 220
-                        ? await this.activeChannelsService.getActiveChannels(150, 0, excludedIds)
-                        : await this.channelsService.getActiveChannels(150, 0, excludedIds);
-                    if (!this.joinChannelMap.has(mobile)) {
-                        if (this.safeSetJoinChannelMap(mobile, result)) {
-                            joinSet.add(mobile);
-                            this.logger.debug(`Added ${result.length} channels to join queue for ${mobile}`);
-                        }
-                        else {
-                            this.logger.warn(`Failed to add ${mobile} to join queue due to memory limits`);
-                        }
-                    }
-                    else {
-                        this.logger.debug(`${mobile}: Already present in join map, skipping`);
-                    }
-                    await this.sessionService.getOldestSessionOrCreate({
-                        mobile: document.mobile
-                    });
-                }
-                else {
-                    if (!this.leaveChannelMap.has(mobile)) {
-                        if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
-                            leaveSet.add(mobile);
-                            this.logger.warn(`Client ${mobile} has ${channels.canSendFalseChats.length} restricted channels, added to leave queue`);
-                        }
-                        else {
-                            this.logger.warn(`Failed to add ${mobile} to leave queue due to memory limits`);
-                        }
-                    }
-                    else {
-                        this.logger.debug(`${mobile}: Already present in leave map, skipping`);
-                    }
-                }
-                successCount++;
-            }
-            catch (error) {
-                failCount++;
-                const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
-                const errorMsg = errorDetails?.message || error?.errorMessage || 'Unknown error';
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                }
-                else {
-                    this.logger.warn(`Transient error for ${mobile}: ${errorMsg}`);
-                }
-            }
-            finally {
-                await this.safeUnregisterClient(mobile);
-                if (i < clients.length - 1) {
-                    await (0, Helpers_1.sleep)(this.CLIENT_PROCESSING_DELAY + Math.random() * 5000);
-                }
-            }
-        }
-        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
-        if (joinSet.size > 0) {
-            this.startMemoryCleanup();
-            this.logger.debug(`Starting join queue for ${joinSet.size} buffer clients`);
-            this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
-        }
-        if (leaveSet.size > 0) {
-            this.logger.debug(`Starting leave queue for ${leaveSet.size} buffer clients`);
-            this.createTimeout(() => this.leaveChannelQueue(), 10000 + Math.random() * 5000);
-        }
-        this.logger.log(`Join process complete — Success: ${successCount}, Fail: ${failCount}`);
-        return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
-    }
-    async joinChannelQueue() {
-        this.logger.debug('Attempting to start join channel queue');
-        if (this.isJoinChannelProcessing) {
-            this.logger.warn('Join channel process is already running');
-            return;
-        }
-        const existingKeys = Array.from(this.joinChannelMap.keys());
-        if (existingKeys.length === 0) {
-            this.logger.debug('No channels to join, not starting queue');
-            return;
-        }
-        if (!this.joinChannelIntervalId) {
-            this.logger.debug('Starting join channel interval');
-            this.joinChannelIntervalId = setInterval(async () => {
-                await this.processJoinChannelInterval();
-            }, this.JOIN_CHANNEL_INTERVAL);
-            this.activeTimeouts.add(this.joinChannelIntervalId);
-            this.createTimeout(() => this.processJoinChannelInterval(), 1000);
-        }
-        else {
-            this.logger.warn('Join channel interval is already running');
-        }
-    }
-    async processJoinChannelInterval() {
-        if (this.isJoinChannelProcessing) {
-            this.logger.debug('Join channel process already running, skipping interval');
-            return;
-        }
-        const existingKeys = Array.from(this.joinChannelMap.keys());
-        if (existingKeys.length === 0) {
-            this.logger.debug('No channels to join, clearing interval');
-            this.clearJoinChannelInterval();
-            return;
-        }
-        this.isJoinChannelProcessing = true;
-        try {
-            await this.processJoinChannelSequentially();
-        }
-        catch (error) {
-            this.logger.error('Error in join channel queue', error);
-        }
-        finally {
-            this.isJoinChannelProcessing = false;
-            if (this.joinChannelMap.size === 0) {
-                this.logger.debug('No more channels to join, clearing interval');
-                this.clearJoinChannelInterval();
-            }
-        }
-    }
-    async processJoinChannelSequentially() {
-        const keys = Array.from(this.joinChannelMap.keys());
-        this.logger.debug(`Processing join channel queue sequentially for ${keys.length} clients`);
-        for (let i = 0; i < keys.length; i++) {
-            const mobile = keys[i];
-            let currentChannel = null;
-            try {
-                const channels = this.joinChannelMap.get(mobile);
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
-                    this.removeFromBufferMap(mobile);
-                    continue;
-                }
-                currentChannel = channels.shift();
-                if (!currentChannel) {
-                    this.logger.debug(`No channel to process for ${mobile}, removing from queue`);
-                    this.removeFromBufferMap(mobile);
-                    continue;
-                }
-                this.logger.debug(`${mobile} has ${channels.length} pending channels to join, processing:`, `@${currentChannel.username}`);
-                this.joinChannelMap.set(mobile, channels);
-                const activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
-                if (activeChannel && activeChannel.banned === true) {
-                    this.logger.debug(`Skipping Channel ${activeChannel.channelId} as it is banned`);
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                    continue;
-                }
-                else {
-                    await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-                }
-            }
-            catch (error) {
-                const errorDetails = this.handleError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`, mobile);
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                this.logger.error(`Error joining channel for ${mobile}: ${errorMessage}`);
-                const errorObj = error;
-                if (errorDetails.error === 'FloodWaitError' ||
-                    errorObj.errorMessage === 'CHANNELS_TOO_MUCH') {
-                    this.logger.warn(`${mobile} has FloodWaitError or joined too many channels, removing from queue`);
-                    this.removeFromBufferMap(mobile);
-                    try {
-                        await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                        if (errorObj.errorMessage === 'CHANNELS_TOO_MUCH') {
-                            await this.update(mobile, { channels: 400 });
-                        }
-                        else {
-                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                            await this.update(mobile, { channels: channelsInfo.ids.length });
-                        }
-                    }
-                    catch (updateError) {
-                        this.logger.error(`Error updating channel count for ${mobile}:`, updateError);
-                    }
-                }
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    this.removeFromBufferMap(mobile);
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                }
-            }
-            finally {
-                await this.safeUnregisterClient(mobile);
-                if (i < keys.length - 1 || this.joinChannelMap.get(mobile)?.length > 0) {
-                    await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY + Math.random() * 10000);
-                }
-                else {
-                    this.logger.log(`Not Sleeping before continuing with next Mobile`);
-                }
-            }
-        }
-    }
-    clearJoinChannelInterval() {
-        if (this.joinChannelIntervalId) {
-            clearInterval(this.joinChannelIntervalId);
-            this.activeTimeouts.delete(this.joinChannelIntervalId);
-            this.joinChannelIntervalId = null;
-        }
-        this.isJoinChannelProcessing = false;
-    }
-    removeFromLeaveMap(key) {
-        this.leaveChannelMap.delete(key);
-        if (this.leaveChannelMap.size === 0) {
-            this.clearLeaveChannelInterval();
-        }
-    }
-    clearLeaveMap() {
-        const mapSize = this.leaveChannelMap.size;
-        this.leaveChannelMap.clear();
-        this.clearLeaveChannelInterval();
-        this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
-    }
-    async leaveChannelQueue() {
-        this.logger.debug('Attempting to start leave channel queue');
-        if (this.isLeaveChannelProcessing) {
-            this.logger.warn('Leave channel process is already running');
-            return;
-        }
-        const existingKeys = Array.from(this.leaveChannelMap.keys());
-        if (existingKeys.length === 0) {
-            this.logger.debug('No channels to leave, not starting queue');
-            return;
-        }
-        if (!this.leaveChannelIntervalId) {
-            this.logger.debug('Starting leave channel interval');
-            this.leaveChannelIntervalId = setInterval(async () => {
-                await this.processLeaveChannelInterval();
-            }, this.LEAVE_CHANNEL_INTERVAL);
-            this.activeTimeouts.add(this.leaveChannelIntervalId);
-            this.createTimeout(() => this.processLeaveChannelInterval(), 1000);
-        }
-        else {
-            this.logger.debug('Leave channel interval is already running');
-        }
-    }
-    async processLeaveChannelInterval() {
-        if (this.isLeaveChannelProcessing) {
-            this.logger.debug('Leave channel process already running, skipping interval');
-            return;
-        }
-        const existingKeys = Array.from(this.leaveChannelMap.keys());
-        if (existingKeys.length === 0) {
-            this.logger.debug('No channels to leave, clearing interval');
-            this.clearLeaveChannelInterval();
-            return;
-        }
-        this.isLeaveChannelProcessing = true;
-        try {
-            await this.processLeaveChannelSequentially();
-        }
-        catch (error) {
-            this.logger.error('Error in leave channel queue', error);
-        }
-        finally {
-            this.isLeaveChannelProcessing = false;
-            if (this.leaveChannelMap.size === 0) {
-                this.logger.debug('No more channels to leave, clearing interval');
-                this.clearLeaveChannelInterval();
-            }
-        }
-    }
-    async processLeaveChannelSequentially() {
-        const keys = Array.from(this.leaveChannelMap.keys());
-        this.logger.debug(`Processing leave channel queue sequentially for ${keys.length} clients`);
-        for (let i = 0; i < keys.length; i++) {
-            const mobile = keys[i];
-            try {
-                const channels = this.leaveChannelMap.get(mobile);
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
-                    this.removeFromLeaveMap(mobile);
-                    continue;
-                }
-                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                this.logger.debug(`${mobile} has ${channels.length} pending channels to leave, processing ${channelsToProcess.length} channels`);
-                if (channels.length > 0) {
-                    this.leaveChannelMap.set(mobile, channels);
-                }
-                else {
-                    this.removeFromLeaveMap(mobile);
-                }
-                const client = await connection_manager_1.connectionManager.getClient(mobile, {
-                    autoDisconnect: false,
-                    handler: false,
-                });
-                this.logger.debug(`${mobile} attempting to leave ${channelsToProcess.length} channels`);
-                await client.leaveChannels(channelsToProcess);
-                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
-            }
-            catch (error) {
-                const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                    this.removeFromLeaveMap(mobile);
-                }
-                else {
-                    this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
-                }
-            }
-            finally {
-                await this.safeUnregisterClient(mobile);
-                if (i < keys.length - 1 ||
-                    this.leaveChannelMap.get(mobile)?.length > 0) {
-                    await (0, Helpers_1.sleep)((this.LEAVE_CHANNEL_INTERVAL / 2) + Math.random() * 60000);
-                }
-            }
-        }
-    }
-    clearLeaveChannelInterval() {
-        if (this.leaveChannelIntervalId) {
-            this.logger.debug(`Clearing leave channel interval: ${this.leaveChannelIntervalId}`);
-            clearInterval(this.leaveChannelIntervalId);
-            this.activeTimeouts.delete(this.leaveChannelIntervalId);
-            this.leaveChannelIntervalId = null;
-        }
-        this.isLeaveChannelProcessing = false;
-        this.logger.debug('Leave channel interval cleared and processing flag reset');
-    }
     async setAsBufferClient(mobile, clientId, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
         const user = (await this.usersService.search({ mobile, expired: false }))[0];
-        if (!user) {
+        if (!user)
             throw new common_1.BadRequestException('user not found');
-        }
         const isExist = await this.findOne(mobile, false);
-        if (isExist) {
+        if (isExist)
             throw new common_1.ConflictException('BufferClient already exist');
-        }
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile)) {
+        if (clientMobiles.includes(mobile))
             throw new common_1.BadRequestException('Number is an Active Client');
-        }
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-            autoDisconnect: false
-        });
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
         try {
-            await telegramClient.set2fa();
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
             const channels = await this.telegramService.getChannelInfo(mobile, true);
             await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const newSession = await this.telegramService.createNewSession(user.mobile);
             const bufferClient = {
                 tgId: user.tgId,
-                session: newSession,
+                session: user.session,
                 mobile: user.mobile,
                 availableDate,
                 channels: channels.ids.length,
                 clientId,
                 status: 'active',
-                message: 'Manually configured as buffer client',
+                message: 'Enrolled for warmup',
                 lastUsed: null,
             };
             await this.bufferClientModel
-                .findOneAndUpdate({ mobile: user.mobile }, { $set: bufferClient }, { new: true, upsert: true })
+                .findOneAndUpdate({ mobile: user.mobile }, {
+                $set: {
+                    ...bufferClient,
+                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                    enrolledAt: new Date(),
+                }
+            }, { new: true, upsert: true })
                 .exec();
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${mobile}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                try {
+                    await this.usersService.update(user.tgId, { expired: true });
+                }
+                catch { }
+            }
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
-        await this.safeUnregisterClient(mobile);
-        return 'Client set as buffer successfully';
+        finally {
+            await this.safeUnregisterClient(mobile);
+        }
+        return 'Client enrolled as buffer successfully';
     }
     async checkBufferClients() {
         if (this.telegramService.getActiveClientSetup()) {
@@ -17341,675 +16853,207 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         ].filter(Boolean);
         const bufferClientsPerClient = new Map();
         const bufferClientCounts = await this.bufferClientModel.aggregate([
-            {
-                $match: {
-                    clientId: { $exists: true, $ne: null },
-                    status: 'active',
-                },
-            },
-            {
-                $group: {
-                    _id: '$clientId',
-                    count: { $sum: 1 },
-                    mobiles: { $push: '$mobile' },
-                },
-            },
+            { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+            { $group: { _id: '$clientId', count: { $sum: 1 }, mobiles: { $push: '$mobile' } } },
         ]);
         let totalUpdates = 0;
-        const MIN_COOLDOWN_HOURS = 2;
-        const MAX_UPDATES_PER_CYCLE = 5;
         const now = Date.now();
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
         const bufferClientsToProcess = [];
         for (const result of bufferClientCounts) {
             bufferClientsPerClient.set(result._id, result.count);
             const client = clients.find((c) => c.clientId === result._id);
-            if (!client) {
-                this.logger.warn(`Client with ID ${result._id} not found, skipping buffer clients`);
+            if (!client)
                 continue;
-            }
             for (const bufferClientMobile of result.mobiles) {
                 const bufferClient = await this.findOne(bufferClientMobile, false);
-                if (!bufferClient) {
-                    this.logger.warn(`Buffer client ${bufferClientMobile} not found, skipping`);
+                if (!bufferClient)
                     continue;
-                }
-                if (bufferClient.inUse === true) {
-                    this.logger.debug(`Skipping ${bufferClientMobile} - currently in use`);
+                if (bufferClient.inUse === true)
                     continue;
-                }
-                const lastChecked = bufferClient.lastChecked
-                    ? new Date(bufferClient.lastChecked).getTime()
-                    : 0;
-                const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
-                if (!healthCheckPassed) {
-                    this.logger.debug(`${bufferClientMobile} has permanent error, continueing with next buffer client!`);
+                const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
+                if (this.isOnCooldown(bufferClientMobile, bufferClient.lastUpdateAttempt, now))
                     continue;
-                }
                 if (bufferClient.lastUsed) {
                     const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
                     if (lastUsed > 0) {
                         await this.backfillTimestamps(bufferClientMobile, bufferClient, now);
-                        this.logger.debug(`Skipping ${bufferClientMobile} - already used, trying timestamps backfill`);
                         continue;
                     }
                 }
-                const lastUpdateAttempt = bufferClient.lastUpdateAttempt
-                    ? new Date(bufferClient.lastUpdateAttempt).getTime()
-                    : 0;
-                if (lastUpdateAttempt && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                    const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
-                    this.logger.debug(`Skipping ${bufferClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
-                    continue;
+                const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+                if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+                    const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
+                    const healthCheckPassed = await this.performHealthCheck(bufferClientMobile, lastChecked, now);
+                    if (!healthCheckPassed)
+                        continue;
                 }
-                const pendingUpdates = this.getPendingUpdates(bufferClient, now);
-                const accountAge = bufferClient.createdAt ? now - new Date(bufferClient.createdAt).getTime() : 0;
-                const DAY = this.ONE_DAY_MS;
                 const failedAttempts = bufferClient.failedUpdateAttempts || 0;
                 const lastAttemptAgeHours = lastUpdateAttempt > 0
                     ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                     : 10000;
-                const priority = (pendingUpdates.totalPending * 10000) +
-                    lastAttemptAgeHours +
-                    (accountAge / DAY) -
-                    (failedAttempts * 100);
-                bufferClientsToProcess.push({
-                    bufferClient,
-                    client,
-                    clientId: result._id,
-                    priority
-                });
+                const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+                const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+                bufferClientsToProcess.push({ bufferClient, client, clientId: result._id, priority });
             }
         }
         bufferClientsToProcess.sort((a, b) => b.priority - a.priority);
-        this.logger.debug(`Processing ${bufferClientsToProcess.length} buffer clients in priority order`);
-        for (const { bufferClient, client, clientId } of bufferClientsToProcess) {
-            if (totalUpdates >= MAX_UPDATES_PER_CYCLE) {
-                this.logger.warn(`Reached total update limit of ${MAX_UPDATES_PER_CYCLE} for this check cycle`);
+        for (const { bufferClient, client } of bufferClientsToProcess) {
+            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
                 break;
-            }
-            const currentUpdates = await this.processBufferClient(bufferClient, client);
-            this.logger.debug(`Processed buffer client ${bufferClient.mobile} for client ${clientId}, current updates: ${currentUpdates} | total updates: ${totalUpdates + currentUpdates}`);
-            if (currentUpdates > 0) {
+            const currentUpdates = await this.processClient(bufferClient, client);
+            if (currentUpdates > 0)
                 totalUpdates += currentUpdates;
-            }
         }
         const clientNeedingBufferClients = [];
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
             if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingBufferClients.push({
-                    clientId: client.clientId,
-                    ...availabilityNeeds
-                });
+                clientNeedingBufferClients.push({ clientId: client.clientId, ...availabilityNeeds });
             }
         }
         clientNeedingBufferClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
-        const clientNeedsMap = new Map();
         for (const clientNeed of clientNeedingBufferClients) {
-            const allocated = Math.min(clientNeed.totalNeeded, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
-            if (allocated > 0) {
-                clientNeedsMap.set(clientNeed.clientId, allocated);
+            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
+            if (allocated > 0)
                 totalSlotsNeeded += allocated;
-            }
-            if (totalSlotsNeeded >= this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER)
+            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
                 break;
         }
-        this.logger.debug(`Availability-based needs calculated (NO HARD LIMIT):`);
-        clientNeedingBufferClients.forEach(need => {
-            this.logger.debug(`Client ${need.clientId} (priority: ${need.priority}): ` +
-                `${need.totalActive} total active, ${need.totalNeeded} new needed - ${need.calculationReason}`);
-            need.windowNeeds.forEach(window => {
-                if (window.needed > 0) {
-                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
-                        `${window.available} available, ${window.needed} needed ` +
-                        `(target: ${window.minRequired} per window)`);
-                }
-                else {
-                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
-                        `${window.available} available ✅ (sufficient, target: ${window.minRequired})`);
-                }
-            });
-        });
         const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
-        this.logger.debug(`Total active buffer clients: ${totalActiveBufferClients}`);
-        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER} per trigger)`);
-        const clientNeedsSummary = clientNeedingBufferClients
-            .map(c => `${c.clientId}: ${c.totalNeeded} (${c.calculationReason})`)
-            .join('\n');
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check (Dynamic Availability):\n\nTotal Active Buffer Clients: ${totalActiveBufferClients}\nBuffer Clients Per Client: ${JSON.stringify(Object.fromEntries(bufferClientsPerClient))}\n\nClients Needing Buffer Clients:\n${clientNeedsSummary || 'None'}\n\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active: ${totalActiveBufferClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
-        else {
-            this.logger.debug('No new buffer clients needed - all availability windows and total count satisfied');
-        }
     }
-    async updateUser2FAStatus(tgId, mobile) {
-        try {
-            await this.usersService.update(tgId, { twoFA: true });
-        }
-        catch (userUpdateError) {
-            this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
-        }
-    }
-    async calculateAvailabilityBasedNeeds(clientId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayStr = today.toISOString().split('T')[0];
-        const windows = this.AVAILABILITY_WINDOWS.map(window => ({
-            ...window,
-            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS)
-                .toISOString().split('T')[0]
-        }));
-        const totalActive = await this.bufferClientModel.countDocuments({
-            clientId,
-            status: 'active'
-        });
-        const windowNeeds = [];
-        let maxNeeded = 0;
-        let mostUrgentWindow = '';
-        let mostUrgentPriority = 999;
-        for (const window of windows) {
-            const availableCount = await this.bufferClientModel.countDocuments({
-                clientId,
-                status: 'active',
-                availableDate: { $lte: window.targetDate }
-            });
-            const needed = Math.max(0, window.minRequired - availableCount);
-            windowNeeds.push({
-                window: window.name,
-                available: availableCount,
-                needed,
-                targetDate: window.targetDate,
-                minRequired: window.minRequired
-            });
-            if (needed > maxNeeded) {
-                maxNeeded = needed;
-                mostUrgentWindow = window.name;
-                mostUrgentPriority = window.days;
-            }
-            else if (needed > 0 && window.days < mostUrgentPriority) {
-                mostUrgentWindow = window.name;
-                mostUrgentPriority = window.days;
-            }
-        }
-        const totalNeededForCount = Math.max(0, this.MIN_TOTAL_BUFFER_CLIENTS - totalActive);
-        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
-        let priority = 100;
-        if (maxNeeded > 0) {
-            priority = mostUrgentPriority;
-        }
-        let calculationReason = '';
-        if (maxNeeded > 0 && totalNeededForCount > 0) {
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
-        }
-        else if (maxNeeded > 0) {
-            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
-        }
-        else if (totalNeededForCount > 0) {
-            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.MIN_TOTAL_BUFFER_CLIENTS}`;
-        }
-        else {
-            calculationReason = 'All windows satisfied';
-        }
-        return {
-            totalNeeded,
-            windowNeeds,
-            totalActive,
-            totalNeededForCount,
-            calculationReason,
-            priority
-        };
-    }
-    async backfillTimestamps(mobile, doc, now) {
-        const needsBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
-            !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt ||
-            !doc.profilePicsUpdatedAt;
-        if (!needsBackfill) {
-            this.logger.debug(`Skipping timestamp backfill for ${mobile} (already has all timestamps)`);
-            return;
-        }
-        ;
-        this.logger.log(`Backfilling timestamp fields for ${mobile}`);
-        const allTimestamps = client_helper_utils_1.ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
-        const backfillData = {};
-        if (!doc.privacyUpdatedAt)
-            backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
-        if (!doc.profilePicsDeletedAt)
-            backfillData.profilePicsDeletedAt = allTimestamps.profilePicsDeletedAt;
-        if (!doc.nameBioUpdatedAt)
-            backfillData.nameBioUpdatedAt = allTimestamps.nameBioUpdatedAt;
-        if (!doc.usernameUpdatedAt)
-            backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
-        if (!doc.profilePicsUpdatedAt)
-            backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
-        await this.update(mobile, backfillData);
-        this.logger.log(`Backfilled ${Object.keys(backfillData).length} timestamp fields for ${mobile}`);
-    }
-    async performHealthCheck(mobile, lastChecked, now) {
-        const needsHealthCheck = !lastChecked || (now - lastChecked > 7 * this.ONE_DAY_MS);
-        if (!needsHealthCheck) {
-            this.logger.debug(`Health check not needed for ${mobile} (last checked: ${new Date(lastChecked).toISOString()})`);
-            return true;
-        }
-        try {
-            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-                autoDisconnect: false,
-                handler: false,
-            });
-            await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
-                key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
-                rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()],
-            }));
-            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-            await this.update(mobile, {
-                channels: channels.ids.length,
-                lastChecked: new Date()
-            });
-            this.logger.debug(`Health check PASSED for ${mobile}`);
-            await (0, Helpers_1.sleep)(5000);
-            return true;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Health check failed', mobile);
-            this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
-            }
-            await (0, Helpers_1.sleep)(5000);
-            return false;
-        }
-        finally {
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
-        }
-    }
-    getPendingUpdates(doc, now) {
-        const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
-        const DAY = this.ONE_DAY_MS;
-        const MIN_DAYS_BETWEEN_UPDATES = DAY;
-        const reasons = [];
-        const privacyTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt);
-        const needsPrivacy = accountAge >= DAY &&
-            (privacyTimestamp === 0 || privacyTimestamp < now - 15 * DAY);
-        if (needsPrivacy)
-            reasons.push('Privacy update needed');
-        const privacyDone = privacyTimestamp > 0 && (now - privacyTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const photosDeletedTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt);
-        const needsDeletePhotos = accountAge >= 2 * DAY &&
-            (photosDeletedTimestamp === 0 || photosDeletedTimestamp < now - 30 * DAY) &&
-            (privacyDone || privacyTimestamp === 0);
-        if (needsDeletePhotos)
-            reasons.push('Delete photos needed');
-        const photosDone = photosDeletedTimestamp > 0 && (now - photosDeletedTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const nameBioTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt);
-        const needsNameBio = accountAge >= 3 * DAY &&
-            (doc.channels || 0) > 100 &&
-            (nameBioTimestamp === 0 || nameBioTimestamp < now - 30 * DAY) &&
-            (photosDone || photosDeletedTimestamp === 0);
-        if (needsNameBio)
-            reasons.push('Name/Bio update needed');
-        const nameBioDone = nameBioTimestamp > 0 && (now - nameBioTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const usernameTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt);
-        const needsUsername = accountAge >= 7 * DAY &&
-            (doc.channels || 0) > 150 &&
-            (usernameTimestamp === 0 || usernameTimestamp < now - 30 * DAY) &&
-            (nameBioDone || nameBioTimestamp === 0);
-        if (needsUsername)
-            reasons.push('Username update needed');
-        const usernameDone = usernameTimestamp > 0 && (now - usernameTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const profilePicsTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt);
-        const needsProfilePhotos = accountAge >= 10 * DAY &&
-            (doc.channels || 0) > 170 &&
-            (profilePicsTimestamp === 0 || profilePicsTimestamp < now - 30 * DAY) &&
-            (usernameDone || usernameTimestamp === 0);
-        if (needsProfilePhotos)
-            reasons.push('Profile photos update needed');
-        const totalPending = [needsPrivacy, needsDeletePhotos, needsNameBio, needsUsername, needsProfilePhotos]
-            .filter(Boolean).length;
-        return {
-            needsPrivacy,
-            needsDeletePhotos,
-            needsNameBio,
-            needsUsername,
-            needsProfilePhotos,
-            totalPending,
-            reasons
-        };
-    }
-    async updatePrivacySettings(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            await telegramClient.updatePrivacyforDeletedAccount();
-            await this.update(doc.mobile, {
-                privacyUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return 1;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating privacy', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async deleteProfilePhotos(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
-            if (photos.photos.length > 0) {
-                await telegramClient.deleteProfilePhotos();
-                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
-            }
-            else {
-                this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
-            }
-            await this.update(doc.mobile, {
-                profilePicsDeletedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return photos.photos.length > 0 ? 1 : 0;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async updateNameAndBio(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const me = await telegramClient.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            let updateCount = 0;
-            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me.firstName), client.name)) {
-                this.logger.log(`Updating name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
-                    maintainFormatting: false,
-                    preserveCase: true,
-                    useInvisibleChars: false
-                })} ${(0, utils_1.getCuteEmoji)()}`, '');
-                updateCount = 1;
-            }
-            await this.update(doc.mobile, {
-                nameBioUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return updateCount;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async updateUsername(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const me = await telegramClient.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
-            await this.update(doc.mobile, {
-                usernameUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            this.logger.debug(`Updated username for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return 1;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async updateProfilePhotos(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
-            let updateCount = 0;
-            if (photos.photos.length < 2) {
-                await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-                const randomPhoto = photoPaths[Math.floor(Math.random() * photoPaths.length)];
-                await telegramClient.updateProfilePic(path_1.default.join(process.cwd(), randomPhoto));
-                updateCount = 1;
-                this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile}`);
-            }
-            await this.update(doc.mobile, {
-                profilePicsUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            await (0, Helpers_1.sleep)(40000 + Math.random() * 20000);
-            return updateCount;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating profile photos', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async processBufferClient(doc, client) {
-        if (doc.inUse === true) {
-            this.logger.debug(`Buffer client ${doc.mobile} is marked as in use`);
-            return 0;
-        }
-        if (!client) {
-            this.logger.warn(`Client not found for buffer client ${doc.mobile}`);
-            return 0;
-        }
-        const MIN_COOLDOWN_HOURS = 2;
-        const MAX_FAILED_ATTEMPTS = 3;
-        const FAILURE_RESET_DAYS = 7;
+    async updateInfo() {
+        const clients = await this.bufferClientModel
+            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 5 * this.ONE_DAY_MS) } })
+            .sort({ channels: 1 })
+            .limit(25);
         const now = Date.now();
-        let updateCount = 0;
-        try {
-            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
-            const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && lastFailureTime > 0 && now - lastFailureTime > FAILURE_RESET_DAYS * this.ONE_DAY_MS) {
-                this.logger.log(`Resetting failure count for ${doc.mobile} (last failure was ${Math.floor((now - lastFailureTime) / this.ONE_DAY_MS)} days ago)`);
-                await this.update(doc.mobile, {
-                    failedUpdateAttempts: 0,
-                    lastUpdateFailure: null
-                });
+        for (let i = 0; i < clients.length; i++) {
+            const client = clients[i];
+            const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
+            await this.performHealthCheck(client.mobile, lastChecked, now);
+            if (i < clients.length - 1) {
+                await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
             }
-            else if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
-                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts}). Will retry after ${FAILURE_RESET_DAYS} days.`);
-                return 0;
-            }
-            const lastUpdateAttempt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateAttempt);
-            if (lastUpdateAttempt > 0 && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
-                this.logger.debug(`Client ${doc.mobile} on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
-                return 0;
-            }
-            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            if (lastUsed > 0 && now - lastUsed < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                this.logger.debug(`Client ${doc.mobile} recently used, skipping`);
-                return 0;
-            }
-            if (lastUsed > 0) {
-                await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
-                return 0;
-            }
-            const pendingUpdates = this.getPendingUpdates(doc, now);
-            if (pendingUpdates.totalPending > 0) {
-                this.logger.debug(`Client ${doc.mobile} has ${pendingUpdates.totalPending} pending updates: ${pendingUpdates.reasons.join(', ')}`);
-            }
-            else {
-                this.logger.debug(`Client ${doc.mobile} has no pending updates - all complete!`);
-            }
-            if (pendingUpdates.needsPrivacy) {
-                updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsDeletePhotos) {
-                updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsNameBio) {
-                updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsUsername) {
-                updateCount = await this.updateUsername(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsProfilePhotos) {
-                updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (updateCount === 0) {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                if (pendingUpdates.totalPending > 0) {
-                    this.logger.debug(`No updates performed for ${doc.mobile} despite ${pendingUpdates.totalPending} pending. Reasons: ${pendingUpdates.reasons.join(', ')}`);
-                }
-            }
-            else {
-                const remainingPending = pendingUpdates.totalPending - updateCount;
-                if (remainingPending > 0) {
-                    this.logger.debug(`Client ${doc.mobile} still has ${remainingPending} pending updates`);
+        }
+    }
+    async joinchannelForBufferClients(skipExisting = true, clientId) {
+        if (this.telegramService.getActiveClientSetup()) {
+            return 'Active client setup exists, skipping';
+        }
+        this.logger.log('Starting join channel process for buffer clients');
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
+            this.logger.warn('Join/leave processing still in progress, skipping re-entry');
+            return 'Join/leave still processing, skipped';
+        }
+        const existingKeys = skipExisting ? Array.from(this.joinChannelMap.keys()) : [];
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
+        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+        const query = {
+            channels: { $lt: this.config.channelTarget },
+            mobile: { $nin: existingKeys },
+            status: 'active',
+            warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
+        };
+        if (clientId)
+            query.clientId = clientId;
+        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(8);
+        const joinSet = new Set();
+        const leaveSet = new Set();
+        let successCount = 0;
+        let failCount = 0;
+        for (let i = 0; i < clients.length; i++) {
+            const document = clients[i];
+            const mobile = document.mobile;
+            try {
+                const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
+                await this.update(mobile, { channels: channels.ids.length });
+                if (channels.canSendFalseCount < 10) {
+                    const excludedIds = channels.ids;
+                    const result = channels.ids.length < 220
+                        ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds)
+                        : await this.channelsService.getActiveChannels(25, 0, excludedIds);
+                    if (!this.joinChannelMap.has(mobile)) {
+                        if (this.safeSetJoinChannelMap(mobile, result)) {
+                            joinSet.add(mobile);
+                        }
+                    }
                 }
                 else {
-                    this.logger.log(`✅ Client ${doc.mobile} - ALL UPDATES COMPLETE!`);
+                    if (!this.leaveChannelMap.has(mobile)) {
+                        if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
+                            leaveSet.add(mobile);
+                        }
+                    }
+                }
+                successCount++;
+            }
+            catch (error) {
+                failCount++;
+                const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    await this.markAsInactive(mobile, reason);
                 }
             }
-            return updateCount;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error with client', doc.mobile);
-            try {
-                const failedAttempts = doc.failedUpdateAttempts || 0;
-                await this.update(doc.mobile, {
-                    lastUpdateAttempt: new Date(),
-                    failedUpdateAttempts: failedAttempts + 1,
-                    lastUpdateFailure: new Date()
-                });
+            finally {
+                await this.safeUnregisterClient(mobile);
+                if (i < clients.length - 1) {
+                    await (0, Helpers_1.sleep)(this.config.clientProcessingDelay + Math.random() * 5000);
+                }
             }
-            catch (updateError) {
-                this.logger.warn(`Failed to track update attempt for ${doc.mobile}:`, updateError);
-            }
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
         }
-        finally {
-            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+        if (joinSet.size > 0) {
+            this.startMemoryCleanup();
+            this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
         }
+        if (leaveSet.size > 0) {
+            this.createTimeout(() => this.leaveChannelQueue(), 10000 + Math.random() * 5000);
+        }
+        return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
     }
     async createBufferClientFromUser(document, targetClientId, availableDate) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, {
-            autoDisconnect: false,
-        });
+        const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
         try {
             const hasPassword = await telegramClient.hasPassword();
-            this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
             if (hasPassword) {
                 this.logger.debug(`Failed to Update as BufferClient as ${document.mobile} already has Password`);
                 await this.updateUser2FAStatus(document.tgId, document.mobile);
                 return false;
             }
-            await telegramClient.removeOtherAuths();
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 10000);
-            await telegramClient.set2fa();
-            this.logger.debug('Waiting for setting 2FA');
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
-            const channels = await this.telegramService.getChannelInfo(document.mobile, true);
+            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
             await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const newSession = await this.telegramService.createNewSession(document.mobile);
+            const user = (await this.usersService.search({ mobile: document.mobile }))[0];
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
-            this.logger.debug(`Inserting Document for client ${targetClientId} with availableDate ${targetAvailableDate}`);
             const bufferClient = {
                 tgId: document.tgId,
-                session: newSession,
+                session: user?.session || '',
                 mobile: document.mobile,
                 lastUsed: null,
                 availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
                 status: 'active',
-                message: availableDate
-                    ? 'Account successfully configured as buffer client - available immediately'
-                    : 'Account successfully configured as buffer client',
+                message: 'Enrolled for warmup',
             };
-            await this.create(bufferClient);
-            await this.updateUser2FAStatus(document.tgId, document.mobile);
+            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, {
+                $set: {
+                    ...bufferClient,
+                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                    enrolledAt: new Date(),
+                }
+            }, { new: true, upsert: true }).exec();
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             return true;
         }
@@ -18020,9 +17064,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 try {
                     await this.markAsInactive(document.mobile, errorDetails.message);
                 }
-                catch (markError) {
-                    this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
+                catch { }
+                try {
+                    await this.usersService.update(document.tgId, { expired: true });
                 }
+                catch { }
             }
             return false;
         }
@@ -18032,18 +17078,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds, clientsNeedingBufferClients = [], bufferClientsPerClient) {
-        const clientNeedingBufferClientsDynamic = [];
+        const clientNeedingDynamic = [];
         for (const clientId of clientsNeedingBufferClients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(clientId);
             if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingBufferClientsDynamic.push({
-                    clientId,
-                    ...availabilityNeeds
-                });
+                clientNeedingDynamic.push({ clientId, ...availabilityNeeds });
             }
         }
-        clientNeedingBufferClientsDynamic.sort((a, b) => a.priority - b.priority);
-        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, clientNeedingBufferClientsDynamic, bufferClientsPerClient);
+        clientNeedingDynamic.sort((a, b) => a.priority - b.priority);
+        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, clientNeedingDynamic, bufferClientsPerClient);
     }
     async addNewUserstoBufferClientsDynamic(badIds, goodIds, clientsNeedingBufferClients, bufferClientsPerClient) {
         const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
@@ -18051,13 +17094,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         for (const clientNeed of clientsNeedingBufferClients) {
             totalNeeded += clientNeed.totalNeeded;
         }
-        totalNeeded = Math.min(totalNeeded, this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER);
-        if (totalNeeded === 0) {
-            this.logger.debug('No buffer clients needed - all availability windows and total count satisfied');
+        totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
+        if (totalNeeded === 0)
             return;
-        }
-        this.logger.debug(`Creating ${totalNeeded} new buffer clients (all with availableDate = today) ` +
-            `to satisfy availability windows and total count requirements`);
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
@@ -18065,69 +17104,52 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             lastActive: { $lt: threeMonthsAgo },
             totalChats: { $gt: 150 },
         }, { tgId: 1 }, totalNeeded + 5);
-        const today = new Date().toISOString().split('T')[0];
+        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const assignmentQueue = [];
         for (const clientNeed of clientsNeedingBufferClients) {
             for (let i = 0; i < clientNeed.totalNeeded; i++) {
-                assignmentQueue.push({
-                    clientId: clientNeed.clientId,
-                    priority: clientNeed.priority
-                });
+                assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
             }
         }
-        let processedCount = 0;
+        let attemptedCount = 0;
+        let createdCount = 0;
         let assignmentIndex = 0;
-        while (processedCount < totalNeeded &&
-            documents.length > 0 &&
-            assignmentIndex < assignmentQueue.length) {
+        while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
-            if (!document || !document.mobile || !document.tgId) {
-                this.logger.warn('Invalid document found, skipping');
+            if (!document || !document.mobile || !document.tgId)
                 continue;
-            }
             const assignment = assignmentQueue[assignmentIndex];
-            if (!assignment) {
-                this.logger.debug('No more assignments needed');
+            if (!assignment)
                 break;
-            }
             try {
                 const created = await this.createBufferClientFromUser(document, assignment.clientId, today);
                 if (created) {
                     assignmentIndex++;
-                    processedCount++;
-                    this.logger.debug(`Created buffer client ${document.mobile} for ${assignment.clientId} ` +
-                        `with availableDate = ${today} (available immediately, priority: ${assignment.priority})`);
+                    createdCount++;
                 }
-                else {
-                    processedCount++;
-                }
+                attemptedCount++;
             }
             catch (error) {
-                const errorDetails = this.handleError(error, 'Error creating client connection', document.mobile);
-                this.logger.error(`Error creating connection for ${document.mobile}:`, errorDetails);
+                this.logger.error(`Error creating connection for ${document.mobile}`);
                 await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                processedCount++;
+                attemptedCount++;
             }
         }
-        this.logger.log(`✅ Dynamic batch completed: Created ${processedCount} new buffer clients ` +
-            `(all with availableDate = ${today}, available immediately). ` +
-            `System maintains availability windows and total count requirements.`);
+        this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
     }
     async updateAllClientSessions() {
-        const bufferClients = await this.findAll('active');
+        const bufferClients = await this.bufferClientModel.find({
+            status: 'active',
+            warmupPhase: { $in: ['ready', 'session_rotated'] },
+        }).exec();
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
             try {
                 this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
-                const client = await connection_manager_1.connectionManager.getClient(bufferClient.mobile, {
-                    autoDisconnect: false,
-                    handler: true,
-                });
+                const client = await connection_manager_1.connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });
                 try {
                     const hasPassword = await client.hasPassword();
                     if (!hasPassword) {
-                        await client.removeOtherAuths();
-                        await (0, Helpers_1.sleep)(20000 + Math.random() * 10000);
                         await client.set2fa();
                         await (0, Helpers_1.sleep)(60000 + Math.random() * 30000);
                     }
@@ -18156,19 +17178,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
                 }
             }
             catch (error) {
-                const errorDetails = this.handleError(error, 'Error creating client connection', bufferClient.mobile);
-                this.logger.error(`Error creating client connection for ${bufferClient.mobile}: ${errorDetails.message}`);
-                if (i < bufferClients.length - 1) {
+                this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
+                if (i < bufferClients.length - 1)
                     await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
-                }
             }
         }
     }
     async getBufferClientsByClientId(clientId, status) {
         const filter = { clientId };
-        if (status) {
+        if (status)
             filter.status = status;
-        }
         return this.bufferClientModel.find(filter).exec();
     }
     async getBufferClientDistribution() {
@@ -18180,88 +17199,49 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
             this.bufferClientModel.countDocuments({ clientId: { $exists: false } }),
             this.bufferClientModel.countDocuments({ status: 'active' }),
             this.bufferClientModel.countDocuments({ status: 'inactive' }),
-            this.bufferClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null } } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.bufferClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.bufferClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.bufferClientModel.aggregate([
-                {
-                    $match: {
-                        clientId: { $exists: true, $ne: null },
-                        status: 'active',
-                        $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
-                    },
-                },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.bufferClientModel.aggregate([
-                {
-                    $match: {
-                        clientId: { $exists: true, $ne: null },
-                        status: 'active',
-                        lastUsed: { $gte: last24Hours },
-                    },
-                },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
+            this.bufferClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null } } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.bufferClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active' } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.bufferClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.bufferClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active', $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }] } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.bufferClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active', lastUsed: { $gte: last24Hours } } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
         ]);
-        const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
-        const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
-        const inactiveCountMap = new Map(inactiveCounts.map((item) => [item._id, item.count]));
-        const neverUsedCountMap = new Map(neverUsedCounts.map((item) => [item._id, item.count]));
-        const recentlyUsedCountMap = new Map(recentlyUsedCounts.map((item) => [item._id, item.count]));
+        const toMap = (arr) => new Map(arr.map((item) => [item._id, item.count]));
+        const assignedCountMap = toMap(assignedCounts);
+        const activeCountMap = toMap(activeCounts);
+        const inactiveCountMap = toMap(inactiveCounts);
+        const neverUsedCountMap = toMap(neverUsedCounts);
+        const recentlyUsedCountMap = toMap(recentlyUsedCounts);
         const distributionPerClient = [];
-        let clientsWithSufficient = 0;
-        let clientsNeedingMore = 0;
-        let totalNeeded = 0;
+        let clientsWithSufficient = 0, clientsNeedingMore = 0, totalNeeded = 0;
         for (const client of clients) {
-            const assignedCount = assignedCountMap.get(client.clientId) || 0;
             const activeCount = activeCountMap.get(client.clientId) || 0;
-            const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
-            const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
-            const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, this.MIN_TOTAL_BUFFER_CLIENTS - activeCount);
-            const status = needed === 0 ? 'sufficient' : 'needs_more';
+            const needed = Math.max(0, this.config.minTotalClients - activeCount);
             distributionPerClient.push({
                 clientId: client.clientId,
-                assignedCount,
+                assignedCount: assignedCountMap.get(client.clientId) || 0,
                 activeCount,
-                inactiveCount,
+                inactiveCount: inactiveCountMap.get(client.clientId) || 0,
                 needed,
-                status,
-                neverUsed,
-                usedInLast24Hours,
+                status: (needed === 0 ? 'sufficient' : 'needs_more'),
+                neverUsed: neverUsedCountMap.get(client.clientId) || 0,
+                usedInLast24Hours: recentlyUsedCountMap.get(client.clientId) || 0,
             });
-            if (status === 'sufficient') {
+            if (needed === 0)
                 clientsWithSufficient++;
-            }
             else {
                 clientsNeedingMore++;
                 totalNeeded += needed;
             }
         }
-        const maxPerTrigger = this.MAX_NEW_BUFFER_CLIENTS_PER_TRIGGER;
-        const triggersNeeded = Math.ceil(totalNeeded / maxPerTrigger);
         return {
-            totalBufferClients,
-            unassignedBufferClients,
-            activeBufferClients,
-            inactiveBufferClients,
+            totalBufferClients, unassignedBufferClients, activeBufferClients, inactiveBufferClients,
             distributionPerClient,
             summary: {
                 clientsWithSufficientBufferClients: clientsWithSufficient,
                 clientsNeedingBufferClients: clientsNeedingMore,
                 totalBufferClientsNeeded: totalNeeded,
-                maxBufferClientsPerTrigger: maxPerTrigger,
-                triggersNeededToSatisfyAll: triggersNeeded,
+                maxBufferClientsPerTrigger: this.config.maxNewClientsPerTrigger,
+                triggersNeededToSatisfyAll: Math.ceil(totalNeeded / this.config.maxNewClientsPerTrigger),
             },
         };
     }
@@ -18269,89 +17249,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService {
         return this.bufferClientModel.find({ status }).exec();
     }
     async getBufferClientsWithMessages() {
-        return this.bufferClientModel
-            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
-            .exec();
+        return this.bufferClientModel.find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 }).exec();
     }
     async getLeastRecentlyUsedBufferClients(clientId, limit = 1) {
-        return this.bufferClientModel
-            .find({
-            clientId,
-            status: 'active',
-            inUse: { $ne: true }
-        })
-            .sort({ lastUsed: 1, _id: 1 })
-            .limit(limit)
-            .exec();
+        return await this.getLeastRecentlyUsedClients(clientId, limit);
     }
     async getNextAvailableBufferClient(clientId) {
         const clients = await this.getLeastRecentlyUsedBufferClients(clientId, 1);
         return clients.length > 0 ? clients[0] : null;
     }
     async getUnusedBufferClients(hoursAgo = 24, clientId) {
-        const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
-        const filter = {
-            status: 'active',
-            inUse: { $ne: true },
-            $or: [
-                { lastUsed: { $lt: cutoffDate } },
-                { lastUsed: { $exists: false } },
-                { lastUsed: null },
-            ],
-        };
-        if (clientId) {
-            filter.clientId = clientId;
-        }
-        return this.bufferClientModel.find(filter).exec();
-    }
-    async getUsageStatistics(clientId) {
-        const filter = { status: 'active' };
-        if (clientId) {
-            filter.clientId = clientId;
-        }
-        const now = new Date();
-        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
-        const lastWeek = new Date(now.getTime() - 7 * this.ONE_DAY_MS);
-        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients,] = await Promise.all([
-            this.bufferClientModel.countDocuments(filter),
-            this.bufferClientModel.countDocuments({
-                ...filter,
-                $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
-            }),
-            this.bufferClientModel.countDocuments({
-                ...filter,
-                lastUsed: { $gte: last24Hours },
-            }),
-            this.bufferClientModel.countDocuments({
-                ...filter,
-                lastUsed: { $gte: lastWeek },
-            }),
-            this.bufferClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec(),
-        ]);
-        let totalGap = 0;
-        let gapCount = 0;
-        for (const client of allClients) {
-            if (client.lastUsed) {
-                const gap = now.getTime() - new Date(client.lastUsed).getTime();
-                totalGap += gap;
-                gapCount++;
-            }
-        }
-        const averageUsageGap = gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0;
-        return {
-            totalClients,
-            neverUsed,
-            usedInLast24Hours,
-            usedInLastWeek,
-            averageUsageGap,
-        };
-    }
-    async markAsUsed(mobile, message) {
-        const updateData = { lastUsed: new Date() };
-        if (message) {
-            updateData.message = message;
-        }
-        return this.update(mobile, updateData);
+        return await this.getUnusedClients(hoursAgo, clientId);
     }
 };
 exports.BufferClientService = BufferClientService;
@@ -18420,9 +17328,10 @@ __decorate([
 ], CreateBufferClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date of the session',
-        example: '2023-06-22',
+        description: 'Date when the client becomes available for assignment.',
+        example: '2026-04-03',
     }),
+    (0, class_validator_1.IsDateString)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "availableDate", void 0);
@@ -18436,7 +17345,7 @@ __decorate([
 ], CreateBufferClientDto.prototype, "session", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Channel Count',
+        description: 'Current joined channel count.',
         example: 23,
         type: Number
     }),
@@ -18452,32 +17361,29 @@ __decorate([
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status of the buffer client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Operational status of the buffer client.',
         example: 'active',
         enum: ['active', 'inactive'],
         default: 'active',
-        required: false,
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status message for the promote client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional operator note attached to the buffer client.',
         example: 'Account is functioning properly',
         default: 'Account is functioning properly',
-        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "message", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Last used timestamp for the promote client',
-        example: '2023-06-22T10:30:00.000Z',
-        required: false
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Timestamp when the client was last used in a live workflow.',
+        example: '2026-04-01T10:30:00.000Z',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
@@ -18541,50 +17447,50 @@ class SearchBufferClientDto {
 }
 exports.SearchBufferClientDto = SearchBufferClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.', example: '+15551234567' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Client ID to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning client ID to filter by.', example: 'client-a' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for.', example: 'sample_user' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Name to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Display name to search for.', example: 'Jane Doe' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for.', example: 'https://t.me/example' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "channelLink", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for.', example: 'https://replit.com/@team/demo' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "repl", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status.', example: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     __metadata("design:type", Boolean)
 ], SearchBufferClientDto.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by tgId' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Telegram account ID.', example: '123456789' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -18600,6 +17506,15 @@ __decorate([
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateBufferClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
@@ -18607,6 +17522,78 @@ const create_buffer_client_dto_1 = __webpack_require__(/*! ./create-buffer-clien
 class UpdateBufferClientDto extends (0, swagger_1.PartialType)(create_buffer_client_dto_1.CreateBufferClientDto) {
 }
 exports.UpdateBufferClientDto = UpdateBufferClientDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the client is currently reserved by an active workflow.', example: false }),
+    __metadata("design:type", Boolean)
+], UpdateBufferClientDto.prototype, "inUse", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the client was last used.', example: '2026-04-01T10:30:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated.', example: '2026-03-10T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "privacyUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "profilePicsUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "nameBioUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were deleted.', example: '2026-03-14T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "profilePicsDeletedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "usernameUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent health check.', example: '2026-04-02T09:15:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "lastChecked", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "lastUpdateAttempt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Current consecutive warmup failure count.', example: 1 }),
+    __metadata("design:type", Number)
+], UpdateBufferClientDto.prototype, "failedUpdateAttempts", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "lastUpdateFailure", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "twoFASetAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "otherAuthsRemovedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    __metadata("design:type", String)
+], UpdateBufferClientDto.prototype, "warmupPhase", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Per-account warmup jitter in days.', example: 2 }),
+    __metadata("design:type", Number)
+], UpdateBufferClientDto.prototype, "warmupJitter", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "enrolledAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "organicActivityAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.', example: '2026-04-02T07:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdateBufferClientDto.prototype, "sessionRotatedAt", void 0);
 
 
 /***/ },
@@ -18660,47 +17647,58 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BufferClientSchema = exports.BufferClient = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Telegram account identifier.', example: '123456789' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "tgId", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.', example: '+15551234567' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "mobile", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Session string currently stored for this buffer client.', example: '1AQAOMT...' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "session", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.', example: '2026-04-03' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "availableDate", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Current joined channel count.', example: 187 }),
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Owning main client identifier.', example: 'client-a' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "clientId", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational note attached to the client.', example: 'Enrolled for warmup' }),
     (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "message", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when this account was last consumed by live usage.', example: '2026-04-01T12:30:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUsed", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent periodic health check.', example: '2026-04-02T09:15:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastChecked", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Operational status for the record.', enum: ['active', 'inactive'], example: 'active' }),
     (0, mongoose_1.Prop)({
         required: true,
         enum: ['active', 'inactive'],
@@ -18711,49 +17709,104 @@ __decorate([
     __metadata("design:type", String)
 ], BufferClient.prototype, "status", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether the account is currently reserved by an active workflow.', example: false }),
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], BufferClient.prototype, "inUse", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated during warmup.', example: '2026-03-10T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "privacyUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "profilePicsUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "nameBioUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were removed.', example: '2026-03-14T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "usernameUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record creation timestamp.', example: '2026-03-01T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "createdAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record last update timestamp.', example: '2026-04-03T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "updatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUpdateAttempt", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Current consecutive warmup failure count.', example: 0, default: 0 }),
     (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "failedUpdateAttempts", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUpdateFailure", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "twoFASetAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other Telegram sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "otherAuthsRemovedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Current warmup lifecycle phase.',
+        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
+        example: 'growing',
+    }),
+    (0, mongoose_1.Prop)({
+        required: false,
+        type: String,
+        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
+        default: null,
+    }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "warmupPhase", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Per-account warmup jitter in days.', example: 2, default: 0 }),
+    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], BufferClient.prototype, "warmupJitter", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "enrolledAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "organicActivityAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created and recorded.', example: '2026-04-02T07:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], BufferClient.prototype, "sessionRotatedAt", void 0);
 exports.BufferClient = BufferClient = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'bufferClients', versionKey: false, autoIndex: true,
@@ -20724,8 +19777,15 @@ let ClientService = ClientService_1 = class ClientService {
         }
         catch (error) {
             await this.notify(`Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`);
-            const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+            const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
+                await this.notify(`Buffer ${newBufferClient.mobile} marked INACTIVE (permanent error during setup)`);
+            }
+            else {
+                const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+            }
             this.telegramService.setActiveClientSetup(undefined);
         }
         finally {
@@ -20768,7 +19828,13 @@ let ClientService = ClientService_1 = class ClientService {
             await this.notify('Update finished');
         }
         catch (error) {
-            (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
+            const errorDetails = (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                try {
+                    await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`);
+                }
+                catch { }
+            }
             throw error;
         }
         finally {
@@ -23914,9 +22980,10 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date of the session',
-        example: '2023-06-22',
+        description: 'Date when the client becomes available for assignment.',
+        example: '2026-04-03',
     }),
+    (0, class_validator_1.IsDateString)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "availableDate", void 0);
@@ -23938,47 +23005,53 @@ __decorate([
     __metadata("design:type", Number)
 ], CreatePromoteClientDto.prototype, "channels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Client ID this promote mobile belongs to',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Owning client ID for this promote mobile.',
         example: 'client123',
-        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status of the promote client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Operational status of the promote client.',
         example: 'active',
         default: 'active',
-        required: false
+        enum: ['active', 'inactive'],
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Status message for the promote client',
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional operator note attached to the promote client.',
         example: 'Account is functioning properly',
         default: 'Account is functioning properly',
-        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "message", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({
-        description: 'Last used timestamp for the promote client',
-        example: '2023-06-22T10:30:00.000Z',
-        required: false
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Timestamp when the client was last used in a live workflow.',
+        example: '2026-04-01T10:30:00.000Z',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
     __metadata("design:type", Date)
 ], CreatePromoteClientDto.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Session string for Telegram connection.',
+        example: 'session123',
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CreatePromoteClientDto.prototype, "session", void 0);
 
 
 /***/ },
@@ -24031,13 +23104,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SearchPromoteClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 class SearchPromoteClientDto {
 }
 exports.SearchPromoteClientDto = SearchPromoteClientDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Telegram ID of the client',
+        description: 'Telegram account identifier.',
         example: '123456789',
     }),
     (0, class_validator_1.IsOptional)(),
@@ -24046,7 +23120,7 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Mobile number of the client',
+        description: 'Mobile number of the promote client.',
         example: '+1234567890',
     }),
     (0, class_validator_1.IsOptional)(),
@@ -24055,8 +23129,8 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'availableDate of the promoteClient',
-        example: '2023-06-22',
+        description: 'Availability date filter.',
+        example: '2026-04-03',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -24064,11 +23138,12 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "availableDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Channel Count',
+        description: 'Exact channel count filter.',
         example: 23,
         type: Number
     }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? value : Number(value)),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchPromoteClientDto.prototype, "channels", void 0);
@@ -24083,6 +23158,15 @@ __decorate([
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdatePromoteClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
@@ -24090,6 +23174,78 @@ const create_promote_client_dto_1 = __webpack_require__(/*! ./create-promote-cli
 class UpdatePromoteClientDto extends (0, swagger_1.PartialType)(create_promote_client_dto_1.CreatePromoteClientDto) {
 }
 exports.UpdatePromoteClientDto = UpdatePromoteClientDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the client is currently reserved by an active workflow.', example: false }),
+    __metadata("design:type", Boolean)
+], UpdatePromoteClientDto.prototype, "inUse", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the client was last used.', example: '2026-04-01T10:30:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated.', example: '2026-03-10T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "privacyUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "profilePicsUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "nameBioUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were deleted.', example: '2026-03-14T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "profilePicsDeletedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated or cleared.', example: '2026-03-20T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "usernameUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent health check.', example: '2026-04-02T09:15:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "lastChecked", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "lastUpdateAttempt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Current consecutive warmup failure count.', example: 1 }),
+    __metadata("design:type", Number)
+], UpdatePromoteClientDto.prototype, "failedUpdateAttempts", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "lastUpdateFailure", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "twoFASetAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "otherAuthsRemovedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    __metadata("design:type", String)
+], UpdatePromoteClientDto.prototype, "warmupPhase", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Per-account warmup jitter in days.', example: 2 }),
+    __metadata("design:type", Number)
+], UpdatePromoteClientDto.prototype, "warmupJitter", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "enrolledAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "organicActivityAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.', example: '2026-04-02T07:00:00.000Z' }),
+    __metadata("design:type", Date)
+], UpdatePromoteClientDto.prototype, "sessionRotatedAt", void 0);
 
 
 /***/ },
@@ -24153,6 +23309,7 @@ const create_promote_client_dto_1 = __webpack_require__(/*! ./dto/create-promote
 const search_promote_client_dto_1 = __webpack_require__(/*! ./dto/search-promote-client.dto */ "./src/components/promote-clients/dto/search-promote-client.dto.ts");
 const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
+const client_swagger_dto_1 = __webpack_require__(/*! ../shared/dto/client-swagger.dto */ "./src/components/shared/dto/client-swagger.dto.ts");
 let PromoteClientController = class PromoteClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -24248,9 +23405,10 @@ let PromoteClientController = class PromoteClientController {
 exports.PromoteClientController = PromoteClientController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a promote client record', description: 'Creates a promote client directly from supplied data.' }),
     (0, swagger_1.ApiBody)({ type: create_promote_client_dto_1.CreatePromoteClientDto }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiCreatedResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Request body validation failed.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_promote_client_dto_1.CreatePromoteClientDto]),
@@ -24258,12 +23416,12 @@ __decorate([
 ], PromoteClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search promote clients', description: 'Searches promote client records by supported fields.' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
     (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name' }),
     (0, swagger_1.ApiQuery)({ name: 'lastName', required: false, description: 'Last name' }),
     (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
-    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_promote_client_dto_1.SearchPromoteClientDto]),
@@ -24271,52 +23429,44 @@ __decorate([
 ], PromoteClientController.prototype, "search", null);
 __decorate([
     (0, common_1.Get)('joinChannelsForPromoteClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Join Channels for PromoteClients' }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Prepare channel joins for promote clients', description: 'Builds the next join queue for eligible promote clients.' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Join channels initiated successfully' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "joinChannelsforPromoteClients", null);
 __decorate([
     (0, common_1.Get)('updateInfo'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update promote Clients Info' }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh promote client metadata', description: 'Starts a background refresh of promote client metadata and channel counts.' }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "updateInfo", null);
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Check Promote Clients' }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Run promote warmup processing', description: 'Starts the background warmup processor for eligible promote clients.' }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "checkpromoteClients", null);
 __decorate([
     (0, common_1.Post)('addNewUserstoPromoteClients'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add New Users to Promote Clients' }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                goodIds: { type: 'array', items: { type: 'string' } },
-                badIds: { type: 'array', items: { type: 'string' } },
-                clientsNeedingPromoteClients: { type: 'array', items: { type: 'string' } }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into promote warmup', description: 'Starts background enrollment of candidate users into the promote client pool.' }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.BulkEnrollPromoteClientsRequestDto }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'goodIds, badIds, or clientsNeedingPromoteClients were not valid arrays.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [client_swagger_dto_1.BulkEnrollPromoteClientsRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "addNewUserstoPromoteClients", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'List promote clients', description: 'Returns all promote clients, optionally filtered by status.' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
-    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24324,9 +23474,11 @@ __decorate([
 ], PromoteClientController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('SetAsPromoteClient/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Set as Promote Client' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a promote client', description: 'Converts an existing user account into a warmup-managed promote client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as promote successfully' } }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
+    (0, swagger_1.ApiConflictResponse)({ description: 'A promote client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24336,7 +23488,8 @@ __decorate([
     (0, common_1.Get)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Promote client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24347,7 +23500,8 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Promote client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -24359,7 +23513,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -24370,7 +23524,8 @@ __decorate([
     (0, common_1.Delete)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
-    (0, swagger_1.ApiResponse)({ type: null }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'null' } }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Promote client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24378,9 +23533,9 @@ __decorate([
 ], PromoteClientController.prototype, "remove", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
-    (0, swagger_1.ApiBody)({ type: Object }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute a raw promote client query', description: 'Executes a direct MongoDB-style filter against the promote client collection.' }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } }),
+    (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -24389,7 +23544,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('distribution'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -24398,7 +23553,7 @@ __decorate([
     (0, common_1.Get)('status/:status'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote clients by status' }),
     (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
-    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Param)('status')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24415,85 +23570,56 @@ __decorate([
     (0, common_1.Patch)('status/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update status of a promote client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                status: { type: 'string', description: 'New status (active/inactive)' },
-                message: { type: 'string', description: 'Status message (optional)' }
-            },
-            required: ['status']
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.StatusUpdateRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Status must be either active or inactive.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.StatusUpdateRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "updateStatus", null);
 __decorate([
     (0, common_1.Patch)('activate/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as active' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                message: { type: 'string', description: 'Activation message (optional)' }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.ActivationRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.ActivationRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "markAsActive", null);
 __decorate([
     (0, common_1.Patch)('deactivate/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as inactive' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                reason: { type: 'string', description: 'Reason for deactivation' }
-            },
-            required: ['reason']
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.DeactivationRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.DeactivationRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "markAsInactive", null);
 __decorate([
     (0, common_1.Patch)('mark-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark a promote client as used (update lastUsed timestamp)' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
-    (0, swagger_1.ApiBody)({
-        schema: {
-            type: 'object',
-            properties: {
-                message: { type: 'string', description: 'Usage message (optional)' }
-            }
-        }
-    }),
+    (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.MarkUsedRequestDto }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:paramtypes", [String, client_swagger_dto_1.MarkUsedRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "markAsUsed", null);
 __decorate([
     (0, common_1.Patch)('update-last-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24504,7 +23630,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get least recently used promote clients for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get promote clients for', type: String }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, description: 'Number of promote clients to return', type: Number }),
-    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
@@ -24515,7 +23641,7 @@ __decorate([
     (0, common_1.Get)('next-available/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get next available promote client for a specific client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String }),
-    (0, swagger_1.ApiResponse)({ type: promote_client_schema_1.PromoteClient }),
+    (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24526,7 +23652,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: "Get promote clients that haven't been used for a specified time period" }),
     (0, swagger_1.ApiQuery)({ name: 'hoursAgo', required: false, description: 'Hours ago cutoff (default: 24)', type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
-    (0, swagger_1.ApiResponse)({ type: [promote_client_schema_1.PromoteClient] }),
+    (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)('hoursAgo')),
     __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
@@ -24537,18 +23663,7 @@ __decorate([
     (0, common_1.Get)('usage-stats'),
     (0, swagger_1.ApiOperation)({ summary: 'Get usage statistics for promote clients' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
-    (0, swagger_1.ApiResponse)({
-        schema: {
-            type: 'object',
-            properties: {
-                totalClients: { type: 'number' },
-                neverUsed: { type: 'number' },
-                usedInLast24Hours: { type: 'number' },
-                usedInLastWeek: { type: 'number' },
-                averageUsageGap: { type: 'number' }
-            }
-        }
-    }),
+    (0, swagger_1.ApiOkResponse)({ type: client_swagger_dto_1.UsageStatisticsDto }),
     __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -24661,96 +23776,115 @@ const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connectio
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
-const getProfilePics_1 = __webpack_require__(/*! ../Telegram/utils/getProfilePics */ "./src/components/Telegram/utils/getProfilePics.ts");
-const deleteProfilePics_1 = __webpack_require__(/*! ../Telegram/utils/deleteProfilePics */ "./src/components/Telegram/utils/deleteProfilePics.ts");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
-const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
-const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
-const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 const checkMe_utils_1 = __webpack_require__(/*! ../../utils/checkMe.utils */ "./src/utils/checkMe.utils.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const base_client_service_1 = __webpack_require__(/*! ../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
-let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
-    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientService, sessionService, botsService) {
+let PromoteClientService = PromoteClientService_1 = class PromoteClientService extends base_client_service_1.BaseClientService {
+    constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
+        super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
         this.promoteClientModel = promoteClientModel;
-        this.telegramService = telegramService;
-        this.usersService = usersService;
-        this.activeChannelsService = activeChannelsService;
-        this.clientService = clientService;
-        this.channelsService = channelsService;
-        this.bufferClientService = bufferClientService;
-        this.sessionService = sessionService;
-        this.botsService = botsService;
-        this.logger = new utils_1.Logger(PromoteClientService_1.name);
-        this.joinChannelMap = new Map();
-        this.leaveChannelMap = new Map();
-        this.joinChannelIntervalId = null;
-        this.leaveChannelIntervalId = null;
-        this.isLeaveChannelProcessing = false;
-        this.isJoinChannelProcessing = false;
-        this.activeTimeouts = new Set();
-        this.JOIN_CHANNEL_INTERVAL = 4 * 60 * 1000;
-        this.LEAVE_CHANNEL_INTERVAL = 60 * 1000;
-        this.LEAVE_CHANNEL_BATCH_SIZE = 10;
-        this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER = 10;
-        this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT = 12;
-        this.MAX_MAP_SIZE = 100;
-        this.CHANNEL_PROCESSING_DELAY = 10000;
-        this.CLEANUP_INTERVAL = 10 * 60 * 1000;
-        this.cleanupIntervalId = null;
-        this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
-        this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
-        this.INACTIVE_USER_CUTOFF_DAYS = 90;
-        this.MIN_TOTAL_PROMOTE_CLIENTS = 12;
-        this.AVAILABILITY_WINDOWS = [
-            { name: 'today', days: 0, minRequired: 3 },
-            { name: 'tomorrow', days: 1, minRequired: 5 },
-            { name: 'oneWeek', days: 7, minRequired: 7 },
-            { name: 'tenDays', days: 10, minRequired: 9 }
-        ];
+        this.bufferClientService = bufferClientServiceRef;
     }
-    startMemoryCleanup() {
-        if (this.cleanupIntervalId)
-            return;
-        this.cleanupIntervalId = setInterval(() => {
-            this.performMemoryCleanup();
-        }, this.CLEANUP_INTERVAL);
-        this.activeTimeouts.add(this.cleanupIntervalId);
+    get model() {
+        return this.promoteClientModel;
     }
-    clearMemoryCleanup() {
-        if (this.cleanupIntervalId) {
-            clearInterval(this.cleanupIntervalId);
-            this.activeTimeouts.delete(this.cleanupIntervalId);
-            this.cleanupIntervalId = null;
-        }
+    get clientType() {
+        return 'promote';
     }
-    performMemoryCleanup() {
+    get config() {
+        return {
+            joinChannelInterval: 6 * 60 * 1000,
+            leaveChannelInterval: 60 * 1000,
+            leaveChannelBatchSize: 10,
+            channelProcessingDelay: 120000,
+            channelTarget: 200,
+            maxJoinsPerSession: 8,
+            maxNewClientsPerTrigger: 10,
+            minTotalClients: 12,
+            maxMapSize: 100,
+            cleanupInterval: 10 * 60 * 1000,
+            cooldownHours: 2,
+            clientProcessingDelay: 8000,
+        };
+    }
+    async updateNameAndBio(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
-            for (const [mobile, channels] of this.joinChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`Cleaning up empty joinChannelMap entry for mobile: ${mobile}`);
-                    this.joinChannelMap.delete(mobile);
-                }
+            await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'medium');
+            const me = await telegramClient.getMe();
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            let updateCount = 0;
+            const expectedName = client?.name.split(' ')[0];
+            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), expectedName, 2)) {
+                this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
+                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(`${expectedName} ${(0, utils_1.getRandomPetName)()}`, {
+                    maintainFormatting: false,
+                    preserveCase: true,
+                    useInvisibleChars: false
+                })} ${(0, utils_1.getCuteEmoji)()}`, '');
+                updateCount = 1;
             }
-            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`Cleaning up empty leaveChannelMap entry for mobile: ${mobile}`);
-                    this.leaveChannelMap.delete(mobile);
-                }
-            }
-            this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
-            this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
-            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}`);
+            await this.update(doc.mobile, {
+                nameBioUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return updateCount;
         }
         catch (error) {
-            this.logger.error('Error during memory cleanup:', error);
+            const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
         }
     }
-    trimMapIfNeeded(map, mapName) {
-        if (map.size > this.MAX_MAP_SIZE) {
-            const keysToRemove = Array.from(map.keys()).slice(this.MAX_MAP_SIZE);
-            keysToRemove.forEach(key => map.delete(key));
-            this.logger.warn(`Trimmed ${keysToRemove.length} entries from ${mapName}`);
+    async updateUsername(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
+            await this.telegramService.updateUsername(doc.mobile, '');
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Cleared username for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return 1;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
         }
     }
     async create(promoteClient) {
@@ -24786,21 +23920,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async updateStatus(mobile, status, message) {
         const updateData = { status };
-        if (message) {
+        if (message)
             updateData.message = message;
-        }
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return this.update(mobile, updateData);
     }
     async updateLastUsed(mobile) {
         return this.update(mobile, { lastUsed: new Date() });
-    }
-    async markAsUsed(mobile, message) {
-        const updateData = { lastUsed: new Date() };
-        if (message) {
-            updateData.message = message;
-        }
-        return this.update(mobile, updateData);
     }
     async markAsInactive(mobile, reason) {
         this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
@@ -24808,7 +23934,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             return await this.updateStatus(mobile, 'inactive', reason);
         }
         catch (error) {
-            this.logger.error(`Failed to mark promote client ${mobile} as inactive: ${error.message}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Failed to mark promote client ${mobile} as inactive: ${errorMessage}`);
+            return null;
         }
     }
     async markAsActive(mobile, message = 'Account is functioning properly') {
@@ -24817,17 +23945,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     async createOrUpdate(mobile, createOrUpdateUserDto) {
         const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
         if (existingUser) {
-            this.logger.debug(`Updating existing promote client: ${mobile}`);
             return this.update(existingUser.mobile, createOrUpdateUserDto);
         }
         else {
-            this.logger.debug(`Creating new promote client: ${mobile}`);
             return this.create(createOrUpdateUserDto);
         }
     }
     async remove(mobile, message) {
         try {
-            this.logger.log(`Removing PromoteClient with mobile: ${mobile}`);
             const deleteResult = await this.promoteClientModel.deleteOne({ mobile }).exec();
             if (deleteResult.deletedCount === 0) {
                 throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -24835,69 +23960,113 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.serviceName || process.env.clientId} Deleting Promote Client : ${mobile}\n${message}`)}`);
         }
         catch (error) {
-            if (error instanceof common_1.NotFoundException) {
+            if (error instanceof common_1.NotFoundException)
                 throw error;
-            }
             const errorDetails = (0, parseError_1.parseError)(error);
-            this.logger.error(`[${mobile}] Error removing PromoteClient: ${errorDetails.message}`, errorDetails);
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
-        this.logger.log(`[${mobile}] PromoteClient removed successfully`);
     }
     async search(filter) {
-        this.logger.debug(`Modified filter:`, filter);
         return this.promoteClientModel.find(filter).exec();
     }
     async executeQuery(query, sort, limit, skip) {
-        if (!query) {
+        if (!query)
             throw new common_1.BadRequestException('Query is invalid.');
-        }
         try {
             const queryExec = this.promoteClientModel.find(query);
-            if (sort) {
+            if (sort)
                 queryExec.sort(sort);
-            }
-            if (limit) {
+            if (limit)
                 queryExec.limit(limit);
-            }
-            if (skip) {
+            if (skip)
                 queryExec.skip(skip);
-            }
             return await queryExec.exec();
         }
         catch (error) {
-            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException) {
+            if (error instanceof common_1.BadRequestException || error instanceof common_1.NotFoundException)
                 throw error;
-            }
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             throw new common_1.InternalServerErrorException(`Query execution failed: ${errorMessage}`);
         }
     }
-    removeFromPromoteMap(key) {
-        const deleted = this.joinChannelMap.delete(key);
-        if (deleted) {
-            this.logger.debug(`Removed ${key} from join channel map`);
+    async setAsPromoteClient(mobile, clientId, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
+        const user = (await this.usersService.search({ mobile, expired: false }))[0];
+        if (!user)
+            throw new common_1.BadRequestException('User not found');
+        const isExist = await this.findOne(mobile, false);
+        if (isExist)
+            throw new common_1.ConflictException('PromoteClient already exists');
+        const clients = await this.clientService.findAll();
+        const clientMobiles = clients.map((client) => client?.mobile);
+        if (clientMobiles.includes(mobile))
+            throw new common_1.BadRequestException('Number is an Active Client');
+        let targetClientId = clientId;
+        if (!targetClientId && clients.length > 0) {
+            const counts = await this.promoteClientModel.aggregate([
+                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]);
+            const countMap = new Map(counts.map((c) => [c._id, c.count]));
+            let minCount = Infinity;
+            for (const c of clients) {
+                const count = countMap.get(c.clientId) || 0;
+                if (count < minCount) {
+                    minCount = count;
+                    targetClientId = c.clientId;
+                }
+            }
         }
-    }
-    clearPromoteMap() {
-        this.logger.debug('PromoteMap cleared');
-        this.joinChannelMap.clear();
-        this.clearJoinChannelInterval();
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
+        try {
+            const channels = await this.telegramService.getChannelInfo(mobile, true);
+            const promoteClient = {
+                tgId: user.tgId,
+                lastActive: 'default',
+                mobile: user.mobile,
+                session: user.session,
+                availableDate,
+                channels: channels.ids.length,
+                clientId: targetClientId,
+                status: 'active',
+                message: 'Enrolled for warmup',
+                lastUsed: null,
+            };
+            await this.promoteClientModel
+                .findOneAndUpdate({ mobile: user.mobile }, {
+                $set: {
+                    ...promoteClient,
+                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                    enrolledAt: new Date(),
+                }
+            }, { new: true, upsert: true })
+                .exec();
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                try {
+                    await this.usersService.update(user.tgId, { expired: true });
+                }
+                catch { }
+            }
+            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
+        }
+        finally {
+            await this.safeUnregisterClient(mobile);
+        }
+        return 'Client enrolled as promote successfully';
     }
     async updateInfo() {
         const clients = await this.promoteClientModel
-            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 7 * this.ONE_DAY_MS) } })
+            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 5 * this.ONE_DAY_MS) } })
             .sort({ channels: 1 })
             .limit(25);
         const now = Date.now();
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
-            const mobile = client?.mobile;
-            this.logger.info(`Processing PromoteClient (${i + 1}/${clients.length}): ${mobile}`);
-            const lastChecked = client.lastChecked
-                ? new Date(client.lastChecked).getTime()
-                : 0;
-            await this.performHealthCheck(mobile, lastChecked, now);
+            const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
+            await this.performHealthCheck(client.mobile, lastChecked, now);
             if (i < clients.length - 1) {
                 await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
             }
@@ -24905,75 +24074,59 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
     }
     async joinchannelForPromoteClients(skipExisting = true) {
         if (this.telegramService.getActiveClientSetup()) {
-            this.logger.warn('Active client setup exists, skipping promotion process');
             return 'Active client setup exists, skipping promotion';
         }
         this.logger.log('Starting join channel process');
-        this.clearAllMapsAndIntervals();
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
+            this.logger.warn('Join/leave processing still in progress, skipping re-entry');
+            return 'Join/leave still processing, skipped';
+        }
+        const existingKeys = skipExisting ? Array.from(this.joinChannelMap.keys()) : [];
+        this.joinChannelMap.clear();
+        this.leaveChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.clearLeaveChannelInterval();
         await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
         try {
-            const existingKeys = skipExisting ? [] : Array.from(this.joinChannelMap.keys());
             const clients = await this.promoteClientModel
                 .find({
-                channels: { $lt: 350 },
+                channels: { $lt: this.config.channelTarget },
                 mobile: { $nin: existingKeys },
                 status: 'active',
+                warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
             })
                 .sort({ channels: 1 })
                 .limit(16);
-            this.logger.debug(`Found ${clients.length} clients to process for joining channels`);
             const joinSet = new Set();
             const leaveSet = new Set();
             let successCount = 0;
             let failCount = 0;
             for (const document of clients) {
                 const mobile = document.mobile;
-                this.logger.debug(`Processing client: ${mobile}`);
                 try {
-                    const client = await connection_manager_1.connectionManager.getClient(mobile, {
-                        autoDisconnect: false,
-                        handler: false,
-                    });
+                    const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                     await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
                     const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
-                    this.logger.debug(`[${mobile}]: Found ${channels.ids.length} existing channels`);
                     await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
                     await this.update(mobile, { channels: channels.ids.length });
-                    if (channels.ids.length > 100) {
-                        await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                        const profilePics = await (0, getProfilePics_1.getProfilePics)(client.client);
-                        if (profilePics.length > 0) {
-                            await (0, deleteProfilePics_1.deleteProfilePhotos)(client.client, profilePics);
-                            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                        }
-                    }
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;
-                        const channelLimit = 150;
                         await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
                         const isBelowThreshold = channels.ids.length < 220;
                         const result = isBelowThreshold
-                            ? await this.activeChannelsService.getActiveChannels(channelLimit, 0, excludedIds)
-                            : await this.channelsService.getActiveChannels(channelLimit, 0, excludedIds);
+                            ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds)
+                            : await this.channelsService.getActiveChannels(25, 0, excludedIds);
                         if (!this.joinChannelMap.has(mobile)) {
                             this.joinChannelMap.set(mobile, result);
                             this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
                             joinSet.add(mobile);
                         }
-                        else {
-                            this.logger.debug(`[${mobile}]: Already in join queue, skipping re-add`);
-                        }
-                        await this.sessionService.getOldestSessionOrCreate({ mobile: document.mobile });
                     }
                     else {
-                        this.logger.debug(`[${mobile}]: Too many blocked channels (${channels.canSendFalseCount}), preparing for leave`);
                         if (!this.leaveChannelMap.has(mobile)) {
                             this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
                             this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
                             leaveSet.add(mobile);
-                        }
-                        else {
-                            this.logger.debug(`[${mobile}]: Already in leave queue, skipping re-add`);
                         }
                     }
                     successCount++;
@@ -24981,881 +24134,34 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
                 catch (error) {
                     failCount++;
                     const errorDetails = (0, parseError_1.parseError)(error);
-                    this.logger.error(`[${mobile}] Error processing client:`, errorDetails);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await (0, Helpers_1.sleep)(1000);
-                        await this.markAsInactive(mobile, `${errorDetails.message}`);
-                    }
-                    else {
-                        this.logger.warn(`[${mobile}]: Non-fatal error encountered, will retry later`);
+                        const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                        await this.markAsInactive(mobile, reason);
                     }
                 }
                 finally {
                     await this.safeUnregisterClient(mobile);
-                    await (0, Helpers_1.sleep)(8000 + Math.random() * 5000);
+                    await (0, Helpers_1.sleep)(this.config.clientProcessingDelay + Math.random() * 5000);
                 }
             }
             await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
             if (joinSet.size > 0) {
                 this.startMemoryCleanup();
-                this.logger.debug(`Starting join queue for ${joinSet.size} clients`);
                 this.createTimeout(() => this.joinChannelQueue(), 2000);
             }
             if (leaveSet.size > 0) {
-                this.logger.debug(`Starting leave queue for ${leaveSet.size} clients`);
                 this.createTimeout(() => this.leaveChannelQueue(), 5000);
             }
-            this.logger.log(`Join channel process completed for ${clients.length} clients (Success: ${successCount}, Failed: ${failCount})`);
             return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
         }
         catch (error) {
             this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
-            this.clearAllMapsAndIntervals();
-            throw new Error('Failed to initiate channel joining process');
-        }
-    }
-    clearAllMapsAndIntervals() {
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-    }
-    async joinChannelQueue() {
-        if (this.isJoinChannelProcessing) {
-            this.logger.warn('Join channel process is already running');
-            return;
-        }
-        if (this.joinChannelMap.size === 0) {
-            this.logger.debug('No channels to join, not starting queue');
-            return;
-        }
-        if (!this.joinChannelIntervalId) {
-            this.logger.debug('Starting join channel interval');
-            this.joinChannelIntervalId = setInterval(async () => {
-                await this.processJoinChannelInterval();
-            }, this.JOIN_CHANNEL_INTERVAL);
-            this.activeTimeouts.add(this.joinChannelIntervalId);
-            await this.processJoinChannelInterval();
-        }
-        else {
-            this.logger.warn('Join channel interval is already running');
-        }
-    }
-    async processJoinChannelInterval() {
-        if (this.isJoinChannelProcessing) {
-            this.logger.debug('Join channel process already running, skipping interval');
-            return;
-        }
-        if (this.joinChannelMap.size === 0) {
-            this.logger.debug('No channels to join, clearing interval');
+            this.joinChannelMap.clear();
+            this.leaveChannelMap.clear();
             this.clearJoinChannelInterval();
-            return;
-        }
-        this.isJoinChannelProcessing = true;
-        try {
-            await this.processJoinChannelSequentially();
-        }
-        catch (error) {
-            this.logger.error('Error in join channel queue', error);
-        }
-        finally {
-            this.isJoinChannelProcessing = false;
-            if (this.joinChannelMap.size === 0) {
-                this.clearJoinChannelInterval();
-            }
-        }
-    }
-    async processJoinChannelSequentially() {
-        const keys = Array.from(this.joinChannelMap.keys());
-        this.logger.debug(`Processing join channel queue sequentially for ${keys.length} clients`);
-        for (let i = 0; i < keys.length; i++) {
-            const mobile = keys[i];
-            let currentChannel = null;
-            try {
-                const channels = this.joinChannelMap.get(mobile);
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`No more channels to join for ${mobile}, removing from queue`);
-                    this.removeFromPromoteMap(mobile);
-                    continue;
-                }
-                currentChannel = channels.shift();
-                if (!currentChannel) {
-                    this.logger.debug(`No channel to process for ${mobile}, removing from queue`);
-                    this.removeFromPromoteMap(mobile);
-                    continue;
-                }
-                this.logger.debug(`[${mobile}] Processing channel: @${currentChannel.username} (${channels.length} remaining)`);
-                this.joinChannelMap.set(mobile, channels);
-                let activeChannel = null;
-                try {
-                    activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
-                }
-                catch (findError) {
-                    this.logger.warn(`Error fetching active channel ${currentChannel.channelId}:`, findError);
-                }
-                if (!activeChannel || activeChannel.banned || (activeChannel.deletedCount && activeChannel.deletedCount > 0)) {
-                    this.logger.debug(`Skipping invalid/banned/deleted channel ${currentChannel.channelId}`);
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                    continue;
-                }
-                await this.telegramService.tryJoiningChannel(mobile, currentChannel);
-            }
-            catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error, `[${mobile}] ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error: `, false);
-                if (errorDetails.error === 'FloodWaitError' ||
-                    error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                    this.logger.warn(`[${mobile}] FloodWaitError or too many channels, removing from queue`);
-                    this.removeFromPromoteMap(mobile);
-                    await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                    if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
-                        await this.update(mobile, { channels: 400 });
-                    }
-                    else {
-                        const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
-                        await this.update(mobile, { channels: channelsInfo.ids.length });
-                    }
-                }
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    this.removeFromPromoteMap(mobile);
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                }
-            }
-            finally {
-                await this.safeUnregisterClient(mobile);
-                if (i < keys.length - 1 ||
-                    this.joinChannelMap.get(mobile)?.length > 0) {
-                    await (0, Helpers_1.sleep)(this.CHANNEL_PROCESSING_DELAY);
-                }
-            }
-        }
-    }
-    clearJoinChannelInterval() {
-        if (this.joinChannelIntervalId) {
-            this.logger.debug(`Clearing join channel interval`);
-            clearInterval(this.joinChannelIntervalId);
-            this.activeTimeouts.delete(this.joinChannelIntervalId);
-            this.joinChannelIntervalId = null;
-        }
-        this.isJoinChannelProcessing = false;
-    }
-    removeFromLeaveMap(key) {
-        this.leaveChannelMap.delete(key);
-        if (this.leaveChannelMap.size === 0) {
             this.clearLeaveChannelInterval();
-        }
-    }
-    clearLeaveMap() {
-        const mapSize = this.leaveChannelMap.size;
-        this.leaveChannelMap.clear();
-        this.clearLeaveChannelInterval();
-        this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
-    }
-    async leaveChannelQueue() {
-        if (this.isLeaveChannelProcessing) {
-            this.logger.warn('Leave channel process is already running');
-            return;
-        }
-        if (this.leaveChannelMap.size === 0) {
-            this.logger.debug('No channels to leave, not starting queue');
-            return;
-        }
-        if (!this.leaveChannelIntervalId) {
-            this.logger.debug('Starting leave channel interval');
-            this.leaveChannelIntervalId = setInterval(async () => {
-                await this.processLeaveChannelInterval();
-            }, this.LEAVE_CHANNEL_INTERVAL);
-            this.activeTimeouts.add(this.leaveChannelIntervalId);
-            await this.processLeaveChannelInterval();
-        }
-        else {
-            this.logger.warn('Leave channel interval is already running');
-        }
-    }
-    async processLeaveChannelInterval() {
-        if (this.isLeaveChannelProcessing) {
-            this.logger.debug('Leave channel process already running, skipping interval');
-            return;
-        }
-        if (this.leaveChannelMap.size === 0) {
-            this.logger.debug('No channels to leave, clearing interval');
-            this.clearLeaveChannelInterval();
-            return;
-        }
-        this.isLeaveChannelProcessing = true;
-        try {
-            await this.processLeaveChannelSequentially();
-        }
-        catch (error) {
-            this.logger.error('Error in leave channel queue', error);
-        }
-        finally {
-            this.isLeaveChannelProcessing = false;
-            if (this.leaveChannelMap.size === 0) {
-                this.clearLeaveChannelInterval();
-            }
-        }
-    }
-    async processLeaveChannelSequentially() {
-        const keys = Array.from(this.leaveChannelMap.keys());
-        this.logger.debug(`Processing leave channel queue sequentially for ${keys.length} clients`);
-        for (let i = 0; i < keys.length; i++) {
-            const mobile = keys[i];
-            try {
-                const channels = this.leaveChannelMap.get(mobile);
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`No more channels to leave for ${mobile}, removing from queue`);
-                    this.removeFromLeaveMap(mobile);
-                    continue;
-                }
-                const channelsToProcess = channels.splice(0, this.LEAVE_CHANNEL_BATCH_SIZE);
-                this.logger.debug(`[${mobile}] Processing ${channelsToProcess.length} channels to leave (${channels.length} remaining)`);
-                if (channels.length > 0) {
-                    this.leaveChannelMap.set(mobile, channels);
-                }
-                else {
-                    this.removeFromLeaveMap(mobile);
-                }
-                const client = await connection_manager_1.connectionManager.getClient(mobile, {
-                    autoDisconnect: false,
-                    handler: false,
-                });
-                await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                await client.leaveChannels(channelsToProcess);
-                this.logger.debug(`[${mobile}] Successfully left ${channelsToProcess.length} channels`);
-            }
-            catch (error) {
-                const errorDetails = (0, parseError_1.parseError)(error, `[${mobile}] Leave Channel ERR: `, false);
-                if ((0, isPermanentError_1.default)(errorDetails)) {
-                    await this.markAsInactive(mobile, `${errorDetails.message}`);
-                    this.removeFromLeaveMap(mobile);
-                }
-                else {
-                    this.logger.warn(`Transient error for ${mobile}: ${errorDetails.message}`);
-                }
-            }
-            finally {
-                await this.safeUnregisterClient(mobile);
-                if (i < keys.length - 1 ||
-                    this.leaveChannelMap.get(mobile)?.length > 0) {
-                    await (0, Helpers_1.sleep)((this.LEAVE_CHANNEL_INTERVAL / 2) + Math.random() * 30000);
-                }
-            }
-        }
-    }
-    clearLeaveChannelInterval() {
-        if (this.leaveChannelIntervalId) {
-            this.logger.debug(`Clearing leave channel interval`);
-            clearInterval(this.leaveChannelIntervalId);
-            this.activeTimeouts.delete(this.leaveChannelIntervalId);
-            this.leaveChannelIntervalId = null;
-        }
-        this.isLeaveChannelProcessing = false;
-    }
-    async safeUnregisterClient(mobile) {
-        try {
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
-        }
-        catch (unregisterError) {
-            const errorMessage = unregisterError instanceof Error ? unregisterError.message : 'Unknown error';
-            this.logger.error(`Error unregistering client ${mobile}: ${errorMessage}`);
-        }
-    }
-    async setAsPromoteClient(mobile, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
-        const user = (await this.usersService.search({ mobile, expired: false }))[0];
-        if (!user) {
-            throw new common_1.BadRequestException('User not found');
-        }
-        const isExist = await this.findOne(mobile, false);
-        if (isExist) {
-            throw new common_1.ConflictException('PromoteClient already exists');
-        }
-        const clients = await this.clientService.findAll();
-        const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile)) {
-            throw new common_1.BadRequestException('Number is an Active Client');
-        }
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
-        try {
-            await telegramClient.set2fa();
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            await telegramClient.updateUsername('');
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-            await telegramClient.updatePrivacyforDeletedAccount();
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-            await telegramClient.updateProfile('Deleted Account', 'Deleted Account');
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-            await telegramClient.deleteProfilePhotos();
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-            const channels = await this.telegramService.getChannelInfo(mobile, true);
-            const promoteClient = {
-                tgId: user.tgId,
-                lastActive: 'default',
-                mobile: user.mobile,
-                availableDate,
-                channels: channels.ids.length,
-                status: 'active',
-                message: 'Manually configured as promote client',
-                lastUsed: null,
-            };
-            await this.promoteClientModel
-                .findOneAndUpdate({ mobile: user.mobile }, { $set: promoteClient }, { new: true, upsert: true })
-                .exec();
-        }
-        catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error);
-            throw new common_1.HttpException(errorDetails.message, errorDetails.status);
-        }
-        finally {
-            await this.safeUnregisterClient(mobile);
-        }
-        return 'Client set as promote successfully';
-    }
-    async updateUser2FAStatus(tgId, mobile) {
-        try {
-            await this.usersService.update(tgId, { twoFA: true });
-        }
-        catch (userUpdateError) {
-            this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
-        }
-    }
-    handleError(error, context, mobile) {
-        const contextWithMobile = mobile ? `${context}: ${mobile}` : context;
-        return (0, parseError_1.parseError)(error, contextWithMobile, false);
-    }
-    async calculateAvailabilityBasedNeeds(clientId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayStr = today.toISOString().split('T')[0];
-        const windows = this.AVAILABILITY_WINDOWS.map(window => ({
-            ...window,
-            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS)
-                .toISOString().split('T')[0]
-        }));
-        const totalActive = await this.promoteClientModel.countDocuments({
-            clientId,
-            status: 'active'
-        });
-        const windowNeeds = [];
-        let maxNeeded = 0;
-        let mostUrgentWindow = '';
-        let mostUrgentPriority = 999;
-        for (const window of windows) {
-            const availableCount = await this.promoteClientModel.countDocuments({
-                clientId,
-                status: 'active',
-                availableDate: { $lte: window.targetDate }
-            });
-            const needed = Math.max(0, window.minRequired - availableCount);
-            windowNeeds.push({
-                window: window.name,
-                available: availableCount,
-                needed,
-                targetDate: window.targetDate,
-                minRequired: window.minRequired
-            });
-            if (needed > maxNeeded) {
-                maxNeeded = needed;
-                mostUrgentWindow = window.name;
-                mostUrgentPriority = window.days;
-            }
-            else if (needed > 0 && window.days < mostUrgentPriority) {
-                mostUrgentWindow = window.name;
-                mostUrgentPriority = window.days;
-            }
-        }
-        const totalNeededForCount = Math.max(0, this.MIN_TOTAL_PROMOTE_CLIENTS - totalActive);
-        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
-        let priority = 100;
-        if (maxNeeded > 0) {
-            priority = mostUrgentPriority;
-        }
-        let calculationReason = '';
-        if (maxNeeded > 0 && totalNeededForCount > 0) {
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
-        }
-        else if (maxNeeded > 0) {
-            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
-        }
-        else if (totalNeededForCount > 0) {
-            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.MIN_TOTAL_PROMOTE_CLIENTS}`;
-        }
-        else {
-            calculationReason = 'All windows satisfied';
-        }
-        return {
-            totalNeeded,
-            windowNeeds,
-            totalActive,
-            totalNeededForCount,
-            calculationReason,
-            priority
-        };
-    }
-    async createPromoteClientFromUser(document, targetClientId, availableDate) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, {
-            autoDisconnect: false,
-        });
-        try {
-            const hasPassword = await telegramClient.hasPassword();
-            this.logger.debug(`hasPassword for ${document.mobile}: ${hasPassword}`);
-            if (hasPassword) {
-                this.logger.debug(`Failed to Update as PromoteClient as ${document.mobile} already has Password`);
-                await this.updateUser2FAStatus(document.tgId, document.mobile);
-                return false;
-            }
-            await telegramClient.removeOtherAuths();
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 10000);
-            await telegramClient.set2fa();
-            this.logger.debug('Waiting for setting 2FA');
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
-            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
-            this.logger.debug(`Inserting Document for client ${targetClientId} with availableDate ${targetAvailableDate}`);
-            const promoteClient = {
-                tgId: document.tgId,
-                lastActive: 'today',
-                mobile: document.mobile,
-                availableDate: targetAvailableDate,
-                channels: channels.ids.length,
-                clientId: targetClientId,
-                status: 'active',
-                message: 'Account successfully configured as promote client',
-                lastUsed: null,
-            };
-            await this.create(promoteClient);
-            await this.updateUser2FAStatus(document.tgId, document.mobile);
-            this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
-            return true;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
-            this.logger.error(`Error processing promote client ${document.mobile}: ${errorDetails.message}`);
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                try {
-                    await this.markAsInactive(document.mobile, errorDetails.message);
-                }
-                catch (markError) {
-                    this.logger.error(`Failed to mark ${document.mobile} as inactive:`, markError);
-                }
-            }
-            return false;
-        }
-        finally {
-            await this.safeUnregisterClient(document.mobile);
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-        }
-    }
-    async backfillTimestamps(mobile, doc, now) {
-        const needsBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
-            !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt ||
-            !doc.profilePicsUpdatedAt;
-        if (!needsBackfill)
-            return;
-        this.logger.log(`Backfilling timestamp fields for ${mobile}`);
-        const allTimestamps = client_helper_utils_1.ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
-        const backfillData = {};
-        if (!doc.privacyUpdatedAt)
-            backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
-        if (!doc.profilePicsDeletedAt)
-            backfillData.profilePicsDeletedAt = allTimestamps.profilePicsDeletedAt;
-        if (!doc.nameBioUpdatedAt)
-            backfillData.nameBioUpdatedAt = allTimestamps.nameBioUpdatedAt;
-        if (!doc.usernameUpdatedAt)
-            backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
-        if (!doc.profilePicsUpdatedAt)
-            backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
-        await this.update(mobile, backfillData);
-        this.logger.log(`Backfilled ${Object.keys(backfillData).length} timestamp fields for ${mobile}`);
-    }
-    async performHealthCheck(mobile, lastChecked, now) {
-        const needsHealthCheck = !lastChecked || (now - lastChecked > 7 * this.ONE_DAY_MS);
-        if (!needsHealthCheck) {
-            return true;
-        }
-        try {
-            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
-                autoDisconnect: false,
-                handler: false,
-            });
-            await telegramClient.client.invoke(new telegram_1.Api.account.SetPrivacy({
-                key: new telegram_1.Api.InputPrivacyKeyPhoneCall(),
-                rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()],
-            }));
-            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-            await this.update(mobile, {
-                channels: channels.ids.length,
-                lastChecked: new Date()
-            });
-            this.logger.debug(`Health check passed for ${mobile}`);
-            await (0, Helpers_1.sleep)(5000);
-            return true;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Health check failed', mobile);
-            this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(mobile, `Health check failed: ${errorDetails.message}`);
-            }
-            await (0, Helpers_1.sleep)(5000);
-            return false;
-        }
-        finally {
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
-        }
-    }
-    getPendingUpdates(doc, now) {
-        const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
-        const DAY = this.ONE_DAY_MS;
-        const MIN_DAYS_BETWEEN_UPDATES = DAY;
-        const reasons = [];
-        const privacyTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt);
-        const needsPrivacy = accountAge >= DAY && accountAge <= 30 * DAY &&
-            (privacyTimestamp === 0 || privacyTimestamp < now - 15 * DAY);
-        if (needsPrivacy)
-            reasons.push('Privacy update needed');
-        const privacyDone = privacyTimestamp > 0 && (now - privacyTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const photosDeletedTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt);
-        const needsDeletePhotos = accountAge >= 2 * DAY && accountAge <= 30 * DAY &&
-            (photosDeletedTimestamp === 0 || photosDeletedTimestamp < now - 30 * DAY) &&
-            (privacyDone || privacyTimestamp === 0);
-        if (needsDeletePhotos)
-            reasons.push('Delete photos needed');
-        const photosDone = photosDeletedTimestamp > 0 && (now - photosDeletedTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const nameBioTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt);
-        const needsNameBio = accountAge >= 3 * DAY && accountAge <= 30 * DAY &&
-            (doc.channels || 0) > 100 &&
-            (nameBioTimestamp === 0 || nameBioTimestamp < now - 30 * DAY) &&
-            (photosDone || photosDeletedTimestamp === 0);
-        if (needsNameBio)
-            reasons.push('Name/Bio update needed');
-        const nameBioDone = nameBioTimestamp > 0 && (now - nameBioTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const usernameTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt);
-        const needsUsername = accountAge >= 7 * DAY && accountAge <= 30 * DAY &&
-            (doc.channels || 0) > 150 &&
-            (usernameTimestamp === 0 || usernameTimestamp < now - 30 * DAY) &&
-            (nameBioDone || nameBioTimestamp === 0);
-        if (needsUsername)
-            reasons.push('Username update needed');
-        const usernameDone = usernameTimestamp > 0 && (now - usernameTimestamp >= MIN_DAYS_BETWEEN_UPDATES);
-        const profilePicsTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt);
-        const needsProfilePhotos = accountAge >= 10 * DAY && accountAge <= 30 * DAY &&
-            (doc.channels || 0) > 170 &&
-            (profilePicsTimestamp === 0 || profilePicsTimestamp < now - 30 * DAY) &&
-            (usernameDone || usernameTimestamp === 0);
-        if (needsProfilePhotos)
-            reasons.push('Profile photos update needed');
-        const totalPending = [needsPrivacy, needsDeletePhotos, needsNameBio, needsUsername, needsProfilePhotos]
-            .filter(Boolean).length;
-        return {
-            needsPrivacy,
-            needsDeletePhotos,
-            needsNameBio,
-            needsUsername,
-            needsProfilePhotos,
-            totalPending,
-            reasons
-        };
-    }
-    async updatePrivacySettings(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            await telegramClient.updatePrivacyforDeletedAccount();
-            await this.update(doc.mobile, {
-                privacyUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return 1;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating privacy', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async deleteProfilePhotos(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
-            if (photos.photos.length > 0) {
-                await telegramClient.deleteProfilePhotos();
-                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
-            }
-            else {
-                this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
-            }
-            await this.update(doc.mobile, {
-                profilePicsDeletedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return photos.photos.length > 0 ? 1 : 0;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async updateNameAndBio(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const me = await telegramClient.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            let updateCount = 0;
-            const expectedName = client?.name.split(' ')[0];
-            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), expectedName, 2)) {
-                this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(`${expectedName} ${(0, utils_1.getRandomPetName)()}`, {
-                    maintainFormatting: false,
-                    preserveCase: true,
-                    useInvisibleChars: false
-                })} ${(0, utils_1.getCuteEmoji)()}`, '');
-                updateCount = 1;
-            }
-            await this.update(doc.mobile, {
-                nameBioUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return updateCount;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async updateUsername(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            await this.telegramService.updateUsername(doc.mobile, '');
-            await this.update(doc.mobile, {
-                usernameUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            this.logger.debug(`Updated username for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
-            return 1;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async updateProfilePhotos(doc, client, failedAttempts) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: true, handler: false });
-        try {
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
-            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
-            let updateCount = 0;
-            if (photos.photos.length < 2) {
-                await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                const shuffle = (arr) => {
-                    const a = arr.slice();
-                    for (let i = a.length - 1; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [a[i], a[j]] = [a[j], a[i]];
-                    }
-                    return a;
-                };
-                const photoPaths = shuffle(['dp1.jpg', 'dp2.jpg', 'dp3.jpg']);
-                const randomPhoto = photoPaths[0];
-                await telegramClient.updateProfilePic(path_1.default.join(process.cwd(), randomPhoto));
-                updateCount = 1;
-                this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile} (1 of ${photoPaths.length} photos)`);
-            }
-            await this.update(doc.mobile, {
-                profilePicsUpdatedAt: new Date(),
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: 0,
-                lastUpdateFailure: null
-            });
-            await (0, Helpers_1.sleep)(40000 + Math.random() * 20000);
-            return updateCount;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error updating profile photos', doc.mobile);
-            await this.update(doc.mobile, {
-                lastUpdateAttempt: new Date(),
-                failedUpdateAttempts: failedAttempts + 1,
-                lastUpdateFailure: new Date()
-            });
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, errorDetails.message);
-            }
-            return 0;
-        }
-        finally {
-            await this.safeUnregisterClient(doc.mobile);
-        }
-    }
-    async processPromoteClient(doc, client) {
-        if (!client) {
-            this.logger.warn(`Client not found for promote client ${doc.mobile}`);
-            return 0;
-        }
-        const MIN_COOLDOWN_HOURS = 2;
-        const MAX_FAILED_ATTEMPTS = 3;
-        const FAILURE_RESET_DAYS = 7;
-        const now = Date.now();
-        let updateCount = 0;
-        try {
-            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
-            const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && lastFailureTime > 0 && now - lastFailureTime > FAILURE_RESET_DAYS * this.ONE_DAY_MS) {
-                this.logger.log(`Resetting failure count for ${doc.mobile} (last failure was ${Math.floor((now - lastFailureTime) / this.ONE_DAY_MS)} days ago)`);
-                await this.update(doc.mobile, {
-                    failedUpdateAttempts: 0,
-                    lastUpdateFailure: null
-                });
-            }
-            else if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
-                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts}). Will retry after ${FAILURE_RESET_DAYS} days.`);
-                return 0;
-            }
-            const lastUpdateAttempt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateAttempt);
-            if (lastUpdateAttempt > 0 && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
-                this.logger.debug(`Client ${doc.mobile} on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
-                return 0;
-            }
-            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            const hasAnyUpdate = !!(doc.privacyUpdatedAt || doc.profilePicsDeletedAt || doc.nameBioUpdatedAt ||
-                doc.usernameUpdatedAt || doc.profilePicsUpdatedAt);
-            if (hasAnyUpdate && lastUsed > 0 && now - lastUsed < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                this.logger.debug(`Client ${doc.mobile} recently used, skipping`);
-                return 0;
-            }
-            const accountAge = doc.createdAt ? now - new Date(doc.createdAt).getTime() : 0;
-            if (accountAge > 30 * this.ONE_DAY_MS) {
-                this.logger.debug(`Client ${doc.mobile} is older than 30 days, skipping`);
-                return 0;
-            }
-            if (lastUsed > 0) {
-                await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
-                return 0;
-            }
-            const pendingUpdates = this.getPendingUpdates(doc, now);
-            if (pendingUpdates.totalPending > 0) {
-                this.logger.debug(`Client ${doc.mobile} has ${pendingUpdates.totalPending} pending updates: ${pendingUpdates.reasons.join(', ')}`);
-            }
-            else {
-                this.logger.debug(`Client ${doc.mobile} has no pending updates - all complete!`);
-            }
-            if (pendingUpdates.needsPrivacy) {
-                updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsDeletePhotos) {
-                updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsNameBio) {
-                updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsUsername) {
-                updateCount = await this.updateUsername(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (pendingUpdates.needsProfilePhotos) {
-                updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
-                return updateCount;
-            }
-            if (updateCount === 0) {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                if (pendingUpdates.totalPending > 0) {
-                    this.logger.debug(`No updates performed for ${doc.mobile} despite ${pendingUpdates.totalPending} pending updates. Reasons: ${pendingUpdates.reasons.join(', ')}`);
-                }
-            }
-            else {
-                const remainingPending = pendingUpdates.totalPending - updateCount;
-                if (remainingPending > 0) {
-                    this.logger.debug(`Client ${doc.mobile} still has ${remainingPending} pending updates remaining`);
-                }
-                else {
-                    this.logger.log(`✅ Client ${doc.mobile} - ALL UPDATES COMPLETE! Ready for use.`);
-                }
-            }
-            return updateCount;
-        }
-        catch (error) {
-            const errorDetails = this.handleError(error, 'Error with client', doc.mobile);
-            try {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-            }
-            catch (updateError) {
-                this.logger.warn(`Failed to track update attempt for ${doc.mobile}:`, updateError);
-            }
-            if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.markAsInactive(doc.mobile, `${errorDetails.message}`);
-            }
-            return 0;
-        }
-        finally {
-            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+            throw new Error('Failed to initiate channel joining process');
         }
     }
     async checkPromoteClients() {
@@ -25863,7 +24169,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
             return;
         }
-        this.logger.log('Starting promote client check process');
         const clients = await this.clientService.findAll();
         const bufferClients = await this.bufferClientService.findAll();
         const clientMainMobiles = clients.map((c) => c.mobile);
@@ -25873,153 +24178,136 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             .distinct('mobile');
         const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
         const promoteClientCounts = await this.promoteClientModel.aggregate([
-            {
-                $match: {
-                    clientId: { $exists: true, $ne: null },
-                    status: 'active',
-                },
-            },
-            {
-                $group: {
-                    _id: '$clientId',
-                    count: { $sum: 1 },
-                    mobiles: { $push: '$mobile' },
-                },
-            },
+            { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
+            { $group: { _id: '$clientId', count: { $sum: 1 }, mobiles: { $push: '$mobile' } } },
         ]);
         const promoteClientsPerClient = new Map(promoteClientCounts.map((result) => [result._id, result.count]));
         let totalUpdates = 0;
-        const MIN_COOLDOWN_HOURS = 4;
         const now = Date.now();
         for (const result of promoteClientCounts) {
-            if (totalUpdates < 5) {
-                for (const promoteClientMobile of result.mobiles) {
-                    const promoteClient = await this.findOne(promoteClientMobile, false);
-                    if (!promoteClient) {
-                        this.logger.warn(`Promote client ${promoteClientMobile} not found, skipping`);
-                        continue;
-                    }
-                    let lastUpdateAttempt = 0;
-                    try {
-                        lastUpdateAttempt = promoteClient.lastUpdateAttempt
-                            ? new Date(promoteClient.lastUpdateAttempt).getTime()
-                            : 0;
-                    }
-                    catch (error) {
-                        lastUpdateAttempt = 0;
-                    }
-                    if (lastUpdateAttempt > 0 && now - lastUpdateAttempt < MIN_COOLDOWN_HOURS * 60 * 60 * 1000) {
-                        const hoursRemaining = ((MIN_COOLDOWN_HOURS * 60 * 60 * 1000) - (now - lastUpdateAttempt)) / (60 * 60 * 1000);
-                        this.logger.debug(`Skipping ${promoteClientMobile} - on cooldown, ${hoursRemaining.toFixed(1)} hours remaining`);
-                        continue;
-                    }
-                    const lastChecked = promoteClient.lastChecked
-                        ? new Date(promoteClient.lastChecked).getTime()
-                        : 0;
-                    const healthCheckPassed = await this.performHealthCheck(promoteClientMobile, lastChecked, now);
-                    if (!healthCheckPassed) {
-                        continue;
-                    }
-                    const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
-                    if (hasBeenUsed) {
-                        const needsBackfill = !promoteClient.privacyUpdatedAt || !promoteClient.profilePicsDeletedAt ||
-                            !promoteClient.nameBioUpdatedAt || !promoteClient.usernameUpdatedAt ||
-                            !promoteClient.profilePicsUpdatedAt;
-                        if (needsBackfill) {
-                            await this.backfillTimestamps(promoteClientMobile, promoteClient, now);
-                        }
-                        this.logger.debug(`Skipping ${promoteClientMobile} - already used, timestamps backfilled`);
-                        continue;
-                    }
-                    const pendingUpdates = this.getPendingUpdates(promoteClient, now);
-                    if (pendingUpdates.totalPending > 0) {
-                        const client = clients.find((c) => c.clientId === result._id);
-                        if (!client) {
-                            this.logger.warn(`Client with ID ${result._id} not found, skipping promote client ${promoteClientMobile}`);
-                            continue;
-                        }
-                        const currentUpdates = await this.processPromoteClient(promoteClient, client);
-                        this.logger.debug(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
-                        if (currentUpdates > 0) {
-                            totalUpdates += currentUpdates;
-                        }
-                        this.logger.log(`Processed promote client ${promoteClientMobile}, updates made: ${currentUpdates} | total updates so far: ${totalUpdates}`);
-                        if (totalUpdates >= 5) {
-                            this.logger.warn('Reached total update limit of 5 for this check cycle');
-                            break;
-                        }
-                    }
+            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
+                break;
+            for (const promoteClientMobile of result.mobiles) {
+                if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
+                    break;
+                const promoteClient = await this.findOne(promoteClientMobile, false);
+                if (!promoteClient)
+                    continue;
+                let lastUpdateAttempt = 0;
+                try {
+                    lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
                 }
-            }
-            else {
-                this.logger.warn(`Skipping promote client ${result.mobiles.join(', ')} as total updates reached 5`);
+                catch {
+                    lastUpdateAttempt = 0;
+                }
+                if (this.isOnCooldown(promoteClientMobile, promoteClient.lastUpdateAttempt, now))
+                    continue;
+                const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
+                if (hasBeenUsed) {
+                    await this.backfillTimestamps(promoteClientMobile, promoteClient, now);
+                    continue;
+                }
+                const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+                if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+                    const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
+                    const healthCheckPassed = await this.performHealthCheck(promoteClientMobile, lastChecked, now);
+                    if (!healthCheckPassed)
+                        continue;
+                }
+                const client = clients.find((c) => c.clientId === result._id);
+                if (!client)
+                    continue;
+                const currentUpdates = await this.processClient(promoteClient, client);
+                if (currentUpdates > 0)
+                    totalUpdates += currentUpdates;
             }
         }
         const clientNeedingPromoteClients = [];
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
             if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingPromoteClients.push({
-                    clientId: client.clientId,
-                    ...availabilityNeeds
-                });
+                clientNeedingPromoteClients.push({ clientId: client.clientId, ...availabilityNeeds });
             }
         }
         clientNeedingPromoteClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
-        const clientNeedsMap = new Map();
         for (const clientNeed of clientNeedingPromoteClients) {
-            const allocated = Math.min(clientNeed.totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER - totalSlotsNeeded);
-            if (allocated > 0) {
-                clientNeedsMap.set(clientNeed.clientId, allocated);
+            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
+            if (allocated > 0)
                 totalSlotsNeeded += allocated;
-            }
-            if (totalSlotsNeeded >= this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER)
+            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
                 break;
         }
-        this.logger.debug(`Availability-based needs calculated (NO HARD LIMIT):`);
-        clientNeedingPromoteClients.forEach(need => {
-            this.logger.debug(`Client ${need.clientId} (priority: ${need.priority}): ` +
-                `${need.totalActive} total active, ${need.totalNeeded} new needed - ${need.calculationReason}`);
-            need.windowNeeds.forEach(window => {
-                if (window.needed > 0) {
-                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
-                        `${window.available} available, ${window.needed} needed ` +
-                        `(target: ${window.minRequired} per window)`);
-                }
-                else {
-                    this.logger.debug(`  - ${window.window} (${window.targetDate}): ` +
-                        `${window.available} available ✅ (sufficient, target: ${window.minRequired})`);
-                }
-            });
-        });
         const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
-        this.logger.debug(`Total active promote clients: ${totalActivePromoteClients}`);
-        this.logger.debug(`Total slots needed: ${totalSlotsNeeded} (limited to max ${this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER} per trigger)`);
-        const clientNeedsSummary = clientNeedingPromoteClients
-            .map(c => `${c.clientId}: ${c.totalNeeded} (${c.calculationReason})`)
-            .join('\n');
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check (Dynamic Availability):\n\nTotal Active Promote Clients: ${totalActivePromoteClients}\nPromote Clients Per Client: ${JSON.stringify(Object.fromEntries(promoteClientsPerClient))}\n\nClients Needing Promote Clients:\n${clientNeedsSummary || 'None'}\n\nTotal Slots Needed: ${totalSlotsNeeded}`)}`);
+        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active: ${totalActivePromoteClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
             await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
         }
-        else {
-            this.logger.debug('No new promote clients needed - all availability windows and total count satisfied');
+    }
+    async createPromoteClientFromUser(document, targetClientId, availableDate) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
+        try {
+            const hasPassword = await telegramClient.hasPassword();
+            if (hasPassword) {
+                await this.updateUser2FAStatus(document.tgId, document.mobile);
+                return false;
+            }
+            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
+            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            const user = (await this.usersService.search({ mobile: document.mobile }))[0];
+            const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+            const promoteClient = {
+                tgId: document.tgId,
+                lastActive: 'today',
+                mobile: document.mobile,
+                session: user?.session || '',
+                availableDate: targetAvailableDate,
+                channels: channels.ids.length,
+                clientId: targetClientId,
+                status: 'active',
+                message: 'Enrolled for warmup',
+                lastUsed: null,
+            };
+            await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, {
+                $set: {
+                    ...promoteClient,
+                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                    enrolledAt: new Date(),
+                }
+            }, { new: true, upsert: true }).exec();
+            this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
+            return true;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                try {
+                    await this.markAsInactive(document.mobile, errorDetails.message);
+                }
+                catch { }
+                try {
+                    await this.usersService.update(document.tgId, { expired: true });
+                }
+                catch { }
+            }
+            return false;
+        }
+        finally {
+            await this.safeUnregisterClient(document.mobile);
+            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
         }
     }
     async addNewUserstoPromoteClients(badIds, goodIds, clientsNeedingPromoteClients = [], promoteClientsPerClient) {
-        const clientNeedingPromoteClientsDynamic = [];
+        const clientNeedingDynamic = [];
         for (const clientId of clientsNeedingPromoteClients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(clientId);
             if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingPromoteClientsDynamic.push({
-                    clientId,
-                    ...availabilityNeeds
-                });
+                clientNeedingDynamic.push({ clientId, ...availabilityNeeds });
             }
         }
-        clientNeedingPromoteClientsDynamic.sort((a, b) => a.priority - b.priority);
-        await this.addNewUserstoPromoteClientsDynamic(badIds, goodIds, clientNeedingPromoteClientsDynamic, promoteClientsPerClient);
+        clientNeedingDynamic.sort((a, b) => a.priority - b.priority);
+        await this.addNewUserstoPromoteClientsDynamic(badIds, goodIds, clientNeedingDynamic, promoteClientsPerClient);
     }
     async addNewUserstoPromoteClientsDynamic(badIds, goodIds, clientsNeedingPromoteClients, promoteClientsPerClient) {
         const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
@@ -26027,13 +24315,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         for (const clientNeed of clientsNeedingPromoteClients) {
             totalNeeded += clientNeed.totalNeeded;
         }
-        totalNeeded = Math.min(totalNeeded, this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER);
-        if (totalNeeded === 0) {
-            this.logger.debug('No promote clients needed - all availability windows and total count satisfied');
+        totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
+        if (totalNeeded === 0)
             return;
-        }
-        this.logger.debug(`Creating ${totalNeeded} new promote clients (all with availableDate = today) ` +
-            `to satisfy availability windows and total count requirements`);
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
@@ -26045,72 +24329,34 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         const assignmentQueue = [];
         for (const clientNeed of clientsNeedingPromoteClients) {
             for (let i = 0; i < clientNeed.totalNeeded; i++) {
-                assignmentQueue.push({
-                    clientId: clientNeed.clientId,
-                    priority: clientNeed.priority
-                });
+                assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
             }
         }
-        let processedCount = 0;
+        let attemptedCount = 0;
+        let createdCount = 0;
         let assignmentIndex = 0;
-        while (processedCount < totalNeeded &&
-            documents.length > 0 &&
-            assignmentIndex < assignmentQueue.length) {
+        while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
-            if (!document || !document.mobile || !document.tgId) {
-                this.logger.warn('Invalid document found, skipping');
+            if (!document || !document.mobile || !document.tgId)
                 continue;
-            }
             const assignment = assignmentQueue[assignmentIndex];
-            if (!assignment) {
-                this.logger.debug('No more assignments needed');
+            if (!assignment)
                 break;
-            }
             try {
                 const created = await this.createPromoteClientFromUser(document, assignment.clientId, today);
                 if (created) {
                     assignmentIndex++;
-                    processedCount++;
-                    this.logger.debug(`Created promote client ${document.mobile} for ${assignment.clientId} ` +
-                        `with availableDate = ${today} (available immediately, priority: ${assignment.priority})`);
+                    createdCount++;
                 }
-                else {
-                    processedCount++;
-                }
+                attemptedCount++;
             }
             catch (error) {
-                const errorDetails = this.handleError(error, 'Error creating client connection', document.mobile);
-                this.logger.error(`Error creating connection for ${document.mobile}:`, errorDetails);
+                this.logger.error(`Error creating connection for ${document.mobile}`);
                 await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                processedCount++;
+                attemptedCount++;
             }
         }
-        this.logger.log(`✅ Dynamic batch completed: Created ${processedCount} new promote clients ` +
-            `(all with availableDate = ${today}, available immediately). ` +
-            `System maintains availability windows and total count requirements.`);
-    }
-    clearAllTimeouts() {
-        this.activeTimeouts.forEach((timeout) => clearTimeout(timeout));
-        this.activeTimeouts.clear();
-        this.logger.debug('Cleared all active timeouts');
-    }
-    async cleanup() {
-        try {
-            this.clearAllTimeouts();
-            this.clearMemoryCleanup();
-            this.clearJoinChannelInterval();
-            this.clearLeaveChannelInterval();
-            this.clearPromoteMap();
-            this.clearLeaveMap();
-            this.isJoinChannelProcessing = false;
-            this.isLeaveChannelProcessing = false;
-        }
-        catch (error) {
-            this.logger.error('Error during cleanup:', error);
-        }
-    }
-    async onModuleDestroy() {
-        await this.cleanup();
+        this.logger.log(`Dynamic batch completed: Created ${createdCount} new promote clients (${attemptedCount} attempted)`);
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
@@ -26121,88 +24367,49 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
             this.promoteClientModel.countDocuments({ clientId: { $exists: false } }),
             this.promoteClientModel.countDocuments({ status: 'active' }),
             this.promoteClientModel.countDocuments({ status: 'inactive' }),
-            this.promoteClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null } } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.promoteClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.promoteClientModel.aggregate([
-                { $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.promoteClientModel.aggregate([
-                {
-                    $match: {
-                        clientId: { $exists: true, $ne: null },
-                        status: 'active',
-                        $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
-                    },
-                },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
-            this.promoteClientModel.aggregate([
-                {
-                    $match: {
-                        clientId: { $exists: true, $ne: null },
-                        status: 'active',
-                        lastUsed: { $gte: last24Hours },
-                    },
-                },
-                { $group: { _id: '$clientId', count: { $sum: 1 } } },
-            ]),
+            this.promoteClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null } } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.promoteClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active' } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.promoteClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'inactive' } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.promoteClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active', $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }] } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
+            this.promoteClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active', lastUsed: { $gte: last24Hours } } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
         ]);
-        const assignedCountMap = new Map(assignedCounts.map((item) => [item._id, item.count]));
-        const activeCountMap = new Map(activeCounts.map((item) => [item._id, item.count]));
-        const inactiveCountMap = new Map(inactiveCounts.map((item) => [item._id, item.count]));
-        const neverUsedCountMap = new Map(neverUsedCounts.map((item) => [item._id, item.count]));
-        const recentlyUsedCountMap = new Map(recentlyUsedCounts.map((item) => [item._id, item.count]));
+        const toMap = (arr) => new Map(arr.map((item) => [item._id, item.count]));
+        const assignedCountMap = toMap(assignedCounts);
+        const activeCountMap = toMap(activeCounts);
+        const inactiveCountMap = toMap(inactiveCounts);
+        const neverUsedCountMap = toMap(neverUsedCounts);
+        const recentlyUsedCountMap = toMap(recentlyUsedCounts);
         const distributionPerClient = [];
-        let clientsWithSufficient = 0;
-        let clientsNeedingMore = 0;
-        let totalNeeded = 0;
+        let clientsWithSufficient = 0, clientsNeedingMore = 0, totalNeeded = 0;
         for (const client of clients) {
-            const assignedCount = assignedCountMap.get(client.clientId) || 0;
             const activeCount = activeCountMap.get(client.clientId) || 0;
-            const inactiveCount = inactiveCountMap.get(client.clientId) || 0;
-            const neverUsed = neverUsedCountMap.get(client.clientId) || 0;
-            const usedInLast24Hours = recentlyUsedCountMap.get(client.clientId) || 0;
-            const needed = Math.max(0, this.MAX_NEEDED_PROMOTE_CLIENTS_PER_CLIENT - activeCount);
-            const status = needed === 0 ? 'sufficient' : 'needs_more';
+            const needed = Math.max(0, this.config.minTotalClients - activeCount);
             distributionPerClient.push({
                 clientId: client.clientId,
-                assignedCount,
+                assignedCount: assignedCountMap.get(client.clientId) || 0,
                 activeCount,
-                inactiveCount,
+                inactiveCount: inactiveCountMap.get(client.clientId) || 0,
                 needed,
-                status,
-                neverUsed,
-                usedInLast24Hours,
+                status: needed === 0 ? 'sufficient' : 'needs_more',
+                neverUsed: neverUsedCountMap.get(client.clientId) || 0,
+                usedInLast24Hours: recentlyUsedCountMap.get(client.clientId) || 0,
             });
-            if (status === 'sufficient') {
+            if (needed === 0)
                 clientsWithSufficient++;
-            }
             else {
                 clientsNeedingMore++;
                 totalNeeded += needed;
             }
         }
-        const maxPerTrigger = this.MAX_NEW_PROMOTE_CLIENTS_PER_TRIGGER;
-        const triggersNeeded = Math.ceil(totalNeeded / maxPerTrigger);
         return {
-            totalPromoteClients,
-            unassignedPromoteClients,
-            activePromoteClients,
-            inactivePromoteClients,
+            totalPromoteClients, unassignedPromoteClients, activePromoteClients, inactivePromoteClients,
             distributionPerClient,
             summary: {
                 clientsWithSufficientPromoteClients: clientsWithSufficient,
                 clientsNeedingPromoteClients: clientsNeedingMore,
                 totalPromoteClientsNeeded: totalNeeded,
-                maxPromoteClientsPerTrigger: maxPerTrigger,
-                triggersNeededToSatisfyAll: triggersNeeded,
+                maxPromoteClientsPerTrigger: this.config.maxNewClientsPerTrigger,
+                triggersNeededToSatisfyAll: Math.ceil(totalNeeded / this.config.maxNewClientsPerTrigger),
             },
         };
     }
@@ -26210,86 +24417,20 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService {
         return this.promoteClientModel.find({ status }).exec();
     }
     async getPromoteClientsWithMessages() {
-        return this.promoteClientModel
-            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
-            .exec();
+        return this.promoteClientModel.find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 }).exec();
     }
     async getLeastRecentlyUsedPromoteClients(clientId, limit = 1) {
-        return this.promoteClientModel
-            .find({ clientId, status: 'active' })
-            .sort({ lastUsed: 1, _id: 1 })
-            .limit(limit)
-            .exec();
+        return await this.getLeastRecentlyUsedClients(clientId, limit);
     }
     async getNextAvailablePromoteClient(clientId) {
         const clients = await this.getLeastRecentlyUsedPromoteClients(clientId, 1);
         return clients.length > 0 ? clients[0] : null;
     }
     async getUnusedPromoteClients(hoursAgo = 24, clientId) {
-        const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
-        const filter = {
-            status: 'active',
-            $or: [
-                { lastUsed: { $lt: cutoffDate } },
-                { lastUsed: { $exists: false } },
-                { lastUsed: null },
-            ],
-        };
-        if (clientId) {
-            filter.clientId = clientId;
-        }
-        return this.promoteClientModel.find(filter).exec();
+        return await this.getUnusedClients(hoursAgo, clientId);
     }
-    async getUsageStatistics(clientId) {
-        const filter = { status: 'active' };
-        if (clientId) {
-            filter.clientId = clientId;
-        }
-        const now = new Date();
-        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
-        const lastWeek = new Date(now.getTime() - 7 * this.ONE_DAY_MS);
-        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients,] = await Promise.all([
-            this.promoteClientModel.countDocuments(filter),
-            this.promoteClientModel.countDocuments({
-                ...filter,
-                $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
-            }),
-            this.promoteClientModel.countDocuments({
-                ...filter,
-                lastUsed: { $gte: last24Hours },
-            }),
-            this.promoteClientModel.countDocuments({
-                ...filter,
-                lastUsed: { $gte: lastWeek },
-            }),
-            this.promoteClientModel.find(filter, { lastUsed: 1, createdAt: 1 }).exec(),
-        ]);
-        let totalGap = 0;
-        let gapCount = 0;
-        for (const client of allClients) {
-            if (client.lastUsed) {
-                const gap = now.getTime() - new Date(client.lastUsed).getTime();
-                totalGap += gap;
-                gapCount++;
-            }
-        }
-        const averageUsageGap = gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0;
-        return {
-            totalClients,
-            neverUsed,
-            usedInLast24Hours,
-            usedInLastWeek,
-            averageUsageGap,
-        };
-    }
-    createTimeout(callback, delay) {
-        const timeout = setTimeout(() => {
-            this.activeTimeouts.delete(timeout);
-            callback();
-        }, delay);
-        this.activeTimeouts.add(timeout);
-        return timeout;
-    }
+    removeFromPromoteMap(key) { this.removeFromJoinMap(key); }
+    clearPromoteMap() { this.clearJoinMap(); }
 };
 exports.PromoteClientService = PromoteClientService;
 exports.PromoteClientService = PromoteClientService = PromoteClientService_1 = __decorate([
@@ -26361,90 +24502,165 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PromoteClientSchema = exports.PromoteClient = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 let PromoteClient = class PromoteClient {
 };
 exports.PromoteClient = PromoteClient;
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Telegram account identifier.', example: '123456789' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "tgId", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.', example: '+15551234567' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "mobile", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Provider-specific last-active indicator recorded for the source user.', example: '2026-04-03' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "lastActive", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.', example: '2026-04-03' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "availableDate", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Current joined channel count.', example: 191 }),
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "channels", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning main client identifier.', example: 'client-a' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "clientId", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Operational status for the record.', example: 'active' }),
     (0, mongoose_1.Prop)({ required: false, default: 'active' }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "status", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational note attached to the client.', example: 'Enrolled for warmup' }),
     (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "message", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when this account was last consumed by live usage.', example: '2026-04-01T12:30:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUsed", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated during warmup.', example: '2026-03-10T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "privacyUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "profilePicsUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "nameBioUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were removed.', example: '2026-03-14T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated or cleared.', example: '2026-03-20T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "usernameUpdatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record creation timestamp.', example: '2026-03-01T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "createdAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record last update timestamp.', example: '2026-04-03T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "updatedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent periodic health check.', example: '2026-04-02T09:15:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastChecked", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUpdateAttempt", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Current consecutive warmup failure count.', example: 0, default: 0 }),
     (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "failedUpdateAttempts", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUpdateFailure", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Session string currently stored for this promote client.', example: '1AQAOMT...' }),
+    (0, mongoose_1.Prop)({ required: false }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "session", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Whether the account is currently reserved by an active workflow.', example: false }),
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], PromoteClient.prototype, "inUse", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "twoFASetAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other Telegram sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "otherAuthsRemovedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Current warmup lifecycle phase.',
+        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
+        example: 'growing',
+    }),
+    (0, mongoose_1.Prop)({
+        required: false,
+        type: String,
+        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
+        default: null,
+    }),
+    __metadata("design:type", String)
+], PromoteClient.prototype, "warmupPhase", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Per-account warmup jitter in days.', example: 2, default: 0 }),
+    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], PromoteClient.prototype, "warmupJitter", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "enrolledAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "organicActivityAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created and recorded.', example: '2026-04-02T07:00:00.000Z' }),
+    (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
+    __metadata("design:type", Date)
+], PromoteClient.prototype, "sessionRotatedAt", void 0);
 exports.PromoteClient = PromoteClient = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'promoteClients', versionKey: false, autoIndex: true,
@@ -28723,7 +26939,8 @@ class SessionManager {
     isRetryableError(errorMessage) {
         const nonRetryableErrors = [
             'user_deactivated_ban', 'auth_key_unregistered', 'session_revoked',
-            'phone_number_banned', 'user_deactivated', 'phone_number_invalid',
+            'auth_key_duplicated', 'session_expired', 'frozen_method_invalid',
+            'frozen_participant_missing', 'phone_number_banned', 'user_deactivated', 'phone_number_invalid',
             'session_password_needed'
         ];
         const retryableErrors = [
@@ -29203,6 +27420,1193 @@ exports.SessionService = SessionService = __decorate([
 
 /***/ },
 
+/***/ "./src/components/shared/base-client.service.ts"
+/*!******************************************************!*\
+  !*** ./src/components/shared/base-client.service.ts ***!
+  \******************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.BaseClientService = exports.performOrganicActivity = exports.getWarmupPhaseAction = exports.isAccountWarmingUp = exports.isAccountReady = exports.WarmupPhase = void 0;
+const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
+const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
+const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
+const cloudinary_1 = __webpack_require__(/*! ../../cloudinary */ "./src/cloudinary.ts");
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+const Password_1 = __webpack_require__(/*! telegram/Password */ "telegram/Password");
+const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
+const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const client_helper_utils_1 = __webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
+const organic_activity_1 = __webpack_require__(/*! ./organic-activity */ "./src/components/shared/organic-activity.ts");
+Object.defineProperty(exports, "performOrganicActivity", ({ enumerable: true, get: function () { return organic_activity_1.performOrganicActivity; } }));
+const warmup_phases_1 = __webpack_require__(/*! ./warmup-phases */ "./src/components/shared/warmup-phases.ts");
+Object.defineProperty(exports, "getWarmupPhaseAction", ({ enumerable: true, get: function () { return warmup_phases_1.getWarmupPhaseAction; } }));
+Object.defineProperty(exports, "WarmupPhase", ({ enumerable: true, get: function () { return warmup_phases_1.WarmupPhase; } }));
+Object.defineProperty(exports, "isAccountReady", ({ enumerable: true, get: function () { return warmup_phases_1.isAccountReady; } }));
+Object.defineProperty(exports, "isAccountWarmingUp", ({ enumerable: true, get: function () { return warmup_phases_1.isAccountWarmingUp; } }));
+class BaseClientService {
+    getEffectiveCooldownMs(mobile, lastUpdateAttempt) {
+        const baseCooldownMs = this.config.cooldownHours * 60 * 60 * 1000;
+        if (lastUpdateAttempt <= 0)
+            return baseCooldownMs;
+        const seed = `${mobile}:${lastUpdateAttempt}`;
+        const hashToUnit = (input) => {
+            let hash = 0;
+            for (let i = 0; i < input.length; i++) {
+                hash = ((hash << 5) - hash + input.charCodeAt(i)) | 0;
+            }
+            return (hash >>> 0) / 0xffffffff;
+        };
+        const averagedUnit = (hashToUnit(`${seed}:a`) + hashToUnit(`${seed}:b`) + hashToUnit(`${seed}:c`)) / 3;
+        const minJitterMs = -30 * 60 * 1000;
+        const maxJitterMs = 60 * 60 * 1000;
+        const jitterMs = Math.round(minJitterMs + averagedUnit * (maxJitterMs - minJitterMs));
+        return baseCooldownMs + jitterMs;
+    }
+    isOnCooldown(mobile, lastUpdateAttempt, now) {
+        const lastAttemptTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(lastUpdateAttempt);
+        if (lastAttemptTs <= 0)
+            return false;
+        return now - lastAttemptTs < this.getEffectiveCooldownMs(mobile, lastAttemptTs);
+    }
+    inferWarmupPhaseFromProgress(doc) {
+        if (doc.warmupPhase)
+            return doc.warmupPhase;
+        if (doc.sessionRotatedAt)
+            return warmup_phases_1.WarmupPhase.SESSION_ROTATED;
+        if (doc.profilePicsUpdatedAt)
+            return warmup_phases_1.WarmupPhase.MATURING;
+        if ((doc.channels || 0) >= warmup_phases_1.MIN_CHANNELS_FOR_MATURING || doc.usernameUpdatedAt)
+            return warmup_phases_1.WarmupPhase.GROWING;
+        if (doc.nameBioUpdatedAt || doc.profilePicsDeletedAt)
+            return warmup_phases_1.WarmupPhase.IDENTITY;
+        if (doc.otherAuthsRemovedAt || doc.twoFASetAt || doc.privacyUpdatedAt)
+            return warmup_phases_1.WarmupPhase.SETTLING;
+        return warmup_phases_1.WarmupPhase.ENROLLED;
+    }
+    getWarmupPhaseRank(phase) {
+        const order = {
+            [warmup_phases_1.WarmupPhase.ENROLLED]: 0,
+            [warmup_phases_1.WarmupPhase.SETTLING]: 1,
+            [warmup_phases_1.WarmupPhase.IDENTITY]: 2,
+            [warmup_phases_1.WarmupPhase.GROWING]: 3,
+            [warmup_phases_1.WarmupPhase.MATURING]: 4,
+            [warmup_phases_1.WarmupPhase.READY]: 5,
+            [warmup_phases_1.WarmupPhase.SESSION_ROTATED]: 6,
+        };
+        if (!phase)
+            return -1;
+        return order[phase] ?? -1;
+    }
+    getRecoveryEnrolledAt(phase, jitter, now) {
+        const recoveryDaysByPhase = {
+            [warmup_phases_1.WarmupPhase.ENROLLED]: Math.max(1, warmup_phases_1.WARMUP_PHASE_THRESHOLDS.settling + jitter),
+            [warmup_phases_1.WarmupPhase.SETTLING]: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.identity + jitter,
+            [warmup_phases_1.WarmupPhase.IDENTITY]: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.growing + jitter,
+            [warmup_phases_1.WarmupPhase.GROWING]: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.maturing + jitter,
+            [warmup_phases_1.WarmupPhase.MATURING]: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready + jitter,
+            [warmup_phases_1.WarmupPhase.READY]: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready + jitter + 1,
+            [warmup_phases_1.WarmupPhase.SESSION_ROTATED]: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready + jitter + 2,
+        };
+        const recoveryDays = recoveryDaysByPhase[phase] ?? (warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready + jitter + 1);
+        return new Date(now - recoveryDays * this.ONE_DAY_MS);
+    }
+    async repairWarmupMetadata(doc, now) {
+        const updateData = {};
+        const progressDoc = { ...doc, warmupPhase: undefined };
+        const inferredPhase = this.inferWarmupPhaseFromProgress(progressDoc);
+        const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
+        const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
+        if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
+            updateData.warmupPhase = inferredPhase;
+        }
+        if (!doc.enrolledAt && !doc.createdAt) {
+            updateData.enrolledAt = this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
+        }
+        if (Object.keys(updateData).length === 0) {
+            return doc;
+        }
+        const repairedDoc = await this.update(doc.mobile, updateData);
+        this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
+        return { ...doc, ...updateData, ...(repairedDoc || {}) };
+    }
+    constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
+        this.telegramService = telegramService;
+        this.usersService = usersService;
+        this.activeChannelsService = activeChannelsService;
+        this.clientService = clientService;
+        this.channelsService = channelsService;
+        this.sessionService = sessionService;
+        this.botsService = botsService;
+        this.joinChannelMap = new Map();
+        this.leaveChannelMap = new Map();
+        this.joinChannelIntervalId = null;
+        this.leaveChannelIntervalId = null;
+        this.isJoinChannelProcessing = false;
+        this.isLeaveChannelProcessing = false;
+        this.activeTimeouts = new Set();
+        this.cleanupIntervalId = null;
+        this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
+        this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
+        this.INACTIVE_USER_CUTOFF_DAYS = 90;
+        this.AVAILABILITY_WINDOWS = [
+            { name: 'today', days: 0, minRequired: 3 },
+            { name: 'tomorrow', days: 1, minRequired: 5 },
+            { name: 'oneWeek', days: 7, minRequired: 7 },
+            { name: 'tenDays', days: 10, minRequired: 9 },
+        ];
+        this.MAX_FAILED_ATTEMPTS = 3;
+        this.FAILURE_RESET_DAYS = 7;
+        this.MAX_UPDATES_PER_CYCLE = 5;
+        this.KNOWN_2FA_PASSWORD = 'Ajtdmwajt1@';
+        this.logger = new utils_1.Logger(loggerName);
+    }
+    async onModuleDestroy() {
+        await this.cleanup();
+    }
+    async cleanup() {
+        try {
+            this.clearAllTimeouts();
+            this.clearJoinChannelInterval();
+            this.clearLeaveChannelInterval();
+            this.clearMemoryCleanup();
+            this.joinChannelMap.clear();
+            this.leaveChannelMap.clear();
+            this.isJoinChannelProcessing = false;
+            this.isLeaveChannelProcessing = false;
+        }
+        catch (error) {
+            this.logger.error('Error during cleanup:', error);
+        }
+    }
+    startMemoryCleanup() {
+        if (this.cleanupIntervalId)
+            return;
+        this.cleanupIntervalId = setInterval(() => {
+            this.performMemoryCleanup();
+        }, this.config.cleanupInterval);
+        this.activeTimeouts.add(this.cleanupIntervalId);
+    }
+    clearMemoryCleanup() {
+        if (this.cleanupIntervalId) {
+            clearInterval(this.cleanupIntervalId);
+            this.activeTimeouts.delete(this.cleanupIntervalId);
+            this.cleanupIntervalId = null;
+        }
+    }
+    performMemoryCleanup() {
+        try {
+            for (const [mobile, channels] of this.joinChannelMap.entries()) {
+                if (!channels || channels.length === 0) {
+                    this.logger.debug(`Cleaning up empty joinChannelMap entry for mobile: ${mobile}`);
+                    this.joinChannelMap.delete(mobile);
+                }
+            }
+            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
+                if (!channels || channels.length === 0) {
+                    this.logger.debug(`Cleaning up empty leaveChannelMap entry for mobile: ${mobile}`);
+                    this.leaveChannelMap.delete(mobile);
+                }
+            }
+            this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
+            this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
+            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}`);
+        }
+        catch (error) {
+            this.logger.error('Error during memory cleanup:', error);
+        }
+    }
+    trimMapIfNeeded(map, mapName) {
+        if (map.size > this.config.maxMapSize) {
+            const keysToRemove = Array.from(map.keys()).slice(this.config.maxMapSize);
+            keysToRemove.forEach(key => map.delete(key));
+            this.logger.warn(`Trimmed ${keysToRemove.length} entries from ${mapName}`);
+        }
+    }
+    createTimeout(callback, delay) {
+        const timeout = setTimeout(() => {
+            this.activeTimeouts.delete(timeout);
+            callback();
+        }, delay);
+        this.activeTimeouts.add(timeout);
+        return timeout;
+    }
+    clearAllTimeouts() {
+        this.activeTimeouts.forEach(timeout => clearTimeout(timeout));
+        this.activeTimeouts.clear();
+        this.logger.debug('Cleared all active timeouts');
+    }
+    async safeUnregisterClient(mobile) {
+        try {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+        catch (unregisterError) {
+            const errorMessage = unregisterError instanceof Error ? unregisterError.message : 'Unknown error';
+            this.logger.error(`Error unregistering client ${mobile}: ${errorMessage}`);
+        }
+    }
+    handleError(error, context, mobile) {
+        const contextWithMobile = mobile ? `${context}: ${mobile}` : context;
+        return (0, parseError_1.parseError)(error, contextWithMobile, false);
+    }
+    async updateUser2FAStatus(tgId, mobile) {
+        try {
+            await this.usersService.update(tgId, { twoFA: true });
+        }
+        catch (userUpdateError) {
+            this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
+        }
+    }
+    isFrozenError(errorDetails) {
+        const message = `${errorDetails?.message || ''} ${errorDetails?.error?.message || ''} ${errorDetails?.error?.errorMessage || ''}`.toLowerCase();
+        return message.includes('frozen_method_invalid') || message.includes('frozen_participant_missing');
+    }
+    extractConfigValue(node, targetKey) {
+        if (node === null || node === undefined)
+            return undefined;
+        if (Array.isArray(node)) {
+            for (const item of node) {
+                const value = this.extractConfigValue(item, targetKey);
+                if (value !== undefined)
+                    return value;
+            }
+            return undefined;
+        }
+        if (typeof node !== 'object')
+            return undefined;
+        if (node.key === targetKey && 'value' in node) {
+            return node.value;
+        }
+        if (targetKey in node && node[targetKey] !== undefined) {
+            return node[targetKey];
+        }
+        for (const value of Object.values(node)) {
+            const extracted = this.extractConfigValue(value, targetKey);
+            if (extracted !== undefined)
+                return extracted;
+        }
+        return undefined;
+    }
+    async buildPermanentAccountReason(baseReason, telegramClient) {
+        if (!telegramClient || !this.isFrozenError({ message: baseReason })) {
+            return baseReason;
+        }
+        try {
+            const appConfig = await telegramClient.client.invoke(new telegram_1.Api.help.GetAppConfig({ hash: 0 }));
+            const freezeSince = this.extractConfigValue(appConfig, 'freeze_since_date');
+            const freezeUntil = this.extractConfigValue(appConfig, 'freeze_until_date');
+            const freezeAppealUrl = this.extractConfigValue(appConfig, 'freeze_appeal_url');
+            const extras = [];
+            if (freezeSince)
+                extras.push(`freeze_since=${new Date(Number(freezeSince) * 1000).toISOString()}`);
+            if (freezeUntil)
+                extras.push(`freeze_until=${new Date(Number(freezeUntil) * 1000).toISOString()}`);
+            if (freezeAppealUrl)
+                extras.push(`appeal_url=${freezeAppealUrl}`);
+            return extras.length > 0 ? `${baseReason} (${extras.join(', ')})` : baseReason;
+        }
+        catch (configError) {
+            this.logger.warn(`Failed to fetch freeze metadata for permanent error`, configError);
+            return baseReason;
+        }
+    }
+    safeSetJoinChannelMap(mobile, channels) {
+        if (this.joinChannelMap.size >= this.config.maxMapSize && !this.joinChannelMap.has(mobile)) {
+            this.logger.warn(`Join channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
+            return false;
+        }
+        this.joinChannelMap.set(mobile, channels);
+        return true;
+    }
+    safeSetLeaveChannelMap(mobile, channels) {
+        if (this.leaveChannelMap.size >= this.config.maxMapSize && !this.leaveChannelMap.has(mobile)) {
+            this.logger.warn(`Leave channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
+            return false;
+        }
+        this.leaveChannelMap.set(mobile, channels);
+        return true;
+    }
+    removeFromJoinMap(key) {
+        this.joinChannelMap.delete(key);
+    }
+    removeFromLeaveMap(key) {
+        this.leaveChannelMap.delete(key);
+        if (this.leaveChannelMap.size === 0) {
+            this.clearLeaveChannelInterval();
+        }
+    }
+    clearJoinMap() {
+        const mapSize = this.joinChannelMap.size;
+        this.joinChannelMap.clear();
+        this.clearJoinChannelInterval();
+        this.logger.debug(`JoinMap cleared, removed ${mapSize} entries`);
+    }
+    clearLeaveMap() {
+        const mapSize = this.leaveChannelMap.size;
+        this.leaveChannelMap.clear();
+        this.clearLeaveChannelInterval();
+        this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
+    }
+    async performHealthCheck(mobile, lastChecked, now) {
+        const healthCheckIntervalDays = 5 + Math.random() * 4;
+        const needsHealthCheck = !lastChecked || (now - lastChecked > healthCheckIntervalDays * this.ONE_DAY_MS);
+        if (!needsHealthCheck) {
+            return true;
+        }
+        let telegramClient = null;
+        try {
+            telegramClient = await connection_manager_1.connectionManager.getClient(mobile, {
+                autoDisconnect: false,
+                handler: false,
+            });
+            await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'light');
+            const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
+            await this.update(mobile, {
+                channels: channels.ids.length,
+                lastChecked: new Date(),
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Health check passed for ${mobile}`);
+            await (0, Helpers_1.sleep)(5000);
+            return true;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Health check failed', mobile);
+            this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
+                await this.markAsInactive(mobile, reason);
+            }
+            await (0, Helpers_1.sleep)(5000);
+            return false;
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
+    }
+    async updatePrivacySettings(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'medium');
+            await telegramClient.updatePrivacyforDeletedAccount();
+            await this.update(doc.mobile, {
+                privacyUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return 1;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating privacy', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async deleteProfilePhotos(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'light');
+            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
+            if (photos.photos.length > 0) {
+                await telegramClient.deleteProfilePhotos();
+                this.logger.debug(`Deleted ${photos.photos.length} profile photos for ${doc.mobile}`);
+            }
+            else {
+                this.logger.debug(`No profile photos to delete for ${doc.mobile}`);
+            }
+            await this.update(doc.mobile, {
+                profilePicsDeletedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            return photos.photos.length > 0 ? 1 : 0;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async updateProfilePhotos(doc, client, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'medium');
+            const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
+            let updateCount = 0;
+            if (photos.photos.length < 2) {
+                await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
+                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
+                const randomPhoto = photoPaths[Math.floor(Math.random() * photoPaths.length)];
+                await telegramClient.updateProfilePic(path_1.default.join(process.cwd(), randomPhoto));
+                updateCount = 1;
+                this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile}`);
+            }
+            await this.update(doc.mobile, {
+                profilePicsUpdatedAt: new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            await (0, Helpers_1.sleep)(40000 + Math.random() * 20000);
+            return updateCount;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error updating profile photos', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async verifyOurPassword(telegramClient, mobile) {
+        try {
+            const passwordInfo = await telegramClient.client.invoke(new telegram_1.Api.account.GetPassword());
+            if (!passwordInfo.hasPassword)
+                return false;
+            const srp = await (0, Password_1.computeCheck)(passwordInfo, this.KNOWN_2FA_PASSWORD);
+            await telegramClient.client.invoke(new telegram_1.Api.account.GetPasswordSettings({ password: srp }));
+            return true;
+        }
+        catch (error) {
+            const msg = (error?.message || error?.errorMessage || '').toLowerCase();
+            if (msg.includes('password_hash_invalid') || msg.includes('srp_id_invalid')) {
+                this.logger.warn(`${mobile}: 2FA password verification failed — foreign password`);
+                return false;
+            }
+            this.logger.warn(`${mobile}: 2FA password verification error: ${msg}`);
+            return false;
+        }
+    }
+    async set2fa(doc, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'full');
+            const hasPassword = await telegramClient.hasPassword();
+            if (hasPassword) {
+                const isOurPassword = await this.verifyOurPassword(telegramClient, doc.mobile);
+                if (isOurPassword) {
+                    this.logger.debug(`${doc.mobile} already has our 2FA set`);
+                    await this.update(doc.mobile, {
+                        lastUpdateAttempt: new Date(),
+                        twoFASetAt: new Date(),
+                    });
+                    await this.updateUser2FAStatus(doc.tgId, doc.mobile);
+                    return 1;
+                }
+                else {
+                    this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
+                    await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `FOREIGN 2FA:\n\nMobile: ${doc.mobile}\nPhase: ${doc.warmupPhase}\nAccount has unknown 2FA password — marked inactive`);
+                    return 0;
+                }
+            }
+            await telegramClient.set2fa();
+            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+                twoFASetAt: new Date(),
+            });
+            await this.updateUser2FAStatus(doc.tgId, doc.mobile);
+            this.logger.debug(`Set 2FA for ${doc.mobile}`);
+            return 1;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error setting 2FA', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async removeOtherAuths(doc, failedAttempts) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'medium');
+            await telegramClient.removeOtherAuths();
+            await (0, Helpers_1.sleep)(20000 + Math.random() * 20000);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+                otherAuthsRemovedAt: new Date(),
+            });
+            this.logger.debug(`Removed other auths for ${doc.mobile} — session verified alive`);
+            return 1;
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, 'Error removing other auths', doc.mobile);
+            const errorMsg = errorDetails?.message || '';
+            if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
+                this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
+                await this.markAsInactive(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `CRITICAL SESSION LOSS:\n\nMobile: ${doc.mobile}\nPhase: ${doc.warmupPhase}\nError: ${errorMsg}`);
+                return 0;
+            }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
+    async processClient(doc, client) {
+        if (doc.inUse === true) {
+            this.logger.debug(`Client ${doc.mobile} is marked as in use`);
+            return 0;
+        }
+        if (!client) {
+            this.logger.warn(`Client not found for ${this.clientType} client ${doc.mobile}`);
+            return 0;
+        }
+        const now = Date.now();
+        let updateCount = 0;
+        try {
+            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+            doc = await this.repairWarmupMetadata(doc, now);
+            const failedAttempts = doc.failedUpdateAttempts || 0;
+            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                this.logger.log(`Resetting failure count for ${doc.mobile}`);
+                await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
+                doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
+            }
+            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
+                return 0;
+            }
+            if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+                this.logger.debug(`Client ${doc.mobile} on cooldown`);
+                return 0;
+            }
+            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+            if (lastUsed > 0) {
+                await this.backfillTimestamps(doc.mobile, doc, now);
+                this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
+                return 0;
+            }
+            const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+            this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+            if (warmupAction.phase !== doc.warmupPhase) {
+                await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
+            }
+            if (warmupAction.action === 'wait') {
+                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+                return 0;
+            }
+            switch (warmupAction.action) {
+                case 'organic_only': {
+                    const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+                    try {
+                        await (0, organic_activity_1.performOrganicActivity)(telegramClient, warmupAction.organicIntensity);
+                        await this.update(doc.mobile, { organicActivityAt: new Date(), lastUpdateAttempt: new Date() });
+                    }
+                    finally {
+                        await this.safeUnregisterClient(doc.mobile);
+                    }
+                    return 0;
+                }
+                case 'set_privacy':
+                    updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
+                    return updateCount;
+                case 'delete_photos':
+                    updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
+                    return updateCount;
+                case 'update_name_bio':
+                    updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
+                    return updateCount;
+                case 'update_username':
+                    updateCount = await this.updateUsername(doc, client, failedAttempts);
+                    return updateCount;
+                case 'upload_photo':
+                    updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
+                    return updateCount;
+                case 'set_2fa':
+                    updateCount = await this.set2fa(doc, failedAttempts);
+                    return updateCount;
+                case 'remove_other_auths':
+                    updateCount = await this.removeOtherAuths(doc, failedAttempts);
+                    return updateCount;
+                case 'advance_to_ready':
+                    await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
+                    this.logger.log(`Client ${doc.mobile} advanced to READY`);
+                    return 0;
+                case 'join_channels':
+                    return 0;
+                case 'rotate_session':
+                    return 0;
+                default:
+                    await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+                    return 0;
+            }
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, `Error with ${this.clientType} client`, doc.mobile);
+            try {
+                await this.update(doc.mobile, {
+                    lastUpdateAttempt: new Date(),
+                    failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
+                    lastUpdateFailure: new Date(),
+                });
+            }
+            catch (updateError) {
+                this.logger.warn(`Failed to track update attempt for ${doc.mobile}:`, updateError);
+            }
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                await this.markAsInactive(doc.mobile, reason);
+            }
+            return 0;
+        }
+        finally {
+            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+        }
+    }
+    async backfillTimestamps(mobile, doc, now) {
+        const needsProfileBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
+            !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt || !doc.profilePicsUpdatedAt;
+        const needsWarmupBackfill = !doc.warmupPhase || !doc.twoFASetAt || !doc.otherAuthsRemovedAt || !doc.enrolledAt;
+        if (!needsProfileBackfill && !needsWarmupBackfill)
+            return;
+        this.logger.log(`Backfilling fields for ${mobile}`);
+        const allTimestamps = client_helper_utils_1.ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
+        const backfillData = {};
+        if (!doc.privacyUpdatedAt)
+            backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
+        if (!doc.profilePicsDeletedAt)
+            backfillData.profilePicsDeletedAt = allTimestamps.profilePicsDeletedAt;
+        if (!doc.nameBioUpdatedAt)
+            backfillData.nameBioUpdatedAt = allTimestamps.nameBioUpdatedAt;
+        if (!doc.usernameUpdatedAt)
+            backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
+        if (!doc.profilePicsUpdatedAt)
+            backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
+        if (!doc.warmupPhase)
+            backfillData.warmupPhase = warmup_phases_1.WarmupPhase.READY;
+        if (!doc.enrolledAt)
+            backfillData.enrolledAt = doc.createdAt || new Date(now - 30 * this.ONE_DAY_MS);
+        if (!doc.twoFASetAt)
+            backfillData.twoFASetAt = new Date(now - 28 * this.ONE_DAY_MS);
+        if (!doc.otherAuthsRemovedAt)
+            backfillData.otherAuthsRemovedAt = new Date(now - 27 * this.ONE_DAY_MS);
+        if (Object.keys(backfillData).length > 0) {
+            await this.update(mobile, backfillData);
+            this.logger.log(`Backfilled ${Object.keys(backfillData).length} fields for ${mobile}`);
+        }
+    }
+    async joinChannelQueue() {
+        if (this.isJoinChannelProcessing) {
+            this.logger.warn('Join channel process is already running');
+            return;
+        }
+        if (this.joinChannelMap.size === 0) {
+            this.logger.debug('No channels to join, not starting queue');
+            return;
+        }
+        if (!this.joinChannelIntervalId) {
+            this.logger.debug('Starting join channel queue');
+            this.scheduleNextJoinRound();
+        }
+    }
+    scheduleNextJoinRound() {
+        if (this.joinChannelMap.size === 0) {
+            this.clearJoinChannelInterval();
+            return;
+        }
+        const baseInterval = this.config.joinChannelInterval;
+        const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
+        const delay = Math.max(60000, baseInterval + jitter);
+        this.joinChannelIntervalId = this.createTimeout(async () => {
+            await this.processJoinChannelInterval();
+        }, delay);
+    }
+    async processJoinChannelInterval() {
+        if (this.isJoinChannelProcessing)
+            return;
+        if (this.joinChannelMap.size === 0) {
+            this.clearJoinChannelInterval();
+            return;
+        }
+        this.isJoinChannelProcessing = true;
+        try {
+            await this.processJoinChannelSequentially();
+        }
+        catch (error) {
+            this.logger.error('Error in join channel queue', error);
+        }
+        finally {
+            this.isJoinChannelProcessing = false;
+            this.scheduleNextJoinRound();
+        }
+    }
+    async processJoinChannelSequentially() {
+        const keys = Array.from(this.joinChannelMap.keys());
+        this.logger.debug(`Processing join channel queue for ${keys.length} clients`);
+        for (let i = 0; i < keys.length; i++) {
+            const mobile = keys[i];
+            let currentChannel = null;
+            let joinCount = 0;
+            try {
+                const channels = this.joinChannelMap.get(mobile);
+                if (!channels || channels.length === 0) {
+                    this.removeFromJoinMap(mobile);
+                    continue;
+                }
+                while (joinCount < this.config.maxJoinsPerSession && channels.length > 0) {
+                    currentChannel = channels.shift();
+                    if (!currentChannel)
+                        break;
+                    this.joinChannelMap.set(mobile, channels);
+                    this.logger.debug(`${mobile} joining @${currentChannel.username} (${channels.length} remaining)`);
+                    let activeChannel = null;
+                    try {
+                        activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
+                    }
+                    catch { }
+                    if (activeChannel && (activeChannel.banned === true || (activeChannel.deletedCount && activeChannel.deletedCount > 0))) {
+                        this.logger.debug(`Skipping banned/deleted channel ${currentChannel.channelId}`);
+                        await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
+                        continue;
+                    }
+                    await this.telegramService.tryJoiningChannel(mobile, currentChannel);
+                    joinCount++;
+                    if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
+                        try {
+                            const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                            await (0, organic_activity_1.performOrganicActivity)(client, 'light');
+                        }
+                        catch {
+                        }
+                    }
+                    if (channels.length > 0 && joinCount < this.config.maxJoinsPerSession) {
+                        const delay = client_helper_utils_1.ClientHelperUtils.gaussianRandom(120000, 30000, 90000, 180000);
+                        await (0, Helpers_1.sleep)(delay);
+                    }
+                }
+                if (channels.length === 0) {
+                    this.removeFromJoinMap(mobile);
+                }
+            }
+            catch (error) {
+                const errorDetails = this.handleError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`, mobile);
+                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
+                    this.removeFromJoinMap(mobile);
+                    await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                    try {
+                        const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                        await this.update(mobile, { channels: channelsInfo.ids.length });
+                    }
+                    catch {
+                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                            await this.update(mobile, { channels: 500 });
+                        }
+                    }
+                }
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    this.removeFromJoinMap(mobile);
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    await this.markAsInactive(mobile, reason);
+                }
+            }
+            finally {
+                await this.safeUnregisterClient(mobile);
+                if (i < keys.length - 1) {
+                    await (0, Helpers_1.sleep)(this.config.clientProcessingDelay + Math.random() * 5000);
+                }
+            }
+        }
+    }
+    async leaveChannelQueue() {
+        if (this.isLeaveChannelProcessing) {
+            this.logger.warn('Leave channel process is already running');
+            return;
+        }
+        if (this.leaveChannelMap.size === 0) {
+            this.logger.debug('No channels to leave, not starting queue');
+            return;
+        }
+        if (!this.leaveChannelIntervalId) {
+            this.logger.debug('Starting leave channel interval');
+            this.leaveChannelIntervalId = setInterval(async () => {
+                await this.processLeaveChannelInterval();
+            }, this.config.leaveChannelInterval);
+            this.activeTimeouts.add(this.leaveChannelIntervalId);
+            this.createTimeout(() => this.processLeaveChannelInterval(), 1000);
+        }
+    }
+    async processLeaveChannelInterval() {
+        if (this.isLeaveChannelProcessing)
+            return;
+        if (this.leaveChannelMap.size === 0) {
+            this.clearLeaveChannelInterval();
+            return;
+        }
+        this.isLeaveChannelProcessing = true;
+        try {
+            await this.processLeaveChannelSequentially();
+        }
+        catch (error) {
+            this.logger.error('Error in leave channel queue', error);
+        }
+        finally {
+            this.isLeaveChannelProcessing = false;
+            if (this.leaveChannelMap.size === 0) {
+                this.clearLeaveChannelInterval();
+            }
+        }
+    }
+    async processLeaveChannelSequentially() {
+        const keys = Array.from(this.leaveChannelMap.keys());
+        this.logger.debug(`Processing leave channel queue for ${keys.length} clients`);
+        for (let i = 0; i < keys.length; i++) {
+            const mobile = keys[i];
+            try {
+                const channels = this.leaveChannelMap.get(mobile);
+                if (!channels || channels.length === 0) {
+                    this.removeFromLeaveMap(mobile);
+                    continue;
+                }
+                const channelsToProcess = channels.splice(0, this.config.leaveChannelBatchSize);
+                this.logger.debug(`${mobile} leaving ${channelsToProcess.length} channels (${channels.length} remaining)`);
+                if (channels.length > 0) {
+                    this.leaveChannelMap.set(mobile, channels);
+                }
+                else {
+                    this.removeFromLeaveMap(mobile);
+                }
+                const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                await client.leaveChannels(channelsToProcess);
+                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
+            }
+            catch (error) {
+                const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    await this.markAsInactive(mobile, reason);
+                    this.removeFromLeaveMap(mobile);
+                }
+            }
+            finally {
+                await this.safeUnregisterClient(mobile);
+                if (i < keys.length - 1 || (this.leaveChannelMap.get(mobile)?.length || 0) > 0) {
+                    await (0, Helpers_1.sleep)((this.config.leaveChannelInterval / 2) + Math.random() * 60000);
+                }
+            }
+        }
+    }
+    clearJoinChannelInterval() {
+        if (this.joinChannelIntervalId) {
+            clearInterval(this.joinChannelIntervalId);
+            this.activeTimeouts.delete(this.joinChannelIntervalId);
+            this.joinChannelIntervalId = null;
+        }
+        this.isJoinChannelProcessing = false;
+    }
+    clearLeaveChannelInterval() {
+        if (this.leaveChannelIntervalId) {
+            clearInterval(this.leaveChannelIntervalId);
+            this.activeTimeouts.delete(this.leaveChannelIntervalId);
+            this.leaveChannelIntervalId = null;
+        }
+        this.isLeaveChannelProcessing = false;
+    }
+    getMissingWarmupPhaseQuery(clientId) {
+        const filter = {
+            status: 'active',
+            $or: [{ warmupPhase: { $exists: false } }, { warmupPhase: null }],
+        };
+        if (clientId)
+            filter.clientId = clientId;
+        return filter;
+    }
+    async selfHealLegacyUsedAccounts(clientId, limit = 100) {
+        const docs = await this.model
+            .find({
+            ...this.getMissingWarmupPhaseQuery(clientId),
+            lastUsed: { $exists: true, $ne: null },
+        })
+            .sort({ lastUsed: -1, _id: 1 })
+            .limit(limit)
+            .exec();
+        if (!docs.length)
+            return 0;
+        const now = Date.now();
+        let healed = 0;
+        for (const doc of docs) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            healed++;
+        }
+        if (healed > 0) {
+            this.logger.log(`Self-healed ${healed} legacy used ${this.clientType} accounts${clientId ? ` for ${clientId}` : ''}`);
+        }
+        return healed;
+    }
+    async selfHealLegacyWarmupAccounts(clientId, limit = 50) {
+        const docs = await this.model
+            .find({
+            ...this.getMissingWarmupPhaseQuery(clientId),
+            $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
+        })
+            .sort({ createdAt: 1, _id: 1 })
+            .limit(limit)
+            .exec();
+        if (!docs.length)
+            return 0;
+        const now = Date.now();
+        let healed = 0;
+        for (const doc of docs) {
+            await this.repairWarmupMetadata(doc, now);
+            healed++;
+        }
+        if (healed > 0) {
+            this.logger.log(`Self-healed ${healed} legacy warming ${this.clientType} accounts${clientId ? ` for ${clientId}` : ''}`);
+        }
+        return healed;
+    }
+    async selfHealLegacyOperationalState(clientId) {
+        await this.selfHealLegacyUsedAccounts(clientId);
+        await this.selfHealLegacyWarmupAccounts(clientId);
+    }
+    async calculateAvailabilityBasedNeeds(clientId) {
+        await this.selfHealLegacyOperationalState(clientId);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const windows = this.AVAILABILITY_WINDOWS.map(window => ({
+            ...window,
+            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS).toISOString().split('T')[0],
+        }));
+        const readyFilter = {
+            clientId,
+            status: 'active',
+            warmupPhase: { $in: [warmup_phases_1.WarmupPhase.READY, warmup_phases_1.WarmupPhase.SESSION_ROTATED] },
+        };
+        const totalActive = await this.model.countDocuments(readyFilter);
+        const windowNeeds = [];
+        let maxNeeded = 0;
+        let mostUrgentWindow = '';
+        let mostUrgentPriority = 999;
+        for (const window of windows) {
+            const availableCount = await this.model.countDocuments({
+                ...readyFilter,
+                availableDate: { $lte: window.targetDate },
+            });
+            const needed = Math.max(0, window.minRequired - availableCount);
+            windowNeeds.push({
+                window: window.name,
+                available: availableCount,
+                needed,
+                targetDate: window.targetDate,
+                minRequired: window.minRequired,
+            });
+            if (needed > maxNeeded) {
+                maxNeeded = needed;
+                mostUrgentWindow = window.name;
+                mostUrgentPriority = window.days;
+            }
+            else if (needed > 0 && window.days < mostUrgentPriority) {
+                mostUrgentWindow = window.name;
+                mostUrgentPriority = window.days;
+            }
+        }
+        const totalNeededForCount = Math.max(0, this.config.minTotalClients - totalActive);
+        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
+        let priority = 100;
+        if (maxNeeded > 0) {
+            priority = mostUrgentPriority;
+        }
+        let calculationReason = '';
+        if (maxNeeded > 0 && totalNeededForCount > 0) {
+            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
+        }
+        else if (maxNeeded > 0) {
+            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
+            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
+        }
+        else if (totalNeededForCount > 0) {
+            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.config.minTotalClients}`;
+        }
+        else {
+            calculationReason = 'All windows satisfied';
+        }
+        return { totalNeeded, windowNeeds, totalActive, totalNeededForCount, calculationReason, priority };
+    }
+    async getClientsByStatus(status) {
+        return this.model.find({ status }).exec();
+    }
+    async getClientsWithMessages() {
+        return this.model.find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 }).exec();
+    }
+    async getLeastRecentlyUsedClients(clientId, limit = 1) {
+        await this.selfHealLegacyOperationalState(clientId);
+        return this.model
+            .find({
+            clientId,
+            status: 'active',
+            inUse: { $ne: true },
+            warmupPhase: { $in: [warmup_phases_1.WarmupPhase.READY, warmup_phases_1.WarmupPhase.SESSION_ROTATED] },
+        })
+            .sort({ lastUsed: 1, _id: 1 })
+            .limit(limit)
+            .exec();
+    }
+    async getNextAvailableClient(clientId) {
+        const clients = await this.getLeastRecentlyUsedClients(clientId, 1);
+        return clients.length > 0 ? clients[0] : null;
+    }
+    async getUnusedClients(hoursAgo = 24, clientId) {
+        await this.selfHealLegacyOperationalState(clientId);
+        const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+        const filter = {
+            status: 'active',
+            inUse: { $ne: true },
+            warmupPhase: { $in: [warmup_phases_1.WarmupPhase.READY, warmup_phases_1.WarmupPhase.SESSION_ROTATED] },
+            $or: [
+                { lastUsed: { $lt: cutoffDate } },
+                { lastUsed: { $exists: false } },
+                { lastUsed: null },
+            ],
+        };
+        if (clientId)
+            filter.clientId = clientId;
+        return this.model.find(filter).exec();
+    }
+    async getUsageStatistics(clientId) {
+        const filter = { status: 'active' };
+        if (clientId)
+            filter.clientId = clientId;
+        const now = new Date();
+        const last24Hours = new Date(now.getTime() - this.ONE_DAY_MS);
+        const lastWeek = new Date(now.getTime() - 7 * this.ONE_DAY_MS);
+        const [totalClients, neverUsed, usedInLast24Hours, usedInLastWeek, allClients] = await Promise.all([
+            this.model.countDocuments(filter),
+            this.model.countDocuments({ ...filter, $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }] }),
+            this.model.countDocuments({ ...filter, lastUsed: { $gte: last24Hours } }),
+            this.model.countDocuments({ ...filter, lastUsed: { $gte: lastWeek } }),
+            this.model.find(filter, { lastUsed: 1, createdAt: 1 }).exec(),
+        ]);
+        let totalGap = 0;
+        let gapCount = 0;
+        for (const client of allClients) {
+            if (client.lastUsed) {
+                totalGap += now.getTime() - new Date(client.lastUsed).getTime();
+                gapCount++;
+            }
+        }
+        return {
+            totalClients,
+            neverUsed,
+            usedInLast24Hours,
+            usedInLastWeek,
+            averageUsageGap: gapCount > 0 ? totalGap / gapCount / (60 * 60 * 1000) : 0,
+        };
+    }
+    async markAsUsed(mobile, message) {
+        const updateData = { lastUsed: new Date() };
+        if (message)
+            updateData.message = message;
+        return this.update(mobile, updateData);
+    }
+    async rotateSession(mobile) {
+        try {
+            this.logger.log(`Starting session rotation for ${mobile}`);
+            const newSession = await this.telegramService.createNewSession(mobile);
+            if (!newSession) {
+                this.logger.error(`Failed to create new session for ${mobile}`);
+                return false;
+            }
+            const users = await this.usersService.search({ mobile });
+            if (users.length > 0) {
+                await this.usersService.update(users[0].tgId, { session: newSession });
+            }
+            await this.update(mobile, {
+                warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: new Date(),
+            });
+            this.logger.log(`Session rotation complete for ${mobile}`);
+            return true;
+        }
+        catch (error) {
+            this.logger.error(`Session rotation failed for ${mobile}:`, error);
+            return false;
+        }
+        finally {
+            await this.safeUnregisterClient(mobile);
+        }
+    }
+}
+exports.BaseClientService = BaseClientService;
+
+
+/***/ },
+
 /***/ "./src/components/shared/client-helper.utils.ts"
 /*!******************************************************!*\
   !*** ./src/components/shared/client-helper.utils.ts ***!
@@ -29217,7 +28621,8 @@ class ClientHelperUtils {
         if (!date)
             return 0;
         try {
-            return new Date(date).getTime();
+            const ts = new Date(date).getTime();
+            return isNaN(ts) ? 0 : ts;
         }
         catch {
             return 0;
@@ -29238,8 +28643,170 @@ class ClientHelperUtils {
             profilePicsUpdatedAt: new Date(now - (7 * oneDayMs)),
         };
     }
+    static gaussianRandom(mean, stddev, min, max) {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        let result = mean + z * stddev;
+        if (min !== undefined)
+            result = Math.max(result, min);
+        if (max !== undefined)
+            result = Math.min(result, max);
+        return Math.round(result);
+    }
+    static generateWarmupJitter() {
+        return Math.floor(Math.random() * 4);
+    }
 }
 exports.ClientHelperUtils = ClientHelperUtils;
+
+
+/***/ },
+
+/***/ "./src/components/shared/dto/client-swagger.dto.ts"
+/*!*********************************************************!*\
+  !*** ./src/components/shared/dto/client-swagger.dto.ts ***!
+  \*********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UsageStatisticsDto = exports.BulkEnrollPromoteClientsRequestDto = exports.BulkEnrollBufferClientsRequestDto = exports.BulkEnrollClientsRequestDto = exports.MarkUsedRequestDto = exports.DeactivationRequestDto = exports.ActivationRequestDto = exports.StatusUpdateRequestDto = exports.AcceptedStringResponseDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class AcceptedStringResponseDto {
+}
+exports.AcceptedStringResponseDto = AcceptedStringResponseDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Acknowledgement returned when a long-running background operation is started.',
+        example: 'initiated Checking',
+    }),
+    __metadata("design:type", String)
+], AcceptedStringResponseDto.prototype, "message", void 0);
+class StatusUpdateRequestDto {
+}
+exports.StatusUpdateRequestDto = StatusUpdateRequestDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Lifecycle status to assign to the client record.',
+        enum: ['active', 'inactive'],
+        example: 'active',
+    }),
+    __metadata("design:type", String)
+], StatusUpdateRequestDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional operator note explaining why the status changed.',
+        example: 'Re-enabled after manual review',
+    }),
+    __metadata("design:type", String)
+], StatusUpdateRequestDto.prototype, "message", void 0);
+class ActivationRequestDto {
+}
+exports.ActivationRequestDto = ActivationRequestDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional operator note recorded when activating the client.',
+        example: 'Returned to active pool',
+    }),
+    __metadata("design:type", String)
+], ActivationRequestDto.prototype, "message", void 0);
+class DeactivationRequestDto {
+}
+exports.DeactivationRequestDto = DeactivationRequestDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Reason for deactivating the client.',
+        example: 'Health check failed repeatedly',
+    }),
+    __metadata("design:type", String)
+], DeactivationRequestDto.prototype, "reason", void 0);
+class MarkUsedRequestDto {
+}
+exports.MarkUsedRequestDto = MarkUsedRequestDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Optional note describing where or why the client was consumed.',
+        example: 'Assigned to live campaign rotation',
+    }),
+    __metadata("design:type", String)
+], MarkUsedRequestDto.prototype, "message", void 0);
+class BulkEnrollClientsRequestDto {
+}
+exports.BulkEnrollClientsRequestDto = BulkEnrollClientsRequestDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Candidate user identifiers that passed upstream validation.',
+        type: [String],
+        example: ['10001', '10002'],
+    }),
+    __metadata("design:type", Array)
+], BulkEnrollClientsRequestDto.prototype, "goodIds", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Candidate user identifiers that failed upstream validation and should be excluded.',
+        type: [String],
+        example: ['99999'],
+    }),
+    __metadata("design:type", Array)
+], BulkEnrollClientsRequestDto.prototype, "badIds", void 0);
+class BulkEnrollBufferClientsRequestDto extends BulkEnrollClientsRequestDto {
+}
+exports.BulkEnrollBufferClientsRequestDto = BulkEnrollBufferClientsRequestDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Specific client IDs that currently need more buffer accounts.',
+        type: [String],
+        example: ['client-a', 'client-b'],
+    }),
+    __metadata("design:type", Array)
+], BulkEnrollBufferClientsRequestDto.prototype, "clientsNeedingBufferClients", void 0);
+class BulkEnrollPromoteClientsRequestDto extends BulkEnrollClientsRequestDto {
+}
+exports.BulkEnrollPromoteClientsRequestDto = BulkEnrollPromoteClientsRequestDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Specific client IDs that currently need more promote accounts.',
+        type: [String],
+        example: ['client-a', 'client-b'],
+    }),
+    __metadata("design:type", Array)
+], BulkEnrollPromoteClientsRequestDto.prototype, "clientsNeedingPromoteClients", void 0);
+class UsageStatisticsDto {
+}
+exports.UsageStatisticsDto = UsageStatisticsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total number of matching client records.', example: 48 }),
+    __metadata("design:type", Number)
+], UsageStatisticsDto.prototype, "totalClients", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients that have never been used.', example: 12 }),
+    __metadata("design:type", Number)
+], UsageStatisticsDto.prototype, "neverUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 24 hours.', example: 6 }),
+    __metadata("design:type", Number)
+], UsageStatisticsDto.prototype, "usedInLast24Hours", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 7 days.', example: 21 }),
+    __metadata("design:type", Number)
+], UsageStatisticsDto.prototype, "usedInLastWeek", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Average time gap between usages, in hours.',
+        example: 37.5,
+    }),
+    __metadata("design:type", Number)
+], UsageStatisticsDto.prototype, "averageUsageGap", void 0);
 
 
 /***/ },
@@ -29362,6 +28929,276 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./dto/execute-request.dto */ "./src/components/shared/dto/execute-request.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts"), exports);
+__exportStar(__webpack_require__(/*! ./organic-activity */ "./src/components/shared/organic-activity.ts"), exports);
+__exportStar(__webpack_require__(/*! ./warmup-phases */ "./src/components/shared/warmup-phases.ts"), exports);
+__exportStar(__webpack_require__(/*! ./base-client.service */ "./src/components/shared/base-client.service.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/shared/organic-activity.ts"
+/*!***************************************************!*\
+  !*** ./src/components/shared/organic-activity.ts ***!
+  \***************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.performOrganicActivity = performOrganicActivity;
+const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+const client_helper_utils_1 = __webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const logger = new utils_1.Logger('OrganicActivity');
+const FATAL_ERROR_PATTERNS = [
+    'auth_key_unregistered', 'session_revoked', 'session_expired',
+    'user_deactivated_ban', 'user_deactivated', 'phone_number_banned',
+    'auth_key_duplicated', 'frozen_method_invalid', 'frozen_participant_missing',
+    'connection_not_inited',
+];
+function isConnectionFatalError(error) {
+    const msg = (error?.message || error?.errorMessage || error?.toString?.() || '').toLowerCase();
+    return FATAL_ERROR_PATTERNS.some(p => msg.includes(p));
+}
+async function performOrganicActivity(client, intensity = 'light') {
+    try {
+        switch (intensity) {
+            case 'light':
+                await performLightActivity(client);
+                break;
+            case 'medium':
+                await performMediumActivity(client);
+                break;
+            case 'full':
+                await performFullActivity(client);
+                break;
+        }
+    }
+    catch (error) {
+        if (isConnectionFatalError(error)) {
+            logger.error(`Organic activity hit fatal error (${intensity}), re-throwing:`, error);
+            throw error;
+        }
+        logger.warn(`Organic activity (${intensity}) failed (non-fatal):`, error);
+    }
+}
+async function randomPause(minMs = 15000, maxMs = 45000) {
+    const delay = client_helper_utils_1.ClientHelperUtils.gaussianRandom((minMs + maxMs) / 2, (maxMs - minMs) / 4, minMs, maxMs);
+    await (0, Helpers_1.sleep)(delay);
+}
+async function performLightActivity(client) {
+    logger.debug('Performing light organic activity');
+    await client.getMe();
+    await randomPause(15000, 30000);
+    await client.getDialogs({ limit: 5 });
+    await randomPause(10000, 20000);
+}
+async function performMediumActivity(client) {
+    logger.debug('Performing medium organic activity');
+    const dialogs = await client.getDialogs({ limit: 15 });
+    await randomPause(20000, 40000);
+    if (dialogs && dialogs.length > 0) {
+        const randomIdx = Math.floor(Math.random() * Math.min(dialogs.length, 5));
+        const dialog = dialogs[randomIdx];
+        if (dialog?.entity) {
+            try {
+                await client.getMessages(dialog.entity, 5);
+            }
+            catch {
+            }
+            await randomPause(15000, 35000);
+        }
+    }
+    try {
+        await client.getContacts();
+    }
+    catch {
+    }
+    await randomPause(10000, 25000);
+}
+async function performFullActivity(client) {
+    logger.debug('Performing full organic activity');
+    const dialogs = await client.getDialogs({ limit: 20 });
+    await randomPause(20000, 40000);
+    if (dialogs && dialogs.length > 0) {
+        const numToRead = Math.min(2 + Math.floor(Math.random() * 2), dialogs.length);
+        const indices = new Set();
+        while (indices.size < numToRead) {
+            indices.add(Math.floor(Math.random() * Math.min(dialogs.length, 10)));
+        }
+        for (const idx of indices) {
+            const dialog = dialogs[idx];
+            if (dialog?.entity) {
+                try {
+                    await client.getMessages(dialog.entity, 5);
+                }
+                catch {
+                }
+                await randomPause(20000, 45000);
+            }
+        }
+    }
+    try {
+        await client.getContacts();
+    }
+    catch {
+    }
+    await randomPause(15000, 30000);
+    try {
+        await client.getSelfMSgsInfo(10);
+    }
+    catch {
+    }
+    await randomPause(10000, 20000);
+}
+
+
+/***/ },
+
+/***/ "./src/components/shared/warmup-phases.ts"
+/*!************************************************!*\
+  !*** ./src/components/shared/warmup-phases.ts ***!
+  \************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
+exports.getWarmupPhaseAction = getWarmupPhaseAction;
+exports.isAccountReady = isAccountReady;
+exports.isAccountWarmingUp = isAccountWarmingUp;
+const client_helper_utils_1 = __webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
+exports.WarmupPhase = {
+    ENROLLED: 'enrolled',
+    SETTLING: 'settling',
+    IDENTITY: 'identity',
+    GROWING: 'growing',
+    MATURING: 'maturing',
+    READY: 'ready',
+    SESSION_ROTATED: 'session_rotated',
+};
+exports.WARMUP_PHASE_THRESHOLDS = {
+    settling: 1,
+    identity: 4,
+    growing: 8,
+    maturing: 18,
+    ready: 20,
+};
+exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = 2;
+exports.MIN_CHANNELS_FOR_MATURING = 200;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+function getWarmupPhaseAction(doc, now) {
+    const jitter = doc.warmupJitter || 0;
+    const enrolledAt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+    const daysSinceEnrolled = enrolledAt > 0 ? (now - enrolledAt) / ONE_DAY_MS : 0;
+    const phase = doc.warmupPhase || exports.WarmupPhase.ENROLLED;
+    const daysSince = (date) => {
+        const ts = client_helper_utils_1.ClientHelperUtils.getTimestamp(date);
+        return ts > 0 ? (now - ts) / ONE_DAY_MS : Infinity;
+    };
+    if (phase === exports.WarmupPhase.ENROLLED) {
+        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.settling + jitter) {
+            return { phase: exports.WarmupPhase.SETTLING, action: 'set_privacy', organicIntensity: 'full' };
+        }
+        return { phase: exports.WarmupPhase.ENROLLED, action: 'wait', organicIntensity: 'light' };
+    }
+    if (phase === exports.WarmupPhase.SETTLING) {
+        const privacyDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
+        const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
+        const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
+        if (!privacyDone) {
+            return { phase: exports.WarmupPhase.SETTLING, action: 'set_privacy', organicIntensity: 'full' };
+        }
+        if (!twoFADone) {
+            if (daysSince(doc.privacyUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+                return { phase: exports.WarmupPhase.SETTLING, action: 'set_2fa', organicIntensity: 'full' };
+            }
+            return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'medium' };
+        }
+        if (!authsRemoved) {
+            if (daysSince(doc.twoFASetAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+                return { phase: exports.WarmupPhase.SETTLING, action: 'remove_other_auths', organicIntensity: 'medium' };
+            }
+            return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'light' };
+        }
+        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.identity + jitter) {
+            return { phase: exports.WarmupPhase.IDENTITY, action: 'delete_photos', organicIntensity: 'medium' };
+        }
+        return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'medium' };
+    }
+    if (phase === exports.WarmupPhase.IDENTITY) {
+        const photosDeleted = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
+        const nameBioDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
+        const usernameDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (!photosDeleted) {
+            return { phase: exports.WarmupPhase.IDENTITY, action: 'delete_photos', organicIntensity: 'medium' };
+        }
+        if (!nameBioDone) {
+            if (daysSince(doc.profilePicsDeletedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+                return { phase: exports.WarmupPhase.IDENTITY, action: 'update_name_bio', organicIntensity: 'medium' };
+            }
+            return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
+        }
+        if (!usernameDone) {
+            if (daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+                return { phase: exports.WarmupPhase.IDENTITY, action: 'update_username', organicIntensity: 'medium' };
+            }
+            return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
+        }
+        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.growing + jitter) {
+            return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
+        }
+        return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
+    }
+    if (phase === exports.WarmupPhase.GROWING) {
+        const channels = doc.channels || 0;
+        if (channels < exports.MIN_CHANNELS_FOR_MATURING) {
+            return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
+        }
+        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.maturing + jitter) {
+            const hasPhoto = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) > 0;
+            if (!hasPhoto) {
+                return { phase: exports.WarmupPhase.MATURING, action: 'upload_photo', organicIntensity: 'full' };
+            }
+            if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.ready + jitter) {
+                return { phase: exports.WarmupPhase.MATURING, action: 'advance_to_ready', organicIntensity: 'light' };
+            }
+            return { phase: exports.WarmupPhase.MATURING, action: 'organic_only', organicIntensity: 'light' };
+        }
+        return { phase: exports.WarmupPhase.GROWING, action: 'organic_only', organicIntensity: 'light' };
+    }
+    if (phase === exports.WarmupPhase.MATURING) {
+        const hasPhoto = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) > 0;
+        if (!hasPhoto) {
+            return { phase: exports.WarmupPhase.MATURING, action: 'upload_photo', organicIntensity: 'full' };
+        }
+        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.ready + jitter) {
+            return { phase: exports.WarmupPhase.MATURING, action: 'advance_to_ready', organicIntensity: 'light' };
+        }
+        return { phase: exports.WarmupPhase.MATURING, action: 'organic_only', organicIntensity: 'light' };
+    }
+    if (phase === exports.WarmupPhase.READY) {
+        return { phase: exports.WarmupPhase.READY, action: 'wait', organicIntensity: 'light' };
+    }
+    if (phase === exports.WarmupPhase.SESSION_ROTATED) {
+        return { phase: exports.WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
+    }
+    return { phase: exports.WarmupPhase.ENROLLED, action: 'wait', organicIntensity: 'light' };
+}
+function isAccountReady(phase) {
+    return phase === exports.WarmupPhase.READY || phase === exports.WarmupPhase.SESSION_ROTATED;
+}
+function isAccountWarmingUp(phase) {
+    if (!phase)
+        return true;
+    return [
+        exports.WarmupPhase.ENROLLED,
+        exports.WarmupPhase.SETTLING,
+        exports.WarmupPhase.IDENTITY,
+        exports.WarmupPhase.GROWING,
+        exports.WarmupPhase.MATURING,
+    ].includes(phase);
+}
 
 
 /***/ },
@@ -35976,9 +35813,14 @@ function isPermanentError(errorDetails) {
     const permanentErrors = [
         'SESSION_REVOKED',
         'AUTH_KEY_UNREGISTERED',
+        'AUTH_KEY_DUPLICATED',
+        'SESSION_EXPIRED',
         'USER_DEACTIVATED',
         'USER_DEACTIVATED_BAN',
+        'PHONE_NUMBER_BANNED',
+        'PHONE_NUMBER_INVALID',
         'FROZEN_METHOD_INVALID',
+        'FROZEN_PARTICIPANT_MISSING',
     ];
     if ((0, common_1.contains)(errorDetails.message, permanentErrors) && !(0, common_1.contains)(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
         return true;

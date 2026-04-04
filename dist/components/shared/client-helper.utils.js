@@ -6,7 +6,8 @@ class ClientHelperUtils {
         if (!date)
             return 0;
         try {
-            return new Date(date).getTime();
+            const ts = new Date(date).getTime();
+            return isNaN(ts) ? 0 : ts;
         }
         catch {
             return 0;
@@ -26,6 +27,20 @@ class ClientHelperUtils {
             usernameUpdatedAt: new Date(now - (10 * oneDayMs)),
             profilePicsUpdatedAt: new Date(now - (7 * oneDayMs)),
         };
+    }
+    static gaussianRandom(mean, stddev, min, max) {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        let result = mean + z * stddev;
+        if (min !== undefined)
+            result = Math.max(result, min);
+        if (max !== undefined)
+            result = Math.min(result, max);
+        return Math.round(result);
+    }
+    static generateWarmupJitter() {
+        return Math.floor(Math.random() * 4);
     }
 }
 exports.ClientHelperUtils = ClientHelperUtils;

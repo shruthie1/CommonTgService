@@ -26,14 +26,21 @@ async function getUserFromSession(session, mobile) {
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         this.logger.logError(mobile, 'Failed to get user from session', error);
-        if (errorMessage.toLowerCase().includes('auth_key_unregistered')) {
+        const lowerErrorMessage = errorMessage.toLowerCase();
+        if (lowerErrorMessage.includes('auth_key_unregistered') || lowerErrorMessage.includes('session_revoked') || lowerErrorMessage.includes('session_expired')) {
             throw new Error('Session is invalid or expired');
         }
-        else if (errorMessage.toLowerCase().includes('user_deactivated')) {
+        else if (lowerErrorMessage.includes('auth_key_duplicated')) {
+            throw new Error('Session is invalid because the auth key was duplicated');
+        }
+        else if (lowerErrorMessage.includes('user_deactivated')) {
             throw new Error('User account has been deactivated');
         }
-        else if (errorMessage.toLowerCase().includes('phone_number_banned')) {
+        else if (lowerErrorMessage.includes('phone_number_banned')) {
             throw new Error('Phone number has been banned');
+        }
+        else if (lowerErrorMessage.includes('frozen_method_invalid') || lowerErrorMessage.includes('frozen_participant_missing')) {
+            throw new Error('Account is frozen');
         }
         else if (errorMessage.toLowerCase().includes('timeout')) {
             throw new Error('Connection timeout while validating session');

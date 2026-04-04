@@ -445,8 +445,15 @@ let ClientService = ClientService_1 = class ClientService {
         }
         catch (error) {
             await this.notify(`Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`);
-            const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-            await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+            const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
+                await this.notify(`Buffer ${newBufferClient.mobile} marked INACTIVE (permanent error during setup)`);
+            }
+            else {
+                const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
+            }
             this.telegramService.setActiveClientSetup(undefined);
         }
         finally {
@@ -489,7 +496,13 @@ let ClientService = ClientService_1 = class ClientService {
             await this.notify('Update finished');
         }
         catch (error) {
-            (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
+            const errorDetails = (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                try {
+                    await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`);
+                }
+                catch { }
+            }
             throw error;
         }
         finally {

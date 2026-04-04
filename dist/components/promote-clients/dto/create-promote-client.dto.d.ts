@@ -8,4 +8,5 @@ export declare class CreatePromoteClientDto {
     readonly status?: string;
     message?: string;
     readonly lastUsed?: Date;
+    readonly session?: string;
 }

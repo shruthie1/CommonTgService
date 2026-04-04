@@ -11,13 +11,14 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SearchPromoteClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
+const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 class SearchPromoteClientDto {
 }
 exports.SearchPromoteClientDto = SearchPromoteClientDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Telegram ID of the client',
+        description: 'Telegram account identifier.',
         example: '123456789',
     }),
     (0, class_validator_1.IsOptional)(),
@@ -26,7 +27,7 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Mobile number of the client',
+        description: 'Mobile number of the promote client.',
         example: '+1234567890',
     }),
     (0, class_validator_1.IsOptional)(),
@@ -35,8 +36,8 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'availableDate of the promoteClient',
-        example: '2023-06-22',
+        description: 'Availability date filter.',
+        example: '2026-04-03',
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -44,11 +45,12 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "availableDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Channel Count',
+        description: 'Exact channel count filter.',
         example: 23,
         type: Number
     }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? value : Number(value)),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchPromoteClientDto.prototype, "channels", void 0);

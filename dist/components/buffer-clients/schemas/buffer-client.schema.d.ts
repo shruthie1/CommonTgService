@@ -22,6 +22,13 @@ export declare class BufferClient {
     lastUpdateAttempt: Date;
     failedUpdateAttempts: number;
     lastUpdateFailure: Date;
+    twoFASetAt: Date;
+    otherAuthsRemovedAt: Date;
+    warmupPhase: string;
+    warmupJitter: number;
+    enrolledAt: Date;
+    organicActivityAt: Date;
+    sessionRotatedAt: Date;
 }
 export declare const BufferClientSchema: import("mongoose").Schema<BufferClient, import("mongoose").Model<BufferClient, any, any, any, (Document<unknown, any, BufferClient, any, import("mongoose").DefaultSchemaOptions> & BufferClient & {
     _id: import("mongoose").Types.ObjectId;
@@ -223,6 +230,69 @@ export declare const BufferClientSchema: import("mongoose").Schema<BufferClient,
         id: string;
     }>;
     lastUpdateFailure?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    twoFASetAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    otherAuthsRemovedAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    warmupPhase?: import("mongoose").SchemaDefinitionProperty<string, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    warmupJitter?: import("mongoose").SchemaDefinitionProperty<number, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    enrolledAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    organicActivityAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    sessionRotatedAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
         _id: import("mongoose").Types.ObjectId;
