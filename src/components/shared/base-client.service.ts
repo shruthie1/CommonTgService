@@ -526,6 +526,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     clearJoinMap() {
         const mapSize = this.joinChannelMap.size;
         this.joinChannelMap.clear();
+        this.joinFailureCounts.clear();
+        this.joinScopeClientId = null;
         this.clearJoinChannelInterval();
         this.logger.debug(`JoinMap cleared, removed ${mapSize} entries`);
     }
@@ -569,7 +571,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected async performHealthCheck(mobile: string, lastChecked: number, now: number): Promise<boolean> {
         // Randomize interval: 5-9 days instead of exactly 7
-        const healthCheckIntervalDays = 5 + Math.random() * 4;
+        const healthCheckIntervalDays = ClientHelperUtils.gaussianRandom(7, 1.5, 4, 10);
         const needsHealthCheck = !lastChecked || (now - lastChecked > healthCheckIntervalDays * this.ONE_DAY_MS);
 
         if (!needsHealthCheck) {
@@ -626,7 +628,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-            await sleep(30000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating privacy', doc.mobile);
@@ -665,7 +667,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            await sleep(30000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return photos.photos.length > 0 ? 1 : 0;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
@@ -693,7 +695,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             let updateCount = 0;
             if (photos.photos.length < 2) {
                 await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                await sleep(10000 + Math.random() * 5000);
+                await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
 
                 // Shuffle for randomness
                 const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
@@ -710,7 +712,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            await sleep(40000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
             return updateCount;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating profile photos', doc.mobile);
@@ -889,7 +891,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         let updateCount = 0;
 
         try {
-            await sleep(15000 + Math.random() * 10000); // 15-25s initial delay
+            await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000)); // 15-25s initial delay
             doc = await this.repairWarmupMetadata(doc, now);
 
             // Check failed attempts
@@ -1018,7 +1020,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
             return 0;
         } finally {
-            await sleep(15000 + Math.random() * 10000);
+            await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
         }
     }
 
@@ -1230,7 +1232,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
 
-                    await sleep(10000 + Math.random() * 5000);
+                    await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
                     try {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -1243,6 +1245,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
+                    await this.expireUserByMobile(mobile);
                 } else {
                     // Transient error — restore the failed channel and track failures
                     const channels = this.joinChannelMap.get(mobile);
@@ -1366,6 +1369,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
+                    await this.expireUserByMobile(mobile);
                     this.removeFromLeaveMap(mobile);
                 } else if (channelsToProcess.length > 0) {
                     // Transient failure — restore spliced channels back to the queue
@@ -1535,6 +1539,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     public async ensureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean> {
         const user = await this.getOrEnsureDistinctUsersBackupSession(mobile, activeSession);
         return !!user?.session?.trim();
+    }
+
+    protected async expireUserByMobile(mobile: string): Promise<void> {
+        try {
+            const users = await this.usersService.search({ mobile, expired: false });
+            const user = users[0];
+            if (user?.tgId) {
+                await this.usersService.update(user.tgId, { expired: true });
+            }
+        } catch {
+            // Non-fatal: client doc deactivation is the primary retirement action.
+        }
     }
 
     protected normalizeDateString(dateValue?: string | Date | null): string | null {

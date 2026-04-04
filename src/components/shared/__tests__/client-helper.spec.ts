@@ -49,17 +49,19 @@ describe('ClientHelperUtils.gaussianRandom', () => {
 });
 
 describe('ClientHelperUtils.generateWarmupJitter', () => {
-    test('returns integer between 0 and 3 inclusive', () => {
-        const seen = new Set<number>();
-        for (let i = 0; i < 100; i++) {
+    test('returns integer between 0 and 7 inclusive (Gaussian, mean ~3.5)', () => {
+        const values: number[] = [];
+        for (let i = 0; i < 200; i++) {
             const jitter = ClientHelperUtils.generateWarmupJitter();
             expect(Number.isInteger(jitter)).toBe(true);
             expect(jitter).toBeGreaterThanOrEqual(0);
-            expect(jitter).toBeLessThanOrEqual(3);
-            seen.add(jitter);
+            expect(jitter).toBeLessThanOrEqual(7);
+            values.push(jitter);
         }
-        // Should see all 4 values in 100 tries
-        expect(seen.size).toBe(4);
+        // Distribution should be centered around 3.5 — mean should be between 2 and 5
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        expect(mean).toBeGreaterThanOrEqual(2);
+        expect(mean).toBeLessThanOrEqual(5);
     });
 });
 

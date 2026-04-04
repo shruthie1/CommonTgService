@@ -120,7 +120,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             await performOrganicActivity(telegramClient, 'medium');
 
             const me = await telegramClient.getMe();
-            await sleep(5000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             let updateCount = 0;
             if (!isIncludedWithTolerance(safeAttemptReverse(me.firstName), client.name)) {
@@ -144,7 +144,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-            await sleep(30000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return updateCount;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
@@ -171,7 +171,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             await performOrganicActivity(telegramClient, 'light');
 
             const me = await telegramClient.getMe();
-            await sleep(5000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
             await this.update(doc.mobile, {
                 usernameUpdatedAt: new Date(),
@@ -181,7 +181,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated username for ${doc.mobile}`);
-            await sleep(30000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
@@ -401,7 +401,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         try {
             // Only get channel info — no 2FA, no profile changes, no new session
             const channels = await this.telegramService.getChannelInfo(mobile, true);
-            await sleep(5000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             const bufferClient: CreateBufferClientDto = {
                 tgId: user.tgId,
@@ -659,7 +659,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
         }
         if (leaveSet.size > 0) {
-            this.createTimeout(() => this.leaveChannelQueue(), 10000 + Math.random() * 5000);
+            this.createTimeout(() => this.leaveChannelQueue(), ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
 
         return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
@@ -685,7 +685,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             // No removeOtherAuths, no set2fa, no createNewSession
             // Just get channel info and enroll
             const channels = await channelInfo(telegramClient.client, true);
-            await sleep(5000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
             const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
@@ -729,7 +729,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             return false;
         } finally {
             await this.safeUnregisterClient(document.mobile);
-            await sleep(10000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
     }
 
@@ -827,7 +827,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 attemptedCount++;
             } catch (error: unknown) {
                 this.logger.error(`Error creating connection for ${document.mobile}`);
-                await sleep(10000 + Math.random() * 5000);
+                await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
                 attemptedCount++;
             }
         }
@@ -855,7 +855,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         await client.set2fa();
                         await sleep(60000 + Math.random() * 30000);
                     }
-                    await sleep(5000 + Math.random() * 5000);
+                    await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
                     if (!newSession || newSession === bufferClient.session) {
                         throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
@@ -882,12 +882,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 } finally {
                     await this.safeUnregisterClient(bufferClient.mobile);
                     if (i < bufferClients.length - 1) {
-                        await sleep(15000 + Math.random() * 10000);
+                        await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
                     }
                 }
             } catch (error: unknown) {
                 this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
-                if (i < bufferClients.length - 1) await sleep(15000 + Math.random() * 10000);
+                if (i < bufferClients.length - 1) await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             }
         }
     }

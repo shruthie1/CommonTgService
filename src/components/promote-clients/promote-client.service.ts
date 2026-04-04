@@ -119,7 +119,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             await performOrganicActivity(telegramClient, 'medium');
 
             const me = await telegramClient.getMe();
-            await sleep(5000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             let updateCount = 0;
             const expectedName = client?.name.split(' ')[0];
@@ -144,7 +144,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-            await sleep(30000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return updateCount;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
@@ -179,7 +179,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Cleared username for ${doc.mobile}`);
-            await sleep(30000 + Math.random() * 20000);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error updating username', doc.mobile);
@@ -706,7 +706,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             // No removeOtherAuths, no set2fa — just get channel info and enroll
             const channels = await channelInfo(telegramClient.client, true);
-            await sleep(5000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
             const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
@@ -751,7 +751,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             return false;
         } finally {
             await this.safeUnregisterClient(document.mobile);
-            await sleep(10000 + Math.random() * 5000);
+            await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
     }
 
@@ -849,7 +849,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 attemptedCount++;
             } catch (error: unknown) {
                 this.logger.error(`Error creating connection for ${document.mobile}`);
-                await sleep(10000 + Math.random() * 5000);
+                await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
                 attemptedCount++;
             }
         }

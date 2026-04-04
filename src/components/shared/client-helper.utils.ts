@@ -78,6 +78,6 @@ export class ClientHelperUtils {
      * Generate a random warmup jitter (0-3 days) for per-account randomization
      */
     static generateWarmupJitter(): number {
-        return Math.floor(Math.random() * 4); // 0, 1, 2, or 3
+        return Math.round(ClientHelperUtils.gaussianRandom(3.5, 2, 0, 7));
     }
 }
