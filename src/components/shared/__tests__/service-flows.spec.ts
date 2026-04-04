@@ -474,7 +474,7 @@ describe('Service flow reliability', () => {
         expect(processSpy).toHaveBeenNthCalledWith(2, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
     });
 
-    test('buffer join query only targets warmup phases that are allowed to join', async () => {
+    test('buffer join query does not filter by warmup phase', async () => {
         let capturedQuery: Record<string, any> | undefined;
         const bufferModel: any = {
             find: jest.fn((query: Record<string, any>) => {
@@ -496,7 +496,8 @@ describe('Service flow reliability', () => {
 
         await service.joinchannelForBufferClients(true);
 
-        expect(capturedQuery?.warmupPhase?.$in).toEqual(['growing', 'maturing', 'ready', 'session_rotated']);
+        expect(capturedQuery?.warmupPhase).toBeUndefined();
+        expect(capturedQuery?.status).toEqual('active');
     });
 
     test('operational selection self-heals legacy used accounts before querying session-rotated pool', async () => {

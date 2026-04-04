@@ -1,4 +1,6 @@
 import { ChannelsService } from './../channels/channels.service';
+import { Channel } from '../channels/schemas/channel.schema';
+import { ActiveChannel } from '../active-channels';
 import {
     BadRequestException,
     ConflictException,
@@ -298,8 +300,47 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     }
 
     async refillJoinQueue(): Promise<number> {
-        // TODO: Task 4 will implement real refill logic
-        return 0;
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
+        if (this.telegramService.getActiveClientSetup()) return 0;
+
+        this.resetDailyJoinCountersIfNeeded();
+
+        const eligible = await this.bufferClientModel
+            .find({
+                status: 'active',
+                channels: { $lt: this.config.channelTarget },
+                mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+            })
+            .sort({ channels: 1 })
+            .limit(this.config.maxMapSize)
+            .exec();
+
+        let added = 0;
+        for (const doc of eligible) {
+            if (this.isMobileDailyCapped(doc.mobile)) continue;
+
+            const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
+            const channelsToJoin = await this.fetchJoinableChannels(doc.channels, remaining);
+            if (channelsToJoin.length === 0) continue;
+
+            if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
+                added++;
+            }
+        }
+
+        if (added > 0) {
+            this.logger.log(`Refilled join queue with ${added} buffer clients`);
+        }
+
+        return added;
+    }
+
+    private async fetchJoinableChannels(currentChannels: number, limit: number): Promise<(Channel | ActiveChannel)[]> {
+        const capped = Math.min(limit, 25);
+        if (capped <= 0) return [];
+        return currentChannels < 220
+            ? this.activeChannelsService.getActiveChannels(capped, 0, [])
+            : this.channelsService.getActiveChannels(capped, 0, []);
     }
 
     async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null> {
@@ -529,11 +570,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(preservedMobiles) },
             status: 'active',
-            warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
         };
         if (clientId) query.clientId = clientId;
 
-        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(8);
+        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(this.config.maxMapSize);
 
         const joinSet = new Set<string>();
         const leaveSet = new Set<string>();
