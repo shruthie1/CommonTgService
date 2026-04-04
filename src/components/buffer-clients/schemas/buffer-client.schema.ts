@@ -143,6 +143,27 @@ export class BufferClient {
   @ApiPropertyOptional({ description: 'Timestamp when a backup session was created and recorded.', example: '2026-04-02T07:00:00.000Z' })
   @Prop({ required: false, type: Date, default: null })
   sessionRotatedAt: Date;
+
+  // ---- Persona assignment ----
+  @ApiProperty({ description: 'Assigned first name from pool', required: false })
+  @Prop({ required: false, default: null })
+  assignedFirstName: string;
+
+  @ApiProperty({ description: 'Assigned last name from pool', required: false })
+  @Prop({ required: false, default: null })
+  assignedLastName: string;
+
+  @ApiProperty({ description: 'Assigned bio from pool', required: false })
+  @Prop({ required: false, default: null })
+  assignedBio: string;
+
+  @ApiProperty({ description: 'Assigned photo filenames from pool', required: false })
+  @Prop({ required: false, type: [String], default: [] })
+  assignedPhotoFilenames: string[];
+
+  @ApiProperty({ description: 'Pool version when assignment was made', required: false })
+  @Prop({ required: false, default: null })
+  assignedPersonaPoolVersion: string;
 }
 
 export const BufferClientSchema = SchemaFactory.createForClass(BufferClient);
