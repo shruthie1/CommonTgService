@@ -42,6 +42,8 @@ import {
     performOrganicActivity,
     WarmupPhase,
 } from '../shared/base-client.service';
+import { Channel } from '../channels/schemas/channel.schema';
+import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 
 @Injectable()
@@ -241,8 +243,47 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     async refillJoinQueue(): Promise<number> {
-        // TODO: Task 5 will implement real refill logic
-        return 0;
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
+        if (this.telegramService.getActiveClientSetup()) return 0;
+
+        this.resetDailyJoinCountersIfNeeded();
+
+        const eligible = await this.promoteClientModel
+            .find({
+                status: 'active',
+                channels: { $lt: this.config.channelTarget },
+                mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+            })
+            .sort({ channels: 1 })
+            .limit(this.config.maxMapSize)
+            .exec();
+
+        let added = 0;
+        for (const doc of eligible) {
+            if (this.isMobileDailyCapped(doc.mobile)) continue;
+
+            const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
+            const channelsToJoin = await this.fetchJoinableChannels(doc.channels, remaining);
+            if (channelsToJoin.length === 0) continue;
+
+            if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
+                added++;
+            }
+        }
+
+        if (added > 0) {
+            this.logger.log(`Refilled join queue with ${added} promote clients`);
+        }
+
+        return added;
+    }
+
+    private async fetchJoinableChannels(currentChannels: number, limit: number): Promise<(Channel | ActiveChannel)[]> {
+        const capped = Math.min(limit, 25);
+        if (capped <= 0) return [];
+        return currentChannels < 220
+            ? this.activeChannelsService.getActiveChannels(capped, 0, [])
+            : this.channelsService.getActiveChannels(capped, 0, []);
     }
 
     async updateLastUsed(mobile: string): Promise<PromoteClient> {
@@ -428,10 +469,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     channels: { $lt: this.config.channelTarget },
                     mobile: { $nin: Array.from(preservedMobiles) },
                     status: 'active',
-                    warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
                 })
                 .sort({ channels: 1 })
-                .limit(16);
+                .limit(this.config.maxMapSize);
 
             const joinSet = new Set<string>();
             const leaveSet = new Set<string>();
