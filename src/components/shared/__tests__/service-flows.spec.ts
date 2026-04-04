@@ -79,7 +79,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     async update(mobile: string, updateDto: any): Promise<any> { return this.updateMock(mobile, updateDto); }
     async markAsInactive(): Promise<any> { return null; }
     async updateStatus(): Promise<any> { return null; }
-    async refillJoinQueue(): Promise<number> { return 0; }
+    async refillJoinQueue(_clientId?: string | null): Promise<number> { return 0; }
 
     public effectiveCooldown(mobile: string, lastUpdateAttempt: number): number {
         return this.getEffectiveCooldownMs(mobile, lastUpdateAttempt);
@@ -498,6 +498,74 @@ describe('Service flow reliability', () => {
 
         expect(capturedQuery?.warmupPhase).toBeUndefined();
         expect(capturedQuery?.status).toEqual('active');
+    });
+
+    test('prepareJoinChannelRefresh preserves non-empty leave queue entries', async () => {
+        const service = new TestBaseService();
+        const clearLeaveSpy = jest.spyOn(service as any, 'clearLeaveChannelInterval');
+
+        (service as any).joinChannelMap.set('keep-join', [{ username: 'join-1' }]);
+        (service as any).joinChannelMap.set('drop-join', []);
+        (service as any).leaveChannelMap.set('keep-leave', ['chan-1']);
+        (service as any).leaveChannelMap.set('drop-leave', []);
+
+        const preserved = await (service as any).prepareJoinChannelRefresh(true);
+
+        expect(Array.from(preserved)).toEqual(['keep-join']);
+        expect((service as any).joinChannelMap.has('keep-join')).toBe(true);
+        expect((service as any).joinChannelMap.has('drop-join')).toBe(false);
+        expect((service as any).leaveChannelMap.has('keep-leave')).toBe(true);
+        expect((service as any).leaveChannelMap.has('drop-leave')).toBe(false);
+        expect(clearLeaveSpy).not.toHaveBeenCalled();
+    });
+
+    test('buffer refillJoinQueue uses fresh channel exclusions from live channelInfo', async () => {
+        const doc = { mobile: '9990011111', channels: 10, status: 'active' };
+        const bufferModel: any = {
+            find: jest.fn(() => createQueryChain(() => [doc])),
+        };
+
+        const service = makeBufferService(bufferModel);
+        const activeChannelsService = { getActiveChannels: jest.fn().mockResolvedValue([{ channelId: 'new-1', username: 'new-1' }]) };
+        (service as any).activeChannelsService = activeChannelsService;
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
+            ids: ['existing-1', 'existing-2'],
+            canSendFalseCount: 0,
+            canSendFalseChats: [],
+        } as any);
+        jest.spyOn(service, 'update').mockResolvedValue({} as any);
+
+        const added = await service.refillJoinQueue();
+
+        expect(added).toBe(1);
+        expect(activeChannelsService.getActiveChannels).toHaveBeenCalledWith(20, 0, ['existing-1', 'existing-2']);
+        expect((service as any).joinChannelMap.get('9990011111')).toEqual([{ channelId: 'new-1', username: 'new-1' }]);
+    });
+
+    test('buffer refillJoinQueue queues leave work when live channelInfo says the mobile should leave', async () => {
+        const doc = { mobile: '9990012222', channels: 50, status: 'active' };
+        const bufferModel: any = {
+            find: jest.fn(() => createQueryChain(() => [doc])),
+        };
+
+        const service = makeBufferService(bufferModel);
+        const timeoutSpy = jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
+            ids: ['existing-1'],
+            canSendFalseCount: 12,
+            canSendFalseChats: ['leave-1', 'leave-2'],
+        } as any);
+        jest.spyOn(service, 'update').mockResolvedValue({} as any);
+
+        const added = await service.refillJoinQueue();
+
+        expect(added).toBe(0);
+        expect((service as any).leaveChannelMap.get('9990012222')).toEqual(['leave-1', 'leave-2']);
+        expect(timeoutSpy).toHaveBeenCalled();
     });
 
     test('operational selection self-heals legacy used accounts before querying session-rotated pool', async () => {

@@ -196,6 +196,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected dailyJoinCounts: Map<string, number> = new Map();
     protected dailyJoinDate: string = '';
+    /** Tracks per-mobile transient join failures in the current loop. Reset on each refill. */
+    protected joinFailureCounts: Map<string, number> = new Map();
+    protected readonly MAX_JOIN_FAILURES_PER_MOBILE = 3;
+    /** clientId scope from the HTTP trigger — refill respects this so a client-specific trigger doesn't spill. */
+    protected joinScopeClientId: string | null = null;
 
     protected resetDailyJoinCountersIfNeeded(): void {
         const today = ClientHelperUtils.getTodayDateString();
@@ -357,8 +362,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     /** Update status */
     abstract updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc>;
 
-    /** Re-query DB for mobiles below channelTarget not yet daily-capped. Populate joinChannelMap. */
-    abstract refillJoinQueue(): Promise<number>;
+    /** Re-query DB for mobiles below channelTarget not yet daily-capped. Populate joinChannelMap. Respects joinScopeClientId if set. */
+    abstract refillJoinQueue(clientId?: string | null): Promise<number>;
 
     // ---- Lifecycle ----
 
@@ -373,6 +378,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.clearLeaveChannelInterval();
             this.joinChannelMap.clear();
             this.dailyJoinCounts.clear();
+            this.joinFailureCounts.clear();
+            this.joinScopeClientId = null;
             this.leaveChannelMap.clear();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
@@ -546,9 +553,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
         }
 
-        this.leaveChannelMap.clear();
+        for (const [mobile, channels] of this.leaveChannelMap.entries()) {
+            if (!channels || channels.length === 0) {
+                this.leaveChannelMap.delete(mobile);
+            }
+        }
+
         this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
         await sleep(6000 + Math.random() * 3000);
 
         return preservedMobiles;
@@ -1072,7 +1083,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     private async scheduleNextJoinRound() {
         if (this.joinChannelMap.size === 0) {
             try {
-                const refilled = await this.refillJoinQueue();
+                this.joinFailureCounts.clear();
+                const refilled = await this.refillJoinQueue(this.joinScopeClientId);
                 if (refilled === 0) {
                     this.logger.debug('No eligible mobiles for channel joining — stopping until next trigger');
                     this.clearJoinChannelInterval();
@@ -1149,6 +1161,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 const roundLimit = Math.min(
                     this.config.joinsPerMobilePerRound,
+                    this.config.maxJoinsPerSession,
                     this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(mobile),
                     channels.length,
                 );
@@ -1226,12 +1239,22 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                             await this.update(mobile, { channels: 500 });
                         }
                     }
-                }
-
-                if (isPermanentError(errorDetails)) {
+                } else if (isPermanentError(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
+                } else {
+                    // Transient error — restore the failed channel and track failures
+                    const channels = this.joinChannelMap.get(mobile);
+                    if (currentChannel && channels) {
+                        channels.unshift(currentChannel);
+                    }
+                    const failures = (this.joinFailureCounts.get(mobile) || 0) + 1;
+                    this.joinFailureCounts.set(mobile, failures);
+                    if (failures >= this.MAX_JOIN_FAILURES_PER_MOBILE) {
+                        this.logger.warn(`${mobile} hit ${failures} transient join failures, quarantining for this cycle`);
+                        this.removeFromJoinMap(mobile);
+                    }
                 }
             } finally {
                 await this.safeUnregisterClient(mobile);
@@ -1291,6 +1314,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         } finally {
             this.isLeaveChannelProcessing = false;
             this.scheduleNextLeaveRound();
+
+            // After leave processing, kick the join loop if it's idle — accounts that
+            // just left channels may now be eligible for new joins.
+            if (!this.joinChannelIntervalId && !this.isJoinChannelProcessing) {
+                this.scheduleNextJoinRound();
+            }
         }
     }
 
@@ -1300,6 +1329,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
+            let channelsToProcess: string[] = [];
 
             try {
                 const channels = this.leaveChannelMap.get(mobile);
@@ -1308,7 +1338,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     continue;
                 }
 
-                const channelsToProcess = channels.splice(0, this.config.leaveChannelBatchSize);
+                channelsToProcess = channels.splice(0, this.config.leaveChannelBatchSize);
                 this.logger.debug(`${mobile} leaving ${channelsToProcess.length} channels (${channels.length} remaining)`);
 
                 if (channels.length > 0) {
@@ -1319,13 +1349,30 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                 await client.leaveChannels(channelsToProcess);
-                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
+                const leftCount = channelsToProcess.length;
+                this.logger.debug(`${mobile} left ${leftCount} channels successfully`);
+
+                // Decrement stored channel count so refill can pick this mobile up again
+                if (leftCount > 0) {
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });
+                    } catch {
+                        // Non-fatal — health check will correct
+                    }
+                }
+                channelsToProcess = []; // Mark as consumed so catch doesn't restore
             } catch (error: unknown) {
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
                     this.removeFromLeaveMap(mobile);
+                } else if (channelsToProcess.length > 0) {
+                    // Transient failure — restore spliced channels back to the queue
+                    const existing = this.leaveChannelMap.get(mobile) || [];
+                    existing.unshift(...channelsToProcess);
+                    this.safeSetLeaveChannelMap(mobile, existing);
+                    this.logger.warn(`${mobile} transient leave failure, restored ${channelsToProcess.length} channels to queue`);
                 }
             } finally {
                 await this.safeUnregisterClient(mobile);
