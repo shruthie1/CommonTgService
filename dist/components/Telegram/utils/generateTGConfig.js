@@ -25,7 +25,7 @@ const redisClient_1 = require("../../../utils/redisClient");
 const logger = new utils_1.Logger("TGConfig");
 const PROXY_MAP_PREFIX = "tg:proxy_map:";
 const CONFIG_PREFIX = "tg:config:";
-const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 365 * 0.5;
+const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 400;
 const _directHttpsAgent = new https_1.default.Agent({ keepAlive: true, timeout: 10000 });
 const _directHttpAgent = new http_1.default.Agent({ keepAlive: true, timeout: 10000 });
 function isProxyEnabled() {

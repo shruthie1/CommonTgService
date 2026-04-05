@@ -1,14 +1,34 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stableHash = stableHash;
+exports.getTelegramCredentialsForMobile = getTelegramCredentialsForMobile;
+exports.getTelegramCredentialPool = getTelegramCredentialPool;
 exports.generateTGConfig = generateTGConfig;
 exports.generateTGConfigWithProxy = generateTGConfigWithProxy;
 exports.getAvailablePlatforms = getAvailablePlatforms;
 exports.getPlatformConfig = getPlatformConfig;
+exports.getExpectedAuthFingerprint = getExpectedAuthFingerprint;
+exports.isAuthFingerprintMatch = isAuthFingerprintMatch;
+const API_CREDENTIALS = [
+    { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
+    { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
+    { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
+    { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
+    { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
+    { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" },
+];
+const DEFAULT_PLATFORM = "android";
+const DEFAULT_LANG_CODE = "en";
+const DEFAULT_SYSTEM_LANG_CODE = "en-US";
+const DEVICE_MODEL_TAGS = {
+    android: "PGA",
+    ios: "PGI",
+    desktop: "PGD",
+    web: "PGW",
+    macos: "PGM",
+};
 const PLATFORMS = {
     android: {
-        apiId: 6,
-        apiHash: "eb06d4abfb49dc3eeb1aeb98ae0f581e",
         langPack: "android",
         devices: [
             { deviceModel: "Samsung SM-S928B", systemVersion: "SDK 35" },
@@ -30,8 +50,6 @@ const PLATFORMS = {
         appVersions: ["12.5.2 (6597)", "12.5.1 (6595)", "12.4.3 (6590)", "12.4.1 (6585)"],
     },
     ios: {
-        apiId: 10840,
-        apiHash: "33c45224029d59cb3ad0c16134215aeb",
         langPack: "ios",
         devices: [
             { deviceModel: "iPhone 16 Pro Max", systemVersion: "18.3.2" },
@@ -52,8 +70,6 @@ const PLATFORMS = {
         appVersions: ["12.5.2 (32493)", "12.5.1 (32487)", "12.4.1 (32360)"],
     },
     desktop: {
-        apiId: 2040,
-        apiHash: "b18441a1ff607e10a989891a5462e627",
         langPack: "tdesktop",
         devices: [
             { deviceModel: "DESKTOP-PC", systemVersion: "Windows 11 Version 23H2" },
@@ -67,8 +83,6 @@ const PLATFORMS = {
         appVersions: ["6.6.4", "6.6.3", "6.6.2", "6.5.7"],
     },
     web: {
-        apiId: 2496,
-        apiHash: "8da85b0d5bfe62527e5b244c209159c3",
         langPack: "",
         devices: [
             {
@@ -91,8 +105,6 @@ const PLATFORMS = {
         appVersions: ["1.28.3 Z", "1.28.2 Z", "1.27.1 Z"],
     },
     macos: {
-        apiId: 2834,
-        apiHash: "68875f756c9b437a8b916ca3de215815",
         langPack: "macos",
         devices: [
             { deviceModel: "MacBook Pro", systemVersion: "macOS 15.3" },
@@ -115,25 +127,47 @@ function stableHash(str) {
 function stablePick(arr, seed) {
     return arr[stableHash(seed) % arr.length];
 }
+function pickTelegramCredentials(seed) {
+    return stablePick(API_CREDENTIALS, `${seed}-credentials`);
+}
+function getTelegramCredentialsForMobile(mobile) {
+    return pickTelegramCredentials(mobile);
+}
+function getTelegramCredentialPool() {
+    return API_CREDENTIALS;
+}
+function buildCustomDeviceModel(platformName, baseDeviceModel, seed) {
+    const tag = stableHash(`${seed}-${platformName}-device`)
+        .toString(36)
+        .toUpperCase()
+        .slice(0, 6)
+        .padStart(6, "0");
+    const prefix = DEVICE_MODEL_TAGS[platformName] || "PG";
+    return `${baseDeviceModel} ${prefix}-${tag}`;
+}
+function normalizeAuthField(value) {
+    return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
 function generateTGConfig(mobile, proxy, options) {
     const platformName = (options?.platform ||
-        process.env.TG_PLATFORM ||
-        "android").toLowerCase();
+        DEFAULT_PLATFORM).toLowerCase();
     const platform = PLATFORMS[platformName];
     if (!platform) {
         throw new Error(`Unknown platform "${platformName}". Valid: ${Object.keys(PLATFORMS).join(", ")}`);
     }
-    const seed = `${mobile}-${process.env.clientId || "default"}`;
+    const seed = mobile;
     const device = stablePick(platform.devices, seed);
     const appVersion = stablePick(platform.appVersions, seed + "-app");
-    const apiId = options?.apiId || parseInt(process.env.TG_API_ID || "") || platform.apiId;
-    const apiHash = options?.apiHash || process.env.TG_API_HASH || platform.apiHash;
-    const langCode = options?.langCode || process.env.TG_LANG_CODE || "en";
-    const systemLangCode = options?.systemLangCode || process.env.TG_SYSTEM_LANG_CODE || "en-US";
+    const deviceModel = buildCustomDeviceModel(platformName, device.deviceModel, seed);
+    const selectedCredentials = pickTelegramCredentials(seed);
+    const apiId = options?.apiId || selectedCredentials.apiId;
+    const apiHash = options?.apiHash || selectedCredentials.apiHash;
+    const langCode = options?.langCode || DEFAULT_LANG_CODE;
+    const systemLangCode = options?.systemLangCode || DEFAULT_SYSTEM_LANG_CODE;
     const config = {
         apiId,
         apiHash,
-        deviceModel: device.deviceModel,
+        deviceModel,
         systemVersion: device.systemVersion,
         appVersion,
         langCode,
@@ -171,5 +205,28 @@ function getAvailablePlatforms() {
 }
 function getPlatformConfig(platform) {
     return PLATFORMS[platform.toLowerCase()];
+}
+function getExpectedAuthFingerprint(mobile, options) {
+    const platform = (options?.platform || DEFAULT_PLATFORM).toLowerCase();
+    const config = generateTGConfig(mobile, undefined, options);
+    return {
+        apiId: config.apiId,
+        apiHash: config.apiHash,
+        platform,
+        deviceModel: config.deviceModel,
+        systemVersion: config.systemVersion,
+        appVersion: config.appVersion,
+        langCode: config.langCode,
+        systemLangCode: config.systemLangCode,
+        langPack: config.langPack,
+    };
+}
+function isAuthFingerprintMatch(mobile, auth) {
+    if (auth.current) {
+        return true;
+    }
+    const expected = getExpectedAuthFingerprint(mobile);
+    return (normalizeAuthField(auth.deviceModel) === normalizeAuthField(expected.deviceModel) &&
+        normalizeAuthField(auth.systemVersion) === normalizeAuthField(expected.systemVersion));
 }
 //# sourceMappingURL=tg-config.js.map

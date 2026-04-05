@@ -102,7 +102,7 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.TypeUpdates | Api.Message>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message | Api.TypeUpdates>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./TelegramManager").ScheduledMessageItem[]>;
     sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("./TelegramManager").AlbumSendResult>;
     sendMessage(mobile: string, params: SendTgMessageDto): Promise<Api.Message>;

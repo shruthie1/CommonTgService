@@ -1,6 +1,8 @@
-export interface TGPlatformConfig {
+export interface ITelegramCredentials {
     apiId: number;
     apiHash: string;
+}
+export interface TGPlatformConfig {
     langPack: string;
     devices: {
         deviceModel: string;
@@ -9,6 +11,8 @@ export interface TGPlatformConfig {
     appVersions: string[];
 }
 export declare function stableHash(str: string): number;
+export declare function getTelegramCredentialsForMobile(mobile: string): ITelegramCredentials;
+export declare function getTelegramCredentialPool(): readonly ITelegramCredentials[];
 export interface TGProxyConfig {
     ip: string;
     port: number;
@@ -36,6 +40,17 @@ export interface TGClientConfig {
     testServers: boolean;
     proxy?: TGProxyConfig;
 }
+export interface TGAuthFingerprint {
+    apiId: number;
+    apiHash: string;
+    platform: string;
+    deviceModel: string;
+    systemVersion: string;
+    appVersion: string;
+    langCode: string;
+    systemLangCode: string;
+    langPack: string;
+}
 export declare function generateTGConfig(mobile: string, proxy?: TGProxyConfig, options?: {
     platform?: string;
     apiId?: number;
@@ -56,3 +71,9 @@ export declare function generateTGConfigWithProxy(mobile: string, proxyConfig: {
 } | null, options?: Parameters<typeof generateTGConfig>[2]): TGClientConfig;
 export declare function getAvailablePlatforms(): string[];
 export declare function getPlatformConfig(platform: string): TGPlatformConfig | undefined;
+export declare function getExpectedAuthFingerprint(mobile: string, options?: Parameters<typeof generateTGConfig>[2]): TGAuthFingerprint;
+export declare function isAuthFingerprintMatch(mobile: string, auth: {
+    current?: boolean;
+    deviceModel?: string;
+    systemVersion?: string | null;
+}): boolean;

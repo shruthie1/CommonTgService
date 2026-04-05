@@ -1,6 +1,6 @@
 import { Api } from 'telegram';
 import { TgContext, SessionInfo } from './types';
-export declare function isOwnAuth(auth: Api.Authorization): boolean;
+export declare function isOwnAuth(mobile: string, auth: Api.Authorization): boolean;
 export declare function removeOtherAuths(ctx: TgContext): Promise<void>;
 export declare function getAuths(ctx: TgContext): Promise<Api.account.Authorizations>;
 export declare function getLastActiveTime(ctx: TgContext): Promise<string>;

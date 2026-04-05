@@ -24,8 +24,7 @@ export declare class SessionManager {
     private readonly OTP_WAIT_TIME;
     private readonly OTP_CHECK_INTERVAL;
     private constructor();
-    private getApiId;
-    private getApiHash;
+    private getCredentials;
     static getInstance(): SessionManager;
     createSession(options: SessionCreationOptions): Promise<SessionCreationResult>;
     private checkExistingSession;
@@ -66,8 +65,7 @@ export declare class SessionService {
     private readonly MAX_SESSIONS_PER_HOUR;
     private readonly RATE_LIMIT_WINDOW;
     constructor(sessionAuditService: SessionAuditService);
-    private getApiId;
-    private getApiHash;
+    private getCredentials;
     private checkRateLimit;
     private extractMobileFromSession;
     createSession(options: SessionCreationOptions): Promise<SessionCreationResult>;
