@@ -371,7 +371,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             status: bufferClient.status || 'active',
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
-        this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        await this.botsService.sendMessageByCategory(
+            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            [
+                'Buffer Client Created',
+                '',
+                `Mobile: ${bufferClient.mobile}`,
+                `ClientId: ${bufferClient.clientId || '-'}`,
+                `Status: ${result.status}`,
+                `AvailableDate: ${bufferClient.availableDate || '-'}`,
+                `Channels: ${bufferClient.channels ?? '-'}`,
+                `Message: ${bufferClient.message || '-'}`,
+            ].join('\n'),
+        );
         return result;
     }
 
@@ -458,8 +470,68 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument> {
         const updateData: UpdateBufferClientDto = { status };
         if (message) updateData.message = message;
+        if (status === 'inactive') {
+            updateData.inUse = false;
+        }
         await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return await this.update(mobile, updateData);
+    }
+
+    async setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument> {
+        const now = new Date();
+        const revoked = await this.bufferClientModel.updateMany(
+            {
+                clientId,
+                mobile: { $ne: mobile },
+                inUse: true,
+            },
+            {
+                $set: {
+                    inUse: false,
+                    lastUsed: now,
+                },
+            },
+        ).exec();
+
+        if ((revoked.modifiedCount || 0) > 0) {
+            this.logger.info(`Revoked stale in-use buffer ownership for ${clientId}`, {
+                keepMobile: mobile,
+                revokedCount: revoked.modifiedCount,
+            });
+            await this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                [
+                    'Buffer Primary Reassigned',
+                    '',
+                    `ClientId: ${clientId}`,
+                    `PrimaryMobile: ${mobile}`,
+                    `RevokedInUseCount: ${revoked.modifiedCount}`,
+                ].join('\n'),
+            );
+        }
+
+        const updatedBufferClient = await this.bufferClientModel
+            .findOneAndUpdate(
+                { mobile, clientId },
+                {
+                    $set: {
+                        inUse: true,
+                        status: 'active',
+                        lastUsed: now,
+                    },
+                },
+                { new: true, returnDocument: 'after' },
+            )
+            .exec();
+
+        if (!updatedBufferClient) {
+            throw new NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
+        }
+
+        this.logger.info(`Set primary in-use buffer client for ${clientId}`, {
+            mobile,
+        });
+        return updatedBufferClient;
     }
 
     async refillJoinQueue(clientId?: string | null): Promise<number> {
@@ -732,9 +804,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
         await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active: ${totalActiveBufferClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
 
+        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
+
+        await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
     }
 
     // ---- Buffer-specific: updateInfo ----
@@ -907,6 +982,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             ).exec();
 
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
+            await this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                [
+                    'Buffer Client Enrolled',
+                    '',
+                    `ClientId: ${targetClientId}`,
+                    `Mobile: ${document.mobile}`,
+                    `AvailableDate: ${targetAvailableDate}`,
+                    `Channels: ${channels.ids.length}`,
+                    `WarmupPhase: ${WarmupPhase.ENROLLED}`,
+                    `SourceTgId: ${document.tgId}`,
+                ].join('\n'),
+            );
             return true;
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
@@ -966,7 +1054,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             priority: number;
         }>,
         bufferClientsPerClient?: Map<string, number>,
-    ) {
+    ): Promise<{ createdCount: number; attemptedCount: number }> {
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
 
         let totalNeeded = 0;
@@ -975,7 +1063,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
 
-        if (totalNeeded === 0) return;
+        if (totalNeeded === 0) return { createdCount: 0, attemptedCount: 0 };
 
         const documents = await this.usersService.executeQuery(
             {
@@ -1024,6 +1112,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
+        return { createdCount, attemptedCount };
     }
 
     // ---- Buffer-specific: Bulk session update ----
@@ -1200,5 +1289,32 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     async getUnusedBufferClients(hoursAgo: number = 24, clientId?: string): Promise<BufferClientDocument[]> {
         return await this.getUnusedClients(hoursAgo, clientId) as BufferClientDocument[];
+    }
+
+    private async sendBufferCheckSummaryNotification(totalUpdates: number, createdCount: number, attemptedCount: number): Promise<void> {
+        const distribution = await this.getBufferClientDistribution();
+        const lines = distribution.distributionPerClient
+            .sort((a, b) => a.clientId.localeCompare(b.clientId))
+            .map((item) =>
+                `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
+            );
+
+        await this.botsService.sendMessageByCategory(
+            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            [
+                'Buffer Client Check Summary',
+                '',
+                `Active: ${distribution.activeBufferClients}`,
+                `Inactive: ${distribution.inactiveBufferClients}`,
+                `Unassigned: ${distribution.unassignedBufferClients}`,
+                `UpdatesApplied: ${totalUpdates}`,
+                `CreatedThisRun: ${createdCount}`,
+                `AttemptedCreates: ${attemptedCount}`,
+                `TotalNeeded: ${distribution.summary.totalBufferClientsNeeded}`,
+                `ClientsNeedingMore: ${distribution.summary.clientsNeedingBufferClients}`,
+                '',
+                ...lines,
+            ].join('\n'),
+        );
     }
 }

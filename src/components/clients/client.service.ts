@@ -677,8 +677,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         mirroredActiveName,
       });
       try {
-        await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date(), status: 'active' });
-        this.logger.debug(`[${clientId}] Marked replacement buffer doc as active/in-use`, { newMobile });
+        await this.bufferClientService.setPrimaryInUse(clientId, newMobile);
+        this.logger.debug(`[${clientId}] Marked replacement buffer doc as the sole active/in-use primary`, { newMobile });
       } catch (bufferUpdateError) {
         parseError(bufferUpdateError, `[${clientId}] Failed to mark ${newMobile} as in-use after cutover`);
         this.logger.error(
