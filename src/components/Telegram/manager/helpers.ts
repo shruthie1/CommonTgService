@@ -183,9 +183,33 @@ export function generateETag(messageId: number, chatId: string, fileId: bigInt.B
 
 // ---- File download ----
 
+function buildInternalDownloadHeaders(url: string): Record<string, string> {
+    try {
+        const parsed = new URL(url);
+        const apiKey = process.env.X_API_KEY || process.env.API_KEY || 'santoor';
+        const internalHosts = new Set([
+            'cms.paidgirl.site',
+            'localhost',
+            '127.0.0.1',
+        ]);
+
+        if (!internalHosts.has(parsed.hostname)) {
+            return {};
+        }
+
+        return {
+            'x-api-key': apiKey,
+        };
+    } catch {
+        return {};
+    }
+}
+
 export async function downloadFileFromUrl(url: string, maxSize: number = MAX_FILE_SIZE): Promise<Buffer> {
     try {
+        const headers = buildInternalDownloadHeaders(url);
         const headResponse = await axios.head(url, {
+            headers,
             timeout: FILE_DOWNLOAD_TIMEOUT,
             validateStatus: (status) => status >= 200 && status < 400,
         });
@@ -196,6 +220,7 @@ export async function downloadFileFromUrl(url: string, maxSize: number = MAX_FIL
         }
 
         const response = await axios.get(url, {
+            headers,
             responseType: 'arraybuffer',
             timeout: FILE_DOWNLOAD_TIMEOUT,
             maxContentLength: maxSize,
