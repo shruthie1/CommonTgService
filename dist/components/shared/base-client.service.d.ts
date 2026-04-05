@@ -71,6 +71,10 @@ export interface BaseClientDocument extends Document {
     assignedProfilePics?: string[];
 }
 export type BaseClientUpdate = Partial<Pick<BaseClientDocument, 'session' | 'availableDate' | 'channels' | 'clientId' | 'status' | 'message' | 'lastUsed' | 'lastChecked' | 'inUse' | 'privacyUpdatedAt' | 'twoFASetAt' | 'otherAuthsRemovedAt' | 'profilePicsUpdatedAt' | 'nameBioUpdatedAt' | 'profilePicsDeletedAt' | 'usernameUpdatedAt' | 'createdAt' | 'updatedAt' | 'lastUpdateAttempt' | 'failedUpdateAttempts' | 'lastUpdateFailure' | 'warmupPhase' | 'warmupJitter' | 'enrolledAt' | 'organicActivityAt' | 'sessionRotatedAt'>>;
+export interface ProcessClientResult {
+    updateCount: number;
+    updateSummary?: string | null;
+}
 export interface AvailabilityNeeds {
     totalNeeded: number;
     windowNeeds: Array<{
@@ -188,7 +192,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     private verifyOurPassword;
     protected set2fa(doc: TDoc, failedAttempts: number): Promise<number>;
     protected removeOtherAuths(doc: TDoc, failedAttempts: number): Promise<number>;
-    processClient(doc: TDoc, client: Client): Promise<number>;
+    processClient(doc: TDoc, client: Client): Promise<ProcessClientResult>;
     protected backfillTimestamps(mobile: string, doc: TDoc, now: number): Promise<void>;
     joinChannelQueue(): Promise<void>;
     private scheduleNextJoinRound;
