@@ -89,12 +89,6 @@ __decorate([
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Main account of the user' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], CreateClientDto.prototype, "mainAccount", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'booklet_10', description: 'Product associated with the user' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
@@ -136,4 +130,40 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateClientDto.prototype, "autoAssignIps", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of first names', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "firstNames", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for buffer clients', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "bufferLastNames", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for promote clients', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "promoteLastNames", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of bios', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "bios", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of profile pic URLs', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    (0, class_validator_1.IsUrl)({}, { each: true }),
+    __metadata("design:type", Array)
+], CreateClientDto.prototype, "profilePics", void 0);
 //# sourceMappingURL=create-client.dto.js.map

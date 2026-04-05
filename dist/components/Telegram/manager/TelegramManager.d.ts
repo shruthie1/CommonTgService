@@ -17,11 +17,13 @@ declare class TelegramManager {
     apiId: number;
     apiHash: string;
     private timeoutErr;
-    private static activeClientSetup;
+    private static activeClientSetups;
     constructor(sessionString: string, phoneNumber: string);
     private get ctx();
-    static getActiveClientSetup(): ActiveClientSetup;
-    static setActiveClientSetup(data: ActiveClientSetup | undefined): void;
+    static getActiveClientSetup(newMobile?: string): ActiveClientSetup | undefined;
+    static hasActiveClientSetup(): boolean;
+    static setActiveClientSetup(data: ActiveClientSetup): void;
+    static clearActiveClientSetup(newMobile: string): void;
     clearTimeoutErr(): void;
     errorHandler(error: Error): Promise<void>;
     createClient(handler?: boolean, handlerFn?: (event: NewMessageEvent) => Promise<void>): Promise<TelegramClient>;

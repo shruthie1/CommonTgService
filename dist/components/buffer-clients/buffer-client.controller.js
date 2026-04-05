@@ -26,11 +26,15 @@ let BufferClientController = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
     }
+    sanitizeQuery(query) {
+        const { apiKey: _apiKey, ...rest } = query;
+        return rest;
+    }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
     }
     async search(query) {
-        return this.clientService.search(query);
+        return this.clientService.search(this.sanitizeQuery(query));
     }
     async updateInfo() {
         this.clientService.updateInfo();
@@ -62,6 +66,9 @@ let BufferClientController = class BufferClientController {
     async executeQuery(query) {
         return this.clientService.executeQuery(query);
     }
+    async refreshProfilePics(mobile) {
+        return this.clientService.refreshProfilePhotosOnDemand(mobile);
+    }
     async getBufferClientDistribution() {
         return this.clientService.getBufferClientDistribution();
     }
@@ -87,7 +94,11 @@ let BufferClientController = class BufferClientController {
         return this.clientService.markAsUsed(mobile, body.message);
     }
     async getNextAvailable(clientId) {
-        return this.clientService.getNextAvailableBufferClient(clientId);
+        const client = await this.clientService.getNextAvailableBufferClient(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`No available buffer client found for ${clientId}`);
+        }
+        return client;
     }
     async getUnusedBufferClients(hoursAgo, clientId) {
         return this.clientService.getUnusedBufferClients(hoursAgo || 24, clientId);
@@ -204,6 +215,16 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Post)('profile-pics/refresh/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh profile pics for a buffer client on demand' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { refreshed: { type: 'boolean' }, uploadedCount: { type: 'number' } } } }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "refreshProfilePics", null);
 __decorate([
     (0, common_1.Get)('distribution'),
     (0, swagger_1.ApiOperation)({ summary: 'Get buffer client distribution per client' }),

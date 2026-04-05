@@ -170,6 +170,26 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "sessionRotatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned first name from pool', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "assignedFirstName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned last name from pool', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "assignedLastName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned bio from pool', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "assignedBio", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned profile pic URLs from pool', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], BufferClient.prototype, "assignedProfilePics", void 0);
 exports.BufferClient = BufferClient = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'bufferClients', versionKey: false, autoIndex: true,

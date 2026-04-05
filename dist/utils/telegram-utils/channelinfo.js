@@ -8,7 +8,7 @@ async function channelInfo(client, sendIds = false) {
     let canSendTrueCount = 0;
     let canSendFalseCount = 0;
     let totalCount = 0;
-    let channelArray = [];
+    const channelArray = [];
     const canSendFalseChats = [];
     for await (const dialog of client.iterDialogs({ limit: 1500 })) {
         if (dialog.isChannel || dialog.isGroup) {

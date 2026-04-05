@@ -5,7 +5,7 @@ import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
 import { ChannelInfo } from './types/telegram-responses';
-import { ChatStatistics, GroupOptions, MessageScheduleOptions } from './manager/types';
+import { ActiveClientSetup, ChatStatistics, GroupOptions, MessageScheduleOptions } from './manager/types';
 import { MediaAlbumOptions } from './types/telegram-types';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateTgBotDto } from './dto/create-bot.dto';
@@ -20,15 +20,10 @@ export declare class TelegramService implements OnModuleDestroy {
     private readonly logger;
     constructor(usersService: UsersService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
     onModuleDestroy(): Promise<void>;
-    getActiveClientSetup(): import("./TelegramManager").ActiveClientSetup;
-    setActiveClientSetup(data: {
-        days?: number;
-        archiveOld: boolean;
-        formalities: boolean;
-        newMobile: string;
-        existingMobile: string;
-        clientId: string;
-    } | undefined): void;
+    getActiveClientSetup(newMobile?: string): ActiveClientSetup;
+    hasActiveClientSetup(): boolean;
+    setActiveClientSetup(data: ActiveClientSetup): void;
+    clearActiveClientSetup(newMobile: string): void;
     getMessages(mobile: string, username: string, limit?: number, offsetId?: number): Promise<import("./TelegramManager").PaginatedMessages>;
     getMessagesNew(mobile: string, username: string, offset: number, limit: number): Promise<import("./TelegramManager").PaginatedMessages>;
     sendInlineMessage(mobile: string, chatId: string, message: string, url: string): Promise<Api.Message>;
@@ -107,7 +102,7 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message | Api.TypeUpdates>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.TypeUpdates | Api.Message>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./TelegramManager").ScheduledMessageItem[]>;
     sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("./TelegramManager").AlbumSendResult>;
     sendMessage(mobile: string, params: SendTgMessageDto): Promise<Api.Message>;

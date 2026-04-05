@@ -43,7 +43,7 @@ class ClientHelperUtils {
         return Math.round(result);
     }
     static generateWarmupJitter() {
-        return Math.floor(Math.random() * 4);
+        return Math.round(ClientHelperUtils.gaussianRandom(3.5, 2, 0, 7));
     }
 }
 exports.ClientHelperUtils = ClientHelperUtils;

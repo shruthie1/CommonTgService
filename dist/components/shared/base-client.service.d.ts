@@ -65,6 +65,10 @@ export interface BaseClientDocument extends Document {
     enrolledAt?: Date;
     organicActivityAt?: Date;
     sessionRotatedAt?: Date;
+    assignedFirstName?: string;
+    assignedLastName?: string;
+    assignedBio?: string;
+    assignedProfilePics?: string[];
 }
 export type BaseClientUpdate = Partial<Pick<BaseClientDocument, 'session' | 'availableDate' | 'channels' | 'clientId' | 'status' | 'message' | 'lastUsed' | 'lastChecked' | 'inUse' | 'privacyUpdatedAt' | 'twoFASetAt' | 'otherAuthsRemovedAt' | 'profilePicsUpdatedAt' | 'nameBioUpdatedAt' | 'profilePicsDeletedAt' | 'usernameUpdatedAt' | 'createdAt' | 'updatedAt' | 'lastUpdateAttempt' | 'failedUpdateAttempts' | 'lastUpdateFailure' | 'warmupPhase' | 'warmupJitter' | 'enrolledAt' | 'organicActivityAt' | 'sessionRotatedAt'>>;
 export interface AvailabilityNeeds {
@@ -173,6 +177,12 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected performHealthCheck(mobile: string, lastChecked: number, now: number): Promise<boolean>;
     protected updatePrivacySettings(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     protected deleteProfilePhotos(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
+    private getProfilePicExtension;
+    private uploadProfilePhotosFromUrls;
+    refreshProfilePhotosOnDemand(mobile: string): Promise<{
+        refreshed: boolean;
+        uploadedCount: number;
+    }>;
     protected updateProfilePhotos(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     private readonly KNOWN_2FA_PASSWORD;
     private verifyOurPassword;
@@ -199,6 +209,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected hasDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean>;
     getOrEnsureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<User | null>;
     ensureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean>;
+    protected expireUserByMobile(mobile: string): Promise<void>;
     protected normalizeDateString(dateValue?: string | Date | null): string | null;
     protected maxDateString(...dateStrings: Array<string | null | undefined>): string | null;
     protected getProjectedReadyDateString(doc: Partial<BaseClientDocument>): string | null;

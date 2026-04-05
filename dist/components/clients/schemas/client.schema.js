@@ -76,11 +76,6 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Main account of the user' }),
-    (0, mongoose_1.Prop)({ required: true }),
-    __metadata("design:type", String)
-], Client.prototype, "mainAccount", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ example: 'booklet_10', description: 'Product associated with the user' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -110,6 +105,31 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Client.prototype, "autoAssignIps", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of first names for persona assignment', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "firstNames", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for buffer-client persona assignment', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "bufferLastNames", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for promote-client persona assignment', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "promoteLastNames", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of bios for persona assignment', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "bios", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Pool of profile pic URLs', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
+    __metadata("design:type", Array)
+], Client.prototype, "profilePics", void 0);
 exports.Client = Client = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'clients', versionKey: false, autoIndex: true, timestamps: true,

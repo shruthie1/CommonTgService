@@ -216,7 +216,7 @@ async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.de
 async function getMediaMetadata(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    let { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
         ? ['photo', 'video', 'document', 'voice']
@@ -324,7 +324,7 @@ async function getMediaMetadata(ctx, params) {
 async function getAllMediaMetaData(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    let { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
+    const { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
         ? ['photo', 'video', 'document', 'voice']
@@ -386,7 +386,7 @@ async function getAllMediaMetaData(ctx, params) {
 async function getFilteredMedia(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    let { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
         ? ['photo', 'video', 'document', 'voice']

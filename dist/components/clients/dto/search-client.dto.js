@@ -94,13 +94,6 @@ __decorate([
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Main account of the client' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchClientDto.prototype, "mainAccount", void 0);
-__decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Product associated with the client' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),

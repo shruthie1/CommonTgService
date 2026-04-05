@@ -20,5 +20,9 @@ export declare class UpdatePromoteClientDto extends UpdatePromoteClientDto_base 
     enrolledAt?: Date;
     organicActivityAt?: Date;
     sessionRotatedAt?: Date;
+    assignedFirstName?: string;
+    assignedLastName?: string;
+    assignedBio?: string;
+    assignedProfilePics?: string[];
 }
 export {};

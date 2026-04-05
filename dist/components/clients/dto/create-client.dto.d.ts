@@ -11,11 +11,15 @@ export declare class CreateClientDto {
     readonly username: string;
     readonly clientId: string;
     readonly deployKey: string;
-    readonly mainAccount: string;
     readonly product: string;
     readonly qrId: string;
     readonly gpayId: string;
     readonly dedicatedIps?: string[];
     readonly preferredIpCountry?: string;
     readonly autoAssignIps?: boolean;
+    firstNames?: string[];
+    bufferLastNames?: string[];
+    promoteLastNames?: string[];
+    bios?: string[];
+    profilePics?: string[];
 }

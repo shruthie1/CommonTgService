@@ -13,13 +13,17 @@ export declare class Client {
     username: string;
     clientId: string;
     deployKey: string;
-    mainAccount: string;
     product: string;
     qrId: string;
     gpayId: string;
     dedicatedIps?: string[];
     preferredIpCountry?: string;
     autoAssignIps?: boolean;
+    firstNames: string[];
+    bufferLastNames: string[];
+    promoteLastNames: string[];
+    bios: string[];
+    profilePics: string[];
 }
 export declare const ClientSchema: import("mongoose").Schema<Client, import("mongoose").Model<Client, any, any, any, (Document<unknown, any, Client, any, import("mongoose").DefaultSchemaOptions> & Client & {
     _id: import("mongoose").Types.ObjectId;
@@ -148,15 +152,6 @@ export declare const ClientSchema: import("mongoose").Schema<Client, import("mon
     }, "id"> & {
         id: string;
     }>;
-    mainAccount?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
-        id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
     product?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
@@ -203,6 +198,51 @@ export declare const ClientSchema: import("mongoose").Schema<Client, import("mon
         id: string;
     }>;
     autoAssignIps?: import("mongoose").SchemaDefinitionProperty<boolean, Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    firstNames?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    bufferLastNames?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    promoteLastNames?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    bios?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    profilePics?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;

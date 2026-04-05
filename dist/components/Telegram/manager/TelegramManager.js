@@ -62,11 +62,20 @@ class TelegramManager {
             logger: this.logger,
         };
     }
-    static getActiveClientSetup() {
-        return TelegramManager.activeClientSetup;
+    static getActiveClientSetup(newMobile) {
+        if (newMobile) {
+            return TelegramManager.activeClientSetups.get(newMobile);
+        }
+        return TelegramManager.activeClientSetups.values().next().value;
+    }
+    static hasActiveClientSetup() {
+        return TelegramManager.activeClientSetups.size > 0;
     }
     static setActiveClientSetup(data) {
-        TelegramManager.activeClientSetup = data;
+        TelegramManager.activeClientSetups.set(data.newMobile, data);
+    }
+    static clearActiveClientSetup(newMobile) {
+        TelegramManager.activeClientSetups.delete(newMobile);
     }
     clearTimeoutErr() {
         if (this.timeoutErr) {
@@ -369,5 +378,6 @@ class TelegramManager {
         return clientOps.handleIncomingEvent(this.ctx, event);
     }
 }
+TelegramManager.activeClientSetups = new Map();
 exports.default = TelegramManager;
 //# sourceMappingURL=TelegramManager.js.map

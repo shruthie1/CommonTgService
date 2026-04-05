@@ -31,6 +31,10 @@ export declare class BufferClient {
     enrolledAt: Date;
     organicActivityAt: Date;
     sessionRotatedAt: Date;
+    assignedFirstName: string;
+    assignedLastName: string;
+    assignedBio: string;
+    assignedProfilePics: string[];
 }
 export declare const BufferClientSchema: import("mongoose").Schema<BufferClient, import("mongoose").Model<BufferClient, any, any, any, (Document<unknown, any, BufferClient, any, import("mongoose").DefaultSchemaOptions> & BufferClient & {
     _id: import("mongoose").Types.ObjectId;
@@ -295,6 +299,42 @@ export declare const BufferClientSchema: import("mongoose").Schema<BufferClient,
         id: string;
     }>;
     sessionRotatedAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedFirstName?: import("mongoose").SchemaDefinitionProperty<string, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedLastName?: import("mongoose").SchemaDefinitionProperty<string, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedBio?: import("mongoose").SchemaDefinitionProperty<string, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedProfilePics?: import("mongoose").SchemaDefinitionProperty<string[], BufferClient, Document<unknown, {}, BufferClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
         _id: import("mongoose").Types.ObjectId;

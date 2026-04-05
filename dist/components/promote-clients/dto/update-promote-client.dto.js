@@ -90,4 +90,29 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.', example: '2026-04-02T07:00:00.000Z' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "sessionRotatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned first name (set during setupClient)', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdatePromoteClientDto.prototype, "assignedFirstName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned last name', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdatePromoteClientDto.prototype, "assignedLastName", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned bio', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdatePromoteClientDto.prototype, "assignedBio", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Assigned profile pic URLs', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    __metadata("design:type", Array)
+], UpdatePromoteClientDto.prototype, "assignedProfilePics", void 0);
 //# sourceMappingURL=update-promote-client.dto.js.map

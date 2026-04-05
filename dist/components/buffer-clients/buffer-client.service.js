@@ -23,6 +23,7 @@ const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
+const telegram_1 = require("telegram");
 const users_service_1 = require("../users/users.service");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
 const client_service_1 = require("../clients/client.service");
@@ -32,10 +33,10 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
-const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
-const checkMe_utils_1 = require("../../utils/checkMe.utils");
+const persona_assignment_1 = require("../../utils/persona-assignment");
+const homoglyph_normalizer_1 = require("../../utils/homoglyph-normalizer");
 const bots_1 = require("../bots");
 const base_client_service_1 = require("../shared/base-client.service");
 const client_helper_utils_1 = require("../shared/client-helper.utils");
@@ -44,6 +45,20 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
         this.bufferClientModel = bufferClientModel;
         this.promoteClientService = promoteClientServiceRef;
+    }
+    async getPrimaryClientMobiles(clientId) {
+        const clients = await this.clientService.findAll();
+        const primaryClientMobiles = new Set(clients
+            .filter((client) => !!client.mobile && (!clientId || client.clientId === clientId))
+            .map((client) => client.mobile));
+        this.logger.debug('Resolved primary client mobiles for buffer guards', {
+            clientId: clientId || 'all',
+            count: primaryClientMobiles.size,
+        });
+        return primaryClientMobiles;
+    }
+    isPrimaryClientMobile(mobile, primaryClientMobiles) {
+        return !!mobile && primaryClientMobiles.has(mobile);
     }
     get model() {
         return this.bufferClientModel;
@@ -73,26 +88,144 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         try {
             await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'medium');
             const me = await telegramClient.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             let updateCount = 0;
-            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me.firstName), client.name)) {
-                this.logger.log(`Updating name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(client.name, {
-                    maintainFormatting: false,
-                    preserveCase: true,
-                    useInvisibleChars: false
-                })} ${(0, utils_1.getCuteEmoji)()}`, '');
-                updateCount = 1;
+            if ((client.firstNames?.length > 0) || (client.bufferLastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
+                let assignment = null;
+                const hasValidAssignment = (doc.assignedFirstName != null ||
+                    doc.assignedLastName != null ||
+                    doc.assignedBio != null);
+                if (hasValidAssignment) {
+                    assignment = {
+                        assignedFirstName: doc.assignedFirstName,
+                        assignedLastName: doc.assignedLastName,
+                        assignedBio: doc.assignedBio,
+                        assignedProfilePics: doc.assignedProfilePics,
+                    };
+                }
+                else {
+                    const pool = {
+                        firstNames: client.firstNames,
+                        lastNames: client.bufferLastNames || [],
+                        bios: client.bios || [],
+                        profilePics: client.profilePics || [],
+                        dbcoll: client.dbcoll,
+                    };
+                    const existingAssignments = await this.model.find({
+                        clientId: doc.clientId, status: 'active',
+                        mobile: { $ne: doc.mobile },
+                        $or: [
+                            { assignedFirstName: { $ne: null } },
+                            { assignedLastName: { $ne: null } },
+                            { assignedBio: { $ne: null } },
+                            { 'assignedProfilePics.0': { $exists: true } },
+                        ],
+                    }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
+                    try {
+                        const promoteAssignments = await this.promoteClientService.model.find({
+                            clientId: doc.clientId, status: 'active',
+                            mobile: { $ne: doc.mobile },
+                            $or: [
+                                { assignedFirstName: { $ne: null } },
+                                { assignedLastName: { $ne: null } },
+                                { assignedBio: { $ne: null } },
+                                { 'assignedProfilePics.0': { $exists: true } },
+                            ],
+                        }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
+                        existingAssignments.push(...promoteAssignments);
+                    }
+                    catch { }
+                    const activeClientAssignment = await this.clientService.getActiveClientAssignment(client);
+                    if (activeClientAssignment && activeClientAssignment.mobile !== doc.mobile && !existingAssignments.some(a => a.mobile === activeClientAssignment.mobile)) {
+                        existingAssignments.push(activeClientAssignment);
+                    }
+                    const usedKeys = new Set(existingAssignments.map(a => (0, persona_assignment_1.personaKey)({
+                        firstName: a.assignedFirstName,
+                        lastName: a.assignedLastName || '',
+                        bio: a.assignedBio || '',
+                        profilePics: a.assignedProfilePics || [],
+                    })));
+                    const candidates = (0, persona_assignment_1.generateCandidateCombinations)(pool, doc.mobile);
+                    const chosen = candidates.find(c => !usedKeys.has((0, persona_assignment_1.personaKey)(c)));
+                    if (!chosen) {
+                        this.logger.warn(`No unique persona candidate available for ${doc.mobile}, falling back to first candidate`);
+                    }
+                    const pick = chosen || candidates[0];
+                    if (pick) {
+                        const result = await this.model.findOneAndUpdate({
+                            mobile: doc.mobile,
+                            $or: [
+                                {
+                                    assignedFirstName: null,
+                                    assignedLastName: null,
+                                    assignedBio: null,
+                                    'assignedProfilePics.0': { $exists: false },
+                                },
+                            ],
+                        }, { $set: {
+                                assignedFirstName: pick.firstName,
+                                assignedLastName: pick.lastName || null,
+                                assignedBio: pick.bio || null,
+                                assignedProfilePics: pick.profilePics,
+                            } }, { new: true });
+                        if (result) {
+                            assignment = {
+                                assignedFirstName: result.assignedFirstName,
+                                assignedLastName: result.assignedLastName,
+                                assignedBio: result.assignedBio,
+                                assignedProfilePics: result.assignedProfilePics,
+                            };
+                            this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
+                        }
+                        else {
+                            this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                        }
+                    }
+                }
+                const hasAnyAssignment = assignment != null && (assignment.assignedFirstName != null ||
+                    assignment.assignedLastName != null ||
+                    assignment.assignedBio != null);
+                if (hasAnyAssignment) {
+                    const fullUser = await telegramClient.client.invoke(new telegram_1.Api.users.GetFullUser({ id: new telegram_1.Api.InputUserSelf() }));
+                    const currentLastName = fullUser?.users?.[0]?.lastName || '';
+                    const currentBio = fullUser?.fullUser?.about || '';
+                    const firstNameWrong = assignment?.assignedFirstName != null
+                        && !(0, homoglyph_normalizer_1.nameMatchesAssignment)(me.firstName || '', assignment.assignedFirstName);
+                    const lastNameWrong = assignment?.assignedLastName != null
+                        && !(0, homoglyph_normalizer_1.lastNameMatches)(currentLastName, assignment.assignedLastName);
+                    if (firstNameWrong || lastNameWrong) {
+                        const displayFirstName = assignment.assignedFirstName || me.firstName || '';
+                        const displayLastName = assignment.assignedLastName || '';
+                        this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
+                        await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'medium');
+                        await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({
+                            firstName: displayFirstName,
+                            lastName: displayLastName,
+                        }));
+                        updateCount++;
+                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
+                    }
+                    if (assignment.assignedBio != null && currentBio !== assignment.assignedBio) {
+                        this.logger.log(`Updating persona bio for ${doc.mobile}`);
+                        await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
+                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 3000, 8000, 18000));
+                        await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({ about: assignment.assignedBio }));
+                        updateCount++;
+                    }
+                }
+            }
+            else {
+                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
             }
             await this.update(doc.mobile, {
-                nameBioUpdatedAt: new Date(),
+                ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return updateCount;
         }
         catch (error) {
@@ -117,7 +250,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         try {
             await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
             const me = await telegramClient.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
             await this.update(doc.mobile, {
                 usernameUpdatedAt: new Date(),
@@ -127,7 +260,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated username for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         }
         catch (error) {
@@ -246,16 +379,25 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     async refillJoinQueue(clientId) {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing)
             return 0;
-        if (this.telegramService.getActiveClientSetup())
+        if (this.telegramService.hasActiveClientSetup())
             return 0;
         this.resetDailyJoinCountersIfNeeded();
+        const primaryClientMobiles = await this.getPrimaryClientMobiles(clientId);
+        const excludedMobiles = new Set([
+            ...this.joinChannelMap.keys(),
+            ...primaryClientMobiles,
+        ]);
         const query = {
             status: 'active',
             channels: { $lt: this.config.channelTarget },
-            mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+            mobile: { $nin: Array.from(excludedMobiles) },
         };
         if (clientId)
             query.clientId = clientId;
+        this.logger.debug('Refill join queue query prepared', {
+            clientId: clientId || 'all',
+            excludedCount: excludedMobiles.size,
+        });
         const eligible = await this.bufferClientModel
             .find(query)
             .sort({ channels: 1 })
@@ -264,6 +406,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         let added = 0;
         let leaveAdded = 0;
         for (const doc of eligible) {
+            if (this.isPrimaryClientMobile(doc.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping refill candidate ${doc.mobile}: it is the live client mobile`);
+                continue;
+            }
             if (this.isMobileDailyCapped(doc.mobile))
                 continue;
             try {
@@ -300,7 +446,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             this.logger.log(`Refilled join queue with ${added} buffer clients`);
         }
         if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
-            this.createTimeout(() => this.leaveChannelQueue(), 5000 + Math.random() * 3000);
+            this.createTimeout(() => this.leaveChannelQueue(), client_helper_utils_1.ClientHelperUtils.gaussianRandom(6500, 1000, 5000, 8000));
         }
         return added;
     }
@@ -337,7 +483,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
         try {
             const channels = await this.telegramService.getChannelInfo(mobile, true);
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const bufferClient = {
                 tgId: user.tgId,
                 session: user.session,
@@ -376,7 +522,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return 'Client enrolled as buffer successfully';
     }
     async checkBufferClients() {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return;
         }
@@ -410,6 +556,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const client = clientMap.get(bufferClient.clientId);
             if (!client)
                 continue;
+            if (bufferClient.mobile === client.mobile) {
+                this.logger.debug(`Skipping buffer maintenance for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
             if (bufferClient.inUse === true)
                 continue;
             const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
@@ -467,6 +617,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async updateInfo() {
+        const primaryClientMobiles = await this.getPrimaryClientMobiles();
         const clients = await this.bufferClientModel
             .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 5 * this.ONE_DAY_MS) } })
             .sort({ channels: 1 })
@@ -474,15 +625,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const now = Date.now();
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
+            if (this.isPrimaryClientMobile(client.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping buffer health check for ${client.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
             const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
             await this.performHealthCheck(client.mobile, lastChecked, now);
             if (i < clients.length - 1) {
-                await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
+                await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(16000, 2500, 12000, 20000));
             }
         }
     }
     async joinchannelForBufferClients(skipExisting = true, clientId) {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping';
         }
         this.logger.log('Starting join channel process for buffer clients');
@@ -491,14 +646,20 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             return 'Join/leave still processing, skipped';
         }
         this.joinScopeClientId = clientId || null;
+        const primaryClientMobiles = await this.getPrimaryClientMobiles(clientId);
         const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
         const query = {
             channels: { $lt: this.config.channelTarget },
-            mobile: { $nin: Array.from(preservedMobiles) },
+            mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
             status: 'active',
         };
         if (clientId)
             query.clientId = clientId;
+        this.logger.info('Prepared buffer join-channel sweep', {
+            clientId: clientId || 'all',
+            preservedCount: preservedMobiles.size,
+            primaryClientCount: primaryClientMobiles.size,
+        });
         const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(this.config.maxMapSize);
         const joinSet = new Set();
         const leaveSet = new Set();
@@ -542,16 +703,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             finally {
                 await this.safeUnregisterClient(mobile);
                 if (i < clients.length - 1) {
-                    await (0, Helpers_1.sleep)(this.config.clientProcessingDelay + Math.random() * 5000);
+                    await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(this.config.clientProcessingDelay + 2500, 1500, this.config.clientProcessingDelay, this.config.clientProcessingDelay + 5000));
                 }
             }
         }
-        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 750, 6000, 9000));
         if (joinSet.size > 0) {
             this.createTimeout(() => this.joinChannelQueue(), 4000 + Math.random() * 2000);
         }
         if (leaveSet.size > 0) {
-            this.createTimeout(() => this.leaveChannelQueue(), 10000 + Math.random() * 5000);
+            this.createTimeout(() => this.leaveChannelQueue(), client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
         return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
     }
@@ -565,7 +726,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 return false;
             }
             const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const bufferClient = {
@@ -607,7 +768,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         finally {
             await this.safeUnregisterClient(document.mobile);
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
     }
     async addNewUserstoBufferClients(badIds, goodIds, clientsNeedingBufferClients = [], bufferClientsPerClient) {
@@ -664,19 +825,28 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
             catch (error) {
                 this.logger.error(`Error creating connection for ${document.mobile}`);
-                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
                 attemptedCount++;
             }
         }
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
     }
     async updateAllClientSessions() {
+        const primaryClientMobiles = await this.getPrimaryClientMobiles();
         const bufferClients = await this.bufferClientModel.find({
             status: 'active',
             warmupPhase: { $in: ['ready', 'session_rotated'] },
         }).exec();
+        this.logger.info('Starting bulk buffer session rotation', {
+            candidateCount: bufferClients.length,
+            protectedPrimaryClientCount: primaryClientMobiles.size,
+        });
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
+            if (this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping session rotation for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
             try {
                 this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
                 const client = await connection_manager_1.connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });
@@ -686,7 +856,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                         await client.set2fa();
                         await (0, Helpers_1.sleep)(60000 + Math.random() * 30000);
                     }
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+                    await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
                     if (!newSession || newSession === bufferClient.session) {
                         throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
@@ -715,14 +885,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 finally {
                     await this.safeUnregisterClient(bufferClient.mobile);
                     if (i < bufferClients.length - 1) {
-                        await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
                     }
                 }
             }
             catch (error) {
                 this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
                 if (i < bufferClients.length - 1)
-                    await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+                    await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             }
         }
     }

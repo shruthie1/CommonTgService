@@ -32,6 +32,10 @@ export declare class PromoteClient {
     enrolledAt: Date;
     organicActivityAt: Date;
     sessionRotatedAt: Date;
+    assignedFirstName: string;
+    assignedLastName: string;
+    assignedBio: string;
+    assignedProfilePics: string[];
 }
 export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClient, import("mongoose").Model<PromoteClient, any, any, any, (Document<unknown, any, PromoteClient, any, import("mongoose").DefaultSchemaOptions> & PromoteClient & {
     _id: import("mongoose").Types.ObjectId;
@@ -305,6 +309,42 @@ export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClien
         id: string;
     }>;
     sessionRotatedAt?: import("mongoose").SchemaDefinitionProperty<Date, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedFirstName?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedLastName?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedBio?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    assignedProfilePics?: import("mongoose").SchemaDefinitionProperty<string[], PromoteClient, Document<unknown, {}, PromoteClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
         _id: import("mongoose").Types.ObjectId;

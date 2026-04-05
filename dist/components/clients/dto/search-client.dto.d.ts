@@ -10,7 +10,6 @@ export declare class SearchClientDto {
     promoteRepl?: string;
     clientName?: string;
     deployKey?: string;
-    mainAccount?: string;
     product?: string;
     hasPromoteMobiles?: string;
     qrId?: string;

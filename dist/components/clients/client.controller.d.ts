@@ -11,14 +11,26 @@ import { EnhancedClientSearchResponseDto, PromoteMobileSearchResponseDto } from 
 export declare class ClientController {
     private readonly clientService;
     constructor(clientService: ClientService);
+    private sanitizeQuery;
     create(createClientDto: CreateClientDto): Promise<Client>;
     search(query: SearchClientDto): Promise<Client[]>;
     searchByPromoteMobile(query: PromoteMobileSearchQueryDto): Promise<PromoteMobileSearchResponseDto>;
     enhancedSearch(query: EnhancedSearchClientDto): Promise<EnhancedClientSearchResponseDto>;
-    updateClient(clientId: string): Promise<string>;
+    updateClient(clientId: string): Promise<"Update client completed" | "Update client skipped">;
     findAllMasked(): Promise<Partial<Client>[]>;
     findOneMasked(clientId: string): Promise<Partial<Client>>;
     findAll(): Promise<Client[]>;
+    getPersonaPool(clientId: string): Promise<{
+        firstNames: string[];
+        bufferLastNames: string[];
+        promoteLastNames: string[];
+        bios: string[];
+        profilePics: string[];
+        dbcoll: string;
+    }>;
+    getExistingAssignments(clientId: string, scope?: 'all' | 'buffer' | 'promote' | 'activeClient'): Promise<{
+        assignments: import("./client.service").PersonaAssignmentRecord[];
+    }>;
     findOne(clientId: string): Promise<Client>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;

