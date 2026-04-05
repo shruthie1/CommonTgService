@@ -12,9 +12,9 @@ const logger = new Logger("TGConfig");
 const PROXY_MAP_PREFIX = "tg:proxy_map:";
 const CONFIG_PREFIX = "tg:config:";
 
-// Default TTL for config cache — 1 year. Fingerprints should be near-permanent;
-// only explicit invalidation or identity reset should clear them.
-const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 365 * 0.5; // HALF YEAR
+// Default TTL for config cache — keep fingerprints stable for more than a year.
+// Only explicit invalidation or identity reset should clear them.
+const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 400; // 400 DAYS
 
 // Reusable direct agents (bypass global proxy, avoid per-request agent leak)
 const _directHttpsAgent = new https.Agent({ keepAlive: true, timeout: 10000 });

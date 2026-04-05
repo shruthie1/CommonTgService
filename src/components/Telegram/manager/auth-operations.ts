@@ -7,38 +7,17 @@ import { parseError } from '../../../utils/parseError';
 import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
 import { notifbot } from '../../../utils/logbots';
 import { generateTGConfig } from '../utils/generateTGConfig';
-import { getAvailablePlatforms, getPlatformConfig } from '../utils/tg-config';
+import { isAuthFingerprintMatch } from '../utils/tg-config';
 import { MailReader } from '../../../IMap/IMap';
 
-// Build device model list from tg-config platforms (computed once at module load)
-const _ownDeviceModels: string[] = (() => {
-    const models: string[] = [];
-    for (const name of getAvailablePlatforms()) {
-        const platform = getPlatformConfig(name);
-        if (platform) {
-            for (const device of platform.devices) {
-                models.push(device.deviceModel.toLowerCase());
-            }
-        }
-    }
-    return models;
-})();
-
-export function isOwnAuth(auth: Api.Authorization): boolean {
+export function isOwnAuth(mobile: string, auth: Api.Authorization): boolean {
     // PRIMARY CHECK: Telegram flags the session making the API call as current.
     // This is infallible — it's the server telling us "this is YOU".
     if (auth.current) {
         return true;
     }
 
-    // SECONDARY CHECK: Match device model against our known platform configs.
-    // This catches sessions we created but aren't currently using (e.g., backup sessions).
-    const deviceModel = (auth.deviceModel || '').toLowerCase();
-    if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
-        return true;
-    }
-
-    return false;
+    return isAuthFingerprintMatch(mobile, auth);
 }
 
 export async function removeOtherAuths(ctx: TgContext): Promise<void> {
@@ -49,7 +28,7 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
     let revokedCount = 0;
 
     for (const auth of result.authorizations) {
-        if (isOwnAuth(auth)) {
+        if (isOwnAuth(ctx.phoneNumber, auth)) {
             keptCount++;
             ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
@@ -97,7 +76,7 @@ export async function getLastActiveTime(ctx: TgContext): Promise<string> {
         let latest = 0;
 
         result.authorizations.forEach((auth) => {
-            if (!isOwnAuth(auth)) {
+            if (!isOwnAuth(ctx.phoneNumber, auth)) {
                 if (auth.dateActive && latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }

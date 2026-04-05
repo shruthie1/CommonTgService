@@ -5,6 +5,7 @@ import { Api } from 'telegram';
 import { parseError, sleep } from '../../utils';
 import { TelegramLogger } from '../Telegram/utils/telegram-logger';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import { getTelegramCredentialPool, getTelegramCredentialsForMobile, type ITelegramCredentials } from '../Telegram/utils/tg-config';
 import { ClientRegistry } from './client-registry';
 import { SessionAuditService } from './session-audit.service';
 import { SessionCreationMethod, SessionStatus, SessionAudit } from './schemas/sessions.schema';
@@ -40,20 +41,8 @@ export class SessionManager {
     private constructor() {
     }
 
-    private getApiId(): number {
-        const apiId = parseInt(process.env.API_ID!);
-        if (isNaN(apiId)) {
-            throw new Error('Invalid API_ID: must be a number');
-        }
-        return apiId;
-    }
-
-    private getApiHash(): string {
-        const apiHash = process.env.API_HASH;
-        if (!apiHash) {
-            throw new Error('API_HASH environment variable is required');
-        }
-        return apiHash;
+    private getCredentials(mobile: string): ITelegramCredentials {
+        return getTelegramCredentialsForMobile(mobile);
     }
 
     public static getInstance(): SessionManager {
@@ -230,8 +219,8 @@ export class SessionManager {
         try {
             tempClient = new TelegramClient(
                 new StringSession(sessionString),
-                this.getApiId(),
-                this.getApiHash(),
+                this.getCredentials(mobile).apiId,
+                this.getCredentials(mobile).apiHash,
                 { connectionRetries: 1 }
             );
 
@@ -260,11 +249,13 @@ export class SessionManager {
         let newClient: TelegramClient | null = null;
 
         try {
+            const credentials = this.getCredentials(mobile);
+
             // Connect to old session
             oldClient = new TelegramClient(
                 new StringSession(oldSessionString),
-                this.getApiId(),
-                this.getApiHash(),
+                credentials.apiId,
+                credentials.apiHash,
                 { connectionRetries: 1 }
             );
 
@@ -274,8 +265,8 @@ export class SessionManager {
             // Create new client
             newClient = new TelegramClient(
                 new StringSession(''),
-                this.getApiId(),
-                this.getApiHash(),
+                credentials.apiId,
+                credentials.apiHash,
                 { connectionRetries: 1 }
             );
 
@@ -499,24 +490,8 @@ export class SessionService {
         this.sessionAuditService = sessionAuditService;
     }
 
-    private getApiId(): number {
-        const apiId = process.env.API_ID;
-        if (!apiId) {
-            throw new Error('API_ID environment variable is required');
-        }
-        const parsedApiId = parseInt(apiId);
-        if (isNaN(parsedApiId)) {
-            throw new Error('Invalid API_ID: must be a number');
-        }
-        return parsedApiId;
-    }
-
-    private getApiHash(): string {
-        const apiHash = process.env.API_HASH;
-        if (!apiHash) {
-            throw new Error('API_HASH environment variable is required');
-        }
-        return apiHash;
+    private getCredentials(mobile: string): ITelegramCredentials {
+        return getTelegramCredentialsForMobile(mobile);
     }
 
     private checkRateLimit(mobile: string): { allowed: boolean; resetTime?: number } {
@@ -544,36 +519,37 @@ export class SessionService {
     }
 
     private async extractMobileFromSession(sessionString: string): Promise<{ mobile?: string; error?: string }> {
-        let tempClient: TelegramClient | null = null;
+        let lastError = 'Unable to extract phone number from session';
 
-        try {
-            tempClient = new TelegramClient(
-                new StringSession(sessionString),
-                this.getApiId(),
-                this.getApiHash(),
-                { connectionRetries: 1 }
-            );
+        for (const credentials of getTelegramCredentialPool()) {
+            let tempClient: TelegramClient | null = null;
 
-            await tempClient.connect();
-            const userInfo = await tempClient.getMe() as Api.User;
+            try {
+                tempClient = new TelegramClient(
+                    new StringSession(sessionString),
+                    credentials.apiId,
+                    credentials.apiHash,
+                    { connectionRetries: 1 }
+                );
 
-            if (!userInfo || !userInfo.phone) {
-                return { error: 'Unable to extract phone number from session' };
-            }
+                await tempClient.connect();
+                const userInfo = await tempClient.getMe() as Api.User;
 
-            return { mobile: userInfo.phone };
+                if (userInfo?.phone) {
+                    return { mobile: userInfo.phone };
+                }
 
-        } catch (error) {
-            return { error: error.message || error.toString() };
-        } finally {
-            if (tempClient) {
-                try {
-                    await tempClient.destroy();
-                    tempClient._eventBuilders = [];
-                    await sleep(1000);
-                } catch (cleanupError) {
-                } finally {
-                    if (tempClient) {
+                lastError = 'Unable to extract phone number from session';
+            } catch (error) {
+                lastError = error?.message || error?.toString() || lastError;
+            } finally {
+                if (tempClient) {
+                    try {
+                        await tempClient.destroy();
+                        tempClient._eventBuilders = [];
+                        await sleep(1000);
+                    } catch (cleanupError) {
+                    } finally {
                         tempClient._destroyed = true;
                         if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
                             await tempClient._sender.disconnect().catch(() => { });
@@ -582,6 +558,8 @@ export class SessionService {
                 }
             }
         }
+
+        return { error: lastError };
     }
 
     async createSession(options: SessionCreationOptions): Promise<SessionCreationResult> {

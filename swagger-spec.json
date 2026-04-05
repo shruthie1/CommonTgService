@@ -5737,15 +5737,6 @@
             }
           },
           {
-            "name": "mainAccount",
-            "required": false,
-            "in": "query",
-            "description": "Main account of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "product",
             "required": false,
             "in": "query",
@@ -5813,6 +5804,7 @@
             "in": "query",
             "description": "Promote mobile number to search for",
             "schema": {
+              "example": "916265240911",
               "type": "string"
             }
           }
@@ -5820,37 +5812,10 @@
         "responses": {
           "default": {
             "description": "Clients with matching promote mobiles returned successfully.",
-            "schema": {
-              "properties": {
-                "clients": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Client"
-                  }
-                },
-                "matches": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "clientId": {
-                        "type": "string"
-                      },
-                      "mobile": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                },
-                "searchedMobile": {
-                  "type": "string"
-                }
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/PromoteMobileSearchResponseDto"
                 }
               }
             }
@@ -5867,57 +5832,157 @@
         "operationId": "ClientController_enhancedSearch",
         "parameters": [
           {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Client ID of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dbcoll",
+            "required": false,
+            "in": "query",
+            "description": "Database collection name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "channelLink",
+            "required": false,
+            "in": "query",
+            "description": "Channel link of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "link",
+            "required": false,
+            "in": "query",
+            "description": "Link of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "required": false,
+            "in": "query",
+            "description": "Name of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "required": false,
+            "in": "query",
+            "description": "Phone number of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "password",
+            "required": false,
+            "in": "query",
+            "description": "Password of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repl",
+            "required": false,
+            "in": "query",
+            "description": "Repl link of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "promoteRepl",
+            "required": false,
+            "in": "query",
+            "description": "Promotion Repl link of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientName",
+            "required": false,
+            "in": "query",
+            "description": "Clientname of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deployKey",
+            "required": false,
+            "in": "query",
+            "description": "Deployment key URL",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "product",
+            "required": false,
+            "in": "query",
+            "description": "Product associated with the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "hasPromoteMobiles",
             "required": false,
             "in": "query",
             "description": "Filter by clients that have promote mobiles (true/false)",
-            "schema": {}
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "qrId",
+            "required": false,
+            "in": "query",
+            "description": "Paytm QR ID of the client",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gpayId",
+            "required": false,
+            "in": "query",
+            "description": "Google Pay ID of the client",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "promoteMobileNumber",
             "required": false,
             "in": "query",
             "description": "Promote mobile number to search for",
-            "schema": {}
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "default": {
             "description": "Enhanced search results with promote mobile context.",
-            "schema": {
-              "properties": {
-                "clients": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Client"
-                  }
-                },
-                "searchType": {
-                  "type": "string"
-                },
-                "promoteMobileMatches": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "clientId": {
-                        "type": "string"
-                      },
-                      "mobile": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                },
-                "totalResults": {
-                  "type": "number"
-                }
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/EnhancedClientSearchResponseDto"
                 }
               }
             }
@@ -6013,6 +6078,70 @@
           }
         },
         "summary": "Get user data with masked fields by ID",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{clientId}/persona-pool": {
+      "get": {
+        "operationId": "ClientController_getPersonaPool",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get persona pool for a client",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{clientId}/existing-assignments": {
+      "get": {
+        "operationId": "ClientController_getExistingAssignments",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "all",
+                "buffer",
+                "promote",
+                "activeClient"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get existing persona assignments for a client",
         "tags": [
           "Clients"
         ]
@@ -6129,27 +6258,24 @@
           "content": {
             "application/json": {
               "schema": {
-                "properties": {
-                  "query": {
-                    "type": "object"
-                  },
-                  "sort": {
-                    "type": "object"
-                  },
-                  "limit": {
-                    "type": "number"
-                  },
-                  "skip": {
-                    "type": "number"
-                  }
-                }
+                "$ref": "#/components/schemas/ExecuteClientQueryDto"
               }
             }
           }
         },
         "responses": {
           "default": {
-            "description": "Query executed successfully."
+            "description": "Query executed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Client"
+                  }
+                }
+              }
+            }
           }
         },
         "summary": "Execute a custom MongoDB query",
@@ -6177,12 +6303,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "properties": {
-                  "mobileNumber": {
-                    "type": "string",
-                    "example": "916265240911"
-                  }
-                }
+                "$ref": "#/components/schemas/PromoteMobileAssignmentDto"
               }
             }
           }
@@ -6224,12 +6345,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "properties": {
-                  "mobileNumber": {
-                    "type": "string",
-                    "example": "916265240911"
-                  }
-                }
+                "$ref": "#/components/schemas/PromoteMobileAssignmentDto"
               }
             }
           }
@@ -8548,6 +8664,46 @@
         ]
       }
     },
+    "/bufferclients/profile-pics/refresh/{mobile}": {
+      "post": {
+        "operationId": "BufferClientController_refreshProfilePics",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the buffer client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "refreshed": {
+                      "type": "boolean"
+                    },
+                    "uploadedCount": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Refresh profile pics for a buffer client on demand",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
     "/bufferclients/distribution": {
       "get": {
         "operationId": "BufferClientController_getBufferClientDistribution",
@@ -9807,6 +9963,46 @@
           }
         },
         "summary": "Execute a raw promote client query",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/profile-pics/refresh/{mobile}": {
+      "post": {
+        "operationId": "PromoteClientController_refreshProfilePics",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "refreshed": {
+                      "type": "boolean"
+                    },
+                    "uploadedCount": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Refresh profile pics for a promote client on demand",
         "tags": [
           "Promote Clients"
         ]
@@ -11110,122 +11306,6 @@
         ]
       }
     },
-    "/npoint/documents/{id}": {
-      "get": {
-        "operationId": "NpointController_fetchDocument",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "The ID of the document to fetch",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Document fetched successfully"
-          },
-          "404": {
-            "description": "Document not found"
-          }
-        },
-        "summary": "Fetch a document by ID",
-        "tags": [
-          "NPoint API"
-        ]
-      },
-      "put": {
-        "operationId": "NpointController_updateDocument",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "description": "The ID of the document to update",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "description": "The updated document",
-          "content": {
-            "application/json": {
-              "schema": {
-                "example": {
-                  "title": "Updated Document",
-                  "content": "This is the updated content of the document."
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Document updated successfully"
-          },
-          "404": {
-            "description": "Document not found"
-          }
-        },
-        "summary": "Update a document by ID",
-        "tags": [
-          "NPoint API"
-        ]
-      }
-    },
-    "/npoint/documents": {
-      "post": {
-        "operationId": "NpointController_postDocument",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "description": "The document to post",
-          "content": {
-            "application/json": {
-              "schema": {
-                "example": {
-                  "title": "My Document",
-                  "content": "This is the content of the document."
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Document posted successfully"
-          },
-          "400": {
-            "description": "Invalid input"
-          }
-        },
-        "summary": "Post a new document",
-        "tags": [
-          "NPoint API"
-        ]
-      },
-      "get": {
-        "operationId": "NpointController_fetchAllDocuments",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "List of all documents fetched successfully"
-          },
-          "500": {
-            "description": "Internal server error"
-          }
-        },
-        "summary": "Fetch all documents",
-        "tags": [
-          "NPoint API"
-        ]
-      }
-    },
     "/timestamps": {
       "get": {
         "operationId": "TimestampController_findOne",
@@ -11328,21 +11408,6 @@
           }
         },
         "summary": "Get all dynamic data documents",
-        "tags": [
-          "dynamic-data"
-        ]
-      }
-    },
-    "/dynamic-data/check-npoint": {
-      "post": {
-        "operationId": "DynamicDataController_checkNpoint",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Npoint data check completed successfully"
-          }
-        },
-        "summary": "Check and update npoint data if needed",
         "tags": [
           "dynamic-data"
         ]
@@ -13353,11 +13418,6 @@
             "example": "https://shruthi1.glitch.me/exit",
             "description": "Deployment key URL"
           },
-          "mainAccount": {
-            "type": "string",
-            "example": "ShruthiRedd2",
-            "description": "Main account of the user"
-          },
           "product": {
             "type": "string",
             "example": "booklet_10",
@@ -13393,6 +13453,41 @@
             "type": "boolean",
             "example": true,
             "description": "Whether to auto-assign IPs to mobile numbers"
+          },
+          "firstNames": {
+            "description": "Pool of first names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bufferLastNames": {
+            "description": "Pool of last names for buffer clients",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "promoteLastNames": {
+            "description": "Pool of last names for promote clients",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bios": {
+            "description": "Pool of bios",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profilePics": {
+            "description": "Pool of profile pic URLs",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -13408,7 +13503,6 @@
           "username",
           "clientId",
           "deployKey",
-          "mainAccount",
           "product"
         ]
       },
@@ -13475,11 +13569,6 @@
             "example": "https://shruthi1.glitch.me/exit",
             "description": "Deployment key URL"
           },
-          "mainAccount": {
-            "type": "string",
-            "example": "ShruthiRedd2",
-            "description": "Main account of the user"
-          },
           "product": {
             "type": "string",
             "example": "booklet_10",
@@ -13505,6 +13594,51 @@
             "items": {
               "type": "string"
             }
+          },
+          "preferredIpCountry": {
+            "type": "string",
+            "example": "US",
+            "description": "Preferred country for IP assignment"
+          },
+          "autoAssignIps": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether to auto-assign IPs to mobile numbers"
+          },
+          "firstNames": {
+            "description": "Pool of first names for persona assignment",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bufferLastNames": {
+            "description": "Pool of last names for buffer-client persona assignment",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "promoteLastNames": {
+            "description": "Pool of last names for promote-client persona assignment",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bios": {
+            "description": "Pool of bios for persona assignment",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profilePics": {
+            "description": "Pool of profile pic URLs",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -13520,11 +13654,88 @@
           "username",
           "clientId",
           "deployKey",
-          "mainAccount",
           "product",
           "qrId",
           "gpayId",
           "dedicatedIps"
+        ]
+      },
+      "PromoteMobileMatchDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "example": "client-a"
+          },
+          "mobile": {
+            "type": "string",
+            "example": "916265240911"
+          }
+        },
+        "required": [
+          "clientId",
+          "mobile"
+        ]
+      },
+      "PromoteMobileSearchResponseDto": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Client"
+            }
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromoteMobileMatchDto"
+            }
+          },
+          "searchedMobile": {
+            "type": "string",
+            "example": "916265240911"
+          }
+        },
+        "required": [
+          "clients",
+          "matches",
+          "searchedMobile"
+        ]
+      },
+      "EnhancedClientSearchResponseDto": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Client"
+            }
+          },
+          "searchType": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "promoteMobile",
+              "mixed"
+            ],
+            "example": "promoteMobile"
+          },
+          "promoteMobileMatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromoteMobileMatchDto"
+            }
+          },
+          "totalResults": {
+            "type": "number",
+            "example": 4
+          }
+        },
+        "required": [
+          "clients",
+          "searchType",
+          "totalResults"
         ]
       },
       "UpdateClientDto": {
@@ -13590,11 +13801,6 @@
             "example": "https://shruthi1.glitch.me/exit",
             "description": "Deployment key URL"
           },
-          "mainAccount": {
-            "type": "string",
-            "example": "ShruthiRedd2",
-            "description": "Main account of the user"
-          },
           "product": {
             "type": "string",
             "example": "booklet_10",
@@ -13630,8 +13836,87 @@
             "type": "boolean",
             "example": true,
             "description": "Whether to auto-assign IPs to mobile numbers"
+          },
+          "firstNames": {
+            "description": "Pool of first names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bufferLastNames": {
+            "description": "Pool of last names for buffer clients",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "promoteLastNames": {
+            "description": "Pool of last names for promote clients",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bios": {
+            "description": "Pool of bios",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "profilePics": {
+            "description": "Pool of profile pic URLs",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
+      },
+      "ExecuteClientQueryDto": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "additionalProperties": true,
+            "example": {
+              "clientId": "client-a"
+            }
+          },
+          "sort": {
+            "type": "object",
+            "additionalProperties": true,
+            "example": {
+              "clientId": 1
+            }
+          },
+          "limit": {
+            "type": "number",
+            "example": 20,
+            "minimum": 1
+          },
+          "skip": {
+            "type": "number",
+            "example": 0,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "PromoteMobileAssignmentDto": {
+        "type": "object",
+        "properties": {
+          "mobileNumber": {
+            "type": "string",
+            "example": "916265240911"
+          }
+        },
+        "required": [
+          "mobileNumber"
+        ]
       },
       "CreateSessionDto": {
         "type": "object",
@@ -14736,6 +15021,25 @@
             "type": "string",
             "description": "Timestamp when a backup session was created and recorded.",
             "example": "2026-04-02T07:00:00.000Z"
+          },
+          "assignedFirstName": {
+            "type": "string",
+            "description": "Assigned first name from pool"
+          },
+          "assignedLastName": {
+            "type": "string",
+            "description": "Assigned last name from pool"
+          },
+          "assignedBio": {
+            "type": "string",
+            "description": "Assigned bio from pool"
+          },
+          "assignedProfilePics": {
+            "description": "Assigned profile pic URLs from pool",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -15007,6 +15311,25 @@
             "type": "string",
             "description": "Timestamp when a backup session was created.",
             "example": "2026-04-02T07:00:00.000Z"
+          },
+          "assignedFirstName": {
+            "type": "string",
+            "description": "Assigned first name (set during setupClient)"
+          },
+          "assignedLastName": {
+            "type": "string",
+            "description": "Assigned last name"
+          },
+          "assignedBio": {
+            "type": "string",
+            "description": "Assigned bio"
+          },
+          "assignedProfilePics": {
+            "description": "Assigned profile pic URLs",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -15453,6 +15776,25 @@
             "type": "string",
             "description": "Timestamp when a backup session was created and recorded.",
             "example": "2026-04-02T07:00:00.000Z"
+          },
+          "assignedFirstName": {
+            "type": "string",
+            "description": "Assigned first name from pool"
+          },
+          "assignedLastName": {
+            "type": "string",
+            "description": "Assigned last name from pool"
+          },
+          "assignedBio": {
+            "type": "string",
+            "description": "Assigned bio from pool"
+          },
+          "assignedProfilePics": {
+            "description": "Assigned profile pic URLs from pool",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -15673,6 +16015,25 @@
             "type": "string",
             "description": "Timestamp when a backup session was created.",
             "example": "2026-04-02T07:00:00.000Z"
+          },
+          "assignedFirstName": {
+            "type": "string",
+            "description": "Assigned first name (set during setupClient)"
+          },
+          "assignedLastName": {
+            "type": "string",
+            "description": "Assigned last name"
+          },
+          "assignedBio": {
+            "type": "string",
+            "description": "Assigned bio"
+          },
+          "assignedProfilePics": {
+            "description": "Assigned profile pic URLs",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
