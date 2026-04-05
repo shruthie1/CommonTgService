@@ -4,6 +4,7 @@ import { SearchPromoteClientDto } from './dto/search-promote-client.dto';
 import { PromoteClient } from './schemas/promote-client.schema';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { ActivationRequestDto, BulkEnrollPromoteClientsRequestDto, DeactivationRequestDto, MarkUsedRequestDto, StatusUpdateRequestDto } from '../shared/dto/client-swagger.dto';
+import { ClientStatusType } from '../shared/base-client.service';
 export declare class PromoteClientController {
     private readonly clientService;
     constructor(clientService: PromoteClientService);
@@ -13,7 +14,7 @@ export declare class PromoteClientController {
     updateInfo(): Promise<string>;
     checkpromoteClients(): Promise<string>;
     addNewUserstoPromoteClients(body: BulkEnrollPromoteClientsRequestDto): Promise<string>;
-    findAll(status?: string): Promise<PromoteClient[]>;
+    findAll(status?: ClientStatusType): Promise<PromoteClient[]>;
     setAsPromoteClient(mobile: string): Promise<string>;
     findOne(mobile: string): Promise<PromoteClient>;
     update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
@@ -21,7 +22,7 @@ export declare class PromoteClientController {
     remove(mobile: string): Promise<void>;
     executeQuery(query: object): Promise<any>;
     getPromoteClientDistribution(): Promise<any>;
-    getPromoteClientsByStatus(status: string): Promise<PromoteClient[]>;
+    getPromoteClientsByStatus(status: ClientStatusType): Promise<PromoteClient[]>;
     getPromoteClientsWithMessages(): Promise<Array<{
         mobile: string;
         status: string;

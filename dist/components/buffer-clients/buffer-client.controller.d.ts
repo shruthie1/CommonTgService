@@ -4,6 +4,7 @@ import { SearchBufferClientDto } from './dto/search-buffer-client.dto';
 import { BufferClient } from './schemas/buffer-client.schema';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { ActivationRequestDto, BulkEnrollBufferClientsRequestDto, DeactivationRequestDto, MarkUsedRequestDto, StatusUpdateRequestDto } from '../shared/dto/client-swagger.dto';
+import { ClientStatusType } from '../shared/base-client.service';
 export declare class BufferClientController {
     private readonly clientService;
     constructor(clientService: BufferClientService);
@@ -13,12 +14,12 @@ export declare class BufferClientController {
     joinChannelsforBufferClients(clientId?: string): Promise<string>;
     checkbufferClients(): Promise<string>;
     addNewUserstoBufferClients(body: BulkEnrollBufferClientsRequestDto): Promise<string>;
-    findAll(status?: string): Promise<BufferClient[]>;
+    findAll(status?: ClientStatusType): Promise<BufferClient[]>;
     setAsBufferClient(mobile: string, clientId: string): Promise<string>;
     executeQuery(query: object): Promise<any>;
     getBufferClientDistribution(): Promise<any>;
-    getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClient[]>;
-    getBufferClientsByStatus(status: string): Promise<BufferClient[]>;
+    getBufferClientsByClientId(clientId: string, status?: ClientStatusType): Promise<BufferClient[]>;
+    getBufferClientsByStatus(status: ClientStatusType): Promise<BufferClient[]>;
     updateStatus(mobile: string, body: StatusUpdateRequestDto): Promise<BufferClient>;
     markAsActive(mobile: string, body?: ActivationRequestDto): Promise<BufferClient>;
     markAsInactive(mobile: string, body: DeactivationRequestDto): Promise<BufferClient>;

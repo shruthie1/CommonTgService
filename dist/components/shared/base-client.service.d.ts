@@ -12,9 +12,10 @@ import { Logger } from '../../utils';
 import { ActiveChannel } from '../active-channels';
 import TelegramManager from '../Telegram/TelegramManager';
 import { Client } from '../clients';
+import { User } from '../users';
 import { BotsService } from '../bots';
 import { performOrganicActivity } from './organic-activity';
-import { getWarmupPhaseAction, WarmupPhase, WarmupAction, isAccountReady, isAccountWarmingUp } from './warmup-phases';
+import { getWarmupPhaseAction, WarmupPhase, WarmupPhaseType, WarmupAction, isAccountReady, isAccountWarmingUp } from './warmup-phases';
 export interface ClientConfig {
     joinChannelInterval: number;
     leaveChannelInterval: number;
@@ -25,10 +26,16 @@ export interface ClientConfig {
     maxNewClientsPerTrigger: number;
     minTotalClients: number;
     maxMapSize: number;
-    cleanupInterval: number;
     cooldownHours: number;
     clientProcessingDelay: number;
+    maxChannelJoinsPerDay: number;
+    joinsPerMobilePerRound: number;
 }
+export declare const ClientStatus: {
+    readonly ACTIVE: "active";
+    readonly INACTIVE: "inactive";
+};
+export type ClientStatusType = typeof ClientStatus[keyof typeof ClientStatus];
 export interface BaseClientDocument extends Document {
     tgId: string;
     mobile: string;
@@ -36,7 +43,7 @@ export interface BaseClientDocument extends Document {
     availableDate: string;
     channels: number;
     clientId?: string;
-    status: string;
+    status: ClientStatusType;
     message?: string;
     lastUsed?: Date;
     lastChecked?: Date;
@@ -53,12 +60,13 @@ export interface BaseClientDocument extends Document {
     lastUpdateAttempt?: Date;
     failedUpdateAttempts?: number;
     lastUpdateFailure?: Date;
-    warmupPhase?: string;
+    warmupPhase?: WarmupPhaseType;
     warmupJitter?: number;
     enrolledAt?: Date;
     organicActivityAt?: Date;
     sessionRotatedAt?: Date;
 }
+export type BaseClientUpdate = Partial<Pick<BaseClientDocument, 'session' | 'availableDate' | 'channels' | 'clientId' | 'status' | 'message' | 'lastUsed' | 'lastChecked' | 'inUse' | 'privacyUpdatedAt' | 'twoFASetAt' | 'otherAuthsRemovedAt' | 'profilePicsUpdatedAt' | 'nameBioUpdatedAt' | 'profilePicsDeletedAt' | 'usernameUpdatedAt' | 'createdAt' | 'updatedAt' | 'lastUpdateAttempt' | 'failedUpdateAttempts' | 'lastUpdateFailure' | 'warmupPhase' | 'warmupJitter' | 'enrolledAt' | 'organicActivityAt' | 'sessionRotatedAt'>>;
 export interface AvailabilityNeeds {
     totalNeeded: number;
     windowNeeds: Array<{
@@ -72,6 +80,20 @@ export interface AvailabilityNeeds {
     totalNeededForCount: number;
     calculationReason: string;
     priority: number;
+    readyActive: number;
+    warmingPipeline: number;
+    replenishmentWindowNeeds: Array<{
+        window: string;
+        available: number;
+        needed: number;
+        targetDate: string;
+        minRequired: number;
+    }>;
+    projectedWindowCounts: Array<{
+        window: string;
+        available: number;
+        targetDate: string;
+    }>;
 }
 export { WarmupPhase, WarmupAction, isAccountReady, isAccountWarmingUp, getWarmupPhaseAction, performOrganicActivity };
 export declare abstract class BaseClientService<TDoc extends BaseClientDocument> implements OnModuleDestroy {
@@ -90,7 +112,6 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected isJoinChannelProcessing: boolean;
     protected isLeaveChannelProcessing: boolean;
     protected activeTimeouts: Set<NodeJS.Timeout>;
-    protected cleanupIntervalId: NodeJS.Timeout | null;
     protected readonly ONE_DAY_MS: number;
     protected readonly THREE_MONTHS_MS: number;
     protected readonly INACTIVE_USER_CUTOFF_DAYS = 90;
@@ -102,11 +123,20 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected readonly MAX_FAILED_ATTEMPTS = 3;
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly MAX_UPDATES_PER_CYCLE = 5;
+    protected dailyJoinCounts: Map<string, number>;
+    protected dailyJoinDate: string;
+    protected joinFailureCounts: Map<string, number>;
+    protected readonly MAX_JOIN_FAILURES_PER_MOBILE = 3;
+    protected joinScopeClientId: string | null;
+    protected resetDailyJoinCountersIfNeeded(): void;
+    protected getDailyJoinCount(mobile: string): number;
+    protected incrementDailyJoinCount(mobile: string): void;
+    protected isMobileDailyCapped(mobile: string): boolean;
     protected getEffectiveCooldownMs(mobile: string, lastUpdateAttempt: number): number;
     protected isOnCooldown(mobile: string, lastUpdateAttempt: Date | string | null | undefined, now: number): boolean;
-    protected inferWarmupPhaseFromProgress(doc: TDoc): string;
-    protected getWarmupPhaseRank(phase: string | null | undefined): number;
-    protected getRecoveryEnrolledAt(phase: string, jitter: number, now: number): Date;
+    protected inferWarmupPhaseFromProgress(doc: TDoc): WarmupPhaseType;
+    protected getWarmupPhaseRank(phase: WarmupPhaseType | null | undefined): number;
+    protected getRecoveryEnrolledAt(phase: WarmupPhaseType, jitter: number, now: number): Date;
     protected repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc>;
     constructor(telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, sessionService: SessionService, botsService: BotsService, loggerName: string);
     abstract get model(): Model<TDoc>;
@@ -115,14 +145,12 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     abstract updateNameAndBio(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     abstract updateUsername(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     abstract findOne(mobile: string, throwErr?: boolean): Promise<TDoc>;
-    abstract update(mobile: string, updateDto: any): Promise<TDoc>;
+    abstract update(mobile: string, updateDto: BaseClientUpdate): Promise<TDoc>;
     abstract markAsInactive(mobile: string, reason: string): Promise<TDoc | null>;
-    abstract updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<TDoc>;
+    abstract updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc>;
+    abstract refillJoinQueue(clientId?: string | null): Promise<number>;
     onModuleDestroy(): Promise<void>;
     protected cleanup(): Promise<void>;
-    protected startMemoryCleanup(): void;
-    protected clearMemoryCleanup(): void;
-    protected performMemoryCleanup(): void;
     protected trimMapIfNeeded<T>(map: Map<string, T>, mapName: string): void;
     protected createTimeout(callback: () => void, delay: number): NodeJS.Timeout;
     protected clearAllTimeouts(): void;
@@ -141,6 +169,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     removeFromLeaveMap(key: string): void;
     clearJoinMap(): void;
     clearLeaveMap(): void;
+    protected prepareJoinChannelRefresh(skipExisting: boolean): Promise<Set<string>>;
     protected performHealthCheck(mobile: string, lastChecked: number, now: number): Promise<boolean>;
     protected updatePrivacySettings(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     protected deleteProfilePhotos(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
@@ -156,6 +185,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected processJoinChannelInterval(): Promise<void>;
     protected processJoinChannelSequentially(): Promise<void>;
     leaveChannelQueue(): Promise<void>;
+    private scheduleNextLeaveRound;
     protected processLeaveChannelInterval(): Promise<void>;
     protected processLeaveChannelSequentially(): Promise<void>;
     clearJoinChannelInterval(): void;
@@ -164,11 +194,26 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected selfHealLegacyUsedAccounts(clientId?: string, limit?: number): Promise<number>;
     protected selfHealLegacyWarmupAccounts(clientId?: string, limit?: number): Promise<number>;
     protected selfHealLegacyOperationalState(clientId?: string): Promise<void>;
+    protected getStoredActiveSession(mobile: string): Promise<string | null>;
+    protected createDistinctSessionString(mobile: string, forbiddenSessions: Array<string | null | undefined>, maxAttempts?: number): Promise<string | null>;
+    protected hasDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean>;
+    getOrEnsureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<User | null>;
+    ensureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean>;
+    protected normalizeDateString(dateValue?: string | Date | null): string | null;
+    protected maxDateString(...dateStrings: Array<string | null | undefined>): string | null;
+    protected getProjectedReadyDateString(doc: Partial<BaseClientDocument>): string | null;
+    protected getOperationalAvailabilityDateString(doc: Partial<BaseClientDocument>, now: number): string | null;
+    protected getReplenishmentWindows(): Array<{
+        name: string;
+        days: number;
+        minRequired: number;
+    }>;
+    protected calculateAvailabilityBasedNeedsForCurrentState(clientId: string): Promise<AvailabilityNeeds>;
     protected calculateAvailabilityBasedNeeds(clientId: string): Promise<AvailabilityNeeds>;
-    getClientsByStatus(status: string): Promise<TDoc[]>;
+    getClientsByStatus(status: ClientStatusType): Promise<TDoc[]>;
     getClientsWithMessages(): Promise<Array<{
         mobile: string;
-        status: string;
+        status: ClientStatusType;
         message?: string;
         clientId?: string;
         lastUsed?: Date;

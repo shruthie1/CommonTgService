@@ -18,6 +18,8 @@ export declare class Client {
     qrId: string;
     gpayId: string;
     dedicatedIps?: string[];
+    preferredIpCountry?: string;
+    autoAssignIps?: boolean;
 }
 export declare const ClientSchema: import("mongoose").Schema<Client, import("mongoose").Model<Client, any, any, any, (Document<unknown, any, Client, any, import("mongoose").DefaultSchemaOptions> & Client & {
     _id: import("mongoose").Types.ObjectId;
@@ -183,6 +185,24 @@ export declare const ClientSchema: import("mongoose").Schema<Client, import("mon
         id: string;
     }>;
     dedicatedIps?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    preferredIpCountry?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    autoAssignIps?: import("mongoose").SchemaDefinitionProperty<boolean, Client, Document<unknown, {}, Client, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;

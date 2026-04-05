@@ -3,11 +3,14 @@ import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
+import { EnhancedSearchClientDto } from './dto/enhanced-search-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
+import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
 import { PromoteClientDocument } from '../promote-clients/schemas/promote-client.schema';
+import { SortOrder } from 'mongoose';
 import { TelegramService } from '../Telegram/Telegram.service';
 interface SearchResult {
     clients: Client[];
@@ -17,6 +20,11 @@ interface SearchResult {
         mobile: string;
     }>;
 }
+type ClientSearchFilter = Partial<SearchClientDto & Pick<EnhancedSearchClientDto, 'promoteMobileNumber'>>;
+type ClientMongoQuery = Record<string, unknown>;
+type ClientQuerySort = Record<string, SortOrder | {
+    $meta: unknown;
+}>;
 export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly clientModel;
     private readonly promoteClientModel;
@@ -50,9 +58,9 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     findOne(clientId: string, throwErr?: boolean): Promise<Client | null>;
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
-    search(filter: any): Promise<Client[]>;
+    search(filter: ClientSearchFilter | ClientMongoQuery): Promise<Client[]>;
     searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]>;
-    enhancedSearch(filter: any): Promise<SearchResult>;
+    enhancedSearch(filter: ClientSearchFilter): Promise<SearchResult>;
     private ensureInitialized;
     private cleanUpdateObject;
     private notifyClientUpdate;
@@ -84,6 +92,8 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private handleClientArchival;
     private handleFormalities;
     private archiveOldClient;
+    private findSafeSetupBufferCandidate;
+    private assertDistinctUserBackupSession;
     updateClient(clientId: string, message?: string): Promise<void>;
     private canUpdateClient;
     private updateClientUsername;
@@ -91,7 +101,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private updateClientPrivacy;
     private updateClientPhotos;
     updateClients(): Promise<void>;
-    executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<Client[]>;
+    executeQuery(query: ExecuteClientQueryDto['query'], sort?: ClientQuerySort, limit?: number, skip?: number): Promise<Client[]>;
     getPromoteMobiles(clientId: string): Promise<string[]>;
     getAllPromoteMobiles(): Promise<string[]>;
     isPromoteMobile(mobile: string): Promise<{

@@ -23,7 +23,7 @@ export interface WarmupAction {
     organicIntensity: 'light' | 'medium' | 'full';
 }
 export declare function getWarmupPhaseAction(doc: {
-    warmupPhase?: string;
+    warmupPhase?: WarmupPhaseType;
     warmupJitter?: number;
     enrolledAt?: Date;
     channels?: number;
@@ -34,6 +34,7 @@ export declare function getWarmupPhaseAction(doc: {
     nameBioUpdatedAt?: Date;
     usernameUpdatedAt?: Date;
     profilePicsUpdatedAt?: Date;
+    sessionRotatedAt?: Date;
     organicActivityAt?: Date;
     createdAt?: Date;
     twoFA?: boolean;

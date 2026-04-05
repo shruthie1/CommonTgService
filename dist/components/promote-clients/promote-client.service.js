@@ -63,9 +63,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             maxNewClientsPerTrigger: 10,
             minTotalClients: 12,
             maxMapSize: 100,
-            cleanupInterval: 10 * 60 * 1000,
             cooldownHours: 2,
             clientProcessingDelay: 8000,
+            maxChannelJoinsPerDay: 20,
+            joinsPerMobilePerRound: 3,
         };
     }
     async updateNameAndBio(doc, client, failedAttempts) {
@@ -183,6 +184,75 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             updateData.message = message;
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
         return this.update(mobile, updateData);
+    }
+    async refillJoinQueue(clientId) {
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing)
+            return 0;
+        if (this.telegramService.getActiveClientSetup())
+            return 0;
+        this.resetDailyJoinCountersIfNeeded();
+        const query = {
+            status: 'active',
+            channels: { $lt: this.config.channelTarget },
+            mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+        };
+        if (clientId)
+            query.clientId = clientId;
+        const eligible = await this.promoteClientModel
+            .find(query)
+            .sort({ channels: 1 })
+            .limit(this.config.maxMapSize)
+            .exec();
+        let added = 0;
+        let leaveAdded = 0;
+        for (const doc of eligible) {
+            if (this.isMobileDailyCapped(doc.mobile))
+                continue;
+            try {
+                const client = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+                const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
+                await this.update(doc.mobile, { channels: channels.ids.length });
+                if (channels.canSendFalseCount < 10) {
+                    const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
+                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, channels.ids);
+                    if (channelsToJoin.length === 0)
+                        continue;
+                    if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
+                        added++;
+                    }
+                }
+                else if (!this.leaveChannelMap.has(doc.mobile)) {
+                    if (this.safeSetLeaveChannelMap(doc.mobile, channels.canSendFalseChats)) {
+                        leaveAdded++;
+                    }
+                }
+            }
+            catch (error) {
+                const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
+                if ((0, isPermanentError_1.default)(errorDetails)) {
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    await this.markAsInactive(doc.mobile, reason);
+                }
+            }
+            finally {
+                await this.safeUnregisterClient(doc.mobile);
+            }
+        }
+        if (added > 0) {
+            this.logger.log(`Refilled join queue with ${added} promote clients`);
+        }
+        if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
+            this.createTimeout(() => this.leaveChannelQueue(), 5000 + Math.random() * 3000);
+        }
+        return added;
+    }
+    async fetchJoinableChannels(currentChannels, limit, excludedIds) {
+        const capped = Math.min(limit, 25);
+        if (capped <= 0)
+            return [];
+        return currentChannels < 220
+            ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
+            : this.channelsService.getActiveChannels(capped, 0, excludedIds);
     }
     async updateLastUsed(mobile) {
         return this.update(mobile, { lastUsed: new Date() });
@@ -340,22 +410,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        const existingKeys = skipExisting ? Array.from(this.joinChannelMap.keys()) : [];
-        this.joinChannelMap.clear();
-        this.leaveChannelMap.clear();
-        this.clearJoinChannelInterval();
-        this.clearLeaveChannelInterval();
-        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+        const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
         try {
             const clients = await this.promoteClientModel
                 .find({
                 channels: { $lt: this.config.channelTarget },
-                mobile: { $nin: existingKeys },
+                mobile: { $nin: Array.from(preservedMobiles) },
                 status: 'active',
-                warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
             })
                 .sort({ channels: 1 })
-                .limit(16);
+                .limit(this.config.maxMapSize);
             const joinSet = new Set();
             const leaveSet = new Set();
             let successCount = 0;
@@ -376,16 +440,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                             ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds)
                             : await this.channelsService.getActiveChannels(25, 0, excludedIds);
                         if (!this.joinChannelMap.has(mobile)) {
-                            this.joinChannelMap.set(mobile, result);
-                            this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
-                            joinSet.add(mobile);
+                            if (this.safeSetJoinChannelMap(mobile, result)) {
+                                joinSet.add(mobile);
+                            }
                         }
                     }
                     else {
                         if (!this.leaveChannelMap.has(mobile)) {
-                            this.leaveChannelMap.set(mobile, channels.canSendFalseChats);
-                            this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
-                            leaveSet.add(mobile);
+                            if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
+                                leaveSet.add(mobile);
+                            }
                         }
                     }
                     successCount++;
@@ -406,7 +470,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }
             await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
             if (joinSet.size > 0) {
-                this.startMemoryCleanup();
                 this.createTimeout(() => this.joinChannelQueue(), 2000);
             }
             if (leaveSet.size > 0) {
@@ -430,60 +493,67 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
         const clients = await this.clientService.findAll();
         const bufferClients = await this.bufferClientService.findAll();
+        const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+        const now = Date.now();
+        await this.selfHealLegacyOperationalState();
         const clientMainMobiles = clients.map((c) => c.mobile);
         const bufferClientIds = bufferClients.map((c) => c.mobile);
-        const assignedPromoteMobiles = await this.promoteClientModel
-            .find({ clientId: { $exists: true }, status: 'active' })
-            .distinct('mobile');
+        const assignedPromoteClients = await this.promoteClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        const assignedPromoteMobiles = assignedPromoteClients.map((doc) => doc.mobile);
         const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
-        const promoteClientCounts = await this.promoteClientModel.aggregate([
-            { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
-            { $group: { _id: '$clientId', count: { $sum: 1 }, mobiles: { $push: '$mobile' } } },
-        ]);
-        const promoteClientsPerClient = new Map(promoteClientCounts.map((result) => [result._id, result.count]));
+        const promoteClientsPerClient = new Map(assignedPromoteClients
+            .filter((doc) => !!doc.clientId)
+            .reduce((acc, doc) => {
+            acc.set(doc.clientId, (acc.get(doc.clientId) || 0) + 1);
+            return acc;
+        }, new Map()));
         let totalUpdates = 0;
-        const now = Date.now();
-        for (const result of promoteClientCounts) {
+        const promoteClientsToProcess = [];
+        for (const promoteClient of assignedPromoteClients) {
+            if (!promoteClient.clientId)
+                continue;
+            const client = clientMap.get(promoteClient.clientId);
+            if (!client)
+                continue;
+            if (promoteClient.inUse === true)
+                continue;
+            const lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
+            if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now))
+                continue;
+            const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
+            if (hasBeenUsed) {
+                await this.backfillTimestamps(promoteClient.mobile, promoteClient, now);
+                continue;
+            }
+            const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            const failedAttempts = promoteClient.failedUpdateAttempts || 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
+        }
+        promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
+        for (const { promoteClient, client } of promoteClientsToProcess) {
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
                 break;
-            for (const promoteClientMobile of result.mobiles) {
-                if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
-                    break;
-                const promoteClient = await this.findOne(promoteClientMobile, false);
-                if (!promoteClient)
+            const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+                const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
+                const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
+                if (!healthCheckPassed)
                     continue;
-                let lastUpdateAttempt = 0;
-                try {
-                    lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
-                }
-                catch {
-                    lastUpdateAttempt = 0;
-                }
-                if (this.isOnCooldown(promoteClientMobile, promoteClient.lastUpdateAttempt, now))
-                    continue;
-                const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
-                if (hasBeenUsed) {
-                    await this.backfillTimestamps(promoteClientMobile, promoteClient, now);
-                    continue;
-                }
-                const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
-                if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
-                    const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
-                    const healthCheckPassed = await this.performHealthCheck(promoteClientMobile, lastChecked, now);
-                    if (!healthCheckPassed)
-                        continue;
-                }
-                const client = clients.find((c) => c.clientId === result._id);
-                if (!client)
-                    continue;
-                const currentUpdates = await this.processClient(promoteClient, client);
-                if (currentUpdates > 0)
-                    totalUpdates += currentUpdates;
             }
+            const currentUpdates = await this.processClient(promoteClient, client);
+            if (currentUpdates > 0)
+                totalUpdates += currentUpdates;
         }
         const clientNeedingPromoteClients = [];
         for (const client of clients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(client.clientId);
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
             if (availabilityNeeds.totalNeeded > 0) {
                 clientNeedingPromoteClients.push({ clientId: client.clientId, ...availabilityNeeds });
             }

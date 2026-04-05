@@ -12,7 +12,7 @@ import { SessionService } from '../session-manager';
 import { SearchBufferClientDto } from './dto/search-buffer-client.dto';
 import { Client } from '../clients';
 import { BotsService } from '../bots';
-import { BaseClientService, ClientConfig } from '../shared/base-client.service';
+import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } from '../shared/base-client.service';
 export declare class BufferClientService extends BaseClientService<BufferClientDocument> {
     private bufferClientModel;
     private promoteClientService;
@@ -23,14 +23,16 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     updateNameAndBio(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number>;
     updateUsername(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number>;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument>;
-    findAll(status?: 'active' | 'inactive'): Promise<BufferClientDocument[]>;
+    findAll(status?: ClientStatusType): Promise<BufferClientDocument[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<BufferClientDocument>;
-    update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClientDocument>;
+    update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument>;
     createOrUpdate(mobile: string, createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClientDocument>;
     remove(mobile: string, message?: string): Promise<void>;
     search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]>;
     executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<BufferClientDocument[]>;
-    updateStatus(mobile: string, status: 'active' | 'inactive', message?: string): Promise<BufferClientDocument>;
+    updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument>;
+    refillJoinQueue(clientId?: string | null): Promise<number>;
+    private fetchJoinableChannels;
     markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null>;
     setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
     checkBufferClients(): Promise<void>;
@@ -78,7 +80,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
             triggersNeededToSatisfyAll: number;
         };
     }>;
-    getBufferClientsByStatus(status: string): Promise<BufferClient[]>;
+    getBufferClientsByStatus(status: ClientStatusType): Promise<BufferClient[]>;
     getBufferClientsWithMessages(): Promise<(import("mongoose").Document<unknown, {}, BufferClientDocument, {}, import("mongoose").DefaultSchemaOptions> & BufferClient & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {

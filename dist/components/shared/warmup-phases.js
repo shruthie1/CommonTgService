@@ -115,7 +115,11 @@ function getWarmupPhaseAction(doc, now) {
         return { phase: exports.WarmupPhase.MATURING, action: 'organic_only', organicIntensity: 'light' };
     }
     if (phase === exports.WarmupPhase.READY) {
-        return { phase: exports.WarmupPhase.READY, action: 'wait', organicIntensity: 'light' };
+        const sessionRotated = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.sessionRotatedAt) > 0;
+        if (!sessionRotated) {
+            return { phase: exports.WarmupPhase.READY, action: 'rotate_session', organicIntensity: 'light' };
+        }
+        return { phase: exports.WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
     }
     if (phase === exports.WarmupPhase.SESSION_ROTATED) {
         return { phase: exports.WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
@@ -123,7 +127,7 @@ function getWarmupPhaseAction(doc, now) {
     return { phase: exports.WarmupPhase.ENROLLED, action: 'wait', organicIntensity: 'light' };
 }
 function isAccountReady(phase) {
-    return phase === exports.WarmupPhase.READY || phase === exports.WarmupPhase.SESSION_ROTATED;
+    return phase === exports.WarmupPhase.SESSION_ROTATED;
 }
 function isAccountWarmingUp(phase) {
     if (!phase)

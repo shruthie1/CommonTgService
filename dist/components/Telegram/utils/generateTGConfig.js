@@ -380,6 +380,7 @@ function _startHealthMonitor(intervalMs) {
             }
         }
     }, intervalMs);
+    _healthInterval.unref();
 }
 async function _handleProxyDeath(deadProxy, affectedMobiles) {
     if (_isHandlingDeath)

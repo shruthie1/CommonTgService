@@ -2,6 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientHelperUtils = void 0;
 class ClientHelperUtils {
+    static toDateString(dateOrTimestamp) {
+        return new Date(dateOrTimestamp).toISOString().split('T')[0];
+    }
     static getTimestamp(date) {
         if (!date)
             return 0;
@@ -14,10 +17,10 @@ class ClientHelperUtils {
         }
     }
     static getTodayDateString() {
-        return new Date().toISOString().split('T')[0];
+        return this.toDateString(new Date());
     }
     static getDateStringDaysAgo(days, oneDayMs) {
-        return new Date(Date.now() - days * oneDayMs).toISOString().split('T')[0];
+        return this.toDateString(Date.now() - days * oneDayMs);
     }
     static createBackfillTimestamps(now, oneDayMs) {
         return {

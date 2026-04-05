@@ -1,4 +1,6 @@
 import { Document } from 'mongoose';
+import { WarmupPhaseType } from '../../shared/warmup-phases';
+import { ClientStatusType } from '../../shared/base-client.service';
 export type PromoteClientDocument = PromoteClient & Document;
 export declare class PromoteClient {
     tgId: string;
@@ -7,7 +9,7 @@ export declare class PromoteClient {
     availableDate: string;
     channels: number;
     clientId?: string;
-    status: string;
+    status: ClientStatusType;
     message: string;
     lastUsed: Date;
     privacyUpdatedAt: Date;
@@ -25,7 +27,7 @@ export declare class PromoteClient {
     inUse: boolean;
     twoFASetAt: Date;
     otherAuthsRemovedAt: Date;
-    warmupPhase: string;
+    warmupPhase: WarmupPhaseType;
     warmupJitter: number;
     enrolledAt: Date;
     organicActivityAt: Date;
@@ -104,7 +106,7 @@ export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClien
     }, "id"> & {
         id: string;
     }>;
-    status?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+    status?: import("mongoose").SchemaDefinitionProperty<ClientStatusType, PromoteClient, Document<unknown, {}, PromoteClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
         _id: import("mongoose").Types.ObjectId;
@@ -266,7 +268,7 @@ export declare const PromoteClientSchema: import("mongoose").Schema<PromoteClien
     }, "id"> & {
         id: string;
     }>;
-    warmupPhase?: import("mongoose").SchemaDefinitionProperty<string, PromoteClient, Document<unknown, {}, PromoteClient, {
+    warmupPhase?: import("mongoose").SchemaDefinitionProperty<WarmupPhaseType, PromoteClient, Document<unknown, {}, PromoteClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<PromoteClient & {
         _id: import("mongoose").Types.ObjectId;

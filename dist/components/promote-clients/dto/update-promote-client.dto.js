@@ -12,6 +12,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdatePromoteClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const create_promote_client_dto_1 = require("./create-promote-client.dto");
+const class_validator_1 = require("class-validator");
+const warmup_phases_1 = require("../../shared/warmup-phases");
 class UpdatePromoteClientDto extends (0, swagger_1.PartialType)(create_promote_client_dto_1.CreatePromoteClientDto) {
 }
 exports.UpdatePromoteClientDto = UpdatePromoteClientDto;
@@ -69,6 +71,7 @@ __decorate([
 ], UpdatePromoteClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "warmupPhase", void 0);
 __decorate([

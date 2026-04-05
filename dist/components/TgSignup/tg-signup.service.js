@@ -26,6 +26,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         this.usersService = usersService;
         this.logger = new utils_1.Logger(TgSignupService_1.name);
         this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), TgSignupService_1.SESSION_CLEANUP_INTERVAL);
+        this.cleanupInterval.unref();
     }
     async onModuleDestroy() {
         clearInterval(this.cleanupInterval);

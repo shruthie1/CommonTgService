@@ -12,6 +12,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UpdateBufferClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const create_buffer_client_dto_1 = require("./create-buffer-client.dto");
+const class_validator_1 = require("class-validator");
+const warmup_phases_1 = require("../../shared/warmup-phases");
 class UpdateBufferClientDto extends (0, swagger_1.PartialType)(create_buffer_client_dto_1.CreateBufferClientDto) {
 }
 exports.UpdateBufferClientDto = UpdateBufferClientDto;
@@ -69,6 +71,7 @@ __decorate([
 ], UpdateBufferClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "warmupPhase", void 0);
 __decorate([

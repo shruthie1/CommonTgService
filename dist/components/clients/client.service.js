@@ -36,6 +36,8 @@ const tl_1 = require("telegram/tl");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const checkMe_utils_1 = require("../../utils/checkMe.utils");
+const warmup_phases_1 = require("../shared/warmup-phases");
+const client_helper_utils_1 = require("../shared/client-helper.utils");
 const CONFIG = {
     REFRESH_INTERVAL: 5 * 60 * 1000,
     CACHE_TTL: 10 * 60 * 1000,
@@ -96,11 +98,13 @@ let ClientService = ClientService_1 = class ClientService {
                 return;
             await this.performPeriodicRefresh();
         }, CONFIG.REFRESH_INTERVAL);
+        this.checkInterval.unref();
         this.refreshInterval = setInterval(() => {
             if (this.isShuttingDown)
                 return;
             this.updateCacheMetadata();
         }, 60000);
+        this.refreshInterval.unref();
     }
     async performPeriodicRefresh() {
         if (this.refreshPromise) {
@@ -237,11 +241,12 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async search(filter) {
         try {
-            if (filter.hasPromoteMobiles !== undefined) {
-                filter = await this.processPromoteMobileFilter(filter);
+            let workingFilter = { ...filter };
+            if (workingFilter.hasPromoteMobiles !== undefined) {
+                workingFilter = await this.processPromoteMobileFilter(workingFilter);
             }
-            filter = this.processTextSearchFields(filter);
-            return this.executeWithRetry(() => this.clientModel.find(filter).lean().exec());
+            workingFilter = this.processTextSearchFields(workingFilter);
+            return this.executeWithRetry(() => this.clientModel.find(workingFilter).lean().exec());
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
@@ -260,12 +265,13 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async enhancedSearch(filter) {
         try {
+            const workingFilter = { ...filter };
             let searchType = 'direct';
             let promoteMobileMatches = [];
-            if (filter.promoteMobileNumber) {
+            if (workingFilter.promoteMobileNumber) {
                 searchType = 'promoteMobile';
-                const mobileNumber = filter.promoteMobileNumber;
-                delete filter.promoteMobileNumber;
+                const mobileNumber = workingFilter.promoteMobileNumber;
+                delete workingFilter.promoteMobileNumber;
                 const promoteClients = await this.executeWithRetry(() => this.promoteClientModel
                     .find({
                     mobile: { $regex: new RegExp(this.escapeRegex(mobileNumber), 'i') },
@@ -277,9 +283,9 @@ let ClientService = ClientService_1 = class ClientService {
                     clientId: pc.clientId,
                     mobile: pc.mobile,
                 }));
-                filter.clientId = { $in: promoteClients.map((pc) => pc.clientId) };
+                workingFilter.clientId = { $in: promoteClients.map((pc) => pc.clientId) };
             }
-            const clients = await this.search(filter);
+            const clients = await this.search(workingFilter);
             return {
                 clients,
                 searchType,
@@ -299,10 +305,6 @@ let ClientService = ClientService_1 = class ClientService {
     cleanUpdateObject(updateDto) {
         const cleaned = { ...updateDto };
         delete cleaned._id;
-        if (cleaned._doc) {
-            delete cleaned._doc._id;
-            delete cleaned._doc;
-        }
         return cleaned;
     }
     async notifyClientUpdate(clientId) {
@@ -321,7 +323,7 @@ let ClientService = ClientService_1 = class ClientService {
     performPostUpdateTasks(updatedClient) {
         setImmediate(async () => {
             try {
-                this.refreshExternalMaps();
+                await this.refreshExternalMaps();
             }
             catch (error) {
                 (0, parseError_1.parseError)(error, 'Failed to refresh external maps after client update');
@@ -336,22 +338,28 @@ let ClientService = ClientService_1 = class ClientService {
         this.logger.debug('External maps refreshed');
     }
     async processPromoteMobileFilter(filter) {
-        const hasPromoteMobiles = filter.hasPromoteMobiles.toLowerCase() === 'true';
-        delete filter.hasPromoteMobiles;
+        const nextFilter = { ...filter };
+        const hasPromoteMobilesValue = typeof filter.hasPromoteMobiles === 'string'
+            ? filter.hasPromoteMobiles
+            : String(filter.hasPromoteMobiles);
+        const hasPromoteMobiles = hasPromoteMobilesValue.toLowerCase() === 'true';
+        delete nextFilter.hasPromoteMobiles;
         const clientsWithPromoteMobiles = await this.executeWithRetry(() => this.promoteClientModel.find({ clientId: { $exists: true } }).distinct('clientId').lean());
-        filter.clientId = hasPromoteMobiles
+        nextFilter.clientId = hasPromoteMobiles
             ? { $in: clientsWithPromoteMobiles }
             : { $nin: clientsWithPromoteMobiles };
-        return filter;
+        return nextFilter;
     }
     processTextSearchFields(filter) {
-        const textFields = ['firstName', 'name'];
+        const nextFilter = { ...filter };
+        const textFields = ['name'];
         textFields.forEach((field) => {
-            if (filter[field]) {
-                filter[field] = { $regex: new RegExp(this.escapeRegex(filter[field]), 'i') };
+            const value = nextFilter[field];
+            if (typeof value === 'string' && value) {
+                nextFilter[field] = { $regex: new RegExp(this.escapeRegex(value), 'i') };
             }
         });
-        return filter;
+        return nextFilter;
     }
     escapeRegex(text) {
         return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -417,19 +425,22 @@ let ClientService = ClientService_1 = class ClientService {
         }
         const existingClientMobile = existingClient.mobile;
         this.logger.log('setupClientQueryDto:', setupClientQueryDto);
-        const today = new Date().toISOString().split('T')[0];
+        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const query = {
             clientId,
             mobile: { $ne: existingClientMobile },
             createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
             availableDate: { $lte: today },
             channels: { $gt: 200 },
-            status: "active"
+            status: 'active',
+            inUse: { $ne: true },
+            warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
         };
-        const newBufferClient = (await this.bufferClientService.executeQuery(query, { tgId: 1 }))[0];
+        const candidateBufferClients = await this.bufferClientService.executeQuery(query, { availableDate: 1, createdAt: 1 }, 10);
+        const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
         if (!newBufferClient) {
-            await this.notify(`Buffer Clients not available, Requested by ${clientId}`);
-            this.logger.log('Buffer Clients not available');
+            await this.notify(`Buffer Clients not safely available, Requested by ${clientId}`);
+            this.logger.log('Buffer Clients not safely available');
             return;
         }
         try {
@@ -451,7 +462,7 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.notify(`Buffer ${newBufferClient.mobile} marked INACTIVE (permanent error during setup)`);
             }
             else {
-                const availableDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                const availableDate = client_helper_utils_1.ClientHelperUtils.toDateString(Date.now() + 3 * 24 * 60 * 60 * 1000);
                 await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
             }
             this.telegramService.setActiveClientSetup(undefined);
@@ -462,7 +473,11 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async updateClientSession(newSession) {
         const setup = this.telegramService.getActiveClientSetup();
-        const { days, archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+        if (!setup) {
+            throw new common_1.BadRequestException('No active client setup found');
+        }
+        const { archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+        const days = setup.days ?? 0;
         this.logger.log('Updating Client Session');
         await (0, Helpers_1.sleep)(2000);
         const existingClient = await this.findOne(clientId);
@@ -488,6 +503,9 @@ let ClientService = ClientService_1 = class ClientService {
             const me = await newTelegramClient.getMe();
             const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, existingClient.name, me.username);
             await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: @${me.username}\nNewUsername: @${updatedUsername}`);
+            if (!newSession?.trim()) {
+                throw new common_1.BadRequestException(`Invalid replacement session for ${newMobile}`);
+            }
             await this.update(clientId, { mobile: newMobile, username: updatedUsername, session: newSession });
             await (0, fetchWithTimeout_1.fetchWithTimeout)(existingClient.deployKey, {}, 1);
             setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
@@ -515,7 +533,7 @@ let ClientService = ClientService_1 = class ClientService {
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             if (!existingClientUser)
                 return;
-            if ((0, utils_1.toBoolean)(formalities)) {
+            if (formalities) {
                 await this.handleFormalities(existingMobile);
             }
             else {
@@ -536,24 +554,27 @@ let ClientService = ClientService_1 = class ClientService {
         }
         catch (e) {
             const errorDetails = (0, parseError_1.parseError)(e, `Error in Archiving Old Client: ${existingMobile}`, false);
+            const errorMessage = e instanceof Error ? e.message : String(e);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(existingMobile, e.errorMessage || e.message);
+                await this.bufferClientService.markAsInactive(existingMobile, errorMessage);
             }
-            await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${e.errorMessage || e.message}`);
+            await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${errorMessage}`);
         }
     }
     async handleFormalities(mobile) {
-        const client = await connection_manager_1.connectionManager.getClient(mobile, { handler: true, autoDisconnect: false });
-        await this.telegramService.updatePrivacyforDeletedAccount(mobile);
-        this.logger.log('Formalities finished');
-        await connection_manager_1.connectionManager.unregisterClient(mobile);
-        await this.notify('Formalities finished');
+        try {
+            await this.telegramService.updatePrivacyforDeletedAccount(mobile);
+            this.logger.log('Formalities finished');
+            await this.notify('Formalities finished');
+        }
+        finally {
+            await connection_manager_1.connectionManager.unregisterClient(mobile);
+        }
     }
     async archiveOldClient(existingClient, existingClientUser, existingMobile, days) {
         try {
-            const availableDate = new Date(Date.now() + (days + 1) * 24 * 60 * 60 * 1000)
-                .toISOString()
-                .split('T')[0];
+            await this.assertDistinctUserBackupSession(existingMobile, existingClient.session);
+            const availableDate = client_helper_utils_1.ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
             const bufferClientDto = {
                 clientId: existingClient.clientId,
                 mobile: existingMobile,
@@ -563,22 +584,66 @@ let ClientService = ClientService_1 = class ClientService {
                 channels: 170,
                 status: days > 35 ? 'inactive' : 'active',
                 inUse: false,
+                warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: new Date(),
             };
             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
-            this.logger.log('client Archived: ', updatedBufferClient['_doc']);
+            this.logger.log('client Archived:', updatedBufferClient);
             await this.notify('old Client Archived');
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Error in Archiving Old Client: ${existingMobile}`, true);
             await this.notify(errorDetails.message);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                this.logger.log('Deleting User: ', existingClientUser.mobile);
+                this.logger.log('Marking archived user inactive:', existingClientUser.mobile);
                 await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
             }
             else {
                 this.logger.log('Not Deleting user');
             }
         }
+    }
+    async findSafeSetupBufferCandidate(candidates, existingClientSession) {
+        for (const candidate of candidates) {
+            if (!candidate?.mobile || !candidate?.session)
+                continue;
+            if (candidate.session === existingClientSession) {
+                this.logger.warn(`Skipping setup candidate ${candidate.mobile}: session matches current main client`);
+                continue;
+            }
+            try {
+                const backupUser = await this.assertDistinctUserBackupSession(candidate.mobile, candidate.session);
+                if (!backupUser.session?.trim() || backupUser.session.trim() === candidate.session.trim()) {
+                    this.logger.warn(`Skipping setup candidate ${candidate.mobile}: backup session is still duplicated`);
+                    continue;
+                }
+                return { mobile: candidate.mobile, session: candidate.session, backupUser };
+            }
+            catch (error) {
+                this.logger.warn(`Skipping setup candidate ${candidate.mobile}: failed to ensure distinct backup session`);
+                continue;
+            }
+        }
+        return null;
+    }
+    async assertDistinctUserBackupSession(mobile, activeSession) {
+        let user;
+        try {
+            user = await this.bufferClientService.getOrEnsureDistinctUsersBackupSession(mobile, activeSession);
+        }
+        catch (error) {
+            if (error instanceof common_1.NotFoundException) {
+                throw error;
+            }
+            throw error;
+        }
+        if (!user) {
+            throw new common_1.BadRequestException(`Failed to create distinct backup session for ${mobile}`);
+        }
+        if (user.session?.trim() && user.session.trim() !== activeSession.trim()) {
+            return user;
+        }
+        throw new common_1.BadRequestException(`Distinct backup session was not persisted for ${mobile}`);
     }
     async updateClient(clientId, message = '') {
         this.logger.log(`Updating Client: ${clientId} - ${message}`);
@@ -609,7 +674,7 @@ let ClientService = ClientService_1 = class ClientService {
         catch (error) {
             this.lastUpdateMap.delete(clientId);
             (0, parseError_1.parseError)(error, `[${clientId}] [${client.mobile}] updateClient failed`);
-            this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
+            await this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
         }
         finally {
             await connection_manager_1.connectionManager.unregisterClient(client.mobile);

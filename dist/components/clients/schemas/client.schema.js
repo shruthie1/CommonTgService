@@ -100,6 +100,16 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "dedicatedIps", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Preferred country for IP assignment', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
+    __metadata("design:type", String)
+], Client.prototype, "preferredIpCountry", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false }),
+    (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
+    __metadata("design:type", Boolean)
+], Client.prototype, "autoAssignIps", void 0);
 exports.Client = Client = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'clients', versionKey: false, autoIndex: true, timestamps: true,

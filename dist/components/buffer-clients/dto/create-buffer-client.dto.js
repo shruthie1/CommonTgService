@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateBufferClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
+const base_client_service_1 = require("../../shared/base-client.service");
 class CreateBufferClientDto {
 }
 exports.CreateBufferClientDto = CreateBufferClientDto;
@@ -72,7 +73,8 @@ __decorate([
         enum: ['active', 'inactive'],
         default: 'active',
     }),
-    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(base_client_service_1.ClientStatus),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "status", void 0);
 __decorate([

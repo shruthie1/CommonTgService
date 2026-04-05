@@ -3,7 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BaseClientService = exports.performOrganicActivity = exports.getWarmupPhaseAction = exports.isAccountWarmingUp = exports.isAccountReady = exports.WarmupPhase = void 0;
+exports.BaseClientService = exports.performOrganicActivity = exports.getWarmupPhaseAction = exports.isAccountWarmingUp = exports.isAccountReady = exports.WarmupPhase = exports.ClientStatus = void 0;
+const common_1 = require("@nestjs/common");
 const Helpers_1 = require("telegram/Helpers");
 const parseError_1 = require("../../utils/parseError");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
@@ -23,7 +24,28 @@ Object.defineProperty(exports, "getWarmupPhaseAction", { enumerable: true, get: 
 Object.defineProperty(exports, "WarmupPhase", { enumerable: true, get: function () { return warmup_phases_1.WarmupPhase; } });
 Object.defineProperty(exports, "isAccountReady", { enumerable: true, get: function () { return warmup_phases_1.isAccountReady; } });
 Object.defineProperty(exports, "isAccountWarmingUp", { enumerable: true, get: function () { return warmup_phases_1.isAccountWarmingUp; } });
+exports.ClientStatus = {
+    ACTIVE: 'active',
+    INACTIVE: 'inactive',
+};
 class BaseClientService {
+    resetDailyJoinCountersIfNeeded() {
+        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+        if (today !== this.dailyJoinDate) {
+            this.dailyJoinCounts.clear();
+            this.dailyJoinDate = today;
+        }
+    }
+    getDailyJoinCount(mobile) {
+        this.resetDailyJoinCountersIfNeeded();
+        return this.dailyJoinCounts.get(mobile) || 0;
+    }
+    incrementDailyJoinCount(mobile) {
+        this.dailyJoinCounts.set(mobile, this.getDailyJoinCount(mobile) + 1);
+    }
+    isMobileDailyCapped(mobile) {
+        return this.getDailyJoinCount(mobile) >= this.config.maxChannelJoinsPerDay;
+    }
     getEffectiveCooldownMs(mobile, lastUpdateAttempt) {
         const baseCooldownMs = this.config.cooldownHours * 60 * 60 * 1000;
         if (lastUpdateAttempt <= 0)
@@ -124,7 +146,6 @@ class BaseClientService {
         this.isJoinChannelProcessing = false;
         this.isLeaveChannelProcessing = false;
         this.activeTimeouts = new Set();
-        this.cleanupIntervalId = null;
         this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
         this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
         this.INACTIVE_USER_CUTOFF_DAYS = 90;
@@ -137,6 +158,11 @@ class BaseClientService {
         this.MAX_FAILED_ATTEMPTS = 3;
         this.FAILURE_RESET_DAYS = 7;
         this.MAX_UPDATES_PER_CYCLE = 5;
+        this.dailyJoinCounts = new Map();
+        this.dailyJoinDate = '';
+        this.joinFailureCounts = new Map();
+        this.MAX_JOIN_FAILURES_PER_MOBILE = 3;
+        this.joinScopeClientId = null;
         this.KNOWN_2FA_PASSWORD = 'Ajtdmwajt1@';
         this.logger = new utils_1.Logger(loggerName);
     }
@@ -148,51 +174,16 @@ class BaseClientService {
             this.clearAllTimeouts();
             this.clearJoinChannelInterval();
             this.clearLeaveChannelInterval();
-            this.clearMemoryCleanup();
             this.joinChannelMap.clear();
+            this.dailyJoinCounts.clear();
+            this.joinFailureCounts.clear();
+            this.joinScopeClientId = null;
             this.leaveChannelMap.clear();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
         }
         catch (error) {
             this.logger.error('Error during cleanup:', error);
-        }
-    }
-    startMemoryCleanup() {
-        if (this.cleanupIntervalId)
-            return;
-        this.cleanupIntervalId = setInterval(() => {
-            this.performMemoryCleanup();
-        }, this.config.cleanupInterval);
-        this.activeTimeouts.add(this.cleanupIntervalId);
-    }
-    clearMemoryCleanup() {
-        if (this.cleanupIntervalId) {
-            clearInterval(this.cleanupIntervalId);
-            this.activeTimeouts.delete(this.cleanupIntervalId);
-            this.cleanupIntervalId = null;
-        }
-    }
-    performMemoryCleanup() {
-        try {
-            for (const [mobile, channels] of this.joinChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`Cleaning up empty joinChannelMap entry for mobile: ${mobile}`);
-                    this.joinChannelMap.delete(mobile);
-                }
-            }
-            for (const [mobile, channels] of this.leaveChannelMap.entries()) {
-                if (!channels || channels.length === 0) {
-                    this.logger.debug(`Cleaning up empty leaveChannelMap entry for mobile: ${mobile}`);
-                    this.leaveChannelMap.delete(mobile);
-                }
-            }
-            this.trimMapIfNeeded(this.joinChannelMap, 'joinChannelMap');
-            this.trimMapIfNeeded(this.leaveChannelMap, 'leaveChannelMap');
-            this.logger.debug(`Memory cleanup completed. Maps sizes - Join: ${this.joinChannelMap.size}, Leave: ${this.leaveChannelMap.size}`);
-        }
-        catch (error) {
-            this.logger.error('Error during memory cleanup:', error);
         }
     }
     trimMapIfNeeded(map, mapName) {
@@ -325,6 +316,29 @@ class BaseClientService {
         this.leaveChannelMap.clear();
         this.clearLeaveChannelInterval();
         this.logger.debug(`LeaveMap cleared, removed ${mapSize} entries`);
+    }
+    async prepareJoinChannelRefresh(skipExisting) {
+        const preservedMobiles = new Set();
+        if (skipExisting) {
+            for (const [mobile, channels] of this.joinChannelMap.entries()) {
+                if (channels && channels.length > 0) {
+                    preservedMobiles.add(mobile);
+                }
+            }
+        }
+        for (const key of this.joinChannelMap.keys()) {
+            if (!preservedMobiles.has(key)) {
+                this.joinChannelMap.delete(key);
+            }
+        }
+        for (const [mobile, channels] of this.leaveChannelMap.entries()) {
+            if (!channels || channels.length === 0) {
+                this.leaveChannelMap.delete(mobile);
+            }
+        }
+        this.clearJoinChannelInterval();
+        await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+        return preservedMobiles;
     }
     async performHealthCheck(mobile, lastChecked, now) {
         const healthCheckIntervalDays = 5 + Math.random() * 4;
@@ -673,7 +687,15 @@ class BaseClientService {
                 case 'join_channels':
                     return 0;
                 case 'rotate_session':
-                    return 0;
+                    updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
+                    if (updateCount === 0) {
+                        await this.update(doc.mobile, {
+                            lastUpdateAttempt: new Date(),
+                            failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
+                            lastUpdateFailure: new Date(),
+                        });
+                    }
+                    return updateCount;
                 default:
                     await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
                     return 0;
@@ -720,14 +742,17 @@ class BaseClientService {
             backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
         if (!doc.profilePicsUpdatedAt)
             backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
+        const hasDistinctBackupSession = await this.hasDistinctUsersBackupSession(mobile, doc.session || null);
         if (!doc.warmupPhase)
-            backfillData.warmupPhase = warmup_phases_1.WarmupPhase.READY;
+            backfillData.warmupPhase = hasDistinctBackupSession ? warmup_phases_1.WarmupPhase.SESSION_ROTATED : warmup_phases_1.WarmupPhase.READY;
         if (!doc.enrolledAt)
             backfillData.enrolledAt = doc.createdAt || new Date(now - 30 * this.ONE_DAY_MS);
         if (!doc.twoFASetAt)
             backfillData.twoFASetAt = new Date(now - 28 * this.ONE_DAY_MS);
         if (!doc.otherAuthsRemovedAt)
             backfillData.otherAuthsRemovedAt = new Date(now - 27 * this.ONE_DAY_MS);
+        if (hasDistinctBackupSession && !doc.sessionRotatedAt)
+            backfillData.sessionRotatedAt = new Date(now - 26 * this.ONE_DAY_MS);
         if (Object.keys(backfillData).length > 0) {
             await this.update(mobile, backfillData);
             this.logger.log(`Backfilled ${Object.keys(backfillData).length} fields for ${mobile}`);
@@ -747,10 +772,23 @@ class BaseClientService {
             this.scheduleNextJoinRound();
         }
     }
-    scheduleNextJoinRound() {
+    async scheduleNextJoinRound() {
         if (this.joinChannelMap.size === 0) {
-            this.clearJoinChannelInterval();
-            return;
+            try {
+                this.joinFailureCounts.clear();
+                const refilled = await this.refillJoinQueue(this.joinScopeClientId);
+                if (refilled === 0) {
+                    this.logger.debug('No eligible mobiles for channel joining — stopping until next trigger');
+                    this.clearJoinChannelInterval();
+                    return;
+                }
+                this.logger.log(`Refilled join queue with ${refilled} mobiles`);
+            }
+            catch (error) {
+                this.logger.error('Error refilling join queue', error);
+                this.clearJoinChannelInterval();
+                return;
+            }
         }
         const baseInterval = this.config.joinChannelInterval;
         const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
@@ -763,7 +801,7 @@ class BaseClientService {
         if (this.isJoinChannelProcessing)
             return;
         if (this.joinChannelMap.size === 0) {
-            this.clearJoinChannelInterval();
+            await this.scheduleNextJoinRound();
             return;
         }
         this.isJoinChannelProcessing = true;
@@ -775,23 +813,30 @@ class BaseClientService {
         }
         finally {
             this.isJoinChannelProcessing = false;
-            this.scheduleNextJoinRound();
+            await this.scheduleNextJoinRound();
         }
     }
     async processJoinChannelSequentially() {
+        this.resetDailyJoinCountersIfNeeded();
         const keys = Array.from(this.joinChannelMap.keys());
-        this.logger.debug(`Processing join channel queue for ${keys.length} clients`);
+        this.logger.debug(`Processing join channel queue for ${keys.length} clients (round-robin, ${this.config.joinsPerMobilePerRound}/mobile)`);
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
             let currentChannel = null;
             let joinCount = 0;
+            if (this.isMobileDailyCapped(mobile)) {
+                this.logger.debug(`${mobile} hit daily cap (${this.config.maxChannelJoinsPerDay}), removing from queue`);
+                this.removeFromJoinMap(mobile);
+                continue;
+            }
             try {
                 const channels = this.joinChannelMap.get(mobile);
                 if (!channels || channels.length === 0) {
                     this.removeFromJoinMap(mobile);
                     continue;
                 }
-                while (joinCount < this.config.maxJoinsPerSession && channels.length > 0) {
+                const roundLimit = Math.min(this.config.joinsPerMobilePerRound, this.config.maxJoinsPerSession, this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(mobile), channels.length);
+                while (joinCount < roundLimit) {
                     currentChannel = channels.shift();
                     if (!currentChannel)
                         break;
@@ -809,6 +854,7 @@ class BaseClientService {
                     }
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
+                    this.incrementDailyJoinCount(mobile);
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
                         try {
                             const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
@@ -817,12 +863,19 @@ class BaseClientService {
                         catch {
                         }
                     }
-                    if (channels.length > 0 && joinCount < this.config.maxJoinsPerSession) {
+                    if (joinCount < roundLimit && channels.length > 0) {
                         const delay = client_helper_utils_1.ClientHelperUtils.gaussianRandom(120000, 30000, 90000, 180000);
                         await (0, Helpers_1.sleep)(delay);
                     }
                 }
-                if (channels.length === 0) {
+                if (joinCount > 0) {
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                    }
+                    catch {
+                    }
+                }
+                if (channels.length === 0 || this.isMobileDailyCapped(mobile)) {
                     this.removeFromJoinMap(mobile);
                 }
             }
@@ -842,10 +895,22 @@ class BaseClientService {
                         }
                     }
                 }
-                if ((0, isPermanentError_1.default)(errorDetails)) {
+                else if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
+                }
+                else {
+                    const channels = this.joinChannelMap.get(mobile);
+                    if (currentChannel && channels) {
+                        channels.unshift(currentChannel);
+                    }
+                    const failures = (this.joinFailureCounts.get(mobile) || 0) + 1;
+                    this.joinFailureCounts.set(mobile, failures);
+                    if (failures >= this.MAX_JOIN_FAILURES_PER_MOBILE) {
+                        this.logger.warn(`${mobile} hit ${failures} transient join failures, quarantining for this cycle`);
+                        this.removeFromJoinMap(mobile);
+                    }
                 }
             }
             finally {
@@ -866,13 +931,21 @@ class BaseClientService {
             return;
         }
         if (!this.leaveChannelIntervalId) {
-            this.logger.debug('Starting leave channel interval');
-            this.leaveChannelIntervalId = setInterval(async () => {
-                await this.processLeaveChannelInterval();
-            }, this.config.leaveChannelInterval);
-            this.activeTimeouts.add(this.leaveChannelIntervalId);
-            this.createTimeout(() => this.processLeaveChannelInterval(), 1000);
+            this.logger.debug('Starting leave channel queue');
+            this.scheduleNextLeaveRound();
         }
+    }
+    scheduleNextLeaveRound() {
+        if (this.leaveChannelMap.size === 0) {
+            this.clearLeaveChannelInterval();
+            return;
+        }
+        const baseInterval = this.config.leaveChannelInterval;
+        const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
+        const delay = Math.max(30000, baseInterval + jitter);
+        this.leaveChannelIntervalId = this.createTimeout(async () => {
+            await this.processLeaveChannelInterval();
+        }, delay);
     }
     async processLeaveChannelInterval() {
         if (this.isLeaveChannelProcessing)
@@ -890,8 +963,9 @@ class BaseClientService {
         }
         finally {
             this.isLeaveChannelProcessing = false;
-            if (this.leaveChannelMap.size === 0) {
-                this.clearLeaveChannelInterval();
+            this.scheduleNextLeaveRound();
+            if (!this.joinChannelIntervalId && !this.isJoinChannelProcessing) {
+                this.scheduleNextJoinRound();
             }
         }
     }
@@ -900,13 +974,14 @@ class BaseClientService {
         this.logger.debug(`Processing leave channel queue for ${keys.length} clients`);
         for (let i = 0; i < keys.length; i++) {
             const mobile = keys[i];
+            let channelsToProcess = [];
             try {
                 const channels = this.leaveChannelMap.get(mobile);
                 if (!channels || channels.length === 0) {
                     this.removeFromLeaveMap(mobile);
                     continue;
                 }
-                const channelsToProcess = channels.splice(0, this.config.leaveChannelBatchSize);
+                channelsToProcess = channels.splice(0, this.config.leaveChannelBatchSize);
                 this.logger.debug(`${mobile} leaving ${channelsToProcess.length} channels (${channels.length} remaining)`);
                 if (channels.length > 0) {
                     this.leaveChannelMap.set(mobile, channels);
@@ -916,7 +991,16 @@ class BaseClientService {
                 }
                 const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                 await client.leaveChannels(channelsToProcess);
-                this.logger.debug(`${mobile} left ${channelsToProcess.length} channels successfully`);
+                const leftCount = channelsToProcess.length;
+                this.logger.debug(`${mobile} left ${leftCount} channels successfully`);
+                if (leftCount > 0) {
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });
+                    }
+                    catch {
+                    }
+                }
+                channelsToProcess = [];
             }
             catch (error) {
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
@@ -924,6 +1008,12 @@ class BaseClientService {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
                     this.removeFromLeaveMap(mobile);
+                }
+                else if (channelsToProcess.length > 0) {
+                    const existing = this.leaveChannelMap.get(mobile) || [];
+                    existing.unshift(...channelsToProcess);
+                    this.safeSetLeaveChannelMap(mobile, existing);
+                    this.logger.warn(`${mobile} transient leave failure, restored ${channelsToProcess.length} channels to queue`);
                 }
             }
             finally {
@@ -984,8 +1074,10 @@ class BaseClientService {
     async selfHealLegacyWarmupAccounts(clientId, limit = 50) {
         const docs = await this.model
             .find({
-            ...this.getMissingWarmupPhaseQuery(clientId),
-            $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }],
+            $and: [
+                this.getMissingWarmupPhaseQuery(clientId),
+                { $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }] },
+            ],
         })
             .sort({ createdAt: 1, _id: 1 })
             .limit(limit)
@@ -1007,29 +1099,172 @@ class BaseClientService {
         await this.selfHealLegacyUsedAccounts(clientId);
         await this.selfHealLegacyWarmupAccounts(clientId);
     }
-    async calculateAvailabilityBasedNeeds(clientId) {
-        await this.selfHealLegacyOperationalState(clientId);
+    async getStoredActiveSession(mobile) {
+        const doc = await this.model.findOne({ mobile }, { session: 1 }).lean().exec();
+        return doc?.session?.trim() || null;
+    }
+    async createDistinctSessionString(mobile, forbiddenSessions, maxAttempts = 2) {
+        const forbidden = new Set(forbiddenSessions
+            .map((session) => session?.trim())
+            .filter((session) => !!session));
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const newSession = (await this.telegramService.createNewSession(mobile))?.trim();
+            if (newSession && !forbidden.has(newSession)) {
+                return newSession;
+            }
+            this.logger.warn(`Rejected duplicate/empty rotated session for ${mobile} on attempt ${attempt + 1}`);
+        }
+        return null;
+    }
+    async hasDistinctUsersBackupSession(mobile, activeSession) {
+        const users = await this.usersService.search({ mobile });
+        if (!users.length)
+            return false;
+        const backupSession = users[0].session?.trim();
+        const active = activeSession?.trim();
+        return !!backupSession && !!active && backupSession !== active;
+    }
+    async getOrEnsureDistinctUsersBackupSession(mobile, activeSession) {
+        const active = activeSession?.trim();
+        if (!active)
+            return null;
+        const users = await this.usersService.search({ mobile });
+        if (!users.length) {
+            throw new common_1.NotFoundException(`User not found for ${mobile}`);
+        }
+        const user = users[0];
+        const currentBackup = user.session?.trim();
+        if (currentBackup && currentBackup !== active) {
+            return user;
+        }
+        const distinctBackup = await this.createDistinctSessionString(mobile, [active, currentBackup]);
+        if (!distinctBackup) {
+            return null;
+        }
+        await this.usersService.update(user.tgId, { session: distinctBackup });
+        return {
+            ...user,
+            session: distinctBackup,
+        };
+    }
+    async ensureDistinctUsersBackupSession(mobile, activeSession) {
+        const user = await this.getOrEnsureDistinctUsersBackupSession(mobile, activeSession);
+        return !!user?.session?.trim();
+    }
+    normalizeDateString(dateValue) {
+        if (!dateValue)
+            return null;
+        if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            return dateValue;
+        }
+        const timestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(dateValue);
+        return timestamp > 0 ? client_helper_utils_1.ClientHelperUtils.toDateString(timestamp) : null;
+    }
+    maxDateString(...dateStrings) {
+        const validDates = dateStrings.filter((value) => !!value);
+        if (!validDates.length)
+            return null;
+        return validDates.reduce((max, current) => (current > max ? current : max));
+    }
+    getProjectedReadyDateString(doc) {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
+            return null;
+        const enrolledTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledTimestamp <= 0)
+            return null;
+        const jitter = Math.max(0, doc.warmupJitter || 0);
+        const readyTimestamp = enrolledTimestamp + (warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready + jitter) * this.ONE_DAY_MS;
+        return client_helper_utils_1.ClientHelperUtils.toDateString(readyTimestamp);
+    }
+    getOperationalAvailabilityDateString(doc, now) {
+        const availableDate = this.normalizeDateString(doc.availableDate);
+        const lastUsedTimestamp = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+        if (!doc.warmupPhase && lastUsedTimestamp > 0) {
+            return availableDate || client_helper_utils_1.ClientHelperUtils.toDateString(now);
+        }
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        if ((0, warmup_phases_1.isAccountReady)(phase)) {
+            return availableDate || client_helper_utils_1.ClientHelperUtils.toDateString(now);
+        }
+        if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
+            return null;
+        const projectedReadyDate = this.getProjectedReadyDateString({ ...doc, warmupPhase: phase });
+        if (!projectedReadyDate)
+            return null;
+        return this.maxDateString(projectedReadyDate, availableDate);
+    }
+    getReplenishmentWindows() {
+        return [
+            {
+                name: 'threeWeeks',
+                days: 21,
+                minRequired: Math.max(1, Math.ceil(this.config.minTotalClients * 0.6)),
+            },
+            {
+                name: 'oneMonth',
+                days: 30,
+                minRequired: this.config.minTotalClients,
+            },
+        ];
+    }
+    async calculateAvailabilityBasedNeedsForCurrentState(clientId) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const windows = this.AVAILABILITY_WINDOWS.map(window => ({
             ...window,
-            targetDate: new Date(today.getTime() + window.days * this.ONE_DAY_MS).toISOString().split('T')[0],
+            targetDate: client_helper_utils_1.ClientHelperUtils.toDateString(today.getTime() + window.days * this.ONE_DAY_MS),
         }));
-        const readyFilter = {
-            clientId,
-            status: 'active',
-            warmupPhase: { $in: [warmup_phases_1.WarmupPhase.READY, warmup_phases_1.WarmupPhase.SESSION_ROTATED] },
-        };
-        const totalActive = await this.model.countDocuments(readyFilter);
+        const replenishmentWindows = this.getReplenishmentWindows().map(window => ({
+            ...window,
+            targetDate: client_helper_utils_1.ClientHelperUtils.toDateString(today.getTime() + window.days * this.ONE_DAY_MS),
+        }));
+        const activeDocs = await this.model.find({ clientId, status: 'active' }, {
+            availableDate: 1,
+            warmupPhase: 1,
+            warmupJitter: 1,
+            enrolledAt: 1,
+            createdAt: 1,
+            lastUsed: 1,
+            sessionRotatedAt: 1,
+            profilePicsUpdatedAt: 1,
+            usernameUpdatedAt: 1,
+            nameBioUpdatedAt: 1,
+            profilePicsDeletedAt: 1,
+            otherAuthsRemovedAt: 1,
+            twoFASetAt: 1,
+            privacyUpdatedAt: 1,
+            channels: 1,
+        }).exec();
+        const readyOperationalDates = [];
+        const pipelineOperationalDates = [];
+        for (const doc of activeDocs) {
+            const operationalDate = this.getOperationalAvailabilityDateString(doc, today.getTime());
+            if (!operationalDate)
+                continue;
+            const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+            const isLegacyOperational = !doc.warmupPhase && client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed) > 0;
+            if (isLegacyOperational || (0, warmup_phases_1.isAccountReady)(phase)) {
+                readyOperationalDates.push(operationalDate);
+            }
+            else {
+                pipelineOperationalDates.push(operationalDate);
+            }
+        }
+        const readyActive = readyOperationalDates.length;
+        const warmingPipeline = pipelineOperationalDates.length;
+        const totalActive = readyActive + warmingPipeline;
         const windowNeeds = [];
-        let maxNeeded = 0;
-        let mostUrgentWindow = '';
+        const projectedWindowCounts = [];
+        const replenishmentWindowNeeds = [];
+        let maxEnrollableWindowNeeded = 0;
+        let mostUrgentEnrollableWindow = '';
         let mostUrgentPriority = 999;
+        let hasShortWindowDeficit = false;
         for (const window of windows) {
-            const availableCount = await this.model.countDocuments({
-                ...readyFilter,
-                availableDate: { $lte: window.targetDate },
-            });
+            const readyAvailableCount = readyOperationalDates.filter((date) => date <= window.targetDate).length;
+            const projectedAvailableCount = pipelineOperationalDates.filter((date) => date <= window.targetDate).length;
+            const availableCount = readyAvailableCount + projectedAvailableCount;
             const needed = Math.max(0, window.minRequired - availableCount);
             windowNeeds.push({
                 window: window.name,
@@ -1038,52 +1273,107 @@ class BaseClientService {
                 targetDate: window.targetDate,
                 minRequired: window.minRequired,
             });
-            if (needed > maxNeeded) {
-                maxNeeded = needed;
-                mostUrgentWindow = window.name;
+            projectedWindowCounts.push({
+                window: window.name,
+                available: availableCount,
+                targetDate: window.targetDate,
+            });
+            if (needed > 0) {
+                hasShortWindowDeficit = true;
+            }
+        }
+        for (const window of replenishmentWindows) {
+            const availableCount = readyOperationalDates.filter((date) => date <= window.targetDate).length +
+                pipelineOperationalDates.filter((date) => date <= window.targetDate).length;
+            const needed = Math.max(0, window.minRequired - availableCount);
+            replenishmentWindowNeeds.push({
+                window: window.name,
+                available: availableCount,
+                needed,
+                targetDate: window.targetDate,
+                minRequired: window.minRequired,
+            });
+            if (needed > maxEnrollableWindowNeeded) {
+                maxEnrollableWindowNeeded = needed;
+                mostUrgentEnrollableWindow = window.name;
                 mostUrgentPriority = window.days;
             }
             else if (needed > 0 && window.days < mostUrgentPriority) {
-                mostUrgentWindow = window.name;
+                mostUrgentEnrollableWindow = window.name;
                 mostUrgentPriority = window.days;
             }
         }
-        const totalNeededForCount = Math.max(0, this.config.minTotalClients - totalActive);
-        const totalNeeded = Math.max(maxNeeded, totalNeededForCount);
+        const oneMonthWindow = replenishmentWindowNeeds.find((window) => window.window === 'oneMonth');
+        const totalNeededForCount = oneMonthWindow?.needed || 0;
+        const totalNeeded = maxEnrollableWindowNeeded;
         let priority = 100;
-        if (maxNeeded > 0) {
+        if (maxEnrollableWindowNeeded > 0) {
             priority = mostUrgentPriority;
         }
         let calculationReason = '';
-        if (maxNeeded > 0 && totalNeededForCount > 0) {
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded}, total count needs ${totalNeededForCount}`;
+        if (maxEnrollableWindowNeeded > 0 && totalNeededForCount > 0) {
+            calculationReason = `Window '${mostUrgentEnrollableWindow}' needs ${maxEnrollableWindowNeeded}, total pipeline count needs ${totalNeededForCount}`;
         }
-        else if (maxNeeded > 0) {
-            const windowConfig = this.AVAILABILITY_WINDOWS.find(w => w.name === mostUrgentWindow);
-            calculationReason = `Window '${mostUrgentWindow}' needs ${maxNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
+        else if (maxEnrollableWindowNeeded > 0) {
+            const windowConfig = replenishmentWindowNeeds.find(w => w.window === mostUrgentEnrollableWindow);
+            calculationReason = `Window '${mostUrgentEnrollableWindow}' needs ${maxEnrollableWindowNeeded} to meet minimum of ${windowConfig?.minRequired || 'unknown'}`;
         }
         else if (totalNeededForCount > 0) {
-            calculationReason = `Total count needs ${totalNeededForCount} to reach minimum of ${this.config.minTotalClients}`;
+            calculationReason = `One-month pipeline needs ${totalNeededForCount} to reach minimum of ${this.config.minTotalClients} (ready=${readyActive}, warming=${warmingPipeline})`;
+        }
+        else if (hasShortWindowDeficit) {
+            calculationReason = `Short-term windows are below target, but current replenishment focuses on the 3-4 week horizon (ready=${readyActive}, warming=${warmingPipeline})`;
         }
         else {
-            calculationReason = 'All windows satisfied';
+            calculationReason = `Short-term and replenishment horizons satisfied (ready=${readyActive}, warming=${warmingPipeline})`;
         }
-        return { totalNeeded, windowNeeds, totalActive, totalNeededForCount, calculationReason, priority };
+        return {
+            totalNeeded,
+            windowNeeds,
+            totalActive,
+            totalNeededForCount,
+            calculationReason,
+            priority,
+            readyActive,
+            warmingPipeline,
+            replenishmentWindowNeeds,
+            projectedWindowCounts,
+        };
+    }
+    async calculateAvailabilityBasedNeeds(clientId) {
+        await this.selfHealLegacyOperationalState(clientId);
+        return this.calculateAvailabilityBasedNeedsForCurrentState(clientId);
     }
     async getClientsByStatus(status) {
         return this.model.find({ status }).exec();
     }
     async getClientsWithMessages() {
-        return this.model.find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 }).exec();
+        const docs = await this.model
+            .find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 })
+            .lean()
+            .exec();
+        return docs.map((doc) => ({
+            mobile: doc.mobile,
+            status: doc.status,
+            message: doc.message,
+            clientId: doc.clientId,
+            lastUsed: doc.lastUsed,
+        }));
     }
     async getLeastRecentlyUsedClients(clientId, limit = 1) {
         await this.selfHealLegacyOperationalState(clientId);
+        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         return this.model
             .find({
             clientId,
             status: 'active',
             inUse: { $ne: true },
-            warmupPhase: { $in: [warmup_phases_1.WarmupPhase.READY, warmup_phases_1.WarmupPhase.SESSION_ROTATED] },
+            warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+            $or: [
+                { availableDate: { $lte: today } },
+                { availableDate: { $exists: false } },
+                { availableDate: null },
+            ],
         })
             .sort({ lastUsed: 1, _id: 1 })
             .limit(limit)
@@ -1096,14 +1386,26 @@ class BaseClientService {
     async getUnusedClients(hoursAgo = 24, clientId) {
         await this.selfHealLegacyOperationalState(clientId);
         const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
+        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const filter = {
             status: 'active',
             inUse: { $ne: true },
-            warmupPhase: { $in: [warmup_phases_1.WarmupPhase.READY, warmup_phases_1.WarmupPhase.SESSION_ROTATED] },
-            $or: [
-                { lastUsed: { $lt: cutoffDate } },
-                { lastUsed: { $exists: false } },
-                { lastUsed: null },
+            warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+            $and: [
+                {
+                    $or: [
+                        { availableDate: { $lte: today } },
+                        { availableDate: { $exists: false } },
+                        { availableDate: null },
+                    ],
+                },
+                {
+                    $or: [
+                        { lastUsed: { $lt: cutoffDate } },
+                        { lastUsed: { $exists: false } },
+                        { lastUsed: null },
+                    ],
+                },
             ],
         };
         if (clientId)
@@ -1149,14 +1451,11 @@ class BaseClientService {
     async rotateSession(mobile) {
         try {
             this.logger.log(`Starting session rotation for ${mobile}`);
-            const newSession = await this.telegramService.createNewSession(mobile);
-            if (!newSession) {
-                this.logger.error(`Failed to create new session for ${mobile}`);
+            const activeSession = await this.getStoredActiveSession(mobile);
+            const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(mobile, activeSession);
+            if (!hasDistinctBackup) {
+                this.logger.error(`Failed to ensure distinct backup session for ${mobile}`);
                 return false;
-            }
-            const users = await this.usersService.search({ mobile });
-            if (users.length > 0) {
-                await this.usersService.update(users[0].tgId, { session: newSession });
             }
             await this.update(mobile, {
                 warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,

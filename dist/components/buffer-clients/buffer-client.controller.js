@@ -21,6 +21,7 @@ const search_buffer_client_dto_1 = require("./dto/search-buffer-client.dto");
 const buffer_client_schema_1 = require("./schemas/buffer-client.schema");
 const update_buffer_client_dto_1 = require("./dto/update-buffer-client.dto");
 const client_swagger_dto_1 = require("../shared/dto/client-swagger.dto");
+const base_client_service_1 = require("../shared/base-client.service");
 let BufferClientController = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
@@ -174,7 +175,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'List buffer clients', description: 'Returns all buffer clients, optionally filtered by status.' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)' }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
-    __param(0, (0, common_1.Query)('status')),
+    __param(0, (0, common_1.Query)('status', new common_1.ParseEnumPipe(base_client_service_1.ClientStatus, { optional: true }))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
@@ -218,7 +219,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by status (active/inactive)', type: String }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Query)('status')),
+    __param(1, (0, common_1.Query)('status', new common_1.ParseEnumPipe(base_client_service_1.ClientStatus, { optional: true }))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
@@ -228,7 +229,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get buffer clients by status' }),
     (0, swagger_1.ApiParam)({ name: 'status', description: 'Status to filter by (active/inactive)', type: String }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
-    __param(0, (0, common_1.Param)('status')),
+    __param(0, (0, common_1.Param)('status', new common_1.ParseEnumPipe(base_client_service_1.ClientStatus))),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)

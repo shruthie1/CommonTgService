@@ -27,7 +27,6 @@ const promote_stat_module_1 = require("./components/promote-stats/promote-stat.m
 const promote_client_module_1 = require("./components/promote-clients/promote-client.module");
 const tg_signup_module_1 = require("./components/TgSignup/tg-signup.module");
 const transaction_module_1 = require("./components/transactions/transaction.module");
-const npoint_module_1 = require("./components/n-point/npoint.module");
 const timestamp_module_1 = require("./components/timestamps/timestamp.module");
 const dynamic_data_module_1 = require("./components/dynamic-data/dynamic-data.module");
 const session_manager_1 = require("./components/session-manager");
@@ -67,7 +66,6 @@ exports.AppModule = AppModule = __decorate([
             stat2_module_1.Stat2Module,
             tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
-            npoint_module_1.NpointModule,
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
         ],
