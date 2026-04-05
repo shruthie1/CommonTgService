@@ -718,6 +718,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         let totalUpdates = 0;
+        const updatedEntries: string[] = [];
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
 
         // Collect buffer clients for priority-sorted processing
@@ -770,8 +771,13 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
                 if (!healthCheckPassed) continue;
             }
-            const currentUpdates = await this.processClient(bufferClient, client);
-            if (currentUpdates > 0) totalUpdates += currentUpdates;
+            const processResult = await this.processClient(bufferClient, client);
+            if (processResult.updateCount > 0) {
+                totalUpdates += processResult.updateCount;
+                updatedEntries.push(
+                    `${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,
+                );
+            }
         }
 
         // Dynamic availability: add new buffer clients if needed
@@ -801,15 +807,22 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
         }
 
-        const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
-        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active: ${totalActiveBufferClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
-
-        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
+        let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: string[] } = {
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
 
-        await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
+        await this.sendBufferCheckSummaryNotification(
+            totalUpdates,
+            dynamicCreateResult.createdCount,
+            dynamicCreateResult.attemptedCount,
+            updatedEntries,
+            dynamicCreateResult.createdEntries,
+        );
     }
 
     // ---- Buffer-specific: updateInfo ----
@@ -1054,7 +1067,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             priority: number;
         }>,
         bufferClientsPerClient?: Map<string, number>,
-    ): Promise<{ createdCount: number; attemptedCount: number }> {
+    ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: string[] }> {
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
 
         let totalNeeded = 0;
@@ -1063,7 +1076,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
 
-        if (totalNeeded === 0) return { createdCount: 0, attemptedCount: 0 };
+        if (totalNeeded === 0) return { createdCount: 0, attemptedCount: 0, createdEntries: [] };
 
         const documents = await this.usersService.executeQuery(
             {
@@ -1089,6 +1102,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
+        const createdEntries: string[] = [];
 
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
@@ -1102,6 +1116,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
+                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
                 }
                 attemptedCount++;
             } catch (error: unknown) {
@@ -1112,7 +1127,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
-        return { createdCount, attemptedCount };
+        return { createdCount, attemptedCount, createdEntries };
     }
 
     // ---- Buffer-specific: Bulk session update ----
@@ -1291,13 +1306,25 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return await this.getUnusedClients(hoursAgo, clientId) as BufferClientDocument[];
     }
 
-    private async sendBufferCheckSummaryNotification(totalUpdates: number, createdCount: number, attemptedCount: number): Promise<void> {
+    private async sendBufferCheckSummaryNotification(
+        totalUpdates: number,
+        createdCount: number,
+        attemptedCount: number,
+        updatedEntries: string[],
+        createdEntries: string[],
+    ): Promise<void> {
         const distribution = await this.getBufferClientDistribution();
         const lines = distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
             .map((item) =>
                 `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
             );
+        const updatedLines = updatedEntries.length > 0
+            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            : ['UpdatedThisRun: none', ''];
+        const createdLines = createdEntries.length > 0
+            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            : ['CreatedThisRunDetails: none', ''];
 
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
@@ -1313,6 +1340,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 `TotalNeeded: ${distribution.summary.totalBufferClientsNeeded}`,
                 `ClientsNeedingMore: ${distribution.summary.clientsNeedingBufferClients}`,
                 '',
+                ...updatedLines,
+                ...createdLines,
+                'PerClientSummary:',
                 ...lines,
             ].join('\n'),
         );

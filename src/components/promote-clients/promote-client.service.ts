@@ -762,6 +762,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         );
 
         let totalUpdates = 0;
+        const updatedEntries: string[] = [];
         const promoteClientsToProcess: Array<{
             promoteClient: PromoteClientDocument;
             client: Client;
@@ -805,8 +806,13 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
                 if (!healthCheckPassed) continue;
             }
-            const currentUpdates = await this.processClient(promoteClient, client);
-            if (currentUpdates > 0) totalUpdates += currentUpdates;
+            const processResult = await this.processClient(promoteClient, client);
+            if (processResult.updateCount > 0) {
+                totalUpdates += processResult.updateCount;
+                updatedEntries.push(
+                    `${client.clientId} | ${promoteClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,
+                );
+            }
         }
 
         // Dynamic availability: add new promote clients if needed
@@ -836,15 +842,22 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
         }
 
-        const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
-        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active: ${totalActivePromoteClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
-
-        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
+        let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: string[] } = {
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
             dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
         }
 
-        await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
+        await this.sendPromoteCheckSummaryNotification(
+            totalUpdates,
+            dynamicCreateResult.createdCount,
+            dynamicCreateResult.attemptedCount,
+            updatedEntries,
+            dynamicCreateResult.createdEntries,
+        );
     }
 
     // ---- Promote-specific: Create promote client from user (redesigned) ----
@@ -969,7 +982,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             priority: number;
         }>,
         promoteClientsPerClient?: Map<string, number>,
-    ): Promise<{ createdCount: number; attemptedCount: number }> {
+    ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: string[] }> {
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
 
         let totalNeeded = 0;
@@ -978,7 +991,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
 
-        if (totalNeeded === 0) return { createdCount: 0, attemptedCount: 0 };
+        if (totalNeeded === 0) return { createdCount: 0, attemptedCount: 0, createdEntries: [] };
 
         const documents = await this.usersService.executeQuery(
             {
@@ -1004,6 +1017,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
+        const createdEntries: string[] = [];
 
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
@@ -1017,6 +1031,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
+                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
                 }
                 attemptedCount++;
             } catch (error: unknown) {
@@ -1027,7 +1042,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
 
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new promote clients (${attemptedCount} attempted)`);
-        return { createdCount, attemptedCount };
+        return { createdCount, attemptedCount, createdEntries };
     }
 
     // ---- Promote-specific: Distribution stats ----
@@ -1137,13 +1152,25 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return await this.getUnusedClients(hoursAgo, clientId) as PromoteClientDocument[];
     }
 
-    private async sendPromoteCheckSummaryNotification(totalUpdates: number, createdCount: number, attemptedCount: number): Promise<void> {
+    private async sendPromoteCheckSummaryNotification(
+        totalUpdates: number,
+        createdCount: number,
+        attemptedCount: number,
+        updatedEntries: string[],
+        createdEntries: string[],
+    ): Promise<void> {
         const distribution = await this.getPromoteClientDistribution();
         const lines = distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
             .map((item) =>
                 `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
             );
+        const updatedLines = updatedEntries.length > 0
+            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            : ['UpdatedThisRun: none', ''];
+        const createdLines = createdEntries.length > 0
+            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            : ['CreatedThisRunDetails: none', ''];
 
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
@@ -1159,6 +1186,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 `TotalNeeded: ${distribution.summary.totalPromoteClientsNeeded}`,
                 `ClientsNeedingMore: ${distribution.summary.clientsNeedingPromoteClients}`,
                 '',
+                ...updatedLines,
+                ...createdLines,
+                'PerClientSummary:',
                 ...lines,
             ].join('\n'),
         );
