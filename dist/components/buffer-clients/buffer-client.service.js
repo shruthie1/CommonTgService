@@ -602,6 +602,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
         }
         let totalUpdates = 0;
+        const updatedEntries = [];
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
         const bufferClientsToProcess = [];
         for (const bufferClient of assignedBufferClients) {
@@ -644,9 +645,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 if (!healthCheckPassed)
                     continue;
             }
-            const currentUpdates = await this.processClient(bufferClient, client);
-            if (currentUpdates > 0)
-                totalUpdates += currentUpdates;
+            const processResult = await this.processClient(bufferClient, client);
+            if (processResult.updateCount > 0) {
+                totalUpdates += processResult.updateCount;
+                updatedEntries.push(`${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`);
+            }
         }
         const clientNeedingBufferClients = [];
         for (const client of clients) {
@@ -664,13 +667,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
                 break;
         }
-        const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active: ${totalActiveBufferClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
-        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
+        let dynamicCreateResult = {
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
-        await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
+        await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
     async updateInfo() {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
@@ -856,7 +861,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
         if (totalNeeded === 0)
-            return { createdCount: 0, attemptedCount: 0 };
+            return { createdCount: 0, attemptedCount: 0, createdEntries: [] };
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
@@ -874,6 +879,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
+        const createdEntries = [];
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId)
@@ -886,6 +892,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
+                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
                 }
                 attemptedCount++;
             }
@@ -896,7 +903,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
         }
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
-        return { createdCount, attemptedCount };
+        return { createdCount, attemptedCount, createdEntries };
     }
     async updateAllClientSessions() {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
@@ -1040,11 +1047,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     async getUnusedBufferClients(hoursAgo = 24, clientId) {
         return await this.getUnusedClients(hoursAgo, clientId);
     }
-    async sendBufferCheckSummaryNotification(totalUpdates, createdCount, attemptedCount) {
+    async sendBufferCheckSummaryNotification(totalUpdates, createdCount, attemptedCount, updatedEntries, createdEntries) {
         const distribution = await this.getBufferClientDistribution();
         const lines = distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
             .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`);
+        const updatedLines = updatedEntries.length > 0
+            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            : ['UpdatedThisRun: none', ''];
+        const createdLines = createdEntries.length > 0
+            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             'Buffer Client Check Summary',
             '',
@@ -1057,6 +1070,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             `TotalNeeded: ${distribution.summary.totalBufferClientsNeeded}`,
             `ClientsNeedingMore: ${distribution.summary.clientsNeedingBufferClients}`,
             '',
+            ...updatedLines,
+            ...createdLines,
+            'PerClientSummary:',
             ...lines,
         ].join('\n'));
     }

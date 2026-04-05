@@ -58,6 +58,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     }>, promoteClientsPerClient?: Map<string, number>): Promise<{
         createdCount: number;
         attemptedCount: number;
+        createdEntries: string[];
     }>;
     getPromoteClientDistribution(): Promise<{
         totalPromoteClients: number;

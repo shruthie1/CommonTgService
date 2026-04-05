@@ -17187,6 +17187,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
         }
         let totalUpdates = 0;
+        const updatedEntries = [];
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
         const bufferClientsToProcess = [];
         for (const bufferClient of assignedBufferClients) {
@@ -17229,9 +17230,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 if (!healthCheckPassed)
                     continue;
             }
-            const currentUpdates = await this.processClient(bufferClient, client);
-            if (currentUpdates > 0)
-                totalUpdates += currentUpdates;
+            const processResult = await this.processClient(bufferClient, client);
+            if (processResult.updateCount > 0) {
+                totalUpdates += processResult.updateCount;
+                updatedEntries.push(`${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`);
+            }
         }
         const clientNeedingBufferClients = [];
         for (const client of clients) {
@@ -17249,13 +17252,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
                 break;
         }
-        const totalActiveBufferClients = await this.bufferClientModel.countDocuments({ status: 'active' });
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Buffer Client Check:\n\nTotal Active: ${totalActiveBufferClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
-        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
+        let dynamicCreateResult = {
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
         }
-        await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
+        await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
     async updateInfo() {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
@@ -17441,7 +17446,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
         if (totalNeeded === 0)
-            return { createdCount: 0, attemptedCount: 0 };
+            return { createdCount: 0, attemptedCount: 0, createdEntries: [] };
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
@@ -17459,6 +17464,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
+        const createdEntries = [];
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId)
@@ -17471,6 +17477,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
+                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
                 }
                 attemptedCount++;
             }
@@ -17481,7 +17488,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
         }
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
-        return { createdCount, attemptedCount };
+        return { createdCount, attemptedCount, createdEntries };
     }
     async updateAllClientSessions() {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
@@ -17625,11 +17632,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     async getUnusedBufferClients(hoursAgo = 24, clientId) {
         return await this.getUnusedClients(hoursAgo, clientId);
     }
-    async sendBufferCheckSummaryNotification(totalUpdates, createdCount, attemptedCount) {
+    async sendBufferCheckSummaryNotification(totalUpdates, createdCount, attemptedCount, updatedEntries, createdEntries) {
         const distribution = await this.getBufferClientDistribution();
         const lines = distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
             .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`);
+        const updatedLines = updatedEntries.length > 0
+            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            : ['UpdatedThisRun: none', ''];
+        const createdLines = createdEntries.length > 0
+            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             'Buffer Client Check Summary',
             '',
@@ -17642,6 +17655,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             `TotalNeeded: ${distribution.summary.totalBufferClientsNeeded}`,
             `ClientsNeedingMore: ${distribution.summary.clientsNeedingBufferClients}`,
             '',
+            ...updatedLines,
+            ...createdLines,
+            'PerClientSummary:',
             ...lines,
         ].join('\n'));
     }
@@ -25200,6 +25216,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             return acc;
         }, new Map()));
         let totalUpdates = 0;
+        const updatedEntries = [];
         const promoteClientsToProcess = [];
         for (const promoteClient of assignedPromoteClients) {
             if (!promoteClient.clientId)
@@ -25237,9 +25254,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 if (!healthCheckPassed)
                     continue;
             }
-            const currentUpdates = await this.processClient(promoteClient, client);
-            if (currentUpdates > 0)
-                totalUpdates += currentUpdates;
+            const processResult = await this.processClient(promoteClient, client);
+            if (processResult.updateCount > 0) {
+                totalUpdates += processResult.updateCount;
+                updatedEntries.push(`${client.clientId} | ${promoteClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`);
+            }
         }
         const clientNeedingPromoteClients = [];
         for (const client of clients) {
@@ -25257,13 +25276,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
                 break;
         }
-        const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
-        await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active: ${totalActivePromoteClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
-        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
+        let dynamicCreateResult = {
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
             dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
         }
-        await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
+        await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
     async createPromoteClientFromUser(document, targetClientId, availableDate) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
@@ -25348,7 +25369,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
         if (totalNeeded === 0)
-            return { createdCount: 0, attemptedCount: 0 };
+            return { createdCount: 0, attemptedCount: 0, createdEntries: [] };
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
@@ -25366,6 +25387,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
+        const createdEntries = [];
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId)
@@ -25378,6 +25400,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
+                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
                 }
                 attemptedCount++;
             }
@@ -25388,7 +25411,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }
         }
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new promote clients (${attemptedCount} attempted)`);
-        return { createdCount, attemptedCount };
+        return { createdCount, attemptedCount, createdEntries };
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
@@ -25461,11 +25484,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     async getUnusedPromoteClients(hoursAgo = 24, clientId) {
         return await this.getUnusedClients(hoursAgo, clientId);
     }
-    async sendPromoteCheckSummaryNotification(totalUpdates, createdCount, attemptedCount) {
+    async sendPromoteCheckSummaryNotification(totalUpdates, createdCount, attemptedCount, updatedEntries, createdEntries) {
         const distribution = await this.getPromoteClientDistribution();
         const lines = distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
             .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`);
+        const updatedLines = updatedEntries.length > 0
+            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            : ['UpdatedThisRun: none', ''];
+        const createdLines = createdEntries.length > 0
+            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             'Promote Client Check Summary',
             '',
@@ -25478,6 +25507,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             `TotalNeeded: ${distribution.summary.totalPromoteClientsNeeded}`,
             `ClientsNeedingMore: ${distribution.summary.clientsNeedingPromoteClients}`,
             '',
+            ...updatedLines,
+            ...createdLines,
+            'PerClientSummary:',
             ...lines,
         ].join('\n'));
     }
@@ -29220,11 +29252,11 @@ class BaseClientService {
     async processClient(doc, client) {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
-            return 0;
+            return { updateCount: 0 };
         }
         if (!client) {
             this.logger.warn(`Client not found for ${this.clientType} client ${doc.mobile}`);
-            return 0;
+            return { updateCount: 0 };
         }
         const now = Date.now();
         let updateCount = 0;
@@ -29240,17 +29272,17 @@ class BaseClientService {
             }
             else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
                 this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                return 0;
+                return { updateCount: 0 };
             }
             if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
                 this.logger.debug(`Client ${doc.mobile} on cooldown`);
-                return 0;
+                return { updateCount: 0 };
             }
             const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
             if (lastUsed > 0) {
                 await this.backfillTimestamps(doc.mobile, doc, now);
                 this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
-                return 0;
+                return { updateCount: 0, updateSummary: 'backfill_timestamps' };
             }
             const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
             this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
@@ -29259,7 +29291,7 @@ class BaseClientService {
             }
             if (warmupAction.action === 'wait') {
                 await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                return 0;
+                return { updateCount: 0 };
             }
             switch (warmupAction.action) {
                 case 'organic_only': {
@@ -29271,35 +29303,35 @@ class BaseClientService {
                     finally {
                         await this.safeUnregisterClient(doc.mobile);
                     }
-                    return 0;
+                    return { updateCount: 0, updateSummary: 'organic_only' };
                 }
                 case 'set_privacy':
                     updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'set_privacy' : null };
                 case 'delete_photos':
                     updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'delete_photos' : null };
                 case 'update_name_bio':
                     updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'update_name_bio' : null };
                 case 'update_username':
                     updateCount = await this.updateUsername(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'update_username' : null };
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'advance_to_ready':
                     await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
                     this.logger.log(`Client ${doc.mobile} advanced to READY`);
-                    return 0;
+                    return { updateCount: 0, updateSummary: 'advance_to_ready' };
                 case 'join_channels':
-                    return 0;
+                    return { updateCount: 0 };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount === 0) {
@@ -29309,10 +29341,10 @@ class BaseClientService {
                             lastUpdateFailure: new Date(),
                         });
                     }
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
                 default:
                     await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                    return 0;
+                    return { updateCount: 0 };
             }
         }
         catch (error) {
@@ -29331,7 +29363,7 @@ class BaseClientService {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 await this.markAsInactive(doc.mobile, reason);
             }
-            return 0;
+            return { updateCount: 0 };
         }
         finally {
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));

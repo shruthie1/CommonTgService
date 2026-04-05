@@ -60,6 +60,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     }>, bufferClientsPerClient?: Map<string, number>): Promise<{
         createdCount: number;
         attemptedCount: number;
+        createdEntries: string[];
     }>;
     updateAllClientSessions(): Promise<void>;
     getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClientDocument[]>;

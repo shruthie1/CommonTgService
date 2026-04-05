@@ -720,11 +720,11 @@ class BaseClientService {
     async processClient(doc, client) {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
-            return 0;
+            return { updateCount: 0 };
         }
         if (!client) {
             this.logger.warn(`Client not found for ${this.clientType} client ${doc.mobile}`);
-            return 0;
+            return { updateCount: 0 };
         }
         const now = Date.now();
         let updateCount = 0;
@@ -740,17 +740,17 @@ class BaseClientService {
             }
             else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
                 this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                return 0;
+                return { updateCount: 0 };
             }
             if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
                 this.logger.debug(`Client ${doc.mobile} on cooldown`);
-                return 0;
+                return { updateCount: 0 };
             }
             const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
             if (lastUsed > 0) {
                 await this.backfillTimestamps(doc.mobile, doc, now);
                 this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
-                return 0;
+                return { updateCount: 0, updateSummary: 'backfill_timestamps' };
             }
             const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
             this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
@@ -759,7 +759,7 @@ class BaseClientService {
             }
             if (warmupAction.action === 'wait') {
                 await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                return 0;
+                return { updateCount: 0 };
             }
             switch (warmupAction.action) {
                 case 'organic_only': {
@@ -771,35 +771,35 @@ class BaseClientService {
                     finally {
                         await this.safeUnregisterClient(doc.mobile);
                     }
-                    return 0;
+                    return { updateCount: 0, updateSummary: 'organic_only' };
                 }
                 case 'set_privacy':
                     updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'set_privacy' : null };
                 case 'delete_photos':
                     updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'delete_photos' : null };
                 case 'update_name_bio':
                     updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'update_name_bio' : null };
                 case 'update_username':
                     updateCount = await this.updateUsername(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'update_username' : null };
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'advance_to_ready':
                     await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
                     this.logger.log(`Client ${doc.mobile} advanced to READY`);
-                    return 0;
+                    return { updateCount: 0, updateSummary: 'advance_to_ready' };
                 case 'join_channels':
-                    return 0;
+                    return { updateCount: 0 };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount === 0) {
@@ -809,10 +809,10 @@ class BaseClientService {
                             lastUpdateFailure: new Date(),
                         });
                     }
-                    return updateCount;
+                    return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
                 default:
                     await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                    return 0;
+                    return { updateCount: 0 };
             }
         }
         catch (error) {
@@ -831,7 +831,7 @@ class BaseClientService {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 await this.markAsInactive(doc.mobile, reason);
             }
-            return 0;
+            return { updateCount: 0 };
         }
         finally {
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
