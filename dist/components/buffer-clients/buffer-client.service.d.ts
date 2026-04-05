@@ -17,6 +17,8 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     private bufferClientModel;
     private promoteClientService;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientServiceRef: PromoteClientService, sessionService: SessionService, botsService: BotsService);
+    private getPrimaryClientMobiles;
+    private isPrimaryClientMobile;
     get model(): Model<BufferClientDocument>;
     get clientType(): 'buffer';
     get config(): ClientConfig;

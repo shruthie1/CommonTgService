@@ -31,11 +31,15 @@ let ClientController = class ClientController {
     constructor(clientService) {
         this.clientService = clientService;
     }
+    sanitizeQuery(query) {
+        const { apiKey: _apiKey, ...rest } = query;
+        return rest;
+    }
     async create(createClientDto) {
         return await this.clientService.create(createClientDto);
     }
     async search(query) {
-        return await this.clientService.search(query);
+        return await this.clientService.search(this.sanitizeQuery(query));
     }
     async searchByPromoteMobile(query) {
         const result = await this.clientService.enhancedSearch({ promoteMobileNumber: query.mobile });
@@ -46,7 +50,7 @@ let ClientController = class ClientController {
         };
     }
     async enhancedSearch(query) {
-        const result = await this.clientService.enhancedSearch(query);
+        const result = await this.clientService.enhancedSearch(this.sanitizeQuery(query));
         return {
             clients: result.clients,
             searchType: result.searchType,
@@ -55,8 +59,8 @@ let ClientController = class ClientController {
         };
     }
     async updateClient(clientId) {
-        this.clientService.updateClient(clientId);
-        return 'Update client initiated';
+        const updated = await this.clientService.updateClient(clientId, '', false, true);
+        return updated ? 'Update client completed' : 'Update client skipped';
     }
     async findAllMasked() {
         return await this.clientService.findAllMasked();
@@ -66,6 +70,12 @@ let ClientController = class ClientController {
     }
     async findAll() {
         return await this.clientService.findAll();
+    }
+    async getPersonaPool(clientId) {
+        return await this.clientService.getPersonaPool(clientId);
+    }
+    async getExistingAssignments(clientId, scope = 'all') {
+        return await this.clientService.getExistingAssignments(clientId, scope);
     }
     async findOne(clientId) {
         return await this.clientService.findOne(clientId);
@@ -180,6 +190,26 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)(':clientId/persona-pool'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get persona pool for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "getPersonaPool", null);
+__decorate([
+    (0, common_1.Get)(':clientId/existing-assignments'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get existing persona assignments for a client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'scope', required: false, enum: ['all', 'buffer', 'promote', 'activeClient'] }),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)('scope')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], ClientController.prototype, "getExistingAssignments", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),

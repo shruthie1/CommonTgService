@@ -20,6 +20,14 @@ interface SearchResult {
         mobile: string;
     }>;
 }
+export interface PersonaAssignmentRecord {
+    mobile: string;
+    assignedFirstName: string | null;
+    assignedLastName: string | null;
+    assignedBio: string | null;
+    assignedProfilePics: string[];
+    source: 'buffer' | 'promote' | 'activeClient';
+}
 type ClientSearchFilter = Partial<SearchClientDto & Pick<EnhancedSearchClientDto, 'promoteMobileNumber'>>;
 type ClientMongoQuery = Record<string, unknown>;
 type ClientQuerySort = Record<string, SortOrder | {
@@ -88,16 +96,19 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<void>;
     private canSetupClient;
     private handleSetupClient;
-    updateClientSession(newSession: string): Promise<void>;
+    updateClientSession(newSession: string, setupMobile?: string): Promise<void>;
     private handleClientArchival;
     private handleFormalities;
     private archiveOldClient;
     private findSafeSetupBufferCandidate;
     private assertDistinctUserBackupSession;
-    updateClient(clientId: string, message?: string): Promise<void>;
+    updateClient(clientId: string, message?: string, skipDeploy?: boolean, throwOnFailure?: boolean): Promise<boolean>;
     private canUpdateClient;
+    private buildMirroredActiveName;
+    private getExpectedClientName;
+    private stampActiveBufferLifecycle;
     private updateClientUsername;
-    private updateClientName;
+    private updateClientIdentity;
     private updateClientPrivacy;
     private updateClientPhotos;
     updateClients(): Promise<void>;
@@ -110,5 +121,19 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     }>;
     addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
     removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
+    getPersonaPool(clientId: string): Promise<{
+        firstNames: string[];
+        bufferLastNames: string[];
+        promoteLastNames: string[];
+        bios: string[];
+        profilePics: string[];
+        dbcoll: string;
+    }>;
+    private buildPersonaAssignmentFilter;
+    private hasPersonaAssignment;
+    getActiveClientAssignment(client: Partial<Client> | null | undefined): Promise<PersonaAssignmentRecord | null>;
+    getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'promote' | 'activeClient'): Promise<{
+        assignments: PersonaAssignmentRecord[];
+    }>;
 }
 export {};

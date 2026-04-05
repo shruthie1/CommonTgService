@@ -239,8 +239,7 @@ async function leaveChannels(ctx, chats) {
             const errorDetails = (0, parseError_1.parseError)(error, `${ctx.phoneNumber} Failed to leave chat ${id}:`, false);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 ctx.logger.error(ctx.phoneNumber, `Permanent error leaving ${id}:`, errorDetails.message);
-                skipCount++;
-                continue;
+                throw new Error(errorDetails.message || `Permanent error leaving ${id}`);
             }
             ctx.logger.warn(ctx.phoneNumber, `Error leaving ${id}:`, errorDetails.message);
             skipCount++;

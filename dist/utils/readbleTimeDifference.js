@@ -8,7 +8,7 @@ function getReadableTimeDifference(ms1, ms2 = Date.now()) {
     const hours = Math.floor((seconds % (3600 * 24)) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    let result = [];
+    const result = [];
     if (days > 0)
         result.push(`${days}d`);
     if (hours > 0)

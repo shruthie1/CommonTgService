@@ -45,7 +45,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
     let offset = 0;
     const limit = 100;
     let forwardedCount = 0;
-    let messages = [];
+    const messages = [];
     do {
         const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
         const messageIds = messages.map((message) => {

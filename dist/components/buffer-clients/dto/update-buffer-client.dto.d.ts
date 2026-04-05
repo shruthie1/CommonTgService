@@ -20,5 +20,9 @@ export declare class UpdateBufferClientDto extends UpdateBufferClientDto_base {
     enrolledAt?: Date;
     organicActivityAt?: Date;
     sessionRotatedAt?: Date;
+    assignedFirstName?: string;
+    assignedLastName?: string;
+    assignedBio?: string;
+    assignedProfilePics?: string[];
 }
 export {};

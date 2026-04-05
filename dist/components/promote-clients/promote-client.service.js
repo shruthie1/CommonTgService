@@ -24,6 +24,7 @@ const mongoose_2 = require("mongoose");
 const promote_client_schema_1 = require("./schemas/promote-client.schema");
 const Telegram_service_1 = require("../Telegram/Telegram.service");
 const Helpers_1 = require("telegram/Helpers");
+const telegram_1 = require("telegram");
 const users_service_1 = require("../users/users.service");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
 const client_service_1 = require("../clients/client.service");
@@ -33,10 +34,10 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const session_manager_1 = require("../session-manager");
-const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
-const checkMe_utils_1 = require("../../utils/checkMe.utils");
+const persona_assignment_1 = require("../../utils/persona-assignment");
+const homoglyph_normalizer_1 = require("../../utils/homoglyph-normalizer");
 const bots_1 = require("../bots");
 const base_client_service_1 = require("../shared/base-client.service");
 const client_helper_utils_1 = require("../shared/client-helper.utils");
@@ -74,27 +75,144 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         try {
             await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'medium');
             const me = await telegramClient.getMe();
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             let updateCount = 0;
-            const expectedName = client?.name.split(' ')[0];
-            if (!(0, checkMe_utils_1.isIncludedWithTolerance)((0, checkMe_utils_1.safeAttemptReverse)(me?.firstName), expectedName, 2)) {
-                this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                await telegramClient.updateProfile(`${(0, utils_1.obfuscateText)(`${expectedName} ${(0, utils_1.getRandomPetName)()}`, {
-                    maintainFormatting: false,
-                    preserveCase: true,
-                    useInvisibleChars: false
-                })} ${(0, utils_1.getCuteEmoji)()}`, '');
-                updateCount = 1;
+            if ((client.firstNames?.length > 0) || (client.promoteLastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
+                let assignment = null;
+                const hasValidAssignment = (doc.assignedFirstName != null ||
+                    doc.assignedLastName != null ||
+                    doc.assignedBio != null);
+                if (hasValidAssignment) {
+                    assignment = {
+                        assignedFirstName: doc.assignedFirstName,
+                        assignedLastName: doc.assignedLastName,
+                        assignedBio: doc.assignedBio,
+                        assignedProfilePics: doc.assignedProfilePics,
+                    };
+                }
+                else {
+                    const pool = {
+                        firstNames: client.firstNames,
+                        lastNames: client.promoteLastNames || [],
+                        bios: client.bios || [],
+                        profilePics: client.profilePics || [],
+                        dbcoll: client.dbcoll,
+                    };
+                    const existingAssignments = await this.model.find({
+                        clientId: doc.clientId, status: 'active',
+                        mobile: { $ne: doc.mobile },
+                        $or: [
+                            { assignedFirstName: { $ne: null } },
+                            { assignedLastName: { $ne: null } },
+                            { assignedBio: { $ne: null } },
+                            { 'assignedProfilePics.0': { $exists: true } },
+                        ],
+                    }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
+                    try {
+                        const bufferAssignments = await this.bufferClientService.model.find({
+                            clientId: doc.clientId, status: 'active',
+                            mobile: { $ne: doc.mobile },
+                            $or: [
+                                { assignedFirstName: { $ne: null } },
+                                { assignedLastName: { $ne: null } },
+                                { assignedBio: { $ne: null } },
+                                { 'assignedProfilePics.0': { $exists: true } },
+                            ],
+                        }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
+                        existingAssignments.push(...bufferAssignments);
+                    }
+                    catch { }
+                    const activeClientAssignment = await this.clientService.getActiveClientAssignment(client);
+                    if (activeClientAssignment && activeClientAssignment.mobile !== doc.mobile && !existingAssignments.some(a => a.mobile === activeClientAssignment.mobile)) {
+                        existingAssignments.push(activeClientAssignment);
+                    }
+                    const usedKeys = new Set(existingAssignments.map(a => (0, persona_assignment_1.personaKey)({
+                        firstName: a.assignedFirstName,
+                        lastName: a.assignedLastName || '',
+                        bio: a.assignedBio || '',
+                        profilePics: a.assignedProfilePics || [],
+                    })));
+                    const candidates = (0, persona_assignment_1.generateCandidateCombinations)(pool, doc.mobile);
+                    const chosen = candidates.find(c => !usedKeys.has((0, persona_assignment_1.personaKey)(c)));
+                    if (!chosen) {
+                        this.logger.warn(`No unique persona candidate available for ${doc.mobile}, falling back to first candidate`);
+                    }
+                    const pick = chosen || candidates[0];
+                    if (pick) {
+                        const result = await this.model.findOneAndUpdate({
+                            mobile: doc.mobile,
+                            $or: [
+                                {
+                                    assignedFirstName: null,
+                                    assignedLastName: null,
+                                    assignedBio: null,
+                                    'assignedProfilePics.0': { $exists: false },
+                                },
+                            ],
+                        }, { $set: {
+                                assignedFirstName: pick.firstName,
+                                assignedLastName: pick.lastName || null,
+                                assignedBio: pick.bio || null,
+                                assignedProfilePics: pick.profilePics,
+                            } }, { new: true });
+                        if (result) {
+                            assignment = {
+                                assignedFirstName: result.assignedFirstName,
+                                assignedLastName: result.assignedLastName,
+                                assignedBio: result.assignedBio,
+                                assignedProfilePics: result.assignedProfilePics,
+                            };
+                            this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
+                        }
+                        else {
+                            this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                        }
+                    }
+                }
+                const hasAnyAssignment = assignment != null && (assignment.assignedFirstName != null ||
+                    assignment.assignedLastName != null ||
+                    assignment.assignedBio != null);
+                if (hasAnyAssignment) {
+                    const fullUser = await telegramClient.client.invoke(new telegram_1.Api.users.GetFullUser({ id: new telegram_1.Api.InputUserSelf() }));
+                    const currentLastName = fullUser?.users?.[0]?.lastName || '';
+                    const currentBio = fullUser?.fullUser?.about || '';
+                    const firstNameWrong = assignment?.assignedFirstName != null
+                        && !(0, homoglyph_normalizer_1.nameMatchesAssignment)(me.firstName || '', assignment.assignedFirstName);
+                    const lastNameWrong = assignment?.assignedLastName != null
+                        && !(0, homoglyph_normalizer_1.lastNameMatches)(currentLastName, assignment.assignedLastName);
+                    if (firstNameWrong || lastNameWrong) {
+                        const displayFirstName = assignment.assignedFirstName || me.firstName || '';
+                        const displayLastName = assignment.assignedLastName || '';
+                        this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
+                        await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'medium');
+                        await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({
+                            firstName: displayFirstName,
+                            lastName: displayLastName,
+                        }));
+                        updateCount++;
+                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
+                    }
+                    if (assignment.assignedBio != null && currentBio !== assignment.assignedBio) {
+                        this.logger.log(`Updating persona bio for ${doc.mobile}`);
+                        await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
+                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 3000, 8000, 18000));
+                        await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({ about: assignment.assignedBio }));
+                        updateCount++;
+                    }
+                }
+            }
+            else {
+                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
             }
             await this.update(doc.mobile, {
-                nameBioUpdatedAt: new Date(),
+                ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated name and bio for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return updateCount;
         }
         catch (error) {
@@ -127,7 +245,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Cleared username for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         }
         catch (error) {
@@ -188,7 +306,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     async refillJoinQueue(clientId) {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing)
             return 0;
-        if (this.telegramService.getActiveClientSetup())
+        if (this.telegramService.hasActiveClientSetup())
             return 0;
         this.resetDailyJoinCountersIfNeeded();
         const query = {
@@ -397,12 +515,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
             await this.performHealthCheck(client.mobile, lastChecked, now);
             if (i < clients.length - 1) {
-                await (0, Helpers_1.sleep)(12000 + Math.random() * 8000);
+                await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(16000, 2500, 12000, 20000));
             }
         }
     }
     async joinchannelForPromoteClients(skipExisting = true) {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping promotion';
         }
         this.logger.log('Starting join channel process');
@@ -487,7 +605,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
     }
     async checkPromoteClients() {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
             return;
         }
@@ -582,7 +700,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 return false;
             }
             const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
-            await (0, Helpers_1.sleep)(5000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const promoteClient = {
@@ -624,7 +742,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
         finally {
             await this.safeUnregisterClient(document.mobile);
-            await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
     }
     async addNewUserstoPromoteClients(badIds, goodIds, clientsNeedingPromoteClients = [], promoteClientsPerClient) {
@@ -681,7 +799,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }
             catch (error) {
                 this.logger.error(`Error creating connection for ${document.mobile}`);
-                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
                 attemptedCount++;
             }
         }

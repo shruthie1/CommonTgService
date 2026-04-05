@@ -75,11 +75,17 @@ let TelegramService = class TelegramService {
     async onModuleDestroy() {
         this.logger.info('system', 'Module destroy initiated');
     }
-    getActiveClientSetup() {
-        return TelegramManager_1.default.getActiveClientSetup();
+    getActiveClientSetup(newMobile) {
+        return TelegramManager_1.default.getActiveClientSetup(newMobile);
+    }
+    hasActiveClientSetup() {
+        return TelegramManager_1.default.hasActiveClientSetup();
     }
     setActiveClientSetup(data) {
         TelegramManager_1.default.setActiveClientSetup(data);
+    }
+    clearActiveClientSetup(newMobile) {
+        TelegramManager_1.default.clearActiveClientSetup(newMobile);
     }
     async getMessages(mobile, username, limit = 8, offsetId = 0) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);

@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -10,12 +43,13 @@ const parseError_1 = require("../../utils/parseError");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
+const fs = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
-const cloudinary_1 = require("../../cloudinary");
 const telegram_1 = require("telegram");
 const Password_1 = require("telegram/Password");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
 const bots_1 = require("../bots");
+const helpers_1 = require("../Telegram/manager/helpers");
 const client_helper_utils_1 = require("./client-helper.utils");
 const organic_activity_1 = require("./organic-activity");
 Object.defineProperty(exports, "performOrganicActivity", { enumerable: true, get: function () { return organic_activity_1.performOrganicActivity; } });
@@ -308,6 +342,8 @@ class BaseClientService {
     clearJoinMap() {
         const mapSize = this.joinChannelMap.size;
         this.joinChannelMap.clear();
+        this.joinFailureCounts.clear();
+        this.joinScopeClientId = null;
         this.clearJoinChannelInterval();
         this.logger.debug(`JoinMap cleared, removed ${mapSize} entries`);
     }
@@ -341,7 +377,7 @@ class BaseClientService {
         return preservedMobiles;
     }
     async performHealthCheck(mobile, lastChecked, now) {
-        const healthCheckIntervalDays = 5 + Math.random() * 4;
+        const healthCheckIntervalDays = client_helper_utils_1.ClientHelperUtils.gaussianRandom(7, 1.5, 4, 10);
         const needsHealthCheck = !lastChecked || (now - lastChecked > healthCheckIntervalDays * this.ONE_DAY_MS);
         if (!needsHealthCheck) {
             return true;
@@ -390,7 +426,7 @@ class BaseClientService {
                 organicActivityAt: new Date(),
             });
             this.logger.debug(`Updated privacy settings for ${doc.mobile}`);
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return 1;
         }
         catch (error) {
@@ -429,7 +465,7 @@ class BaseClientService {
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
             return photos.photos.length > 0 ? 1 : 0;
         }
         catch (error) {
@@ -449,29 +485,107 @@ class BaseClientService {
             await this.safeUnregisterClient(doc.mobile);
         }
     }
+    getProfilePicExtension(url) {
+        try {
+            const parsed = new URL(url);
+            const urlExt = path_1.default.extname(parsed.pathname);
+            return urlExt || '.jpg';
+        }
+        catch {
+            return '.jpg';
+        }
+    }
+    async uploadProfilePhotosFromUrls(telegramClient, doc, urls) {
+        let filesUploaded = 0;
+        for (let index = 0; index < urls.length; index++) {
+            const url = urls[index];
+            const tempPath = path_1.default.join('/tmp', `persona-pool-${doc.mobile}-${Date.now()}-${index}${this.getProfilePicExtension(url)}`);
+            try {
+                const buffer = await (0, helpers_1.downloadFileFromUrl)(url);
+                fs.writeFileSync(tempPath, buffer);
+                await telegramClient.updateProfilePic(tempPath);
+                filesUploaded++;
+                this.logger.debug(`Uploaded profile pic pool URL for ${doc.mobile}`, {
+                    url,
+                });
+                await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Failed to upload profile pic pool URL for ${doc.mobile}: ${errorMessage}`, {
+                    url,
+                });
+            }
+            finally {
+                if (fs.existsSync(tempPath))
+                    fs.unlinkSync(tempPath);
+            }
+        }
+        return filesUploaded;
+    }
+    async refreshProfilePhotosOnDemand(mobile) {
+        const doc = await this.findOne(mobile, false);
+        if (!doc) {
+            throw new common_1.NotFoundException(`${this.clientType} client ${mobile} not found`);
+        }
+        if (!doc.clientId) {
+            throw new common_1.NotFoundException(`${this.clientType} client ${mobile} is not linked to a clientId`);
+        }
+        const client = await this.clientService.findOne(doc.clientId, false);
+        if (!client) {
+            throw new common_1.NotFoundException(`Client ${doc.clientId} not found for ${mobile}`);
+        }
+        const assignedPhotoUrls = (doc.assignedProfilePics || []).filter((url) => typeof url === 'string' && url.trim().length > 0);
+        if (assignedPhotoUrls.length < 2) {
+            this.logger.warn(`Skipping on-demand profile photo refresh for ${mobile}: assigned profile pic URLs are missing or too small`, {
+                clientId: doc.clientId,
+                assignedPhotoCount: assignedPhotoUrls.length,
+            });
+            return { refreshed: false, uploadedCount: 0 };
+        }
+        const uploadedCount = await this.updateProfilePhotos(doc, client, doc.failedUpdateAttempts || 0);
+        this.logger.info(`Completed on-demand profile photo refresh for ${mobile}`, {
+            clientId: doc.clientId,
+            uploadedCount,
+        });
+        return { refreshed: uploadedCount > 0, uploadedCount };
+    }
     async updateProfilePhotos(doc, client, failedAttempts) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
             await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'medium');
             const photos = await telegramClient.client.invoke(new telegram_1.Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
             let updateCount = 0;
-            if (photos.photos.length < 2) {
-                await cloudinary_1.CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
-                const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-                const randomPhoto = photoPaths[Math.floor(Math.random() * photoPaths.length)];
-                await telegramClient.updateProfilePic(path_1.default.join(process.cwd(), randomPhoto));
-                updateCount = 1;
-                this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile}`);
+            if (doc.assignedProfilePics?.length > 0) {
+                if (photos.photos.length < 2) {
+                    const assignedPhotoUrls = doc.assignedProfilePics.filter((url) => typeof url === 'string' && url.trim().length > 0);
+                    if (assignedPhotoUrls.length > 1) {
+                        this.logger.info(`Using assigned profile pic URLs for ${doc.mobile}`, { urlCount: assignedPhotoUrls.length });
+                        updateCount = await this.uploadProfilePhotosFromUrls(telegramClient, doc, assignedPhotoUrls);
+                    }
+                    else {
+                        this.logger.warn(`Skipping profile photo update for ${doc.mobile}: assigned profile pic pool is missing or too small`, {
+                            assignedCount: assignedPhotoUrls.length,
+                        });
+                    }
+                    if (updateCount === 0) {
+                        this.logger.warn(`No profile photos uploaded from assigned profile pic URLs for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
+                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
+                        return 0;
+                    }
+                }
+            }
+            else {
+                this.logger.debug(`Skipping profile photo update for ${doc.mobile}: no assigned profile pic URLs available`);
             }
             await this.update(doc.mobile, {
-                profilePicsUpdatedAt: new Date(),
+                ...(updateCount > 0 ? { profilePicsUpdatedAt: new Date() } : {}),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
                 lastUpdateFailure: null,
                 organicActivityAt: new Date(),
             });
-            await (0, Helpers_1.sleep)(40000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
             return updateCount;
         }
         catch (error) {
@@ -534,7 +648,7 @@ class BaseClientService {
                 }
             }
             await telegramClient.set2fa();
-            await (0, Helpers_1.sleep)(30000 + Math.random() * 30000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(45000, 7500, 30000, 60000));
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
@@ -568,7 +682,7 @@ class BaseClientService {
         try {
             await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'medium');
             await telegramClient.removeOtherAuths();
-            await (0, Helpers_1.sleep)(20000 + Math.random() * 20000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(30000, 5000, 20000, 40000));
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
@@ -615,7 +729,7 @@ class BaseClientService {
         const now = Date.now();
         let updateCount = 0;
         try {
-            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             doc = await this.repairWarmupMetadata(doc, now);
             const failedAttempts = doc.failedUpdateAttempts || 0;
             const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
@@ -720,7 +834,7 @@ class BaseClientService {
             return 0;
         }
         finally {
-            await (0, Helpers_1.sleep)(15000 + Math.random() * 10000);
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
         }
     }
     async backfillTimestamps(mobile, doc, now) {
@@ -884,7 +998,7 @@ class BaseClientService {
                 if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
-                    await (0, Helpers_1.sleep)(10000 + Math.random() * 5000);
+                    await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
                     try {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
@@ -899,6 +1013,7 @@ class BaseClientService {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
+                    await this.expireUserByMobile(mobile);
                 }
                 else {
                     const channels = this.joinChannelMap.get(mobile);
@@ -1007,6 +1122,7 @@ class BaseClientService {
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.markAsInactive(mobile, reason);
+                    await this.expireUserByMobile(mobile);
                     this.removeFromLeaveMap(mobile);
                 }
                 else if (channelsToProcess.length > 0) {
@@ -1150,6 +1266,17 @@ class BaseClientService {
     async ensureDistinctUsersBackupSession(mobile, activeSession) {
         const user = await this.getOrEnsureDistinctUsersBackupSession(mobile, activeSession);
         return !!user?.session?.trim();
+    }
+    async expireUserByMobile(mobile) {
+        try {
+            const users = await this.usersService.search({ mobile, expired: false });
+            const user = users[0];
+            if (user?.tgId) {
+                await this.usersService.update(user.tgId, { expired: true });
+            }
+        }
+        catch {
+        }
     }
     normalizeDateString(dateValue) {
         if (!dateValue)

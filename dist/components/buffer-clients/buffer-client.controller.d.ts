@@ -8,6 +8,7 @@ import { ClientStatusType } from '../shared/base-client.service';
 export declare class BufferClientController {
     private readonly clientService;
     constructor(clientService: BufferClientService);
+    private sanitizeQuery;
     create(createClientDto: CreateBufferClientDto): Promise<BufferClient>;
     search(query: SearchBufferClientDto): Promise<BufferClient[]>;
     updateInfo(): Promise<string>;
@@ -17,6 +18,10 @@ export declare class BufferClientController {
     findAll(status?: ClientStatusType): Promise<BufferClient[]>;
     setAsBufferClient(mobile: string, clientId: string): Promise<string>;
     executeQuery(query: object): Promise<any>;
+    refreshProfilePics(mobile: string): Promise<{
+        refreshed: boolean;
+        uploadedCount: number;
+    }>;
     getBufferClientDistribution(): Promise<any>;
     getBufferClientsByClientId(clientId: string, status?: ClientStatusType): Promise<BufferClient[]>;
     getBufferClientsByStatus(status: ClientStatusType): Promise<BufferClient[]>;

@@ -26,11 +26,15 @@ let PromoteClientController = class PromoteClientController {
     constructor(clientService) {
         this.clientService = clientService;
     }
+    sanitizeQuery(query) {
+        const { apiKey: _apiKey, ...rest } = query;
+        return rest;
+    }
     async create(createClientDto) {
         return this.clientService.create(createClientDto);
     }
     async search(query) {
-        return this.clientService.search(query);
+        return this.clientService.search(this.sanitizeQuery(query));
     }
     async joinChannelsforPromoteClients() {
         return this.clientService.joinchannelForPromoteClients();
@@ -74,6 +78,9 @@ let PromoteClientController = class PromoteClientController {
     async executeQuery(query) {
         return this.clientService.executeQuery(query);
     }
+    async refreshProfilePics(mobile) {
+        return this.clientService.refreshProfilePhotosOnDemand(mobile);
+    }
     async getPromoteClientDistribution() {
         return this.clientService.getPromoteClientDistribution();
     }
@@ -105,7 +112,11 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.getLeastRecentlyUsedPromoteClients(clientId, limit || 1);
     }
     async getNextAvailable(clientId) {
-        return this.clientService.getNextAvailablePromoteClient(clientId);
+        const client = await this.clientService.getNextAvailablePromoteClient(clientId);
+        if (!client) {
+            throw new common_1.NotFoundException(`No available promote client found for ${clientId}`);
+        }
+        return client;
     }
     async getUnusedPromoteClients(hoursAgo, clientId) {
         return this.clientService.getUnusedPromoteClients(hoursAgo || 24, clientId);
@@ -253,6 +264,16 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "executeQuery", null);
+__decorate([
+    (0, common_1.Post)('profile-pics/refresh/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh profile pics for a promote client on demand' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { refreshed: { type: 'boolean' }, uploadedCount: { type: 'number' } } } }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "refreshProfilePics", null);
 __decorate([
     (0, common_1.Get)('distribution'),
     (0, swagger_1.ApiOperation)({ summary: 'Get promote client distribution per client' }),

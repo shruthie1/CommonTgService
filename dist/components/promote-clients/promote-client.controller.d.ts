@@ -8,6 +8,7 @@ import { ClientStatusType } from '../shared/base-client.service';
 export declare class PromoteClientController {
     private readonly clientService;
     constructor(clientService: PromoteClientService);
+    private sanitizeQuery;
     create(createClientDto: CreatePromoteClientDto): Promise<PromoteClient>;
     search(query: SearchPromoteClientDto): Promise<PromoteClient[]>;
     joinChannelsforPromoteClients(): Promise<string>;
@@ -21,6 +22,10 @@ export declare class PromoteClientController {
     createdOrupdate(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
     remove(mobile: string): Promise<void>;
     executeQuery(query: object): Promise<any>;
+    refreshProfilePics(mobile: string): Promise<{
+        refreshed: boolean;
+        uploadedCount: number;
+    }>;
     getPromoteClientDistribution(): Promise<any>;
     getPromoteClientsByStatus(status: ClientStatusType): Promise<PromoteClient[]>;
     getPromoteClientsWithMessages(): Promise<Array<{
