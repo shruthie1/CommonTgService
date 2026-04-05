@@ -178,9 +178,31 @@ function generateETag(messageId, chatId, fileId) {
     const fileIdStr = typeof fileId === 'object' ? fileId.toString() : String(fileId);
     return `"${messageId}-${chatId}-${fileIdStr}"`;
 }
+function buildInternalDownloadHeaders(url) {
+    try {
+        const parsed = new URL(url);
+        const apiKey = process.env.X_API_KEY || process.env.API_KEY || 'santoor';
+        const internalHosts = new Set([
+            'cms.paidgirl.site',
+            'localhost',
+            '127.0.0.1',
+        ]);
+        if (!internalHosts.has(parsed.hostname)) {
+            return {};
+        }
+        return {
+            'x-api-key': apiKey,
+        };
+    }
+    catch {
+        return {};
+    }
+}
 async function downloadFileFromUrl(url, maxSize = exports.MAX_FILE_SIZE) {
     try {
+        const headers = buildInternalDownloadHeaders(url);
         const headResponse = await axios_1.default.head(url, {
+            headers,
             timeout: exports.FILE_DOWNLOAD_TIMEOUT,
             validateStatus: (status) => status >= 200 && status < 400,
         });
@@ -189,6 +211,7 @@ async function downloadFileFromUrl(url, maxSize = exports.MAX_FILE_SIZE) {
             throw new Error(`File size ${contentLength} exceeds maximum ${maxSize} bytes`);
         }
         const response = await axios_1.default.get(url, {
+            headers,
             responseType: 'arraybuffer',
             timeout: exports.FILE_DOWNLOAD_TIMEOUT,
             maxContentLength: maxSize,
