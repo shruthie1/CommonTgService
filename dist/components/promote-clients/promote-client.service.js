@@ -273,7 +273,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         };
         const newUser = new this.promoteClientModel(promoteClientData);
         const result = await newUser.save();
-        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client Created:\n\nMobile: ${promoteClient.mobile}`);
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
+            'Promote Client Created',
+            '',
+            `Mobile: ${promoteClient.mobile}`,
+            `ClientId: ${promoteClient.clientId || '-'}`,
+            `Status: ${result.status}`,
+            `AvailableDate: ${promoteClient.availableDate || '-'}`,
+            `Channels: ${promoteClient.channels ?? '-'}`,
+            `Message: ${promoteClient.message || '-'}`,
+        ].join('\n'));
         return result;
     }
     async findAll(statusFilter) {
@@ -687,9 +696,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
         const totalActivePromoteClients = await this.promoteClientModel.countDocuments({ status: 'active' });
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Promote Client Check:\n\nTotal Active: ${totalActivePromoteClients}\nSlots Needed: ${totalSlotsNeeded}`)}`);
+        let dynamicCreateResult = { createdCount: 0, attemptedCount: 0 };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
         }
+        await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount);
     }
     async createPromoteClientFromUser(document, targetClientId, availableDate) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(document.mobile, { autoDisconnect: false });
@@ -724,6 +735,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 }
             }, { new: true, upsert: true }).exec();
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
+            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
+                'Promote Client Enrolled',
+                '',
+                `ClientId: ${targetClientId}`,
+                `Mobile: ${document.mobile}`,
+                `AvailableDate: ${targetAvailableDate}`,
+                `Channels: ${channels.ids.length}`,
+                `WarmupPhase: ${base_client_service_1.WarmupPhase.ENROLLED}`,
+                `SourceTgId: ${document.tgId}`,
+            ].join('\n'));
             return true;
         }
         catch (error) {
@@ -764,7 +785,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
         totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
         if (totalNeeded === 0)
-            return;
+            return { createdCount: 0, attemptedCount: 0 };
         const documents = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
             expired: false,
@@ -804,6 +825,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }
         }
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new promote clients (${attemptedCount} attempted)`);
+        return { createdCount, attemptedCount };
     }
     async getPromoteClientDistribution() {
         const clients = await this.clientService.findAll();
@@ -875,6 +897,26 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     }
     async getUnusedPromoteClients(hoursAgo = 24, clientId) {
         return await this.getUnusedClients(hoursAgo, clientId);
+    }
+    async sendPromoteCheckSummaryNotification(totalUpdates, createdCount, attemptedCount) {
+        const distribution = await this.getPromoteClientDistribution();
+        const lines = distribution.distributionPerClient
+            .sort((a, b) => a.clientId.localeCompare(b.clientId))
+            .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`);
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
+            'Promote Client Check Summary',
+            '',
+            `Active: ${distribution.activePromoteClients}`,
+            `Inactive: ${distribution.inactivePromoteClients}`,
+            `Unassigned: ${distribution.unassignedPromoteClients}`,
+            `UpdatesApplied: ${totalUpdates}`,
+            `CreatedThisRun: ${createdCount}`,
+            `AttemptedCreates: ${attemptedCount}`,
+            `TotalNeeded: ${distribution.summary.totalPromoteClientsNeeded}`,
+            `ClientsNeedingMore: ${distribution.summary.clientsNeedingPromoteClients}`,
+            '',
+            ...lines,
+        ].join('\n'));
     }
     removeFromPromoteMap(key) { this.removeFromJoinMap(key); }
     clearPromoteMap() { this.clearJoinMap(); }

@@ -55,7 +55,10 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
         totalNeededForCount: number;
         calculationReason: string;
         priority: number;
-    }>, promoteClientsPerClient?: Map<string, number>): Promise<void>;
+    }>, promoteClientsPerClient?: Map<string, number>): Promise<{
+        createdCount: number;
+        attemptedCount: number;
+    }>;
     getPromoteClientDistribution(): Promise<{
         totalPromoteClients: number;
         unassignedPromoteClients: number;
@@ -90,6 +93,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     getLeastRecentlyUsedPromoteClients(clientId: string, limit?: number): Promise<PromoteClient[]>;
     getNextAvailablePromoteClient(clientId: string): Promise<PromoteClient | null>;
     getUnusedPromoteClients(hoursAgo?: number, clientId?: string): Promise<PromoteClientDocument[]>;
+    private sendPromoteCheckSummaryNotification;
     removeFromPromoteMap(key: string): void;
     clearPromoteMap(): void;
 }

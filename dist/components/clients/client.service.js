@@ -584,8 +584,8 @@ let ClientService = ClientService_1 = class ClientService {
                 mirroredActiveName,
             });
             try {
-                await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date(), status: 'active' });
-                this.logger.debug(`[${clientId}] Marked replacement buffer doc as active/in-use`, { newMobile });
+                await this.bufferClientService.setPrimaryInUse(clientId, newMobile);
+                this.logger.debug(`[${clientId}] Marked replacement buffer doc as the sole active/in-use primary`, { newMobile });
             }
             catch (bufferUpdateError) {
                 (0, parseError_1.parseError)(bufferUpdateError, `[${clientId}] Failed to mark ${newMobile} as in-use after cutover`);

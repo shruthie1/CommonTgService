@@ -33,6 +33,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]>;
     executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<BufferClientDocument[]>;
     updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument>;
+    setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument>;
     refillJoinQueue(clientId?: string | null): Promise<number>;
     private fetchJoinableChannels;
     markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null>;
@@ -56,7 +57,10 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
         totalNeededForCount: number;
         calculationReason: string;
         priority: number;
-    }>, bufferClientsPerClient?: Map<string, number>): Promise<void>;
+    }>, bufferClientsPerClient?: Map<string, number>): Promise<{
+        createdCount: number;
+        attemptedCount: number;
+    }>;
     updateAllClientSessions(): Promise<void>;
     getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClientDocument[]>;
     getBufferClientDistribution(): Promise<{
@@ -93,4 +97,5 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     getLeastRecentlyUsedBufferClients(clientId: string, limit?: number): Promise<BufferClient[]>;
     getNextAvailableBufferClient(clientId: string): Promise<BufferClientDocument | null>;
     getUnusedBufferClients(hoursAgo?: number, clientId?: string): Promise<BufferClientDocument[]>;
+    private sendBufferCheckSummaryNotification;
 }
