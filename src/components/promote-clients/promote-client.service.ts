@@ -29,11 +29,9 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { getCuteEmoji, getRandomPetName, obfuscateText } from '../../utils';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { Client } from '../clients/schemas/client.schema';
 import isPermanentError from '../../utils/isPermanentError';
-import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
 import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
 import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-normalizer';
 import { BotsService, ChannelCategory } from '../bots';
@@ -126,47 +124,45 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             let updateCount = 0;
 
-            if ((client.firstNames?.length > 0) || (client.lastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
+            if ((client.firstNames?.length > 0) || (client.promoteLastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
                 // ── PERSONA BRANCH ──────────────────────────────────────────
-                let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedPhotoFilenames'> | null = null;
+                let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedProfilePics'> | null = null;
 
                 // 1. Check if doc already has a valid assignment (any assigned field set AND pool version matches)
                 const hasValidAssignment = (
                     doc.assignedFirstName != null ||
                     doc.assignedLastName != null ||
-                    doc.assignedBio != null ||
-                    (doc.assignedPhotoFilenames?.length || 0) > 0
-                ) && doc.assignedPersonaPoolVersion === client.personaPoolVersion;
+                    doc.assignedBio != null
+                );
 
                 if (hasValidAssignment) {
                     assignment = {
                         assignedFirstName: doc.assignedFirstName,
                         assignedLastName: doc.assignedLastName,
                         assignedBio: doc.assignedBio,
-                        assignedPhotoFilenames: doc.assignedPhotoFilenames,
+                        assignedProfilePics: doc.assignedProfilePics,
                     };
                 } else {
                     // 2. Atomic assignment via findOneAndUpdate with guard
                     const pool: PersonaPool = {
                         firstNames: client.firstNames,
-                        lastNames: client.lastNames || [],
+                        lastNames: client.promoteLastNames || [],
                         bios: client.bios || [],
                         profilePics: client.profilePics || [],
                         dbcoll: client.dbcoll,
-                        personaPoolVersion: client.personaPoolVersion,
                     };
 
                     // Query existing assignments for dedup (promote collection)
-                    const existingAssignments: Array<{ assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedPhotoFilenames?: string[] }> = await this.model.find({
+                    const existingAssignments: Array<{ mobile: string; assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedProfilePics?: string[] }> = await this.model.find({
                         clientId: doc.clientId, status: 'active',
                         mobile: { $ne: doc.mobile },
                         $or: [
                             { assignedFirstName: { $ne: null } },
                             { assignedLastName: { $ne: null } },
                             { assignedBio: { $ne: null } },
-                            { 'assignedPhotoFilenames.0': { $exists: true } },
+                            { 'assignedProfilePics.0': { $exists: true } },
                         ],
-                    }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+                    }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
 
                     // Cross-collection dedup: also fetch buffer assignments (best-effort)
                     try {
@@ -177,17 +173,22 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                                 { assignedFirstName: { $ne: null } },
                                 { assignedLastName: { $ne: null } },
                                 { assignedBio: { $ne: null } },
-                                { 'assignedPhotoFilenames.0': { $exists: true } },
+                                { 'assignedProfilePics.0': { $exists: true } },
                             ],
-                        }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+                        }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
                         existingAssignments.push(...bufferAssignments);
                     } catch { /* cross-collection dedup is best-effort */ }
+
+                    const activeClientAssignment = await this.clientService.getActiveClientAssignment(client);
+                    if (activeClientAssignment && activeClientAssignment.mobile !== doc.mobile && !existingAssignments.some(a => a.mobile === activeClientAssignment.mobile)) {
+                        existingAssignments.push(activeClientAssignment);
+                    }
 
                     const usedKeys = new Set(existingAssignments.map(a => personaKey({
                         firstName: a.assignedFirstName,
                         lastName: a.assignedLastName || '',
                         bio: a.assignedBio || '',
-                        photoFilenames: a.assignedPhotoFilenames || [],
+                        profilePics: a.assignedProfilePics || [],
                     })));
 
                     const candidates = generateCandidateCombinations(pool, doc.mobile);
@@ -207,17 +208,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                                         assignedFirstName: null,
                                         assignedLastName: null,
                                         assignedBio: null,
-                                        'assignedPhotoFilenames.0': { $exists: false },
+                                        'assignedProfilePics.0': { $exists: false },
                                     },
-                                    { assignedPersonaPoolVersion: { $ne: client.personaPoolVersion } },
                                 ],
                             },
                             { $set: {
                                 assignedFirstName: pick.firstName,
                                 assignedLastName: pick.lastName || null,
                                 assignedBio: pick.bio || null,
-                                assignedPhotoFilenames: pick.photoFilenames,
-                                assignedPersonaPoolVersion: client.personaPoolVersion,
+                                assignedProfilePics: pick.profilePics,
                             } },
                             { new: true },
                         );
@@ -227,7 +226,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                                 assignedFirstName: result.assignedFirstName,
                                 assignedLastName: result.assignedLastName,
                                 assignedBio: result.assignedBio,
-                                assignedPhotoFilenames: result.assignedPhotoFilenames,
+                                assignedProfilePics: result.assignedProfilePics,
                             };
                             this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
                         } else {
@@ -240,8 +239,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 const hasAnyAssignment = assignment != null && (
                     assignment.assignedFirstName != null ||
                     assignment.assignedLastName != null ||
-                    assignment.assignedBio != null ||
-                    (assignment.assignedPhotoFilenames?.length || 0) > 0
+                    assignment.assignedBio != null
                 );
                 if (hasAnyAssignment) {
                     // Read current TG profile state once (needed for lastName and bio checks)
@@ -259,18 +257,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     if (firstNameWrong || lastNameWrong) {
                         const displayFirstName = assignment.assignedFirstName || me.firstName || '';
                         const displayLastName = assignment.assignedLastName || '';
-                        const displayName = displayLastName
-                            ? `${displayFirstName} ${displayLastName}`
-                            : displayFirstName;
-                        const obfuscatedDisplayName = `${obfuscateText(displayName, {
-                            maintainFormatting: false,
-                            preserveCase: true,
-                            useInvisibleChars: false,
-                        })} ${getCuteEmoji()}`;
                         this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
                         await performOrganicActivity(telegramClient, 'medium');
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({
-                            firstName: obfuscatedDisplayName,
+                            firstName: displayFirstName,
                             lastName: displayLastName,
                         }));
                         updateCount++;
@@ -287,20 +277,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     }
                 }
             } else {
-                // ── LEGACY BRANCH ───────────────────────────────────────────
-                const expectedName = client?.name.split(' ')[0];
-                if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), expectedName, 2)) {
-                    this.logger.log(`Updating first name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                    await telegramClient.updateProfile(
-                        `${obfuscateText(`${expectedName} ${getRandomPetName()}`, {
-                            maintainFormatting: false,
-                            preserveCase: true,
-                            useInvisibleChars: false
-                        })} ${getCuteEmoji()}`,
-                        ''
-                    );
-                    updateCount = 1;
-                }
+                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
             }
 
             await this.update(doc.mobile, {
@@ -411,7 +388,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     async refillJoinQueue(clientId?: string | null): Promise<number> {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
-        if (this.telegramService.getActiveClientSetup()) return 0;
+        if (this.telegramService.hasActiveClientSetup()) return 0;
 
         this.resetDailyJoinCountersIfNeeded();
 
@@ -642,7 +619,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     // ---- Promote-specific: Channel joining entry point ----
 
     async joinchannelForPromoteClients(skipExisting: boolean = true): Promise<string> {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping promotion';
         }
 
@@ -742,7 +719,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     // ---- Promote-specific: Check & process promote clients ----
 
     async checkPromoteClients() {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
             return;
         }

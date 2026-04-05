@@ -18,16 +18,13 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
 import {
-  getCuteEmoji,
   getReadableTimeDifference,
   Logger,
-  obfuscateText,
   toBoolean,
 } from '../../utils';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { CreateBufferClientDto } from '../buffer-clients/dto/create-buffer-client.dto';
 import { UpdateBufferClientDto } from '../buffer-clients/dto/update-buffer-client.dto';
-import { CloudinaryService } from '../../cloudinary';
 import { SearchClientDto } from './dto/search-client.dto';
 import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
 import { parseError } from '../../utils/parseError';
@@ -46,11 +43,11 @@ import isPermanentError from '../../utils/isPermanentError';
 import { TelegramService } from '../Telegram/Telegram.service';
 import TelegramManager from '../Telegram/TelegramManager';
 import { User } from '../users';
-import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
+import { bioMatches, lastNameMatches, nameMatchesAssignment } from '../../utils/homoglyph-normalizer';
 import { WarmupPhase } from '../shared/warmup-phases';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { ActiveClientSetup } from '../Telegram/manager/types';
-import { computePersonaPoolVersion } from '../../utils/persona-assignment';
+import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 
 // Configuration constants
 const CONFIG = {
@@ -61,7 +58,6 @@ const CONFIG = {
   CACHE_WARMUP_THRESHOLD: 20,
   COOLDOWN_PERIOD: 240000, // 4 minutes
   UPDATE_CLIENT_COOLDOWN: 30000, // 30 seconds
-  PHOTO_PATHS: ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'],
 };
 
 interface CacheMetadata {
@@ -79,6 +75,30 @@ interface SafeSetupBufferCandidate {
   mobile: string;
   session: string;
   backupUser: User;
+}
+
+export interface PersonaAssignmentRecord {
+  mobile: string;
+  assignedFirstName: string | null;
+  assignedLastName: string | null;
+  assignedBio: string | null;
+  assignedProfilePics: string[];
+  source: 'buffer' | 'promote' | 'activeClient';
+}
+
+interface BufferPersonaAssignmentDoc {
+  mobile: string;
+  assignedFirstName?: string | null;
+  assignedLastName?: string | null;
+  assignedBio?: string | null;
+  assignedProfilePics?: string[];
+}
+
+interface PersonaAssignmentLike {
+  assignedFirstName?: string | null;
+  assignedLastName?: string | null;
+  assignedBio?: string | null;
+  assignedProfilePics?: string[];
 }
 
 type ClientSearchFilter = Partial<SearchClientDto & Pick<EnhancedSearchClientDto, 'promoteMobileNumber'>>;
@@ -256,17 +276,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
     this.ensureInitialized();
     try {
-      // If any pool field is being updated, recompute personaPoolVersion
-      if (updateClientDto.firstNames || updateClientDto.lastNames || updateClientDto.bios || updateClientDto.profilePics) {
-        const existing = await this.findOne(clientId, false);
-        const merged = {
-          firstNames: updateClientDto.firstNames ?? existing?.firstNames ?? [],
-          lastNames: updateClientDto.lastNames ?? existing?.lastNames ?? [],
-          bios: updateClientDto.bios ?? existing?.bios ?? [],
-          profilePics: updateClientDto.profilePics ?? existing?.profilePics ?? [],
-        };
-        updateClientDto.personaPoolVersion = computePersonaPoolVersion(merged as any);
-      }
       const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
       await this.notifyClientUpdate(clientId);
       const updatedClient = await this.executeWithRetry(() =>
@@ -395,7 +404,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(message)}`, {
         timeout: 5000,
       });
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn('Failed to send notification', error.message);
     }
   }
@@ -454,7 +463,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         return await operation();
-      } catch (error) {
+      } catch (error: any) {
         this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, error.message);
         if (attempt === retries) throw error;
         const delay = CONFIG.RETRY_DELAY * Math.pow(2, attempt - 1);
@@ -541,6 +550,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       warmupPhase: WarmupPhase.SESSION_ROTATED,
     };
     const candidateBufferClients = await this.bufferClientService.executeQuery(query, { availableDate: 1, createdAt: 1 }, 10);
+    this.logger.info(
+      `[${clientId}] Setup candidate scan completed`,
+      { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query },
+    );
     const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
     if (!newBufferClient) {
       await this.notify(`Buffer Clients not safely available, Requested by ${clientId}`);
@@ -548,6 +561,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       return;
     }
     try {
+      this.logger.info(
+        `[${clientId}] Selected replacement buffer client`,
+        { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile },
+      );
       await this.notify(
         `Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: @${existingClient.username}`,
       );
@@ -557,9 +574,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         existingMobile: existingClientMobile,
         newMobile: newBufferClient.mobile,
       });
+      this.logger.debug(`[${clientId}] Active client setup registered`, {
+        existingMobile: existingClientMobile,
+        newMobile: newBufferClient.mobile,
+        archiveOld: setupClientQueryDto.archiveOld,
+        formalities: setupClientQueryDto.formalities,
+      });
       await connectionManager.getClient(newBufferClient.mobile);
-      await this.updateClientSession(newBufferClient.session);
-    } catch (error) {
+      await this.updateClientSession(newBufferClient.session, newBufferClient.mobile);
+    } catch (error: any) {
       await this.notify(
         `Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`,
       );
@@ -573,24 +596,33 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         const availableDate = ClientHelperUtils.toDateString(Date.now() + 3 * 24 * 60 * 60 * 1000);
         await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
       }
-      this.telegramService.setActiveClientSetup(undefined);
+      this.telegramService.clearActiveClientSetup(newBufferClient.mobile);
     } finally {
       await connectionManager.unregisterClient(newBufferClient.mobile);
     }
   }
 
-  async updateClientSession(newSession: string) {
-    const setup = this.telegramService.getActiveClientSetup();
+  async updateClientSession(newSession: string, setupMobile?: string) {
+    const setup = this.telegramService.getActiveClientSetup(setupMobile);
     if (!setup) {
-      throw new BadRequestException('No active client setup found');
+      const scope = setupMobile ? ` for ${setupMobile}` : '';
+      throw new BadRequestException(`No active client setup found${scope}`);
     }
     const { archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
     const days = setup.days ?? 0;
-    this.logger.log('Updating Client Session');
+    this.logger.info(`[${clientId}] Starting client session cutover`, {
+      existingMobile,
+      newMobile,
+      archiveOld,
+      formalities,
+      days,
+      setupMobile: setupMobile || newMobile,
+    });
     await sleep(2000);
     const existingClient = await this.findOne(clientId);
     if (!existingClient) throw new NotFoundException(`Client ${clientId} not found`);
     let newTelegramClient: TelegramManager;
+    let cutoverCommitted = false;
     try {
       newTelegramClient = await connectionManager.getClient(newMobile, {
         handler: true,
@@ -606,45 +638,97 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     if (!newTelegramClient) throw new Error(`Failed to get Telegram client for NewMobile: ${newMobile}`);
     try {
       const me = await newTelegramClient.getMe();
+      // Fetch buffer doc to get persona assignment
+      const bufferDoc = await this.bufferClientService.findOne(newMobile);
+      this.logger.debug(`[${clientId}] Loaded buffer persona assignment for cutover`, {
+        newMobile,
+        hasAssignedFirstName: !!bufferDoc?.assignedFirstName,
+        assignedPhotoCount: bufferDoc?.assignedProfilePics?.length || 0,
+      });
       const updatedUsername = await this.telegramService.updateUsernameForAClient(
         newMobile,
         clientId,
-        existingClient.name,
+        this.getExpectedClientName(existingClient, {
+          mobile: bufferDoc?.mobile || newMobile,
+          assignedFirstName: bufferDoc?.assignedFirstName || null,
+          assignedLastName: bufferDoc?.assignedLastName || null,
+          assignedBio: bufferDoc?.assignedBio || null,
+          assignedProfilePics: bufferDoc?.assignedProfilePics || [],
+          source: 'activeClient',
+        }),
         me.username,
       );
       await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: @${me.username}\nNewUsername: @${updatedUsername}`);
       if (!newSession?.trim()) {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
-      // Fetch buffer doc to get persona assignment
-      const bufferDoc = await this.bufferClientService.findOne(newMobile);
+      const mirroredActiveName = this.buildMirroredActiveName(bufferDoc, existingClient.name);
       await this.update(clientId, {
         mobile: newMobile,
         username: updatedUsername,
         session: newSession,
-        // Copy persona assignment from buffer doc (same atomic update)
-        name: bufferDoc?.assignedFirstName || existingClient.name,
-        assignedFirstName: bufferDoc?.assignedFirstName || null,
-        assignedLastName: bufferDoc?.assignedLastName || null,
-        assignedBio: bufferDoc?.assignedBio || null,
-        assignedPhotoFilenames: bufferDoc?.assignedPhotoFilenames || [],
-        assignedPersonaPoolVersion: bufferDoc?.assignedPersonaPoolVersion || null,
+        name: mirroredActiveName,
       });
-      await fetchWithTimeout(existingClient.deployKey, {}, 1);
-      setTimeout(() => this.updateClient(clientId, 'Delayed update after buffer removal'), 15000);
+      cutoverCommitted = true;
+      this.logger.info(`[${clientId}] Cutover committed`, {
+        existingMobile,
+        newMobile,
+        updatedUsername,
+        mirroredActiveName,
+      });
+      try {
+        await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date(), status: 'active' });
+        this.logger.debug(`[${clientId}] Marked replacement buffer doc as active/in-use`, { newMobile });
+      } catch (bufferUpdateError) {
+        parseError(bufferUpdateError, `[${clientId}] Failed to mark ${newMobile} as in-use after cutover`);
+        this.logger.error(
+          `[${clientId}] Failed to stamp replacement buffer usage after cutover`,
+          { newMobile },
+          bufferUpdateError instanceof Error ? bufferUpdateError.stack : undefined,
+        );
+      }
+      this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
+      setTimeout(() => {
+        void this.updateClient(clientId, 'Delayed update after buffer removal', true).catch((delayedError) => {
+          parseError(delayedError, `[${clientId}] delayed updateClient failed`);
+        });
+      }, 15000);
+      try {
+        if (existingClient.deployKey) {
+          this.logger.info(`[${clientId}] Triggering deploy restart after cutover`, { deployKeyPresent: true });
+          await fetchWithTimeout(existingClient.deployKey, {}, 1);
+          this.logger.debug(`[${clientId}] Deploy restart request completed`, { newMobile });
+        }
+      } catch (deployError) {
+        const deployMessage = deployError instanceof Error ? deployError.message : String(deployError);
+        parseError(deployError, `[${clientId}] deployKey restart failed after cutover`);
+        await this.notify(`Client cutover completed for ${clientId}, but deploy restart failed\nMobile: ${newMobile}\nError: ${deployMessage}`);
+      }
+      this.logger.info(`[${clientId}] Starting old-client archival handling`, {
+        existingMobile,
+        archiveOld,
+        formalities,
+        days,
+      });
       await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days);
-      await this.bufferClientService.update(newMobile, { inUse: true, lastUsed: new Date() });
+      this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
       await this.notify('Update finished');
     } catch (error) {
       const errorDetails = parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
       // Mark buffer inactive on permanent failure so setupClient's catch can distinguish
-      if (isPermanentError(errorDetails)) {
+      if (!cutoverCommitted && isPermanentError(errorDetails)) {
         try { await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`); } catch { }
       }
+      this.logger.error(
+        `[${clientId}] Client session cutover failed`,
+        { existingMobile, newMobile, cutoverCommitted, error: errorDetails.message },
+        error instanceof Error ? error.stack : undefined,
+      );
       throw error;
     } finally {
       await connectionManager.unregisterClient(newMobile);
-      this.telegramService.setActiveClientSetup(undefined);
+      this.telegramService.clearActiveClientSetup(newMobile);
+      this.logger.debug(`[${clientId}] Cleared active setup state`, { newMobile });
     }
   }
 
@@ -781,13 +865,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     throw new BadRequestException(`Distinct backup session was not persisted for ${mobile}`);
   }
 
-  async updateClient(clientId: string, message: string = '') {
+  async updateClient(clientId: string, message: string = '', skipDeploy = false, throwOnFailure = false): Promise<boolean> {
     this.logger.log(`Updating Client: ${clientId} - ${message}`);
-    if (!this.canUpdateClient(clientId)) return;
+    if (!this.canUpdateClient(clientId)) return false;
     const client = await this.findOne(clientId);
     if (!client) {
-      this.logger.error(`Client not found: ${clientId}`);
-      return;
+      const notFoundError = new NotFoundException(`Client not found: ${clientId}`);
+      this.logger.error(notFoundError.message);
+      if (throwOnFailure) throw notFoundError;
+      return false;
     }
     try {
       this.lastUpdateMap.set(clientId, Date.now());
@@ -796,16 +882,37 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await sleep(2000);
       const me = await telegramClient.getMe();
       if (!me) throw new Error(`Unable to fetch 'me' for ${clientId}`);
-      await this.updateClientUsername(client, me);
-      await this.updateClientName(client, telegramClient, me);
-      await this.updateClientPrivacy(client, telegramClient);
-      await this.updateClientPhotos(client, telegramClient);
+      const activeAssignment = await this.getActiveClientAssignment(client);
+      const mirroredActiveName = this.buildMirroredActiveName(activeAssignment, '');
+      if (mirroredActiveName && client.name !== mirroredActiveName) {
+        await this.update(clientId, { name: mirroredActiveName });
+        client.name = mirroredActiveName;
+        this.logger.debug(`[${clientId}] Mirrored active buffer name onto client document`, {
+          mirroredActiveName,
+        });
+      }
+      await this.updateClientUsername(client, me, activeAssignment);
+      const nameBioReady = await this.updateClientIdentity(client, telegramClient, me, activeAssignment);
+      const privacyReady = await this.updateClientPrivacy(client, telegramClient);
+      const photosReady = await this.updateClientPhotos(client, telegramClient, activeAssignment);
+      await this.stampActiveBufferLifecycle(client.mobile, {
+        ...(nameBioReady ? { nameBioUpdatedAt: new Date() } : {}),
+        ...(privacyReady ? { privacyUpdatedAt: new Date() } : {}),
+        ...(photosReady ? { profilePicsUpdatedAt: new Date() } : {}),
+      });
       await this.notify(`Updated Client: ${clientId} - ${message}`);
-      if (client.deployKey) await fetchWithTimeout(client.deployKey);
+      if (!skipDeploy && client.deployKey) await fetchWithTimeout(client.deployKey);
+      return true;
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
-      parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
-      await this.bufferClientService.update(client.mobile, { inUse: false, status: 'inactive' });
+      const errorDetails = parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.notify(`Failed to update Client: ${clientId} - ${message}\nMobile: ${client.mobile}\nError: ${errorMessage}`);
+      if (isPermanentError(errorDetails)) {
+        this.logger.warn(`Permanent error while updating active client ${clientId}; manual review required for ${client.mobile}`);
+      }
+      if (throwOnFailure) throw error;
+      return false;
     } finally {
       await connectionManager.unregisterClient(client.mobile);
     }
@@ -823,11 +930,41 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return true;
   }
 
-  private async updateClientUsername(client: Client, me: Api.User) {
+  private buildMirroredActiveName(assignment: PersonaAssignmentLike | null | undefined, fallback: string): string {
+    const mirroredName = [
+      assignment?.assignedFirstName?.trim(),
+      assignment?.assignedLastName?.trim(),
+    ]
+      .filter((part): part is string => !!part)
+      .join(' ')
+      .trim();
+
+    return mirroredName || fallback;
+  }
+
+  private getExpectedClientName(client: Client, activeAssignment: PersonaAssignmentRecord | null): string {
+    return this.buildMirroredActiveName(activeAssignment, client.name);
+  }
+
+  private async stampActiveBufferLifecycle(mobile: string, update: Pick<UpdateBufferClientDto, 'nameBioUpdatedAt' | 'privacyUpdatedAt' | 'profilePicsUpdatedAt'>) {
+    if (!mobile || Object.keys(update).length === 0) {
+      return;
+    }
+
+    try {
+      await this.bufferClientService.update(mobile, update);
+      this.logger.debug(`Stamped active buffer lifecycle state for ${mobile}`, update);
+    } catch (error) {
+      this.logger.warn(`Failed to stamp active buffer lifecycle state for ${mobile}`);
+      parseError(error, `[${mobile}] Failed to stamp active buffer lifecycle state`);
+    }
+  }
+
+  private async updateClientUsername(client: Client, me: Api.User, activeAssignment: PersonaAssignmentRecord | null) {
     const updatedUsername = await this.telegramService.updateUsernameForAClient(
       client.mobile,
       client.clientId,
-      client.name,
+      this.getExpectedClientName(client, activeAssignment),
       me.username,
     );
     if (updatedUsername) {
@@ -839,46 +976,94 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private async updateClientName(client: Client, tgManager: TelegramManager, me: Api.User) {
-    if (!isIncludedWithTolerance(safeAttemptReverse(me?.firstName), client.name)) {
-      this.logger.log(`[${client.clientId}] Name mismatch. Actual: ${me.firstName}, Expected: ${client.name}`);
-      await tgManager.updateProfile(
-        `${obfuscateText(client.name, {
-          maintainFormatting: false,
-          preserveCase: true,
-          useInvisibleChars: false
-        })} ${getCuteEmoji()}`, ''
-      );
+  private async updateClientIdentity(client: Client, tgManager: TelegramManager, me: Api.User, activeAssignment: PersonaAssignmentRecord | null): Promise<boolean> {
+    const hasIdentityAssignment = !!(
+      activeAssignment?.assignedFirstName?.trim() ||
+      activeAssignment?.assignedLastName?.trim() ||
+      activeAssignment?.assignedBio != null
+    );
+
+    if (!hasIdentityAssignment) {
+      this.logger.debug(`[${client.clientId}] Skipping active identity update: no active buffer assignment present`);
+      return false;
+    }
+
+    const expectedFirstName = activeAssignment?.assignedFirstName?.trim() || '';
+    const expectedLastName = activeAssignment?.assignedLastName?.trim() || '';
+    const expectedBio = activeAssignment?.assignedBio ?? null;
+    const fullUser = await tgManager.client.invoke(
+      new Api.users.GetFullUser({ id: new Api.InputUserSelf() }),
+    ) as Api.users.UserFull & { users?: Api.User[] };
+    const currentLastName = fullUser?.users?.[0]?.lastName || '';
+    const currentBio = fullUser?.fullUser?.about || null;
+    const firstNameWrong = !!expectedFirstName && !nameMatchesAssignment(me?.firstName || '', expectedFirstName);
+    const lastNameWrong = activeAssignment?.assignedLastName != null && !lastNameMatches(currentLastName, expectedLastName);
+    const bioWrong = expectedBio != null && !bioMatches(currentBio, expectedBio);
+
+    if (firstNameWrong || lastNameWrong || bioWrong) {
+      const expectedDisplayName = [expectedFirstName, expectedLastName].filter(Boolean).join(' ');
+      this.logger.log(`[${client.clientId}] Active identity mismatch. Actual: ${[me.firstName, currentLastName].filter(Boolean).join(' ')}, Expected: ${expectedDisplayName || '(none)'}, BioExpected: ${expectedBio ?? '(skip)'}`);
+      await tgManager.client.invoke(new Api.account.UpdateProfile({
+        ...(expectedFirstName ? { firstName: expectedFirstName } : {}),
+        ...(activeAssignment?.assignedLastName != null ? { lastName: expectedLastName } : {}),
+        ...(expectedBio != null ? { about: expectedBio } : {}),
+      }));
       await sleep(5000);
     } else {
-      this.logger.log(`[${client.clientId}] Name already correct`);
+      this.logger.log(`[${client.clientId}] Active identity already correct`);
     }
+
+    return true;
   }
 
-  private async updateClientPrivacy(client: Client, tgManager: TelegramManager) {
+  private async updateClientPrivacy(client: Client, tgManager: TelegramManager): Promise<boolean> {
     await tgManager.updatePrivacy();
     this.logger.log(`[${client.clientId}] Privacy settings updated`);
     await sleep(5000);
+    return true;
   }
 
-  private async updateClientPhotos(client: Client, telegramClient: TelegramManager) {
+  private async updateClientPhotos(
+    client: Client,
+    telegramClient: TelegramManager,
+    activeAssignment: PersonaAssignmentRecord | null,
+  ): Promise<boolean> {
     const photos = await telegramClient.client.invoke(
       new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }),
     );
     const photoCount = photos?.photos?.length || 0;
+    const profilePicUrls = (activeAssignment?.assignedProfilePics || [])
+      .filter((url) => typeof url === 'string' && url.trim().length > 0)
+      .slice(0, 3);
+    const canManagePhotos = profilePicUrls.length >= 2;
+
+    if (!canManagePhotos) {
+      this.logger.warn(`[${client.clientId}] Skipping profile photo update: active buffer assignment does not have at least 2 profile pic URLs`);
+      return false;
+    }
+
     if (photoCount < 2) {
       this.logger.warn(`[${client.clientId}] No profile photos found. Uploading new ones...`);
       if (photoCount > 0) await telegramClient.deleteProfilePhotos();
-      await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
       await sleep(6000 + Math.random() * 3000);
-      for (const photo of CONFIG.PHOTO_PATHS) {
-        await telegramClient.updateProfilePic(path.join(process.cwd(), photo));
-        this.logger.debug(`[${client.clientId}] Uploaded profile photo: ${photo}`);
-        await sleep(20000 + Math.random() * 15000);
+      for (let index = 0; index < profilePicUrls.length; index++) {
+        const url = profilePicUrls[index];
+        const tempPath = path.join('/tmp', `client-profile-${client.clientId}-${Date.now()}-${index}.jpg`);
+        try {
+          const buffer = await downloadFileFromUrl(url);
+          fs.writeFileSync(tempPath, buffer);
+          await telegramClient.updateProfilePic(tempPath);
+          this.logger.debug(`[${client.clientId}] Uploaded profile photo from URL`, { url });
+          await sleep(20000 + Math.random() * 15000);
+        } finally {
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        }
       }
     } else {
       this.logger.log(`[${client.clientId}] Profile photos already exist (${photoCount})`);
     }
+
+    return true;
   }
 
   async updateClients() {
@@ -962,37 +1147,82 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     if (!client) return null;
     return {
       firstNames: client.firstNames || [],
-      lastNames: client.lastNames || [],
+      bufferLastNames: client.bufferLastNames || [],
+      promoteLastNames: client.promoteLastNames || [],
       bios: client.bios || [],
       profilePics: client.profilePics || [],
-      dbcoll: client.dbcoll,
-      personaPoolVersion: client.personaPoolVersion || null,
+      dbcoll: (client.dbcoll || '').toLowerCase(),
     };
   }
 
-  async getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'promote' | 'activeClient') {
-    const assignments: Array<{
-      mobile: string;
-      assignedFirstName: string | null;
-      assignedLastName: string | null;
-      assignedBio: string | null;
-      assignedPhotoFilenames: string[];
-      source: string;
-    }> = [];
-
-    const projection = {
-      mobile: 1, assignedFirstName: 1, assignedLastName: 1,
-      assignedBio: 1, assignedPhotoFilenames: 1,
-    };
-    const filter = {
+  private buildPersonaAssignmentFilter(clientId: string): Record<string, unknown> {
+    return {
       clientId,
+      status: 'active',
       $or: [
         { assignedFirstName: { $ne: null } },
         { assignedLastName: { $ne: null } },
         { assignedBio: { $ne: null } },
-        { 'assignedPhotoFilenames.0': { $exists: true } },
+        { 'assignedProfilePics.0': { $exists: true } },
       ],
     };
+  }
+
+  private hasPersonaAssignment<T extends PersonaAssignmentLike>(doc: T | null | undefined): doc is T {
+    return !!doc && !!(
+      doc.assignedFirstName ||
+      doc.assignedLastName ||
+      doc.assignedBio ||
+      doc.assignedProfilePics?.length
+    );
+  }
+
+  async getActiveClientAssignment(client: Partial<Client> | null | undefined): Promise<PersonaAssignmentRecord | null> {
+    if (!client?.clientId || !client.mobile) {
+      return null;
+    }
+
+    let bufferDoc: BufferPersonaAssignmentDoc | null = null;
+    try {
+      bufferDoc = await this.bufferClientService.model
+        .findOne(
+          { clientId: client.clientId, mobile: client.mobile },
+          {
+            mobile: 1,
+            assignedFirstName: 1,
+            assignedLastName: 1,
+            assignedBio: 1,
+            assignedProfilePics: 1,
+          },
+        )
+        .lean();
+    } catch (error) {
+      this.logger.warn(`[${client.clientId}] Failed to load active buffer assignment for ${client.mobile}`);
+      return null;
+    }
+
+    if (!this.hasPersonaAssignment(bufferDoc)) {
+      return null;
+    }
+
+    return {
+      mobile: bufferDoc?.mobile || '',
+      assignedFirstName: bufferDoc?.assignedFirstName || null,
+      assignedLastName: bufferDoc?.assignedLastName || null,
+      assignedBio: bufferDoc?.assignedBio || null,
+      assignedProfilePics: bufferDoc?.assignedProfilePics || [],
+      source: 'activeClient',
+    };
+  }
+
+  async getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'promote' | 'activeClient') {
+    const assignments: PersonaAssignmentRecord[] = [];
+
+    const projection = {
+      mobile: 1, assignedFirstName: 1, assignedLastName: 1,
+      assignedBio: 1, assignedProfilePics: 1,
+    };
+    const filter = this.buildPersonaAssignmentFilter(clientId);
 
     if (scope === 'all' || scope === 'buffer') {
       const buffers = await this.bufferClientService.model
@@ -1002,8 +1232,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         assignedFirstName: b.assignedFirstName,
         assignedLastName: b.assignedLastName || null,
         assignedBio: b.assignedBio || null,
-        assignedPhotoFilenames: b.assignedPhotoFilenames || [],
-        source: 'buffer',
+        assignedProfilePics: b.assignedProfilePics || [],
+        source: 'buffer' as const,
       })));
     }
     if (scope === 'all' || scope === 'promote') {
@@ -1014,37 +1244,27 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         assignedFirstName: p.assignedFirstName,
         assignedLastName: p.assignedLastName || null,
         assignedBio: p.assignedBio || null,
-        assignedPhotoFilenames: p.assignedPhotoFilenames || [],
-        source: 'promote',
+        assignedProfilePics: p.assignedProfilePics || [],
+        source: 'promote' as const,
       })));
     }
     if (scope === 'all' || scope === 'activeClient') {
       const client = await this.findOne(clientId, false);
-      if (client && (client.assignedFirstName || client.assignedLastName || client.assignedBio || client.assignedPhotoFilenames?.length > 0)) {
-        assignments.push({
-          mobile: client.mobile,
-          assignedFirstName: client.assignedFirstName,
-          assignedLastName: client.assignedLastName || null,
-          assignedBio: client.assignedBio || null,
-          assignedPhotoFilenames: client.assignedPhotoFilenames || [],
-          source: 'activeClient',
-        });
+      const activeClientAssignment = await this.getActiveClientAssignment(client);
+      const alreadyIncluded = activeClientAssignment
+        ? assignments.some((assignment) => assignment.mobile === activeClientAssignment.mobile)
+        : false;
+      if (activeClientAssignment && !alreadyIncluded) {
+        assignments.push(activeClientAssignment);
       }
     }
 
+    this.logger.debug(`[${clientId}] Existing persona assignments fetched`, {
+      scope,
+      assignmentCount: assignments.length,
+      sources: assignments.map((assignment) => assignment.source),
+    });
     return { assignments };
   }
 
-  findPersonaFile(dir: string, filename: string): string | null {
-    if (!fs.existsSync(dir)) return null;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        const result = this.findPersonaFile(path.join(dir, entry.name), filename);
-        if (result) return result;
-      } else if (entry.name === filename) {
-        return path.join(dir, entry.name);
-      }
-    }
-    return null;
-  }
 }

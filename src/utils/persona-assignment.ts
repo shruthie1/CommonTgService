@@ -3,8 +3,8 @@
  *
  * Deterministic persona assignment for Telegram accounts.
  * Each account gets a unique (firstName, lastName, bio, photos) combination
- * drawn from a per-client pool. The seeded PRNG ensures consistent results for
- * the same mobile+poolVersion across restarts, preventing assignment drift.
+ * drawn from a per-client pool. The seeded PRNG ensures stable initial
+ * assignment for the same mobile across restarts.
  */
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -13,24 +13,22 @@ export interface PersonaPool {
     firstNames: string[];
     lastNames: string[];
     bios: string[];
-    profilePics: Array<{ filename: string; phash: string }>;
+    profilePics: string[];
     dbcoll: string;
-    personaPoolVersion: string;
 }
 
 export interface PersonaAssignment {
     assignedFirstName: string | null;
     assignedLastName: string | null;
     assignedBio: string | null;
-    assignedPhotoFilenames: string[];
-    assignedPersonaPoolVersion: string | null;
+    assignedProfilePics: string[];
 }
 
 export interface PersonaCandidate {
     firstName: string;
     lastName: string;
     bio: string;
-    photoFilenames: string[];
+    profilePics: string[];
 }
 
 // ─── djb2 Hash ───────────────────────────────────────────────────────────────
@@ -82,108 +80,56 @@ function seededShuffle<T>(arr: T[], prng: () => number): T[] {
     return arr;
 }
 
-// ─── computePersonaPoolVersion ───────────────────────────────────────────────
-
-/**
- * Deterministic hash (djb2) of JSON-serialized pool arrays.
- * Returns a base36 string so it is URL-safe and compact.
- * Only hashes the arrays that define the combination space (names, bios, pics).
- */
-export function computePersonaPoolVersion(pool: {
-    firstNames?: string[];
-    lastNames?: string[];
-    bios?: string[];
-    profilePics?: Array<{ filename: string; phash?: string } | string>;
-}): string {
-    const payload = JSON.stringify([
-        pool.firstNames || [],
-        pool.lastNames || [],
-        pool.bios || [],
-        (pool.profilePics || []).map((p: any) => typeof p === 'string' ? p : p.filename),
-    ]);
-    // djb2 returns a signed 32-bit int; convert to unsigned for base36
-    const hash = (djb2(payload) >>> 0);
-    return hash.toString(36);
-}
-
 // ─── hasAssignment ───────────────────────────────────────────────────────────
 
 /**
  * Returns true if the document has any persona assignment:
  *   - any of assignedFirstName / assignedLastName / assignedBio is non-null, OR
- *   - assignedPhotoFilenames has at least one entry.
+ *   - assignedProfilePics has at least one entry.
  */
 export function hasAssignment(doc: PersonaAssignment): boolean {
     return (
         doc.assignedFirstName !== null ||
         doc.assignedLastName !== null ||
         doc.assignedBio !== null ||
-        doc.assignedPhotoFilenames.length > 0
+        doc.assignedProfilePics.length > 0
     );
-}
-
-// ─── needsReassignment ───────────────────────────────────────────────────────
-
-/**
- * Returns whether the document needs a new persona assignment from the pool.
- *
- * Rules:
- * - Legacy account: no assignment AND no stored pool version → false (leave alone)
- * - Pool version matches stored version → false (already up-to-date)
- * - Stored version differs from current pool version → true (pool changed)
- */
-export function needsReassignment(doc: PersonaAssignment, pool: PersonaPool): boolean {
-    // Use the pre-computed pool version directly (avoids recomputation)
-    const currentVersion = pool.personaPoolVersion;
-
-    // Legacy: never had an assignment and never had a pool version tracked
-    if (!hasAssignment(doc) && doc.assignedPersonaPoolVersion === null) {
-        return false;
-    }
-
-    // Version match → no reassignment needed
-    if (doc.assignedPersonaPoolVersion === currentVersion) {
-        return false;
-    }
-
-    // Version mismatch (or doc has stale/old version) → reassign
-    return true;
 }
 
 // ─── personaKey ──────────────────────────────────────────────────────────────
 
 /**
  * Canonical deduplication key for a candidate.
- * Photo filenames are sorted so order doesn't matter.
+ * Profile pic URLs are sorted so order doesn't matter.
  */
 export function personaKey(a: {
     firstName: string;
     lastName: string;
     bio: string;
-    photoFilenames: string[];
+    profilePics: string[];
 }): string {
-    return JSON.stringify([a.firstName, a.lastName, a.bio, [...a.photoFilenames].sort()]);
+    return JSON.stringify([a.firstName, a.lastName, a.bio, [...a.profilePics].sort()]);
 }
 
-// ─── selectAssignedPhotoFilenames ────────────────────────────────────────────
+// ─── selectAssignedProfilePics ───────────────────────────────────────────────
 
 /**
- * Seeded shuffle of profilePics, take up to 3 filenames.
+ * Seeded shuffle of profilePics, take up to 3 URLs.
  * Seed is derived from the mobile number.
  */
-export function selectAssignedPhotoFilenames(
+export function selectAssignedProfilePics(
     mobile: string,
-    profilePics: Array<{ filename: string; phash: string }>,
+    profilePics: string[],
 ): string[] {
     if (profilePics.length === 0) return [];
 
     const seed = djb2(mobile + ':photos');
     const prng = makeLCG(seed);
 
-    const filenames = profilePics.map(p => p.filename);
-    seededShuffle(filenames, prng);
+    const shuffledProfilePics = [...profilePics];
+    seededShuffle(shuffledProfilePics, prng);
 
-    return filenames.slice(0, 3);
+    return shuffledProfilePics.slice(0, 3);
 }
 
 // ─── generateCandidateCombinations ──────────────────────────────────────────
@@ -194,7 +140,7 @@ const MAX_CANDIDATES = 64;
  * Generates up to 64 unique persona candidates for the given mobile+pool.
  *
  * Algorithm:
- * 1. Seed the PRNG from mobile + poolVersion (deterministic).
+ * 1. Seed the PRNG from mobile (deterministic).
  * 2. Shuffle each pool array independently.
  * 3. Iterate combinations in shuffled order, deduplicating by personaKey.
  * 4. Stop when 64 candidates are collected or all combinations exhausted.
@@ -203,8 +149,7 @@ export function generateCandidateCombinations(
     pool: PersonaPool,
     mobile: string,
 ): PersonaCandidate[] {
-    const poolVersion = computePersonaPoolVersion(pool);
-    const seed = djb2(mobile + ':' + poolVersion);
+    const seed = djb2(mobile);
     const prng = makeLCG(seed);
 
     // Guard against empty arrays
@@ -225,7 +170,7 @@ export function generateCandidateCombinations(
             for (const firstName of firstNames) {
                 if (results.length >= MAX_CANDIDATES) break outer;
 
-                const photoFilenames = selectAssignedPhotoFilenames(
+                const profilePics = selectAssignedProfilePics(
                     mobile + ':' + firstName + ':' + lastName,
                     pool.profilePics,
                 );
@@ -234,7 +179,7 @@ export function generateCandidateCombinations(
                     firstName,
                     lastName,
                     bio,
-                    photoFilenames,
+                    profilePics,
                 };
 
                 const key = personaKey(candidate);

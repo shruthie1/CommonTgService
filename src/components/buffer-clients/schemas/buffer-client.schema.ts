@@ -157,13 +157,9 @@ export class BufferClient {
   @Prop({ required: false, default: null })
   assignedBio: string;
 
-  @ApiProperty({ description: 'Assigned photo filenames from pool', required: false })
+  @ApiProperty({ description: 'Assigned profile pic URLs from pool', required: false })
   @Prop({ required: false, type: [String], default: [] })
-  assignedPhotoFilenames: string[];
-
-  @ApiProperty({ description: 'Pool version when assignment was made', required: false })
-  @Prop({ required: false, default: null })
-  assignedPersonaPoolVersion: string;
+  assignedProfilePics: string[];
 }
 
 export const BufferClientSchema = SchemaFactory.createForClass(BufferClient);

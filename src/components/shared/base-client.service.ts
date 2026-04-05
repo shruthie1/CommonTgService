@@ -18,12 +18,11 @@ import { Client } from '../clients';
 import { User } from '../users';
 import * as fs from 'fs';
 import path from 'path';
-import { CloudinaryService } from '../../cloudinary';
-import { selectAssignedPhotoFilenames } from '../../utils/persona-assignment';
 import { Api } from 'telegram';
 import { computeCheck } from 'telegram/Password';
 import isPermanentError from '../../utils/isPermanentError';
 import { BotsService, ChannelCategory } from '../bots';
+import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { ClientHelperUtils } from './client-helper.utils';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
 import {
@@ -100,8 +99,7 @@ export interface BaseClientDocument extends Document {
     assignedFirstName?: string;
     assignedLastName?: string;
     assignedBio?: string;
-    assignedPhotoFilenames?: string[];
-    assignedPersonaPoolVersion?: string;
+    assignedProfilePics?: string[];
 }
 
 export type BaseClientUpdate = Partial<Pick<
@@ -694,6 +692,80 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
     }
 
+    private getProfilePicExtension(url: string): string {
+        try {
+            const parsed = new URL(url);
+            const urlExt = path.extname(parsed.pathname);
+            return urlExt || '.jpg';
+        } catch {
+            return '.jpg';
+        }
+    }
+
+    private async uploadProfilePhotosFromUrls(
+        telegramClient: TelegramManager,
+        doc: TDoc,
+        urls: string[],
+    ): Promise<number> {
+        let filesUploaded = 0;
+
+        for (let index = 0; index < urls.length; index++) {
+            const url = urls[index];
+            const tempPath = path.join('/tmp', `persona-pool-${doc.mobile}-${Date.now()}-${index}${this.getProfilePicExtension(url)}`);
+
+            try {
+                const buffer = await downloadFileFromUrl(url);
+                fs.writeFileSync(tempPath, buffer);
+                await telegramClient.updateProfilePic(tempPath);
+                filesUploaded++;
+                this.logger.debug(`Uploaded profile pic pool URL for ${doc.mobile}`, {
+                    url,
+                });
+                await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Failed to upload profile pic pool URL for ${doc.mobile}: ${errorMessage}`, {
+                    url,
+                });
+            } finally {
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            }
+        }
+
+        return filesUploaded;
+    }
+
+    public async refreshProfilePhotosOnDemand(mobile: string): Promise<{ refreshed: boolean; uploadedCount: number }> {
+        const doc = await this.findOne(mobile, false);
+        if (!doc) {
+            throw new NotFoundException(`${this.clientType} client ${mobile} not found`);
+        }
+        if (!doc.clientId) {
+            throw new NotFoundException(`${this.clientType} client ${mobile} is not linked to a clientId`);
+        }
+
+        const client = await this.clientService.findOne(doc.clientId, false);
+        if (!client) {
+            throw new NotFoundException(`Client ${doc.clientId} not found for ${mobile}`);
+        }
+
+        const assignedPhotoUrls = (doc.assignedProfilePics || []).filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
+        if (assignedPhotoUrls.length < 2) {
+            this.logger.warn(`Skipping on-demand profile photo refresh for ${mobile}: assigned profile pic URLs are missing or too small`, {
+                clientId: doc.clientId,
+                assignedPhotoCount: assignedPhotoUrls.length,
+            });
+            return { refreshed: false, uploadedCount: 0 };
+        }
+
+        const uploadedCount = await this.updateProfilePhotos(doc, client, doc.failedUpdateAttempts || 0);
+        this.logger.info(`Completed on-demand profile photo refresh for ${mobile}`, {
+            clientId: doc.clientId,
+            uploadedCount,
+        });
+        return { refreshed: uploadedCount > 0, uploadedCount };
+    }
+
     protected async updateProfilePhotos(doc: TDoc, client: Client, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
@@ -702,85 +774,27 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const photos = await telegramClient.client.invoke(new Api.photos.GetUserPhotos({ userId: 'me', offset: 0 }));
             let updateCount = 0;
 
-            if (doc.assignedPhotoFilenames?.length > 0) {
+            if (doc.assignedProfilePics?.length > 0) {
                 // ── PERSONA BRANCH: upload assigned photos ──────────────────
                 if (photos.photos.length < 2) {
-                    const PERSONA_BASE = process.env.PERSONA_PATH || path.join(process.cwd(), 'persona');
-                    const dbcollDir = path.join(PERSONA_BASE, client?.dbcoll?.toLowerCase() || 'default');
-                    let filesUploaded = 0;
-
-                    for (const filename of doc.assignedPhotoFilenames) {
-                        const photoPath = path.join(dbcollDir, filename);
-                        if (fs.existsSync(photoPath)) {
-                            await telegramClient.updateProfilePic(photoPath);
-                            filesUploaded++;
-                            this.logger.debug(`Uploaded persona photo ${filename} for ${doc.mobile}`);
-                            await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
-                        } else {
-                            this.logger.warn(`Persona photo not found on disk: ${photoPath} for ${doc.mobile}`);
-                        }
+                    const assignedPhotoUrls = doc.assignedProfilePics.filter((url) => typeof url === 'string' && url.trim().length > 0);
+                    if (assignedPhotoUrls.length > 1) {
+                        this.logger.info(`Using assigned profile pic URLs for ${doc.mobile}`, { urlCount: assignedPhotoUrls.length });
+                        updateCount = await this.uploadProfilePhotosFromUrls(telegramClient, doc, assignedPhotoUrls);
+                    } else {
+                        this.logger.warn(`Skipping profile photo update for ${doc.mobile}: assigned profile pic pool is missing or too small`, {
+                            assignedCount: assignedPhotoUrls.length,
+                        });
                     }
 
-                    if (filesUploaded === 0) {
-                        this.logger.warn(`No persona photos found on disk for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
+                    if (updateCount === 0) {
+                        this.logger.warn(`No profile photos uploaded from assigned profile pic URLs for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
                         await sleep(ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
                         return 0;
                     }
-                    updateCount = filesUploaded;
-                }
-            } else if (client.profilePics?.length > 0 && !doc.assignedPhotoFilenames?.length) {
-                // ── POOL HAS PHOTOS BUT NO ASSIGNMENT: assign filenames and upload ──
-                if (photos.photos.length < 2) {
-                    const assignedFilenames = selectAssignedPhotoFilenames(doc.mobile, client.profilePics);
-
-                    if (assignedFilenames.length > 0) {
-                        // Write assignment to doc
-                        await this.model.findOneAndUpdate(
-                            { mobile: doc.mobile },
-                            { $set: {
-                                assignedPhotoFilenames: assignedFilenames,
-                                assignedPersonaPoolVersion: client.personaPoolVersion,
-                            } },
-                        );
-                        this.logger.log(`Assigned ${assignedFilenames.length} photo filenames to ${doc.mobile}`);
-
-                        const PERSONA_BASE = process.env.PERSONA_PATH || path.join(process.cwd(), 'persona');
-                        const dbcollDir = path.join(PERSONA_BASE, client?.dbcoll?.toLowerCase() || 'default');
-                        let filesUploaded = 0;
-
-                        for (const filename of assignedFilenames) {
-                            const photoPath = path.join(dbcollDir, filename);
-                            if (fs.existsSync(photoPath)) {
-                                await telegramClient.updateProfilePic(photoPath);
-                                filesUploaded++;
-                                this.logger.debug(`Uploaded persona photo ${filename} for ${doc.mobile}`);
-                                await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
-                            } else {
-                                this.logger.warn(`Persona photo not found on disk: ${photoPath} for ${doc.mobile}`);
-                            }
-                        }
-
-                        if (filesUploaded === 0) {
-                            this.logger.warn(`No persona photos found on disk for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
-                            await sleep(ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
-                            return 0;
-                        }
-                        updateCount = filesUploaded;
-                    }
                 }
             } else {
-                // ── LEGACY BRANCH ───────────────────────────────────────────
-                if (photos.photos.length < 2) {
-                    await CloudinaryService.getInstance(client?.dbcoll?.toLowerCase());
-                    await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
-
-                    // Shuffle for randomness
-                    const photoPaths = ['dp1.jpg', 'dp2.jpg', 'dp3.jpg'];
-                    const randomPhoto = photoPaths[Math.floor(Math.random() * photoPaths.length)];
-                    await telegramClient.updateProfilePic(path.join(process.cwd(), randomPhoto));
-                    updateCount = 1;
-                    this.logger.debug(`Updated profile photo ${randomPhoto} for ${doc.mobile}`);
-                }
+                this.logger.debug(`Skipping profile photo update for ${doc.mobile}: no assigned profile pic URLs available`);
             }
 
             await this.update(doc.mobile, {

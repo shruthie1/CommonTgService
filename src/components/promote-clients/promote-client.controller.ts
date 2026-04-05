@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe, NotFoundException } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -32,6 +32,11 @@ import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 export class PromoteClientController {
   constructor(private readonly clientService: PromoteClientService) {}
 
+  private sanitizeQuery<T extends object>(query: T): T {
+    const { apiKey: _apiKey, ...rest } = query as T & { apiKey?: unknown };
+    return rest as T;
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a promote client record', description: 'Creates a promote client directly from supplied data.' })
   @ApiBody({ type: CreatePromoteClientDto })
@@ -49,7 +54,7 @@ export class PromoteClientController {
   @ApiQuery({ name: 'username', required: false, description: 'Username' })
   @ApiOkResponse({ type: [PromoteClient] })
   async search(@Query() query: SearchPromoteClientDto): Promise<PromoteClient[]> {
-    return this.clientService.search(query);
+    return this.clientService.search(this.sanitizeQuery(query));
   }
 
   @Get('joinChannelsForPromoteClients')
@@ -163,6 +168,14 @@ export class PromoteClientController {
     return this.clientService.executeQuery(query);
   }
 
+  @Post('profile-pics/refresh/:mobile')
+  @ApiOperation({ summary: 'Refresh profile pics for a promote client on demand' })
+  @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
+  @ApiOkResponse({ schema: { type: 'object', properties: { refreshed: { type: 'boolean' }, uploadedCount: { type: 'number' } } } })
+  async refreshProfilePics(@Param('mobile') mobile: string): Promise<{ refreshed: boolean; uploadedCount: number }> {
+    return this.clientService.refreshProfilePhotosOnDemand(mobile);
+  }
+
   @Get('distribution')
   @ApiOperation({ summary: 'Get promote client distribution per client' })
   @ApiOkResponse({ schema: { type: 'object', additionalProperties: true } })
@@ -251,7 +264,11 @@ export class PromoteClientController {
   @ApiParam({ name: 'clientId', description: 'Client ID to get next available promote client for', type: String })
   @ApiOkResponse({ type: PromoteClient })
   async getNextAvailable(@Param('clientId') clientId: string): Promise<PromoteClient | null> {
-    return this.clientService.getNextAvailablePromoteClient(clientId);
+    const client = await this.clientService.getNextAvailablePromoteClient(clientId);
+    if (!client) {
+      throw new NotFoundException(`No available promote client found for ${clientId}`);
+    }
+    return client;
   }
 
   @Get('unused')

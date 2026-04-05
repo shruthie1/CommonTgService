@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe, NotFoundException } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -31,6 +31,11 @@ import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 export class BufferClientController {
   constructor(private readonly clientService: BufferClientService) { }
 
+  private sanitizeQuery<T extends object>(query: T): T {
+    const { apiKey: _apiKey, ...rest } = query as T & { apiKey?: unknown };
+    return rest as T;
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a buffer client record', description: 'Creates a buffer client directly from supplied data.' })
   @ApiBody({ type: CreateBufferClientDto })
@@ -51,7 +56,7 @@ export class BufferClientController {
   @ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status' })
   @ApiOkResponse({ type: [BufferClient] })
   async search(@Query() query: SearchBufferClientDto): Promise<BufferClient[]> {
-    return this.clientService.search(query);
+    return this.clientService.search(this.sanitizeQuery(query));
   }
 
   @Get('updateInfo')
@@ -129,6 +134,14 @@ export class BufferClientController {
   @ApiOkResponse({ type: [BufferClient] })
   async executeQuery(@Body() query: object): Promise<any> {
     return this.clientService.executeQuery(query);
+  }
+
+  @Post('profile-pics/refresh/:mobile')
+  @ApiOperation({ summary: 'Refresh profile pics for a buffer client on demand' })
+  @ApiParam({ name: 'mobile', description: 'Mobile number of the buffer client', type: String })
+  @ApiOkResponse({ schema: { type: 'object', properties: { refreshed: { type: 'boolean' }, uploadedCount: { type: 'number' } } } })
+  async refreshProfilePics(@Param('mobile') mobile: string): Promise<{ refreshed: boolean; uploadedCount: number }> {
+    return this.clientService.refreshProfilePhotosOnDemand(mobile);
   }
 
   @Get('distribution')
@@ -209,7 +222,11 @@ export class BufferClientController {
   @ApiParam({ name: 'clientId', description: 'Client ID to get next available buffer client for', type: String })
   @ApiOkResponse({ type: BufferClient })
   async getNextAvailable(@Param('clientId') clientId: string): Promise<BufferClient | null> {
-    return this.clientService.getNextAvailableBufferClient(clientId);
+    const client = await this.clientService.getNextAvailableBufferClient(clientId);
+    if (!client) {
+      throw new NotFoundException(`No available buffer client found for ${clientId}`);
+    }
+    return client;
   }
 
   @Get('unused')

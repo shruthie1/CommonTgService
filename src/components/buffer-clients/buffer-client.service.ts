@@ -31,12 +31,10 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { getCuteEmoji, obfuscateText } from '../../utils';
 import { SearchBufferClientDto } from './dto/search-buffer-client.dto';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { Client } from '../clients';
 import isPermanentError from '../../utils/isPermanentError';
-import { isIncludedWithTolerance, safeAttemptReverse } from '../../utils/checkMe.utils';
 import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
 import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-normalizer';
 import { BotsService, ChannelCategory } from '../bots';
@@ -87,6 +85,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         this.promoteClientService = promoteClientServiceRef;
     }
 
+    private async getPrimaryClientMobiles(clientId?: string | null): Promise<Set<string>> {
+        const clients = await this.clientService.findAll();
+        const primaryClientMobiles = new Set(
+            clients
+                .filter((client) => !!client.mobile && (!clientId || client.clientId === clientId))
+                .map((client) => client.mobile),
+        );
+        this.logger.debug('Resolved primary client mobiles for buffer guards', {
+            clientId: clientId || 'all',
+            count: primaryClientMobiles.size,
+        });
+        return primaryClientMobiles;
+    }
+
+    private isPrimaryClientMobile(mobile: string, primaryClientMobiles: Set<string>): boolean {
+        return !!mobile && primaryClientMobiles.has(mobile);
+    }
+
     // ---- Abstract implementations ----
 
     get model(): Model<BufferClientDocument> {
@@ -127,47 +143,45 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
             let updateCount = 0;
 
-            if ((client.firstNames?.length > 0) || (client.lastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
+            if ((client.firstNames?.length > 0) || (client.bufferLastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
                 // ── PERSONA BRANCH ──────────────────────────────────────────
-                let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedPhotoFilenames'> | null = null;
+                let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedProfilePics'> | null = null;
 
                 // 1. Check if doc already has a valid assignment (any assigned field set AND pool version matches)
                 const hasValidAssignment = (
                     doc.assignedFirstName != null ||
                     doc.assignedLastName != null ||
-                    doc.assignedBio != null ||
-                    (doc.assignedPhotoFilenames?.length || 0) > 0
-                ) && doc.assignedPersonaPoolVersion === client.personaPoolVersion;
+                    doc.assignedBio != null
+                );
 
                 if (hasValidAssignment) {
                     assignment = {
                         assignedFirstName: doc.assignedFirstName,
                         assignedLastName: doc.assignedLastName,
                         assignedBio: doc.assignedBio,
-                        assignedPhotoFilenames: doc.assignedPhotoFilenames,
+                        assignedProfilePics: doc.assignedProfilePics,
                     };
                 } else {
                     // 2. Atomic assignment via findOneAndUpdate with guard
                     const pool: PersonaPool = {
                         firstNames: client.firstNames,
-                        lastNames: client.lastNames || [],
+                        lastNames: client.bufferLastNames || [],
                         bios: client.bios || [],
                         profilePics: client.profilePics || [],
                         dbcoll: client.dbcoll,
-                        personaPoolVersion: client.personaPoolVersion,
                     };
 
                     // Query existing assignments for dedup (buffer collection)
-                    const existingAssignments: Array<{ assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedPhotoFilenames?: string[] }> = await this.model.find({
+                    const existingAssignments: Array<{ mobile: string; assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedProfilePics?: string[] }> = await this.model.find({
                         clientId: doc.clientId, status: 'active',
                         mobile: { $ne: doc.mobile },
                         $or: [
                             { assignedFirstName: { $ne: null } },
                             { assignedLastName: { $ne: null } },
                             { assignedBio: { $ne: null } },
-                            { 'assignedPhotoFilenames.0': { $exists: true } },
+                            { 'assignedProfilePics.0': { $exists: true } },
                         ],
-                    }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+                    }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
 
                     // Cross-collection dedup: also fetch promote assignments (best-effort)
                     try {
@@ -178,17 +192,22 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                                 { assignedFirstName: { $ne: null } },
                                 { assignedLastName: { $ne: null } },
                                 { assignedBio: { $ne: null } },
-                                { 'assignedPhotoFilenames.0': { $exists: true } },
+                                { 'assignedProfilePics.0': { $exists: true } },
                             ],
-                        }, { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedPhotoFilenames: 1 }).lean();
+                        }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
                         existingAssignments.push(...promoteAssignments);
                     } catch { /* cross-collection dedup is best-effort */ }
+
+                    const activeClientAssignment = await this.clientService.getActiveClientAssignment(client);
+                    if (activeClientAssignment && activeClientAssignment.mobile !== doc.mobile && !existingAssignments.some(a => a.mobile === activeClientAssignment.mobile)) {
+                        existingAssignments.push(activeClientAssignment);
+                    }
 
                     const usedKeys = new Set(existingAssignments.map(a => personaKey({
                         firstName: a.assignedFirstName,
                         lastName: a.assignedLastName || '',
                         bio: a.assignedBio || '',
-                        photoFilenames: a.assignedPhotoFilenames || [],
+                        profilePics: a.assignedProfilePics || [],
                     })));
 
                     const candidates = generateCandidateCombinations(pool, doc.mobile);
@@ -208,17 +227,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                                         assignedFirstName: null,
                                         assignedLastName: null,
                                         assignedBio: null,
-                                        'assignedPhotoFilenames.0': { $exists: false },
+                                        'assignedProfilePics.0': { $exists: false },
                                     },
-                                    { assignedPersonaPoolVersion: { $ne: client.personaPoolVersion } },
                                 ],
                             },
                             { $set: {
                                 assignedFirstName: pick.firstName,
                                 assignedLastName: pick.lastName || null,
                                 assignedBio: pick.bio || null,
-                                assignedPhotoFilenames: pick.photoFilenames,
-                                assignedPersonaPoolVersion: client.personaPoolVersion,
+                                assignedProfilePics: pick.profilePics,
                             } },
                             { new: true },
                         );
@@ -228,7 +245,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                                 assignedFirstName: result.assignedFirstName,
                                 assignedLastName: result.assignedLastName,
                                 assignedBio: result.assignedBio,
-                                assignedPhotoFilenames: result.assignedPhotoFilenames,
+                                assignedProfilePics: result.assignedProfilePics,
                             };
                             this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
                         } else {
@@ -241,8 +258,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const hasAnyAssignment = assignment != null && (
                     assignment.assignedFirstName != null ||
                     assignment.assignedLastName != null ||
-                    assignment.assignedBio != null ||
-                    (assignment.assignedPhotoFilenames?.length || 0) > 0
+                    assignment.assignedBio != null
                 );
                 if (hasAnyAssignment) {
                     // Read current TG profile state once (needed for lastName and bio checks)
@@ -260,18 +276,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     if (firstNameWrong || lastNameWrong) {
                         const displayFirstName = assignment.assignedFirstName || me.firstName || '';
                         const displayLastName = assignment.assignedLastName || '';
-                        const displayName = displayLastName
-                            ? `${displayFirstName} ${displayLastName}`
-                            : displayFirstName;
-                        const obfuscatedDisplayName = `${obfuscateText(displayName, {
-                            maintainFormatting: false,
-                            preserveCase: true,
-                            useInvisibleChars: false,
-                        })} ${getCuteEmoji()}`;
                         this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
                         await performOrganicActivity(telegramClient, 'medium');
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({
-                            firstName: obfuscatedDisplayName,
+                            firstName: displayFirstName,
                             lastName: displayLastName,
                         }));
                         updateCount++;
@@ -288,19 +296,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     }
                 }
             } else {
-                // ── LEGACY BRANCH ───────────────────────────────────────────
-                if (!isIncludedWithTolerance(safeAttemptReverse(me.firstName), client.name)) {
-                    this.logger.log(`Updating name for ${doc.mobile} from ${me.firstName} to ${client.name}`);
-                    await telegramClient.updateProfile(
-                        `${obfuscateText(client.name, {
-                            maintainFormatting: false,
-                            preserveCase: true,
-                            useInvisibleChars: false
-                        })} ${getCuteEmoji()}`,
-                        ''
-                    );
-                    updateCount = 1;
-                }
+                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
             }
 
             await this.update(doc.mobile, {
@@ -468,16 +464,25 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     async refillJoinQueue(clientId?: string | null): Promise<number> {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
-        if (this.telegramService.getActiveClientSetup()) return 0;
+        if (this.telegramService.hasActiveClientSetup()) return 0;
 
         this.resetDailyJoinCountersIfNeeded();
+        const primaryClientMobiles = await this.getPrimaryClientMobiles(clientId);
+        const excludedMobiles = new Set([
+            ...this.joinChannelMap.keys(),
+            ...primaryClientMobiles,
+        ]);
 
         const query: Record<string, any> = {
             status: 'active',
             channels: { $lt: this.config.channelTarget },
-            mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+            mobile: { $nin: Array.from(excludedMobiles) },
         };
         if (clientId) query.clientId = clientId;
+        this.logger.debug('Refill join queue query prepared', {
+            clientId: clientId || 'all',
+            excludedCount: excludedMobiles.size,
+        });
 
         const eligible = await this.bufferClientModel
             .find(query)
@@ -488,6 +493,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         let added = 0;
         let leaveAdded = 0;
         for (const doc of eligible) {
+            if (this.isPrimaryClientMobile(doc.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping refill candidate ${doc.mobile}: it is the live client mobile`);
+                continue;
+            }
             if (this.isMobileDailyCapped(doc.mobile)) continue;
             try {
                 const client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -607,7 +616,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Check & process buffer clients ----
 
     async checkBufferClients() {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return;
         }
@@ -651,6 +660,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (!bufferClient.clientId) continue;
             const client = clientMap.get(bufferClient.clientId);
             if (!client) continue;
+            if (bufferClient.mobile === client.mobile) {
+                this.logger.debug(`Skipping buffer maintenance for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
             if (bufferClient.inUse === true) continue;
 
             const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
@@ -727,6 +740,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: updateInfo ----
 
     async updateInfo() {
+        const primaryClientMobiles = await this.getPrimaryClientMobiles();
         const clients = await this.bufferClientModel
             .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 5 * this.ONE_DAY_MS) } })
             .sort({ channels: 1 })
@@ -735,6 +749,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const now = Date.now();
         for (let i = 0; i < clients.length; i++) {
             const client = clients[i];
+            if (this.isPrimaryClientMobile(client.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping buffer health check for ${client.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
             const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
             await this.performHealthCheck(client.mobile, lastChecked, now);
             if (i < clients.length - 1) {
@@ -746,7 +764,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Channel joining entry point ----
 
     async joinchannelForBufferClients(skipExisting: boolean = true, clientId?: string): Promise<string> {
-        if (this.telegramService.getActiveClientSetup()) {
+        if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping';
         }
 
@@ -761,13 +779,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Store clientId scope so refills stay within the same client
         this.joinScopeClientId = clientId || null;
 
+        const primaryClientMobiles = await this.getPrimaryClientMobiles(clientId);
         const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
         const query: Record<string, any> = {
             channels: { $lt: this.config.channelTarget },
-            mobile: { $nin: Array.from(preservedMobiles) },
+            mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
             status: 'active',
         };
         if (clientId) query.clientId = clientId;
+        this.logger.info('Prepared buffer join-channel sweep', {
+            clientId: clientId || 'all',
+            preservedCount: preservedMobiles.size,
+            primaryClientCount: primaryClientMobiles.size,
+        });
 
         const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(this.config.maxMapSize);
 
@@ -1005,13 +1029,22 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Bulk session update ----
 
     async updateAllClientSessions() {
+        const primaryClientMobiles = await this.getPrimaryClientMobiles();
         // Only update sessions for READY/SESSION_ROTATED accounts — never touch warming accounts
         const bufferClients = await this.bufferClientModel.find({
             status: 'active',
             warmupPhase: { $in: ['ready', 'session_rotated'] },
         }).exec();
+        this.logger.info('Starting bulk buffer session rotation', {
+            candidateCount: bufferClients.length,
+            protectedPrimaryClientCount: primaryClientMobiles.size,
+        });
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
+            if (this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping session rotation for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
             try {
                 this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
                 const client = await connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });

@@ -105,11 +105,17 @@ export class CreateClientDto {
     @IsString({ each: true })
     firstNames?: string[];
 
-    @ApiProperty({ description: 'Pool of last names', required: false })
+    @ApiProperty({ description: 'Pool of last names for buffer clients', required: false })
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    lastNames?: string[];
+    bufferLastNames?: string[];
+
+    @ApiProperty({ description: 'Pool of last names for promote clients', required: false })
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    promoteLastNames?: string[];
 
     @ApiProperty({ description: 'Pool of bios', required: false })
     @IsOptional()
@@ -117,8 +123,10 @@ export class CreateClientDto {
     @IsString({ each: true })
     bios?: string[];
 
-    @ApiProperty({ description: 'Pool of profile pics with hashes', required: false })
+    @ApiProperty({ description: 'Pool of profile pic URLs', required: false })
     @IsOptional()
     @IsArray()
-    profilePics?: Array<{ filename: string; phash: string }>;
+    @IsString({ each: true })
+    @IsUrl({}, { each: true })
+    profilePics?: string[];
 }

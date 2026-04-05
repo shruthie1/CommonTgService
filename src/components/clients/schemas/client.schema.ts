@@ -91,42 +91,22 @@ export class Client {
     @Prop({ required: false, type: [String], default: [] })
     firstNames: string[];
 
-    @ApiProperty({ description: 'Pool of last names for persona assignment', required: false })
+    @ApiProperty({ description: 'Pool of last names for buffer-client persona assignment', required: false })
     @Prop({ required: false, type: [String], default: [] })
-    lastNames: string[];
+    bufferLastNames: string[];
+
+    @ApiProperty({ description: 'Pool of last names for promote-client persona assignment', required: false })
+    @Prop({ required: false, type: [String], default: [] })
+    promoteLastNames: string[];
 
     @ApiProperty({ description: 'Pool of bios for persona assignment', required: false })
     @Prop({ required: false, type: [String], default: [] })
     bios: string[];
 
-    @ApiProperty({ description: 'Pool of profile pics with precomputed hashes', required: false })
-    @Prop({ required: false, type: [{ filename: String, phash: String }], default: [] })
-    profilePics: Array<{ filename: string; phash: string }>;
-
-    @ApiProperty({ description: 'Hash of current pool — changes when any pool field is updated', required: false })
-    @Prop({ required: false, default: null })
-    personaPoolVersion: string | null;
-
-    // ---- Active-account persona assignment (copied from buffer during setupClient) ----
-    @ApiProperty({ description: 'Assigned first name from pool', required: false })
-    @Prop({ required: false, default: null })
-    assignedFirstName: string | null;
-
-    @ApiProperty({ description: 'Assigned last name from pool', required: false })
-    @Prop({ required: false, default: null })
-    assignedLastName: string | null;
-
-    @ApiProperty({ description: 'Assigned bio from pool', required: false })
-    @Prop({ required: false, default: null })
-    assignedBio: string | null;
-
-    @ApiProperty({ description: 'Assigned photo filenames from pool', required: false })
+    @ApiProperty({ description: 'Pool of profile pic URLs', required: false })
     @Prop({ required: false, type: [String], default: [] })
-    assignedPhotoFilenames: string[];
+    profilePics: string[];
 
-    @ApiProperty({ description: 'Pool version when assignment was made', required: false })
-    @Prop({ required: false, default: null })
-    assignedPersonaPoolVersion: string | null;
 }
 
 export const ClientSchema = SchemaFactory.createForClass(Client);

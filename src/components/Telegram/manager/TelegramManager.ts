@@ -29,7 +29,7 @@ import { Dialog } from 'telegram/tl/custom/dialog';
         public apiId: number;
         public apiHash: string;
         private timeoutErr: NodeJS.Timeout = null;
-        private static activeClientSetup: ActiveClientSetup;
+        private static activeClientSetups = new Map<string, ActiveClientSetup>();
 
         constructor(sessionString: string, phoneNumber: string) {
             this.session = new StringSession(sessionString);
@@ -47,12 +47,23 @@ import { Dialog } from 'telegram/tl/custom/dialog';
 
         // ---- Static methods ----
 
-        public static getActiveClientSetup(): ActiveClientSetup {
-            return TelegramManager.activeClientSetup;
+        public static getActiveClientSetup(newMobile?: string): ActiveClientSetup | undefined {
+            if (newMobile) {
+                return TelegramManager.activeClientSetups.get(newMobile);
+            }
+            return TelegramManager.activeClientSetups.values().next().value;
         }
 
-        public static setActiveClientSetup(data: ActiveClientSetup | undefined): void {
-            TelegramManager.activeClientSetup = data;
+        public static hasActiveClientSetup(): boolean {
+            return TelegramManager.activeClientSetups.size > 0;
+        }
+
+        public static setActiveClientSetup(data: ActiveClientSetup): void {
+            TelegramManager.activeClientSetups.set(data.newMobile, data);
+        }
+
+        public static clearActiveClientSetup(newMobile: string): void {
+            TelegramManager.activeClientSetups.delete(newMobile);
         }
 
         // ---- Client lifecycle ----

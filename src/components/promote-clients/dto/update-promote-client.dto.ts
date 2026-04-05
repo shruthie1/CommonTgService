@@ -58,14 +58,9 @@ export class UpdatePromoteClientDto extends PartialType(CreatePromoteClientDto) 
     @IsString()
     assignedBio?: string;
 
-    @ApiProperty({ description: 'Assigned photo filenames', required: false })
+    @ApiProperty({ description: 'Assigned profile pic URLs', required: false })
     @IsOptional()
     @IsArray()
     @IsString({ each: true })
-    assignedPhotoFilenames?: string[];
-
-    @ApiProperty({ description: 'Pool version at assignment time', required: false })
-    @IsOptional()
-    @IsString()
-    assignedPersonaPoolVersion?: string;
+    assignedProfilePics?: string[];
 }

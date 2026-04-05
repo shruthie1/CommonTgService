@@ -1,7 +1,5 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseInterceptors, Res, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
-import { Response } from 'express';
-import * as path from 'path';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { Client } from './schemas/client.schema';
@@ -84,8 +82,8 @@ export class ClientController {
   @ApiParam({ name: 'clientId', description: 'Client ID' })
   @ApiResponse({ description: 'Return the user data.', type: String })
   async updateClient(@Param('clientId') clientId: string) {
-    this.clientService.updateClient(clientId);
-    return 'Update client initiated';
+    const updated = await this.clientService.updateClient(clientId, '', false, true);
+    return updated ? 'Update client completed' : 'Update client skipped';
   }
 
   @Get('maskedCls')
@@ -132,27 +130,6 @@ export class ClientController {
     @Query('scope') scope: 'all' | 'buffer' | 'promote' | 'activeClient' = 'all',
   ) {
     return await this.clientService.getExistingAssignments(clientId, scope);
-  }
-
-  @Get('persona-pics/:filename')
-  @ApiOperation({ summary: 'Serve a persona image file by filename, scoped by dbcoll' })
-  @ApiParam({ name: 'filename', description: 'Image filename to serve' })
-  @ApiQuery({ name: 'dbcoll', required: true, description: 'Collection name to scope file lookup (e.g. bufferclients)' })
-  async servePersonaPic(
-    @Param('filename') filename: string,
-    @Query('dbcoll') dbcoll: string,
-    @Res() res: Response,
-  ) {
-    if (!dbcoll) {
-      throw new NotFoundException('dbcoll query parameter is required');
-    }
-    const personaBase = process.env.PERSONA_PATH || path.join(process.cwd(), 'persona');
-    const scopedDir = path.join(personaBase, dbcoll.toLowerCase());
-    const found = this.clientService.findPersonaFile(scopedDir, filename);
-    if (!found) {
-      throw new NotFoundException(`Persona image not found: ${dbcoll}/${filename}`);
-    }
-    res.sendFile(found);
   }
 
   @Get(':clientId')

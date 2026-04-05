@@ -11,7 +11,7 @@ import { parseError } from '../../utils/parseError';
 import { ChannelInfo } from './types/telegram-responses';
 import { connectionManager } from './utils/connection-manager';
 import { TelegramLogger } from './utils/telegram-logger';
-import { ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from './manager/types';
+import { ActiveClientSetup, ChatStatistics, ContentFilter, GroupOptions, MessageScheduleOptions } from './manager/types';
 import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
 import { sleep } from 'telegram/Helpers';
@@ -46,12 +46,20 @@ export class TelegramService implements OnModuleDestroy {
     async onModuleDestroy() {
         this.logger.info('system', 'Module destroy initiated');
     }
-    public getActiveClientSetup() {
-        return TelegramManager.getActiveClientSetup();
+    public getActiveClientSetup(newMobile?: string) {
+        return TelegramManager.getActiveClientSetup(newMobile);
     }
 
-    public setActiveClientSetup(data: { days?: number, archiveOld: boolean, formalities: boolean, newMobile: string, existingMobile: string, clientId: string } | undefined) {
+    public hasActiveClientSetup(): boolean {
+        return TelegramManager.hasActiveClientSetup();
+    }
+
+    public setActiveClientSetup(data: ActiveClientSetup) {
         TelegramManager.setActiveClientSetup(data);
+    }
+
+    public clearActiveClientSetup(newMobile: string): void {
+        TelegramManager.clearActiveClientSetup(newMobile);
     }
 
     async getMessages(mobile: string, username: string, limit: number = 8, offsetId: number = 0) {
