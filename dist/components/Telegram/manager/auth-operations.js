@@ -23,27 +23,11 @@ const logbots_1 = require("../../../utils/logbots");
 const generateTGConfig_1 = require("../utils/generateTGConfig");
 const tg_config_1 = require("../utils/tg-config");
 const IMap_1 = require("../../../IMap/IMap");
-const _ownDeviceModels = (() => {
-    const models = [];
-    for (const name of (0, tg_config_1.getAvailablePlatforms)()) {
-        const platform = (0, tg_config_1.getPlatformConfig)(name);
-        if (platform) {
-            for (const device of platform.devices) {
-                models.push(device.deviceModel.toLowerCase());
-            }
-        }
-    }
-    return models;
-})();
-function isOwnAuth(auth) {
+function isOwnAuth(mobile, auth) {
     if (auth.current) {
         return true;
     }
-    const deviceModel = (auth.deviceModel || '').toLowerCase();
-    if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
-        return true;
-    }
-    return false;
+    return (0, tg_config_1.isAuthFingerprintMatch)(mobile, auth);
 }
 async function removeOtherAuths(ctx) {
     if (!ctx.client)
@@ -52,7 +36,7 @@ async function removeOtherAuths(ctx) {
     let keptCount = 0;
     let revokedCount = 0;
     for (const auth of result.authorizations) {
-        if (isOwnAuth(auth)) {
+        if (isOwnAuth(ctx.phoneNumber, auth)) {
             keptCount++;
             ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
@@ -96,7 +80,7 @@ async function getLastActiveTime(ctx) {
         const result = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
         let latest = 0;
         result.authorizations.forEach((auth) => {
-            if (!isOwnAuth(auth)) {
+            if (!isOwnAuth(ctx.phoneNumber, auth)) {
                 if (auth.dateActive && latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }

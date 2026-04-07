@@ -6985,27 +6985,11 @@ const logbots_1 = __webpack_require__(/*! ../../../utils/logbots */ "./src/utils
 const generateTGConfig_1 = __webpack_require__(/*! ../utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
 const tg_config_1 = __webpack_require__(/*! ../utils/tg-config */ "./src/components/Telegram/utils/tg-config.ts");
 const IMap_1 = __webpack_require__(/*! ../../../IMap/IMap */ "./src/IMap/IMap.ts");
-const _ownDeviceModels = (() => {
-    const models = [];
-    for (const name of (0, tg_config_1.getAvailablePlatforms)()) {
-        const platform = (0, tg_config_1.getPlatformConfig)(name);
-        if (platform) {
-            for (const device of platform.devices) {
-                models.push(device.deviceModel.toLowerCase());
-            }
-        }
-    }
-    return models;
-})();
-function isOwnAuth(auth) {
+function isOwnAuth(mobile, auth) {
     if (auth.current) {
         return true;
     }
-    const deviceModel = (auth.deviceModel || '').toLowerCase();
-    if (deviceModel && _ownDeviceModels.some(model => deviceModel.includes(model) || model.includes(deviceModel))) {
-        return true;
-    }
-    return false;
+    return (0, tg_config_1.isAuthFingerprintMatch)(mobile, auth);
 }
 async function removeOtherAuths(ctx) {
     if (!ctx.client)
@@ -7014,7 +6998,7 @@ async function removeOtherAuths(ctx) {
     let keptCount = 0;
     let revokedCount = 0;
     for (const auth of result.authorizations) {
-        if (isOwnAuth(auth)) {
+        if (isOwnAuth(ctx.phoneNumber, auth)) {
             keptCount++;
             ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
@@ -7058,7 +7042,7 @@ async function getLastActiveTime(ctx) {
         const result = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
         let latest = 0;
         result.authorizations.forEach((auth) => {
-            if (!isOwnAuth(auth)) {
+            if (!isOwnAuth(ctx.phoneNumber, auth)) {
                 if (auth.dateActive && latest < auth.dateActive) {
                     latest = auth.dateActive;
                 }
@@ -11541,7 +11525,7 @@ const redisClient_1 = __webpack_require__(/*! ../../../utils/redisClient */ "./s
 const logger = new utils_1.Logger("TGConfig");
 const PROXY_MAP_PREFIX = "tg:proxy_map:";
 const CONFIG_PREFIX = "tg:config:";
-const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 365 * 0.5;
+const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 400;
 const _directHttpsAgent = new https_1.default.Agent({ keepAlive: true, timeout: 10000 });
 const _directHttpAgent = new http_1.default.Agent({ keepAlive: true, timeout: 10000 });
 function isProxyEnabled() {
@@ -12209,14 +12193,34 @@ exports.TelegramLogger = TelegramLogger;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.stableHash = stableHash;
+exports.getTelegramCredentialsForMobile = getTelegramCredentialsForMobile;
+exports.getTelegramCredentialPool = getTelegramCredentialPool;
 exports.generateTGConfig = generateTGConfig;
 exports.generateTGConfigWithProxy = generateTGConfigWithProxy;
 exports.getAvailablePlatforms = getAvailablePlatforms;
 exports.getPlatformConfig = getPlatformConfig;
+exports.getExpectedAuthFingerprint = getExpectedAuthFingerprint;
+exports.isAuthFingerprintMatch = isAuthFingerprintMatch;
+const API_CREDENTIALS = [
+    { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
+    { apiId: 25328268, apiHash: "b4e654dd2a051930d0a30bb2add80d09" },
+    { apiId: 12777557, apiHash: "05054fc7885dcfa18eb7432865ea3500" },
+    { apiId: 27565391, apiHash: "a3a0a2e895f893e2067dae111b20f2d9" },
+    { apiId: 27586636, apiHash: "f020539b6bb5b945186d39b3ff1dd998" },
+    { apiId: 29210552, apiHash: "f3dbae7e628b312c829e1bd341f1e9a9" },
+];
+const DEFAULT_PLATFORM = "android";
+const DEFAULT_LANG_CODE = "en";
+const DEFAULT_SYSTEM_LANG_CODE = "en-US";
+const DEVICE_MODEL_TAGS = {
+    android: "PGA",
+    ios: "PGI",
+    desktop: "PGD",
+    web: "PGW",
+    macos: "PGM",
+};
 const PLATFORMS = {
     android: {
-        apiId: 6,
-        apiHash: "eb06d4abfb49dc3eeb1aeb98ae0f581e",
         langPack: "android",
         devices: [
             { deviceModel: "Samsung SM-S928B", systemVersion: "SDK 35" },
@@ -12238,8 +12242,6 @@ const PLATFORMS = {
         appVersions: ["12.5.2 (6597)", "12.5.1 (6595)", "12.4.3 (6590)", "12.4.1 (6585)"],
     },
     ios: {
-        apiId: 10840,
-        apiHash: "33c45224029d59cb3ad0c16134215aeb",
         langPack: "ios",
         devices: [
             { deviceModel: "iPhone 16 Pro Max", systemVersion: "18.3.2" },
@@ -12260,8 +12262,6 @@ const PLATFORMS = {
         appVersions: ["12.5.2 (32493)", "12.5.1 (32487)", "12.4.1 (32360)"],
     },
     desktop: {
-        apiId: 2040,
-        apiHash: "b18441a1ff607e10a989891a5462e627",
         langPack: "tdesktop",
         devices: [
             { deviceModel: "DESKTOP-PC", systemVersion: "Windows 11 Version 23H2" },
@@ -12275,8 +12275,6 @@ const PLATFORMS = {
         appVersions: ["6.6.4", "6.6.3", "6.6.2", "6.5.7"],
     },
     web: {
-        apiId: 2496,
-        apiHash: "8da85b0d5bfe62527e5b244c209159c3",
         langPack: "",
         devices: [
             {
@@ -12299,8 +12297,6 @@ const PLATFORMS = {
         appVersions: ["1.28.3 Z", "1.28.2 Z", "1.27.1 Z"],
     },
     macos: {
-        apiId: 2834,
-        apiHash: "68875f756c9b437a8b916ca3de215815",
         langPack: "macos",
         devices: [
             { deviceModel: "MacBook Pro", systemVersion: "macOS 15.3" },
@@ -12323,25 +12319,47 @@ function stableHash(str) {
 function stablePick(arr, seed) {
     return arr[stableHash(seed) % arr.length];
 }
+function pickTelegramCredentials(seed) {
+    return stablePick(API_CREDENTIALS, `${seed}-credentials`);
+}
+function getTelegramCredentialsForMobile(mobile) {
+    return pickTelegramCredentials(mobile);
+}
+function getTelegramCredentialPool() {
+    return API_CREDENTIALS;
+}
+function buildCustomDeviceModel(platformName, baseDeviceModel, seed) {
+    const tag = stableHash(`${seed}-${platformName}-device`)
+        .toString(36)
+        .toUpperCase()
+        .slice(0, 6)
+        .padStart(6, "0");
+    const prefix = DEVICE_MODEL_TAGS[platformName] || "PG";
+    return `${baseDeviceModel} ${prefix}-${tag}`;
+}
+function normalizeAuthField(value) {
+    return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
 function generateTGConfig(mobile, proxy, options) {
     const platformName = (options?.platform ||
-        process.env.TG_PLATFORM ||
-        "android").toLowerCase();
+        DEFAULT_PLATFORM).toLowerCase();
     const platform = PLATFORMS[platformName];
     if (!platform) {
         throw new Error(`Unknown platform "${platformName}". Valid: ${Object.keys(PLATFORMS).join(", ")}`);
     }
-    const seed = `${mobile}-${process.env.clientId || "default"}`;
+    const seed = mobile;
     const device = stablePick(platform.devices, seed);
     const appVersion = stablePick(platform.appVersions, seed + "-app");
-    const apiId = options?.apiId || parseInt(process.env.TG_API_ID || "") || platform.apiId;
-    const apiHash = options?.apiHash || process.env.TG_API_HASH || platform.apiHash;
-    const langCode = options?.langCode || process.env.TG_LANG_CODE || "en";
-    const systemLangCode = options?.systemLangCode || process.env.TG_SYSTEM_LANG_CODE || "en-US";
+    const deviceModel = buildCustomDeviceModel(platformName, device.deviceModel, seed);
+    const selectedCredentials = pickTelegramCredentials(seed);
+    const apiId = options?.apiId || selectedCredentials.apiId;
+    const apiHash = options?.apiHash || selectedCredentials.apiHash;
+    const langCode = options?.langCode || DEFAULT_LANG_CODE;
+    const systemLangCode = options?.systemLangCode || DEFAULT_SYSTEM_LANG_CODE;
     const config = {
         apiId,
         apiHash,
-        deviceModel: device.deviceModel,
+        deviceModel,
         systemVersion: device.systemVersion,
         appVersion,
         langCode,
@@ -12379,6 +12397,29 @@ function getAvailablePlatforms() {
 }
 function getPlatformConfig(platform) {
     return PLATFORMS[platform.toLowerCase()];
+}
+function getExpectedAuthFingerprint(mobile, options) {
+    const platform = (options?.platform || DEFAULT_PLATFORM).toLowerCase();
+    const config = generateTGConfig(mobile, undefined, options);
+    return {
+        apiId: config.apiId,
+        apiHash: config.apiHash,
+        platform,
+        deviceModel: config.deviceModel,
+        systemVersion: config.systemVersion,
+        appVersion: config.appVersion,
+        langCode: config.langCode,
+        systemLangCode: config.systemLangCode,
+        langPack: config.langPack,
+    };
+}
+function isAuthFingerprintMatch(mobile, auth) {
+    if (auth.current) {
+        return true;
+    }
+    const expected = getExpectedAuthFingerprint(mobile);
+    return (normalizeAuthField(auth.deviceModel) === normalizeAuthField(expected.deviceModel) &&
+        normalizeAuthField(auth.systemVersion) === normalizeAuthField(expected.systemVersion));
 }
 
 
@@ -27772,6 +27813,7 @@ const sessions_1 = __webpack_require__(/*! telegram/sessions */ "telegram/sessio
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const telegram_logger_1 = __webpack_require__(/*! ../Telegram/utils/telegram-logger */ "./src/components/Telegram/utils/telegram-logger.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const tg_config_1 = __webpack_require__(/*! ../Telegram/utils/tg-config */ "./src/components/Telegram/utils/tg-config.ts");
 const client_registry_1 = __webpack_require__(/*! ./client-registry */ "./src/components/session-manager/client-registry.ts");
 const session_audit_service_1 = __webpack_require__(/*! ./session-audit.service */ "./src/components/session-manager/session-audit.service.ts");
 const sessions_schema_1 = __webpack_require__(/*! ./schemas/sessions.schema */ "./src/components/session-manager/schemas/sessions.schema.ts");
@@ -27785,19 +27827,8 @@ class SessionManager {
         this.OTP_WAIT_TIME = 120000;
         this.OTP_CHECK_INTERVAL = 3000;
     }
-    getApiId() {
-        const apiId = parseInt(process.env.API_ID);
-        if (isNaN(apiId)) {
-            throw new Error('Invalid API_ID: must be a number');
-        }
-        return apiId;
-    }
-    getApiHash() {
-        const apiHash = process.env.API_HASH;
-        if (!apiHash) {
-            throw new Error('API_HASH environment variable is required');
-        }
-        return apiHash;
+    getCredentials(mobile) {
+        return (0, tg_config_1.getTelegramCredentialsForMobile)(mobile);
     }
     static getInstance() {
         if (!SessionManager.instance) {
@@ -27923,7 +27954,7 @@ class SessionManager {
     async validateSession(sessionString, mobile) {
         let tempClient = null;
         try {
-            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getCredentials(mobile).apiId, this.getCredentials(mobile).apiHash, { connectionRetries: 1 });
             await tempClient.connect();
             const userInfo = await tempClient.getMe();
             if (!userInfo || userInfo.phone !== mobile) {
@@ -27945,10 +27976,11 @@ class SessionManager {
         let oldClient = null;
         let newClient = null;
         try {
-            oldClient = new telegram_1.TelegramClient(new sessions_1.StringSession(oldSessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            const credentials = this.getCredentials(mobile);
+            oldClient = new telegram_1.TelegramClient(new sessions_1.StringSession(oldSessionString), credentials.apiId, credentials.apiHash, { connectionRetries: 1 });
             await oldClient.connect();
             await oldClient.getMe();
-            newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
+            newClient = new telegram_1.TelegramClient(new sessions_1.StringSession(''), credentials.apiId, credentials.apiHash, { connectionRetries: 1 });
             await newClient.start({
                 phoneNumber: mobile,
                 password: async () => password,
@@ -28109,23 +28141,8 @@ let SessionService = class SessionService {
         this.RATE_LIMIT_WINDOW = 3600000;
         this.sessionAuditService = sessionAuditService;
     }
-    getApiId() {
-        const apiId = process.env.API_ID;
-        if (!apiId) {
-            throw new Error('API_ID environment variable is required');
-        }
-        const parsedApiId = parseInt(apiId);
-        if (isNaN(parsedApiId)) {
-            throw new Error('Invalid API_ID: must be a number');
-        }
-        return parsedApiId;
-    }
-    getApiHash() {
-        const apiHash = process.env.API_HASH;
-        if (!apiHash) {
-            throw new Error('API_HASH environment variable is required');
-        }
-        return apiHash;
+    getCredentials(mobile) {
+        return (0, tg_config_1.getTelegramCredentialsForMobile)(mobile);
     }
     checkRateLimit(mobile) {
         const now = Date.now();
@@ -28145,30 +28162,31 @@ let SessionService = class SessionService {
         return { allowed: true };
     }
     async extractMobileFromSession(sessionString) {
-        let tempClient = null;
-        try {
-            tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getApiId(), this.getApiHash(), { connectionRetries: 1 });
-            await tempClient.connect();
-            const userInfo = await tempClient.getMe();
-            if (!userInfo || !userInfo.phone) {
-                return { error: 'Unable to extract phone number from session' };
+        let lastError = 'Unable to extract phone number from session';
+        for (const credentials of (0, tg_config_1.getTelegramCredentialPool)()) {
+            let tempClient = null;
+            try {
+                tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), credentials.apiId, credentials.apiHash, { connectionRetries: 1 });
+                await tempClient.connect();
+                const userInfo = await tempClient.getMe();
+                if (userInfo?.phone) {
+                    return { mobile: userInfo.phone };
+                }
+                lastError = 'Unable to extract phone number from session';
             }
-            return { mobile: userInfo.phone };
-        }
-        catch (error) {
-            return { error: error.message || error.toString() };
-        }
-        finally {
-            if (tempClient) {
-                try {
-                    await tempClient.destroy();
-                    tempClient._eventBuilders = [];
-                    await (0, utils_1.sleep)(1000);
-                }
-                catch (cleanupError) {
-                }
-                finally {
-                    if (tempClient) {
+            catch (error) {
+                lastError = error?.message || error?.toString() || lastError;
+            }
+            finally {
+                if (tempClient) {
+                    try {
+                        await tempClient.destroy();
+                        tempClient._eventBuilders = [];
+                        await (0, utils_1.sleep)(1000);
+                    }
+                    catch (cleanupError) {
+                    }
+                    finally {
                         tempClient._destroyed = true;
                         if (tempClient._sender && typeof tempClient._sender.disconnect === 'function') {
                             await tempClient._sender.disconnect().catch(() => { });
@@ -28177,6 +28195,7 @@ let SessionService = class SessionService {
                 }
             }
         }
+        return { error: lastError };
     }
     async createSession(options) {
         if (!options || typeof options !== 'object') {
