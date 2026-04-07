@@ -105,6 +105,13 @@ let PromoteClientController = class PromoteClientController {
     async markAsUsed(mobile, body = {}) {
         return this.clientService.markAsUsed(mobile, body.message);
     }
+    async resetFailedAttempts(mobile) {
+        await this.clientService.update(mobile, {
+            failedUpdateAttempts: 0,
+            lastUpdateFailure: null,
+        });
+        return { message: `Reset failed attempts for ${mobile}` };
+    }
     async updateLastUsed(mobile) {
         return this.clientService.updateLastUsed(mobile);
     }
@@ -348,6 +355,16 @@ __decorate([
     __metadata("design:paramtypes", [String, client_swagger_dto_1.MarkUsedRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Post)('resetFailures/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Reset warmup failure tracking for a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { message: { type: 'string' } } } }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "resetFailedAttempts", null);
 __decorate([
     (0, common_1.Patch)('update-last-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),

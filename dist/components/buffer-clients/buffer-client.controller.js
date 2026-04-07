@@ -93,6 +93,13 @@ let BufferClientController = class BufferClientController {
     async markAsUsed(mobile, body = {}) {
         return this.clientService.markAsUsed(mobile, body.message);
     }
+    async resetFailedAttempts(mobile) {
+        await this.clientService.update(mobile, {
+            failedUpdateAttempts: 0,
+            lastUpdateFailure: null,
+        });
+        return { message: `Reset failed attempts for ${mobile}` };
+    }
     async getNextAvailable(clientId) {
         const client = await this.clientService.getNextAvailableBufferClient(clientId);
         if (!client) {
@@ -305,6 +312,16 @@ __decorate([
     __metadata("design:paramtypes", [String, client_swagger_dto_1.MarkUsedRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Post)('resetFailures/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Reset warmup failure tracking for a buffer client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { message: { type: 'string' } } } }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "resetFailedAttempts", null);
 __decorate([
     (0, common_1.Get)('next-available/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get next available buffer client for a specific client' }),
