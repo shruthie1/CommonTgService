@@ -217,6 +217,18 @@ export class BufferClientController {
     return this.clientService.markAsUsed(mobile, body.message);
   }
 
+  @Post('resetFailures/:mobile')
+  @ApiOperation({ summary: 'Reset warmup failure tracking for a buffer client' })
+  @ApiParam({ name: 'mobile', description: 'Mobile number of the buffer client', type: String })
+  @ApiOkResponse({ schema: { type: 'object', properties: { message: { type: 'string' } } } })
+  async resetFailedAttempts(@Param('mobile') mobile: string): Promise<{ message: string }> {
+    await this.clientService.update(mobile, {
+      failedUpdateAttempts: 0,
+      lastUpdateFailure: null,
+    });
+    return { message: `Reset failed attempts for ${mobile}` };
+  }
+
   @Get('next-available/:clientId')
   @ApiOperation({ summary: 'Get next available buffer client for a specific client' })
   @ApiParam({ name: 'clientId', description: 'Client ID to get next available buffer client for', type: String })

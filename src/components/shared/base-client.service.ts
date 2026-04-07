@@ -19,10 +19,13 @@ import { User } from '../users';
 import * as fs from 'fs';
 import path from 'path';
 import { Api } from 'telegram';
+import { TelegramClient } from 'telegram';
 import { computeCheck } from 'telegram/Password';
+import { StringSession } from 'telegram/sessions';
 import isPermanentError from '../../utils/isPermanentError';
 import { BotsService, ChannelCategory } from '../bots';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
+import { generateTGConfig } from '../Telegram/utils/generateTGConfig';
 import { ClientHelperUtils } from './client-helper.utils';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
 import {
@@ -1987,33 +1990,196 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     // ---- Session Rotation ----
 
+    protected normalizeMobileNumber(value?: string | null): string {
+        return (value || '').replace(/[^\d]/g, '');
+    }
+
+    protected async createVerifiedSessionClient(mobile: string, session: string): Promise<TelegramClient | null> {
+        const trimmedSession = session?.trim();
+        if (!trimmedSession) return null;
+
+        let client: TelegramClient | null = null;
+        try {
+            const { apiId, apiHash, params } = await generateTGConfig(mobile);
+            client = new TelegramClient(new StringSession(trimmedSession), apiId, apiHash, params);
+            await client.connect();
+            const me = await client.getMe() as Api.User | null;
+            const sessionPhone = this.normalizeMobileNumber(me?.phone || '');
+            const expectedMobile = this.normalizeMobileNumber(mobile);
+            if (!sessionPhone || sessionPhone !== expectedMobile) {
+                this.logger.warn(`Session mobile mismatch for ${mobile}: got ${sessionPhone || 'unknown'}`);
+                await client.destroy();
+                return null;
+            }
+            return client;
+        } catch (error) {
+            this.logger.warn(`Session liveness check failed for ${mobile}: ${parseError(error, 'verifySessionLive').message}`);
+            if (client) {
+                try {
+                    await client.destroy();
+                } catch {
+                    // Best-effort cleanup only.
+                }
+            }
+            return null;
+        }
+    }
+
     /**
-     * Create a backup session and store it in users collection.
-     * Old session stays in buffer/promote client for active use.
+     * Verify a stored session can still authenticate and belongs to the expected mobile.
+     */
+    protected async verifySessionLive(mobile: string, session: string): Promise<boolean> {
+        const client = await this.createVerifiedSessionClient(mobile, session);
+        if (!client) return false;
+        try {
+            return true;
+        } finally {
+            if (client) {
+                try {
+                    await client.destroy();
+                } catch {
+                    // Best-effort cleanup only.
+                }
+            }
+        }
+    }
+
+    /**
+     * Best-effort authorization inspection for the active session that remains on the client doc.
+     */
+    protected async verifySessionAuthorizations(mobile: string, session: string, existingClient?: TelegramClient): Promise<void> {
+        const trimmedSession = session?.trim();
+        if (!trimmedSession && !existingClient) return;
+
+        let client: TelegramClient | null = existingClient || null;
+        const ownsClientLifecycle = !existingClient;
+        try {
+            if (!client) {
+                const { apiId, apiHash, params } = await generateTGConfig(mobile);
+                client = new TelegramClient(new StringSession(trimmedSession), apiId, apiHash, params);
+                await client.connect();
+            }
+            const authResult = await client.invoke(new Api.account.GetAuthorizations());
+            this.logger.log(`Authorization check for ${mobile}: ${authResult.authorizations.length} active sessions found`);
+        } catch (error) {
+            this.logger.warn(`Authorization check failed for ${mobile}: ${parseError(error, 'GetAuthorizations').message}`);
+        } finally {
+            if (client && ownsClientLifecycle) {
+                try {
+                    await client.destroy();
+                } catch {
+                    // Best-effort cleanup only.
+                }
+            }
+        }
+    }
+
+    protected async resolveRotationBackupSession(
+        mobile: string,
+        activeSession: string,
+        user: User,
+    ): Promise<{ backupSession: string | null; reusedExisting: boolean }> {
+        const existingBackup = user.session?.trim() || null;
+
+        if (existingBackup && existingBackup !== activeSession) {
+            const backupSessionIsLive = await this.verifySessionLive(mobile, existingBackup);
+            if (backupSessionIsLive) {
+                this.logger.log(`Reusing existing users backup session for ${mobile}`);
+                return { backupSession: existingBackup, reusedExisting: true };
+            }
+            this.logger.warn(`Existing backup session is not valid for ${mobile}; creating a fresh backup`);
+        }
+
+        this.logger.log(`Creating fresh backup session for ${mobile}`);
+        const backupSession = await this.createDistinctSessionString(mobile, [activeSession, existingBackup]);
+        if (!backupSession) {
+            return { backupSession: null, reusedExisting: false };
+        }
+
+        await this.usersService.update(user.tgId, { session: backupSession });
+        return { backupSession, reusedExisting: false };
+    }
+
+    protected async verifyRotationPersistence(
+        mobile: string,
+        activeSession: string,
+        expectedBackupSession: string,
+    ): Promise<boolean> {
+        const persistedBackupUsers = await this.usersService.search({ mobile });
+        const persistedBackup = persistedBackupUsers[0]?.session?.trim() || null;
+        const persistedActive = await this.getStoredActiveSession(mobile);
+
+        if (persistedActive?.trim() !== activeSession) {
+            this.logger.error(`Active session changed unexpectedly during rotation for ${mobile}`);
+            return false;
+        }
+        if (!persistedBackup || persistedBackup === activeSession || persistedBackup !== expectedBackupSession) {
+            this.logger.error(`Backup session persistence verification failed for ${mobile}`);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Keep the existing active session on the buffer/promote client doc.
+     * Reuse an existing distinct users backup when it is live for the same mobile,
+     * otherwise create and persist a fresh distinct backup.
      */
     async rotateSession(mobile: string): Promise<boolean> {
+        let activeClient: TelegramClient | null = null;
         try {
             this.logger.log(`Starting session rotation for ${mobile}`);
 
             const activeSession = await this.getStoredActiveSession(mobile);
-            const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(mobile, activeSession);
-            if (!hasDistinctBackup) {
-                this.logger.error(`Failed to ensure distinct backup session for ${mobile}`);
+            if (!activeSession) {
+                this.logger.error(`No active session found in client doc for ${mobile}`);
+                return false;
+            }
+            activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
+            if (!activeClient) {
+                this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
                 return false;
             }
 
-            // Mark session as rotated
+            const users = await this.usersService.search({ mobile });
+            if (!users.length) {
+                this.logger.error(`No user record found for ${mobile}`);
+                return false;
+            }
+
+            const user = users[0] as User;
+            const { backupSession } = await this.resolveRotationBackupSession(mobile, activeSession, user);
+            if (!backupSession) {
+                this.logger.error(`Failed to create distinct backup session for ${mobile}`);
+                return false;
+            }
+
+            await this.verifySessionAuthorizations(mobile, activeSession, activeClient);
+
+            const persistenceVerified = await this.verifyRotationPersistence(mobile, activeSession, backupSession);
+            if (!persistenceVerified) {
+                return false;
+            }
+
             await this.update(mobile, {
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
                 sessionRotatedAt: new Date(),
             });
 
-            this.logger.log(`Session rotation complete for ${mobile}`);
+            this.logger.log(`Session rotation complete for ${mobile} — active session retained, users backup verified`);
             return true;
         } catch (error) {
-            this.logger.error(`Session rotation failed for ${mobile}:`, error);
+            this.logger.error(`Session rotation failed for ${mobile}: ${parseError(error, 'rotateSession').message}`);
             return false;
         } finally {
+            if (activeClient) {
+                try {
+                    await activeClient.destroy();
+                } catch {
+                    // Best-effort cleanup only.
+                }
+            }
             await this.safeUnregisterClient(mobile);
         }
     }

@@ -25,6 +25,8 @@ jest.mock('../../../utils/logbots', () => ({
 class TestBaseService extends BaseClientService<BaseClientDocument> {
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
+    public readonly telegramServiceMock: any;
+    public readonly usersServiceMock: any;
 
     constructor(modelOverrides: any = {}) {
         const telegramService = {
@@ -45,6 +47,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
             'TestBaseService',
         );
         this.mockModel = modelOverrides;
+        this.telegramServiceMock = telegramService;
+        this.usersServiceMock = usersService;
     }
 
     get model(): any {
@@ -107,13 +111,13 @@ function createQueryChain(executor: () => any) {
     };
 }
 
-function makeBufferService(bufferModel: any) {
+function makeBufferService(bufferModel: any, clientsList: any[] = [{ clientId: 'client-1', mobile: 'main-1' }]) {
     return new BufferClientService(
         bufferModel as any,
-        { getActiveClientSetup: jest.fn(() => false) } as any,
+        { hasActiveClientSetup: jest.fn(() => false) } as any,
         {} as any,
         { getActiveChannels: jest.fn().mockResolvedValue([]) } as any,
-        { findAll: jest.fn().mockResolvedValue([]) } as any,
+        { findAll: jest.fn().mockResolvedValue(clientsList) } as any,
         { getActiveChannels: jest.fn().mockResolvedValue([]) } as any,
         { findAll: jest.fn().mockResolvedValue([]) } as any,
         {} as any,
@@ -124,7 +128,7 @@ function makeBufferService(bufferModel: any) {
 function makePromoteService(promoteModel: any, clientsList: any[] = [{ clientId: 'client-1', mobile: 'main-1' }]) {
     return new PromoteClientService(
         promoteModel as any,
-        { getActiveClientSetup: jest.fn(() => false) } as any,
+        { hasActiveClientSetup: jest.fn(() => false) } as any,
         {} as any,
         {} as any,
         { findAll: jest.fn().mockResolvedValue(clientsList) } as any,
@@ -220,6 +224,7 @@ describe('Service flow reliability', () => {
     test('processClient resets max failures when lastUpdateFailure is missing instead of skipping forever', async () => {
         const service = new TestBaseService();
         const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-03T12:00:00.000Z').getTime());
+        jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
         const doc = {
             mobile: '9990004444',
             warmupPhase: WarmupPhase.READY,
@@ -238,11 +243,97 @@ describe('Service flow reliability', () => {
             '9990004444',
             expect.objectContaining({ failedUpdateAttempts: 0, lastUpdateFailure: null }),
         );
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '9990004444',
-            expect.objectContaining({ lastUpdateAttempt: expect.any(Date) }),
-        );
+        expect(service.rotateSession).toHaveBeenCalledWith('9990004444');
         nowSpy.mockRestore();
+    });
+
+    test('rotateSession reuses an existing distinct backup when it is valid for the same mobile', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(true);
+        jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
+        const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString');
+
+        service.usersServiceMock.search
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-1', mobile: '9990090001', session: 'live-backup-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-1', mobile: '9990090001', session: 'live-backup-session' }]);
+
+        const rotated = await service.rotateSession('9990090001');
+
+        expect(rotated).toBe(true);
+        expect(service.updateMock).toHaveBeenCalledWith(
+            '9990090001',
+            expect.objectContaining({
+                warmupPhase: WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: expect.any(Date),
+            }),
+        );
+        expect(createDistinctSpy).not.toHaveBeenCalled();
+        expect(service.usersServiceMock.update).not.toHaveBeenCalled();
+        expect((service as any).verifySessionLive).toHaveBeenCalledTimes(1);
+        expect((service as any).verifySessionLive).toHaveBeenCalledWith('9990090001', 'live-backup-session');
+        expect((service as any).verifySessionAuthorizations).toHaveBeenCalledWith('9990090001', 'active-session', expect.anything());
+    });
+
+    test('rotateSession creates and persists a new backup when the existing backup is stale', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
+        jest.spyOn(service as any, 'verifySessionLive')
+            .mockResolvedValueOnce(false);
+        jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
+        const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString').mockResolvedValue('fresh-backup-session');
+
+        service.usersServiceMock.search
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-2', mobile: '9990090002', session: 'dead-backup-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-2', mobile: '9990090002', session: 'fresh-backup-session' }]);
+
+        const rotated = await service.rotateSession('9990090002');
+
+        expect(rotated).toBe(true);
+        expect(createDistinctSpy).toHaveBeenCalledWith('9990090002', ['active-session', 'dead-backup-session']);
+        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-rotate-2', { session: 'fresh-backup-session' });
+        expect(service.updateMock).toHaveBeenCalledWith(
+            '9990090002',
+            expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
+        );
+    });
+
+    test('rotateSession creates and persists a new backup when users session duplicates the active session', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(true);
+        jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
+        const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString').mockResolvedValue('fresh-duplicate-replacement');
+
+        service.usersServiceMock.search
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-dup', mobile: '9990090004', session: 'active-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-dup', mobile: '9990090004', session: 'fresh-duplicate-replacement' }]);
+
+        const rotated = await service.rotateSession('9990090004');
+
+        expect(rotated).toBe(true);
+        expect(createDistinctSpy).toHaveBeenCalledWith('9990090004', ['active-session', 'active-session']);
+        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-rotate-dup', { session: 'fresh-duplicate-replacement' });
+    });
+
+    test('rotateSession fails when the active session belongs to a different mobile', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue(null);
+        jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
+        const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString');
+
+        const rotated = await service.rotateSession('9990090003');
+
+        expect(rotated).toBe(false);
+        expect(createDistinctSpy).not.toHaveBeenCalled();
+        expect(service.usersServiceMock.update).not.toHaveBeenCalled();
     });
 
     test('frozen permanent reasons include freeze metadata when Telegram app config exposes it', async () => {
@@ -281,7 +372,10 @@ describe('Service flow reliability', () => {
             aggregate: jest.fn(),
         };
 
-        const service = makeBufferService(bufferModel);
+        const service = makeBufferService(bufferModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+            { clientId: 'client-2', mobile: 'main-2' },
+        ]);
         jest.spyOn(service as any, 'clearJoinChannelInterval').mockImplementation(() => {});
         jest.spyOn(service as any, 'clearLeaveChannelInterval').mockImplementation(() => {});
         // Mobile with remaining channels should be preserved and excluded from query
@@ -291,7 +385,7 @@ describe('Service flow reliability', () => {
 
         await service.joinchannelForBufferClients(true);
 
-        expect(capturedQuery?.mobile?.$nin).toEqual(['has-channels']);
+        expect(capturedQuery?.mobile?.$nin).toEqual(['has-channels', 'main-1', 'main-2']);
         expect((service as any).joinChannelMap.has('has-channels')).toBe(true);
         expect((service as any).joinChannelMap.has('empty-mobile')).toBe(false);
     });
@@ -310,14 +404,17 @@ describe('Service flow reliability', () => {
             aggregate: jest.fn(),
         };
 
-        const service = makeBufferService(bufferModel);
+        const service = makeBufferService(bufferModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+            { clientId: 'client-2', mobile: 'main-2' },
+        ]);
         jest.spyOn(service as any, 'clearJoinChannelInterval').mockImplementation(() => {});
         jest.spyOn(service as any, 'clearLeaveChannelInterval').mockImplementation(() => {});
         (service as any).joinChannelMap.set('existing-mobile', []);
 
         await service.joinchannelForBufferClients(false);
 
-        expect(capturedQuery?.mobile?.$nin).toEqual([]);
+        expect(capturedQuery?.mobile?.$nin).toEqual(['main-1', 'main-2']);
     });
 
     test('checkPromoteClients skips health checks for warming accounts but still processes warmup', async () => {
@@ -364,7 +461,7 @@ describe('Service flow reliability', () => {
         expect((service as any).processClient).toHaveBeenCalledWith(warmDoc, { clientId: 'client-1', mobile: 'main-1' });
     });
 
-    test('checkPromoteClients performs health checks for ready accounts before processing', async () => {
+    test('checkPromoteClients skips health checks for ready accounts and processes them directly', async () => {
         const readyDoc = {
             mobile: '90002',
             clientId: 'client-1',
@@ -392,7 +489,7 @@ describe('Service flow reliability', () => {
 
         const service = makePromoteService(promoteModel);
         const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
-        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue(1);
+        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
             windowNeeds: [],
@@ -405,12 +502,57 @@ describe('Service flow reliability', () => {
 
         await service.checkPromoteClients();
 
-        expect(healthSpy).toHaveBeenCalledWith('90002', 0, expect.any(Number));
+        expect(healthSpy).not.toHaveBeenCalled();
         expect(processSpy).toHaveBeenCalledWith(readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+    });
+
+    test('checkPromoteClients performs health checks for session-rotated accounts before processing', async () => {
+        const rotatedDoc = {
+            mobile: '90003',
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+        } as any;
+
+        const promoteModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true) {
+                    if (query?.clientId?.$ne === null) {
+                        return { exec: jest.fn().mockResolvedValue([rotatedDoc]) };
+                    }
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([
+                { _id: 'client-1', count: 1, mobiles: ['90003'] },
+            ]),
+            countDocuments: jest.fn().mockResolvedValue(1),
+        };
+
+        const service = makePromoteService(promoteModel);
+        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'noop' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 0,
+            windowNeeds: [],
+            totalActive: 0,
+            totalNeededForCount: 0,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        jest.spyOn(service as any, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue(undefined);
+
+        await service.checkPromoteClients();
+
+        expect(healthSpy).toHaveBeenCalledWith('90003', 0, expect.any(Number));
+        expect(processSpy).toHaveBeenCalledWith(rotatedDoc, { clientId: 'client-1', mobile: 'main-1' });
         expect(healthSpy.mock.invocationCallOrder[0]).toBeLessThan(processSpy.mock.invocationCallOrder[0]);
     });
 
-    test('checkPromoteClients globally prioritizes warming accounts with older attempts before ready accounts', async () => {
+    test('checkPromoteClients globally prioritizes ready accounts before older warming accounts', async () => {
         const readyDoc = {
             mobile: '90011',
             clientId: 'client-1',
@@ -457,7 +599,7 @@ describe('Service flow reliability', () => {
             { clientId: 'client-2', mobile: 'main-2' },
         ]);
         jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
-        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue(1);
+        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
             windowNeeds: [],
@@ -470,8 +612,133 @@ describe('Service flow reliability', () => {
 
         await service.checkPromoteClients();
 
-        expect(processSpy).toHaveBeenNthCalledWith(1, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
-        expect(processSpy).toHaveBeenNthCalledWith(2, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+        expect(processSpy).toHaveBeenNthCalledWith(1, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+        expect(processSpy).toHaveBeenNthCalledWith(2, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+    });
+
+    test('checkBufferClients skips health checks for ready accounts and processes them directly', async () => {
+        const readyDoc = {
+            mobile: '91001',
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.READY,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            inUse: false,
+        } as any;
+
+        const bufferModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true && query?.clientId?.$ne === null) {
+                    return { exec: jest.fn().mockResolvedValue([readyDoc]) };
+                }
+                if (query?.clientId?.$exists === true) {
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([
+                { _id: 'client-1', count: 1, mobiles: ['91001'] },
+            ]),
+            countDocuments: jest.fn().mockResolvedValue(1),
+        };
+
+        const service = makeBufferService(bufferModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+            { clientId: 'client-2', mobile: 'main-2' },
+        ]);
+        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 0,
+            windowNeeds: [],
+            totalActive: 0,
+            totalNeededForCount: 0,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        jest.spyOn(service as any, 'addNewUserstoBufferClientsDynamic').mockResolvedValue({
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        });
+        jest.spyOn(service as any, 'sendBufferCheckSummaryNotification').mockResolvedValue(undefined);
+
+        await service.checkBufferClients();
+
+        expect(healthSpy).not.toHaveBeenCalled();
+        expect(processSpy).toHaveBeenCalledWith(readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+    });
+
+    test('checkBufferClients globally prioritizes ready accounts before older warming accounts', async () => {
+        const readyDoc = {
+            mobile: '91011',
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.READY,
+            lastChecked: null,
+            lastUpdateAttempt: new Date('2026-04-03T11:00:00.000Z'),
+            lastUsed: null,
+            failedUpdateAttempts: 0,
+            inUse: false,
+        } as any;
+        const warmingDoc = {
+            mobile: '91022',
+            clientId: 'client-2',
+            warmupPhase: WarmupPhase.IDENTITY,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            failedUpdateAttempts: 0,
+            inUse: false,
+        } as any;
+
+        const bufferModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true && query?.clientId?.$ne === null) {
+                    return {
+                        exec: jest.fn().mockResolvedValue([
+                            readyDoc,
+                            warmingDoc,
+                        ]),
+                    };
+                }
+                if (query?.clientId?.$exists === true) {
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([
+                { _id: 'client-1', count: 1, mobiles: ['91011'] },
+                { _id: 'client-2', count: 1, mobiles: ['91022'] },
+            ]),
+            countDocuments: jest.fn().mockResolvedValue(1),
+        };
+
+        const service = makeBufferService(bufferModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+            { clientId: 'client-2', mobile: 'main-2' },
+        ]);
+        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 0,
+            windowNeeds: [],
+            totalActive: 0,
+            totalNeededForCount: 0,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        jest.spyOn(service as any, 'addNewUserstoBufferClientsDynamic').mockResolvedValue({
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        });
+        jest.spyOn(service as any, 'sendBufferCheckSummaryNotification').mockResolvedValue(undefined);
+
+        await service.checkBufferClients();
+
+        expect(processSpy).toHaveBeenNthCalledWith(1, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+        expect(processSpy).toHaveBeenNthCalledWith(2, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
     });
 
     test('buffer join query does not filter by warmup phase', async () => {
@@ -517,6 +784,20 @@ describe('Service flow reliability', () => {
         expect((service as any).leaveChannelMap.has('keep-leave')).toBe(true);
         expect((service as any).leaveChannelMap.has('drop-leave')).toBe(false);
         expect(clearLeaveSpy).not.toHaveBeenCalled();
+    });
+
+    test('clearJoinMap resets queue state including transient failures and client scope', () => {
+        const service = new TestBaseService();
+
+        (service as any).joinChannelMap.set('mobile-1', [{ username: 'chan-1' }]);
+        (service as any).joinFailureCounts.set('mobile-1', 2);
+        (service as any).joinScopeClientId = 'client-42';
+
+        (service as any).clearJoinMap();
+
+        expect((service as any).joinChannelMap.size).toBe(0);
+        expect((service as any).joinFailureCounts.size).toBe(0);
+        expect((service as any).joinScopeClientId).toBeNull();
     });
 
     test('buffer refillJoinQueue uses fresh channel exclusions from live channelInfo', async () => {

@@ -753,7 +753,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase !== WarmupPhase.READY && warmupPhase !== WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const warmupBoost = warmupPhase === WarmupPhase.READY
+                ? 20000
+                : warmupPhase === WarmupPhase.SESSION_ROTATED
+                    ? 0
+                    : 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
 
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
@@ -766,7 +770,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         for (const { bufferClient, client } of bufferClientsToProcess) {
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
             const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
-            if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) {
+            if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
                 const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
                 if (!healthCheckPassed) continue;

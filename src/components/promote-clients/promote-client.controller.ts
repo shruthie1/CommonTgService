@@ -242,6 +242,18 @@ export class PromoteClientController {
     return this.clientService.markAsUsed(mobile, body.message);
   }
 
+  @Post('resetFailures/:mobile')
+  @ApiOperation({ summary: 'Reset warmup failure tracking for a promote client' })
+  @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
+  @ApiOkResponse({ schema: { type: 'object', properties: { message: { type: 'string' } } } })
+  async resetFailedAttempts(@Param('mobile') mobile: string): Promise<{ message: string }> {
+    await this.clientService.update(mobile, {
+      failedUpdateAttempts: 0,
+      lastUpdateFailure: null,
+    });
+    return { message: `Reset failed attempts for ${mobile}` };
+  }
+
   @Patch('update-last-used/:mobile')
   @ApiOperation({ summary: 'Update last used timestamp for a promote client' })
   @ApiParam({ name: 'mobile', description: 'Mobile number of the promote client', type: String })
