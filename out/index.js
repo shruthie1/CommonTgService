@@ -17268,11 +17268,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             if (this.isOnCooldown(bufferClient.mobile, bufferClient.lastUpdateAttempt, now))
                 continue;
             const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
-            if (lastUsed > 0) {
+            const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            if (lastUsed > 0 && warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(bufferClient.mobile, bufferClient, now);
                 continue;
             }
-            const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             const failedAttempts = bufferClient.failedUpdateAttempts || 0;
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
@@ -25918,12 +25918,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
             if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now))
                 continue;
+            const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
-            if (hasBeenUsed) {
+            if (hasBeenUsed && warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(promoteClient.mobile, promoteClient, now);
                 continue;
             }
-            const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             const failedAttempts = promoteClient.failedUpdateAttempts || 0;
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
