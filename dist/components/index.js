@@ -38,4 +38,5 @@ __exportStar(require("./upi-ids"), exports);
 __exportStar(require("./shared"), exports);
 __exportStar(require("./dynamic-data"), exports);
 __exportStar(require("./bots"), exports);
+__exportStar(require("./event-manager"), exports);
 //# sourceMappingURL=index.js.map
