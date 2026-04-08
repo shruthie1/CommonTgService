@@ -40,3 +40,5 @@ export * from './shared';
 export * from './dynamic-data'
 
 export * from './bots';
+
+export * from './event-manager';

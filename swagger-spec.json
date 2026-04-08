@@ -6368,6 +6368,145 @@
         ]
       }
     },
+    "/event-manager": {
+      "get": {
+        "operationId": "EventManagerController_getAllEvents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all events (supports query filters)",
+        "tags": [
+          "event-manager"
+        ]
+      },
+      "post": {
+        "operationId": "EventManagerController_createEvent",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEventDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a single event",
+        "tags": [
+          "event-manager"
+        ]
+      }
+    },
+    "/event-manager/{id}": {
+      "get": {
+        "operationId": "EventManagerController_getEventById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get event by ID",
+        "tags": [
+          "event-manager"
+        ]
+      }
+    },
+    "/event-manager/schedule": {
+      "post": {
+        "operationId": "EventManagerController_schedulePaidEvents",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleEventsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Schedule paid events for a chatId+profile",
+        "tags": [
+          "event-manager"
+        ]
+      }
+    },
+    "/event-manager/createMultiple": {
+      "post": {
+        "operationId": "EventManagerController_createMultiple",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create multiple events at once",
+        "tags": [
+          "event-manager"
+        ]
+      }
+    },
+    "/event-manager/delete": {
+      "delete": {
+        "operationId": "EventManagerController_deleteMultiple",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete all events for a chatId",
+        "tags": [
+          "event-manager"
+        ]
+      }
+    },
     "/telegram/session/create": {
       "post": {
         "description": "Creates or retrieves a session based on provided parameters. If forceNew is true, always creates a new session. If forceNew is false, returns active session if exists and was used this month, otherwise creates new.",
@@ -8980,6 +9119,43 @@
         ]
       }
     },
+    "/bufferclients/resetFailures/{mobile}": {
+      "post": {
+        "operationId": "BufferClientController_resetFailedAttempts",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the buffer client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reset warmup failure tracking for a buffer client",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
     "/bufferclients/next-available/{clientId}": {
       "get": {
         "operationId": "BufferClientController_getNextAvailable",
@@ -10247,6 +10423,43 @@
           }
         },
         "summary": "Mark a promote client as used (update lastUsed timestamp)",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/resetFailures/{mobile}": {
+      "post": {
+        "operationId": "PromoteClientController_resetFailedAttempts",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "description": "Mobile number of the promote client",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Reset warmup failure tracking for a promote client",
         "tags": [
           "Promote Clients"
         ]
@@ -13916,6 +14129,68 @@
         },
         "required": [
           "mobileNumber"
+        ]
+      },
+      "CreateEventDto": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "string",
+            "example": "123456789"
+          },
+          "time": {
+            "type": "number",
+            "example": 1700000000000
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "call",
+              "message"
+            ]
+          },
+          "profile": {
+            "type": "string",
+            "example": "shruthi1"
+          },
+          "payload": {
+            "type": "object",
+            "example": {
+              "message": "Hello"
+            }
+          }
+        },
+        "required": [
+          "chatId",
+          "time",
+          "type",
+          "profile"
+        ]
+      },
+      "ScheduleEventsDto": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "string",
+            "example": "123456789"
+          },
+          "profile": {
+            "type": "string",
+            "example": "shruthi1"
+          },
+          "type": {
+            "type": "string",
+            "example": "1",
+            "enum": [
+              "1",
+              "2",
+              "3"
+            ]
+          }
+        },
+        "required": [
+          "chatId",
+          "profile"
         ]
       },
       "CreateSessionDto": {

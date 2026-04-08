@@ -27,6 +27,7 @@ import { APP_GUARD , APP_FILTER} from '@nestjs/core';
 import { AuthGuard } from './guards';
 import { BotsModule } from './components';
 import { ExceptionsFilter } from './interceptors';
+import { EventManagerModule } from './components/event-manager/event-manager.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ExceptionsFilter } from './interceptors';
     BotsModule,
     ActiveChannelsModule,
     ClientModule,
+    EventManagerModule,
     SessionModule,
     IpManagementModule,
     WebshareProxyModule,
@@ -53,6 +55,7 @@ import { ExceptionsFilter } from './interceptors';
     TransactionModule,
     TimestampModule,
     DynamicDataModule,
+    EventManagerModule,
   ],
   providers: [
     {
@@ -77,6 +80,7 @@ import { ExceptionsFilter } from './interceptors';
     TgSignupModule,
     TransactionModule,
     TimestampModule,
+    EventManagerModule,
   ]
 })
 export class AppModule implements NestModule {
