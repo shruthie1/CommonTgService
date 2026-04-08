@@ -743,12 +743,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (this.isOnCooldown(bufferClient.mobile, bufferClient.lastUpdateAttempt, now)) continue;
 
             const lastUsed = ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
-            if (lastUsed > 0) {
+            const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
+            // Only skip for backfill if the account is already fully operational (session_rotated).
+            // "ready" accounts with lastUsed set are pre-warmup-system accounts that need
+            // rotate_session to advance — never skip them here.
+            if (lastUsed > 0 && warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(bufferClient.mobile, bufferClient, now);
                 continue;
             }
-
-            const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
             const failedAttempts = bufferClient.failedUpdateAttempts || 0;
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)

@@ -779,13 +779,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
             if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now)) continue;
 
+            const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
+            // Only skip for backfill if the account is already fully operational (session_rotated).
+            // "ready" accounts with lastUsed set are pre-warmup-system accounts that need
+            // rotate_session to advance — never skip them here.
             const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
-            if (hasBeenUsed) {
+            if (hasBeenUsed && warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(promoteClient.mobile, promoteClient as PromoteClientDocument, now);
                 continue;
             }
-
-            const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
             const failedAttempts = promoteClient.failedUpdateAttempts || 0;
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
