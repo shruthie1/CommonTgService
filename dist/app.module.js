@@ -36,6 +36,7 @@ const core_1 = require("@nestjs/core");
 const guards_1 = require("./guards");
 const components_1 = require("./components");
 const interceptors_1 = require("./interceptors");
+const event_manager_module_1 = require("./components/event-manager/event-manager.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -50,6 +51,7 @@ exports.AppModule = AppModule = __decorate([
             components_1.BotsModule,
             active_channels_module_1.ActiveChannelsModule,
             client_module_1.ClientModule,
+            event_manager_module_1.EventManagerModule,
             session_manager_1.SessionModule,
             ip_management_module_1.IpManagementModule,
             webshare_proxy_module_1.WebshareProxyModule,
@@ -68,6 +70,7 @@ exports.AppModule = AppModule = __decorate([
             transaction_module_1.TransactionModule,
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
+            event_manager_module_1.EventManagerModule,
         ],
         providers: [
             {
@@ -92,6 +95,7 @@ exports.AppModule = AppModule = __decorate([
             tg_signup_module_1.TgSignupModule,
             transaction_module_1.TransactionModule,
             timestamp_module_1.TimestampModule,
+            event_manager_module_1.EventManagerModule,
         ]
     })
 ], AppModule);
