@@ -660,7 +660,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const warmupBoost = warmupPhase === base_client_service_1.WarmupPhase.READY
+                ? 20000
+                : warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED
+                    ? 0
+                    : 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
@@ -669,7 +673,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
                 break;
             const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
-            if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
                 const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
                 if (!healthCheckPassed)

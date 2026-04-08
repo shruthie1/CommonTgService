@@ -16273,6 +16273,13 @@ let BufferClientController = class BufferClientController {
     async markAsUsed(mobile, body = {}) {
         return this.clientService.markAsUsed(mobile, body.message);
     }
+    async resetFailedAttempts(mobile) {
+        await this.clientService.update(mobile, {
+            failedUpdateAttempts: 0,
+            lastUpdateFailure: null,
+        });
+        return { message: `Reset failed attempts for ${mobile}` };
+    }
     async getNextAvailable(clientId) {
         const client = await this.clientService.getNextAvailableBufferClient(clientId);
         if (!client) {
@@ -16485,6 +16492,16 @@ __decorate([
     __metadata("design:paramtypes", [String, client_swagger_dto_1.MarkUsedRequestDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Post)('resetFailures/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Reset warmup failure tracking for a buffer client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the buffer client', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { message: { type: 'string' } } } }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "resetFailedAttempts", null);
 __decorate([
     (0, common_1.Get)('next-available/:clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get next available buffer client for a specific client' }),
@@ -17256,7 +17273,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const warmupBoost = warmupPhase === base_client_service_1.WarmupPhase.READY
+                ? 20000
+                : warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED
+                    ? 0
+                    : 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }
@@ -17265,7 +17286,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
                 break;
             const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
-            if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
                 const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
                 if (!healthCheckPassed)
@@ -24251,6 +24272,13 @@ let PromoteClientController = class PromoteClientController {
     async markAsUsed(mobile, body = {}) {
         return this.clientService.markAsUsed(mobile, body.message);
     }
+    async resetFailedAttempts(mobile) {
+        await this.clientService.update(mobile, {
+            failedUpdateAttempts: 0,
+            lastUpdateFailure: null,
+        });
+        return { message: `Reset failed attempts for ${mobile}` };
+    }
     async updateLastUsed(mobile) {
         return this.clientService.updateLastUsed(mobile);
     }
@@ -24494,6 +24522,16 @@ __decorate([
     __metadata("design:paramtypes", [String, client_swagger_dto_1.MarkUsedRequestDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "markAsUsed", null);
+__decorate([
+    (0, common_1.Post)('resetFailures/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Reset warmup failure tracking for a promote client' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the promote client', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { message: { type: 'string' } } } }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "resetFailedAttempts", null);
 __decorate([
     (0, common_1.Patch)('update-last-used/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Update last used timestamp for a promote client' }),
@@ -25280,7 +25318,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase !== base_client_service_1.WarmupPhase.READY && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED ? 5000 : 0;
+            const warmupBoost = warmupPhase === base_client_service_1.WarmupPhase.READY
+                ? 20000
+                : warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED
+                    ? 0
+                    : 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
@@ -25289,7 +25331,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
                 break;
             const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
-            if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
                 const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
                 if (!healthCheckPassed)
@@ -28597,10 +28639,13 @@ const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channel
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+const telegram_2 = __webpack_require__(/*! telegram */ "telegram");
 const Password_1 = __webpack_require__(/*! telegram/Password */ "telegram/Password");
+const sessions_1 = __webpack_require__(/*! telegram/sessions */ "telegram/sessions");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const helpers_1 = __webpack_require__(/*! ../Telegram/manager/helpers */ "./src/components/Telegram/manager/helpers.ts");
+const generateTGConfig_1 = __webpack_require__(/*! ../Telegram/utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
 const organic_activity_1 = __webpack_require__(/*! ./organic-activity */ "./src/components/shared/organic-activity.ts");
 Object.defineProperty(exports, "performOrganicActivity", ({ enumerable: true, get: function () { return organic_activity_1.performOrganicActivity; } }));
@@ -30126,27 +30171,166 @@ class BaseClientService {
             updateData.message = message;
         return this.update(mobile, updateData);
     }
+    normalizeMobileNumber(value) {
+        return (value || '').replace(/[^\d]/g, '');
+    }
+    async createVerifiedSessionClient(mobile, session) {
+        const trimmedSession = session?.trim();
+        if (!trimmedSession)
+            return null;
+        let client = null;
+        try {
+            const { apiId, apiHash, params } = await (0, generateTGConfig_1.generateTGConfig)(mobile);
+            client = new telegram_2.TelegramClient(new sessions_1.StringSession(trimmedSession), apiId, apiHash, params);
+            await client.connect();
+            const me = await client.getMe();
+            const sessionPhone = this.normalizeMobileNumber(me?.phone || '');
+            const expectedMobile = this.normalizeMobileNumber(mobile);
+            if (!sessionPhone || sessionPhone !== expectedMobile) {
+                this.logger.warn(`Session mobile mismatch for ${mobile}: got ${sessionPhone || 'unknown'}`);
+                await client.destroy();
+                return null;
+            }
+            return client;
+        }
+        catch (error) {
+            this.logger.warn(`Session liveness check failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'verifySessionLive').message}`);
+            if (client) {
+                try {
+                    await client.destroy();
+                }
+                catch {
+                }
+            }
+            return null;
+        }
+    }
+    async verifySessionLive(mobile, session) {
+        const client = await this.createVerifiedSessionClient(mobile, session);
+        if (!client)
+            return false;
+        try {
+            return true;
+        }
+        finally {
+            if (client) {
+                try {
+                    await client.destroy();
+                }
+                catch {
+                }
+            }
+        }
+    }
+    async verifySessionAuthorizations(mobile, session, existingClient) {
+        const trimmedSession = session?.trim();
+        if (!trimmedSession && !existingClient)
+            return;
+        let client = existingClient || null;
+        const ownsClientLifecycle = !existingClient;
+        try {
+            if (!client) {
+                const { apiId, apiHash, params } = await (0, generateTGConfig_1.generateTGConfig)(mobile);
+                client = new telegram_2.TelegramClient(new sessions_1.StringSession(trimmedSession), apiId, apiHash, params);
+                await client.connect();
+            }
+            const authResult = await client.invoke(new telegram_1.Api.account.GetAuthorizations());
+            this.logger.log(`Authorization check for ${mobile}: ${authResult.authorizations.length} active sessions found`);
+        }
+        catch (error) {
+            this.logger.warn(`Authorization check failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'GetAuthorizations').message}`);
+        }
+        finally {
+            if (client && ownsClientLifecycle) {
+                try {
+                    await client.destroy();
+                }
+                catch {
+                }
+            }
+        }
+    }
+    async resolveRotationBackupSession(mobile, activeSession, user) {
+        const existingBackup = user.session?.trim() || null;
+        if (existingBackup && existingBackup !== activeSession) {
+            const backupSessionIsLive = await this.verifySessionLive(mobile, existingBackup);
+            if (backupSessionIsLive) {
+                this.logger.log(`Reusing existing users backup session for ${mobile}`);
+                return { backupSession: existingBackup, reusedExisting: true };
+            }
+            this.logger.warn(`Existing backup session is not valid for ${mobile}; creating a fresh backup`);
+        }
+        this.logger.log(`Creating fresh backup session for ${mobile}`);
+        const backupSession = await this.createDistinctSessionString(mobile, [activeSession, existingBackup]);
+        if (!backupSession) {
+            return { backupSession: null, reusedExisting: false };
+        }
+        await this.usersService.update(user.tgId, { session: backupSession });
+        return { backupSession, reusedExisting: false };
+    }
+    async verifyRotationPersistence(mobile, activeSession, expectedBackupSession) {
+        const persistedBackupUsers = await this.usersService.search({ mobile });
+        const persistedBackup = persistedBackupUsers[0]?.session?.trim() || null;
+        const persistedActive = await this.getStoredActiveSession(mobile);
+        if (persistedActive?.trim() !== activeSession) {
+            this.logger.error(`Active session changed unexpectedly during rotation for ${mobile}`);
+            return false;
+        }
+        if (!persistedBackup || persistedBackup === activeSession || persistedBackup !== expectedBackupSession) {
+            this.logger.error(`Backup session persistence verification failed for ${mobile}`);
+            return false;
+        }
+        return true;
+    }
     async rotateSession(mobile) {
+        let activeClient = null;
         try {
             this.logger.log(`Starting session rotation for ${mobile}`);
             const activeSession = await this.getStoredActiveSession(mobile);
-            const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(mobile, activeSession);
-            if (!hasDistinctBackup) {
-                this.logger.error(`Failed to ensure distinct backup session for ${mobile}`);
+            if (!activeSession) {
+                this.logger.error(`No active session found in client doc for ${mobile}`);
+                return false;
+            }
+            activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
+            if (!activeClient) {
+                this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
+                return false;
+            }
+            const users = await this.usersService.search({ mobile });
+            if (!users.length) {
+                this.logger.error(`No user record found for ${mobile}`);
+                return false;
+            }
+            const user = users[0];
+            const { backupSession } = await this.resolveRotationBackupSession(mobile, activeSession, user);
+            if (!backupSession) {
+                this.logger.error(`Failed to create distinct backup session for ${mobile}`);
+                return false;
+            }
+            await this.verifySessionAuthorizations(mobile, activeSession, activeClient);
+            const persistenceVerified = await this.verifyRotationPersistence(mobile, activeSession, backupSession);
+            if (!persistenceVerified) {
                 return false;
             }
             await this.update(mobile, {
                 warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
                 sessionRotatedAt: new Date(),
             });
-            this.logger.log(`Session rotation complete for ${mobile}`);
+            this.logger.log(`Session rotation complete for ${mobile} — active session retained, users backup verified`);
             return true;
         }
         catch (error) {
-            this.logger.error(`Session rotation failed for ${mobile}:`, error);
+            this.logger.error(`Session rotation failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'rotateSession').message}`);
             return false;
         }
         finally {
+            if (activeClient) {
+                try {
+                    await activeClient.destroy();
+                }
+                catch {
+                }
+            }
             await this.safeUnregisterClient(mobile);
         }
     }

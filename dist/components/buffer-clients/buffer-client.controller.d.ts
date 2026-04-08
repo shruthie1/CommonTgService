@@ -29,6 +29,9 @@ export declare class BufferClientController {
     markAsActive(mobile: string, body?: ActivationRequestDto): Promise<BufferClient>;
     markAsInactive(mobile: string, body: DeactivationRequestDto): Promise<BufferClient>;
     markAsUsed(mobile: string, body?: MarkUsedRequestDto): Promise<BufferClient>;
+    resetFailedAttempts(mobile: string): Promise<{
+        message: string;
+    }>;
     getNextAvailable(clientId: string): Promise<BufferClient | null>;
     getUnusedBufferClients(hoursAgo?: number, clientId?: string): Promise<BufferClient[]>;
     findOne(mobile: string): Promise<BufferClient>;

@@ -38,6 +38,9 @@ export declare class PromoteClientController {
     markAsActive(mobile: string, body?: ActivationRequestDto): Promise<PromoteClient>;
     markAsInactive(mobile: string, body: DeactivationRequestDto): Promise<PromoteClient>;
     markAsUsed(mobile: string, body?: MarkUsedRequestDto): Promise<PromoteClient>;
+    resetFailedAttempts(mobile: string): Promise<{
+        message: string;
+    }>;
     updateLastUsed(mobile: string): Promise<PromoteClient>;
     getLeastRecentlyUsed(clientId: string, limit?: number): Promise<PromoteClient[]>;
     getNextAvailable(clientId: string): Promise<PromoteClient | null>;

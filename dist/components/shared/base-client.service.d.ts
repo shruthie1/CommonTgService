@@ -13,6 +13,7 @@ import { ActiveChannel } from '../active-channels';
 import TelegramManager from '../Telegram/TelegramManager';
 import { Client } from '../clients';
 import { User } from '../users';
+import { TelegramClient } from 'telegram';
 import { BotsService } from '../bots';
 import { performOrganicActivity } from './organic-activity';
 import { getWarmupPhaseAction, WarmupPhase, WarmupPhaseType, WarmupAction, isAccountReady, isAccountWarmingUp } from './warmup-phases';
@@ -244,5 +245,14 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
         averageUsageGap: number;
     }>;
     markAsUsed(mobile: string, message?: string): Promise<TDoc>;
+    protected normalizeMobileNumber(value?: string | null): string;
+    protected createVerifiedSessionClient(mobile: string, session: string): Promise<TelegramClient | null>;
+    protected verifySessionLive(mobile: string, session: string): Promise<boolean>;
+    protected verifySessionAuthorizations(mobile: string, session: string, existingClient?: TelegramClient): Promise<void>;
+    protected resolveRotationBackupSession(mobile: string, activeSession: string, user: User): Promise<{
+        backupSession: string | null;
+        reusedExisting: boolean;
+    }>;
+    protected verifyRotationPersistence(mobile: string, activeSession: string, expectedBackupSession: string): Promise<boolean>;
     rotateSession(mobile: string): Promise<boolean>;
 }
