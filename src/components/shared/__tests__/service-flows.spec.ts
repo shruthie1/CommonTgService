@@ -27,6 +27,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
     public readonly telegramServiceMock: any;
     public readonly usersServiceMock: any;
+    public readonly botsServiceMock: any;
 
     constructor(modelOverrides: any = {}) {
         const telegramService = {
@@ -36,6 +37,9 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
             search: jest.fn(async ({ mobile }: { mobile: string }) => [{ tgId: `tg-${mobile}`, mobile, session: `backup-${mobile}` }]),
             update: jest.fn(async () => 1),
         };
+        const botsService = {
+            sendMessageByCategory: jest.fn(async () => undefined),
+        };
         super(
             telegramService as any,
             usersService as any,
@@ -43,12 +47,13 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
             {} as any,
             {} as any,
             {} as any,
-            {} as any,
+            botsService as any,
             'TestBaseService',
         );
         this.mockModel = modelOverrides;
         this.telegramServiceMock = telegramService;
         this.usersServiceMock = usersService;
+        this.botsServiceMock = botsService;
     }
 
     get model(): any {
@@ -244,6 +249,32 @@ describe('Service flow reliability', () => {
             expect.objectContaining({ failedUpdateAttempts: 0, lastUpdateFailure: null }),
         );
         expect(service.rotateSession).toHaveBeenCalledWith('9990004444');
+        nowSpy.mockRestore();
+    });
+
+    test('processClient retries max-failure accounts after the short backoff instead of leaving them blocked for 7 days', async () => {
+        const service = new TestBaseService();
+        const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-03T12:00:00.000Z').getTime());
+        jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
+        const doc = {
+            mobile: '9990004445',
+            warmupPhase: WarmupPhase.READY,
+            enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
+            createdAt: new Date('2026-03-01T12:00:00.000Z'),
+            failedUpdateAttempts: 3,
+            lastUpdateFailure: new Date('2026-04-02T11:00:00.000Z'),
+            lastUpdateAttempt: null,
+            inUse: false,
+        } as any;
+
+        await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+        expect(service.updateMock).toHaveBeenNthCalledWith(
+            1,
+            '9990004445',
+            expect.objectContaining({ failedUpdateAttempts: 0, lastUpdateFailure: null }),
+        );
+        expect(service.rotateSession).toHaveBeenCalledWith('9990004445');
         nowSpy.mockRestore();
     });
 
@@ -1239,5 +1270,273 @@ describe('Service flow reliability', () => {
         await (service as any).scheduleNextJoinRound();
 
         expect(clearSpy).toHaveBeenCalled();
+    });
+
+    // ======= STUCK SCENARIO TESTS =======
+    // These test processClient end-to-end for every scenario that could cause an account to get stuck.
+
+    describe('Stuck scenario: zombie detection at 45 days', () => {
+        test('account in settling for 50 days with 3+ failures → markAsInactive', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+
+            const doc = {
+                mobile: '9990007771',
+                warmupPhase: WarmupPhase.SETTLING,
+                enrolledAt: new Date('2026-02-20T12:00:00.000Z'), // 50 days ago
+                createdAt: new Date('2026-02-20T12:00:00.000Z'),
+                privacyUpdatedAt: new Date('2026-02-22T12:00:00.000Z'),
+                failedUpdateAttempts: 3,
+                lastUpdateFailure: new Date('2026-04-03T00:00:00.000Z'), // 8+ days ago → clearly triggers reset
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            expect(markInactiveSpy).toHaveBeenCalledWith(
+                '9990007771',
+                expect.stringContaining('Zombie'),
+            );
+        });
+
+        test('account in settling for 30 days with failures → resets normally (not zombie yet)', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+
+            // Mock set2fa to succeed so processClient doesn't need real TG
+            jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
+
+            const doc = {
+                mobile: '9990007772',
+                warmupPhase: WarmupPhase.SETTLING,
+                enrolledAt: new Date('2026-03-12T12:00:00.000Z'), // 30 days ago
+                createdAt: new Date('2026-03-12T12:00:00.000Z'),
+                privacyUpdatedAt: new Date('2026-03-14T12:00:00.000Z'),
+                failedUpdateAttempts: 3,
+                lastUpdateFailure: new Date('2026-04-04T12:00:00.000Z'), // 7d ago
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            // Should NOT be marked inactive — only 30 days, not 45
+            expect(markInactiveSpy).not.toHaveBeenCalled();
+            // Should reset failure count
+            expect(service.updateMock).toHaveBeenCalledWith(
+                '9990007772',
+                expect.objectContaining({ failedUpdateAttempts: 0 }),
+            );
+        });
+    });
+
+    describe('Stuck scenario: lastUsed on non-terminal account', () => {
+        test('settling account with lastUsed set → still processes (not skipped)', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+            // Mock set2fa to succeed
+            jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
+
+            const doc = {
+                mobile: '9990007773',
+                warmupPhase: WarmupPhase.SETTLING,
+                enrolledAt: new Date('2026-03-20T12:00:00.000Z'),
+                createdAt: new Date('2026-03-20T12:00:00.000Z'),
+                privacyUpdatedAt: new Date('2026-03-22T12:00:00.000Z'),
+                lastUsed: new Date('2026-03-25T12:00:00.000Z'), // has lastUsed!
+                failedUpdateAttempts: 0,
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            // Should NOT return backfill_timestamps (old behavior would skip)
+            expect(result.updateSummary).not.toBe('backfill_timestamps');
+            // Should have called set2fa
+            expect((service as any).set2fa).toHaveBeenCalled();
+        });
+
+        test('session_rotated account with lastUsed → backfill and skip (correct)', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+            const doc = {
+                mobile: '9990007774',
+                warmupPhase: WarmupPhase.SESSION_ROTATED,
+                enrolledAt: new Date('2026-01-01T12:00:00.000Z'),
+                createdAt: new Date('2026-01-01T12:00:00.000Z'),
+                lastUsed: new Date('2026-03-01T12:00:00.000Z'),
+                failedUpdateAttempts: 0,
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            expect(result.updateSummary).toBe('backfill_timestamps');
+        });
+    });
+
+    describe('Stuck scenario: enrolledAt backfill', () => {
+        test('repairWarmupMetadata backfills enrolledAt from createdAt when enrolledAt missing', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            const createdDate = new Date('2026-03-01T12:00:00.000Z');
+
+            const doc = {
+                mobile: '9990007775',
+                warmupPhase: WarmupPhase.SETTLING,
+                enrolledAt: undefined,
+                createdAt: createdDate,
+                privacyUpdatedAt: new Date('2026-03-05T12:00:00.000Z'),
+            } as any;
+
+            await service.repair(doc, mockNow);
+
+            expect(service.updateMock).toHaveBeenCalledWith(
+                '9990007775',
+                expect.objectContaining({ enrolledAt: createdDate }),
+            );
+        });
+    });
+
+    describe('Stuck scenario: growing/maturing catch-up executes correct action', () => {
+        test('growing account missing privacy → processClient runs set_privacy action', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+            // Mock the privacy action
+            jest.spyOn(service as any, 'updatePrivacySettings').mockResolvedValue(1);
+
+            const doc = {
+                mobile: '9990007776',
+                warmupPhase: WarmupPhase.GROWING,
+                enrolledAt: new Date('2026-03-15T12:00:00.000Z'),
+                createdAt: new Date('2026-03-15T12:00:00.000Z'),
+                channels: 250,
+                // No settling/identity steps done
+                failedUpdateAttempts: 0,
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            expect((service as any).updatePrivacySettings).toHaveBeenCalled();
+            expect(result.updateSummary).toBe('set_privacy');
+        });
+
+        test('maturing account missing 2FA (privacy done) → processClient runs set_2fa', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+            jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
+
+            const doc = {
+                mobile: '9990007777',
+                warmupPhase: WarmupPhase.MATURING,
+                enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
+                createdAt: new Date('2026-03-01T12:00:00.000Z'),
+                channels: 250,
+                privacyUpdatedAt: new Date('2026-03-05T12:00:00.000Z'),
+                failedUpdateAttempts: 0,
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            expect((service as any).set2fa).toHaveBeenCalled();
+            expect(result.updateSummary).toBe('set_2fa');
+        });
+    });
+
+    describe('Stuck scenario: missing persona assets should not loop forever', () => {
+        test('buffer updateNameAndBio with no persona pool marks the step done to unblock identity', async () => {
+            const bufferModel = {
+                findOneAndUpdate: jest.fn(() => ({ exec: jest.fn().mockResolvedValue({ mobile: '9990008888' }) })),
+            };
+            const service = makeBufferService(bufferModel);
+            const unregisterSpy = jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+                getMe: jest.fn().mockResolvedValue({ firstName: 'Warmup', username: 'warmup_user' }),
+                getDialogs: jest.fn().mockResolvedValue([]),
+                getContacts: jest.fn().mockResolvedValue([]),
+                client: { invoke: jest.fn() },
+            } as any);
+
+            const updateResult = await service.updateNameAndBio(
+                {
+                    mobile: '9990008888',
+                    clientId: 'client-1',
+                    failedUpdateAttempts: 0,
+                } as any,
+                {
+                    clientId: 'client-1',
+                    firstNames: [],
+                    bufferLastNames: [],
+                    bios: [],
+                    profilePics: [],
+                } as any,
+                0,
+            );
+
+            expect(updateResult).toBe(1);
+            expect(bufferModel.findOneAndUpdate).toHaveBeenCalledWith(
+                { mobile: '9990008888' },
+                expect.objectContaining({
+                    $set: expect.objectContaining({
+                        nameBioUpdatedAt: expect.any(Date),
+                        lastUpdateAttempt: expect.any(Date),
+                    }),
+                }),
+                { new: true, returnDocument: 'after' },
+            );
+            expect(unregisterSpy).toHaveBeenCalledWith('9990008888');
+        });
+
+        test('updateProfilePhotos with no assigned profile pics marks the step done to unblock maturing', async () => {
+            const service = new TestBaseService();
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+                getDialogs: jest.fn().mockResolvedValue([]),
+                getContacts: jest.fn().mockResolvedValue([]),
+                client: {
+                    invoke: jest.fn().mockResolvedValue({ photos: [] }),
+                },
+            } as any);
+            const unregisterSpy = jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+
+            const uploadedCount = await (service as any).updateProfilePhotos(
+                {
+                    mobile: '9990008889',
+                    assignedProfilePics: [],
+                    failedUpdateAttempts: 0,
+                },
+                {} as any,
+                0,
+            );
+
+            expect(uploadedCount).toBe(1);
+            expect(service.updateMock).toHaveBeenCalledWith(
+                '9990008889',
+                expect.objectContaining({
+                    profilePicsUpdatedAt: expect.any(Date),
+                    lastUpdateAttempt: expect.any(Date),
+                    failedUpdateAttempts: 0,
+                }),
+            );
+            expect(unregisterSpy).toHaveBeenCalledWith('9990008889');
+        });
     });
 });

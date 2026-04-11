@@ -411,9 +411,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         };
         if (clientId) query.clientId = clientId;
 
+        // Sort descending: accounts closest to target go first — finishing
+        // near-complete accounts produces ready accounts faster.
         const eligible = await this.promoteClientModel
             .find(query)
-            .sort({ channels: 1 })
+            .sort({ channels: -1 })
             .limit(this.config.maxMapSize)
             .exec();
 
@@ -792,11 +794,16 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase === WarmupPhase.READY
-                ? 20000
-                : warmupPhase === WarmupPhase.SESSION_ROTATED
-                    ? 0
-                    : 5000;
+            const phaseBoost: Record<string, number> = {
+                [WarmupPhase.READY]: 25000,
+                [WarmupPhase.MATURING]: 15000,
+                [WarmupPhase.GROWING]: 10000,
+                [WarmupPhase.IDENTITY]: 7000,
+                [WarmupPhase.SETTLING]: 5000,
+                [WarmupPhase.ENROLLED]: 3000,
+                [WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
 
             promoteClientsToProcess.push({ promoteClient: promoteClient as PromoteClientDocument, client, clientId: promoteClient.clientId, priority });

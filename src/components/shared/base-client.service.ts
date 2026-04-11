@@ -208,7 +208,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected readonly MAX_FAILED_ATTEMPTS = 3;
     protected readonly FAILURE_RESET_DAYS = 7;
-    protected readonly MAX_UPDATES_PER_CYCLE = 5;
+    protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
+    protected readonly MAX_UPDATES_PER_CYCLE = 15;
     protected dailyJoinCounts: Map<string, number> = new Map();
     protected dailyJoinDate: string = '';
     /** Tracks per-mobile transient join failures in the current loop. Reset on each refill. */
@@ -322,8 +323,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             updateData.warmupPhase = inferredPhase;
         }
 
-        if (!doc.enrolledAt && !doc.createdAt) {
-            updateData.enrolledAt = this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
+        if (!doc.enrolledAt) {
+            updateData.enrolledAt = doc.createdAt
+                ? new Date(doc.createdAt)
+                : this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -790,20 +793,24 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     if (assignedPhotoUrls.length > 1) {
                         this.logger.info(`Using assigned profile pic URLs for ${doc.mobile}`, { urlCount: assignedPhotoUrls.length });
                         updateCount = await this.uploadProfilePhotosFromUrls(telegramClient, doc, assignedPhotoUrls);
-                    } else {
-                        this.logger.warn(`Skipping profile photo update for ${doc.mobile}: assigned profile pic pool is missing or too small`, {
-                            assignedCount: assignedPhotoUrls.length,
-                        });
                     }
-
                     if (updateCount === 0) {
-                        this.logger.warn(`No profile photos uploaded from assigned profile pic URLs for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
-                        await sleep(ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
-                        return 0;
+                        // Uploads failed or not enough valid URLs — stamp done anyway to
+                        // unblock pipeline.  Account can get photos later via on-demand refresh.
+                        this.logger.warn(`Could not upload profile photos for ${doc.mobile} — marking photo step done to unblock pipeline`);
                     }
                 }
+                // Already has 2+ photos — no upload needed, mark done
+                if (updateCount === 0 && photos.photos.length >= 2) {
+                    this.logger.debug(`${doc.mobile} already has ${photos.photos.length} photos, marking photo step done`);
+                }
+                // In all persona-branch cases, ensure we stamp profilePicsUpdatedAt
+                updateCount = Math.max(updateCount, 1);
             } else {
-                this.logger.debug(`Skipping profile photo update for ${doc.mobile}: no assigned profile pic URLs available`);
+                // No assigned photos — stamp profilePicsUpdatedAt anyway so the pipeline
+                // advances.  Without this the account loops on upload_photo forever.
+                this.logger.warn(`No assigned profile pics for ${doc.mobile} — marking photo step done to unblock pipeline`);
+                updateCount = 1;
             }
 
             await this.update(doc.mobile, {
@@ -1000,12 +1007,33 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const lastFailureTime = ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
 
             if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                // Zombie detection: if account has been warming for 45+ days and is still
+                // cycling through failures, it's never going to recover.
+                const enrolledTs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
+                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+                const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
+                if (daysSinceEnrolled > 45 && phase !== WarmupPhase.SESSION_ROTATED && phase !== WarmupPhase.READY) {
+                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                    this.botsService.sendMessageByCategory(
+                        ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                        `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`
+                    );
+                    return { updateCount: 0 };
+                }
                 this.logger.log(`Resetting failure count for ${doc.mobile}`);
                 await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
                 doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null } as TDoc;
             } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
+                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null } as TDoc;
+                } else {
                 this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
                 return { updateCount: 0 };
+                }
             }
 
             // Check cooldown using the same stable jitter as outer schedulers.
@@ -1014,11 +1042,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 return { updateCount: 0 };
             }
 
-            // Skip already-used clients (backfill timestamps)
+            // Skip already-used clients ONLY if they've completed warmup.
+            // Non-terminal accounts with lastUsed set still need warmup processing.
             const lastUsed = ClientHelperUtils.getTimestamp(doc.lastUsed);
-            if (lastUsed > 0) {
+            const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
+            if (lastUsed > 0 && (warmupPhase === WarmupPhase.SESSION_ROTATED || warmupPhase === WarmupPhase.READY)) {
                 await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
+                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
                 return { updateCount: 0, updateSummary: 'backfill_timestamps' };
             }
 

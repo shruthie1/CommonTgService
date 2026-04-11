@@ -296,7 +296,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     }
                 }
             } else {
-                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
+                // No persona pool on client — stamp nameBioUpdatedAt anyway so the
+                // pipeline advances.  Without this the account loops on update_name_bio forever.
+                this.logger.warn(`No persona pool for ${doc.mobile} (clientId: ${doc.clientId}) — marking name/bio step done to unblock pipeline`);
+                updateCount = 1;
             }
 
             await this.update(doc.mobile, {
@@ -568,9 +571,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             excludedCount: excludedMobiles.size,
         });
 
+        // Sort descending: accounts closest to target (200) go first.
+        // Finishing a near-complete account produces a ready account faster
+        // than spreading joins across many low-channel accounts.
         const eligible = await this.bufferClientModel
             .find(query)
-            .sort({ channels: 1 })
+            .sort({ channels: -1 })
             .limit(this.config.maxMapSize)
             .exec();
 
@@ -767,11 +773,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase === WarmupPhase.READY
-                ? 20000
-                : warmupPhase === WarmupPhase.SESSION_ROTATED
-                    ? 0
-                    : 5000;
+            // Hybrid priority: later phases score higher — finishing near-complete
+            // accounts first produces ready accounts faster than spreading effort.
+            const phaseBoost: Record<string, number> = {
+                [WarmupPhase.READY]: 25000,            // rush to complete
+                [WarmupPhase.MATURING]: 15000,         // almost done
+                [WarmupPhase.GROWING]: 10000,          // mid-pipeline
+                [WarmupPhase.IDENTITY]: 7000,          // early-mid
+                [WarmupPhase.SETTLING]: 5000,          // early
+                [WarmupPhase.ENROLLED]: 3000,           // just started
+                [WarmupPhase.SESSION_ROTATED]: 0,      // done — health checks only
+            };
+            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
 
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });

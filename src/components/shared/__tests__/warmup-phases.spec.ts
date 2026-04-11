@@ -269,11 +269,21 @@ describe('getWarmupPhaseAction', () => {
     // ======= GROWING PHASE =======
 
     describe('GROWING phase', () => {
+        const fullySettledIdentity = {
+            privacyUpdatedAt: daysAgo(14, now),
+            twoFASetAt: daysAgo(12, now),
+            otherAuthsRemovedAt: daysAgo(10, now),
+            profilePicsDeletedAt: daysAgo(8, now),
+            nameBioUpdatedAt: daysAgo(6, now),
+            usernameUpdatedAt: daysAgo(4, now),
+        };
+
         test('growing, channels < 200 → join_channels', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: daysAgo(15, now),
                 channels: 150,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('join_channels');
@@ -285,6 +295,7 @@ describe('getWarmupPhaseAction', () => {
                 enrolledAt: daysAgo(15, now),
                 channels: 200,
                 warmupJitter: 0,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('organic_only');
@@ -296,6 +307,7 @@ describe('getWarmupPhaseAction', () => {
                 enrolledAt: daysAgo(20, now),
                 channels: 250,
                 warmupJitter: 0,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('upload_photo');
@@ -309,6 +321,7 @@ describe('getWarmupPhaseAction', () => {
                 channels: 250,
                 warmupJitter: 0,
                 profilePicsUpdatedAt: daysAgo(1, now),
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('organic_only');
@@ -322,6 +335,7 @@ describe('getWarmupPhaseAction', () => {
                 channels: 250,
                 warmupJitter: 0,
                 profilePicsUpdatedAt: daysAgo(1, now),
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('advance_to_ready');
@@ -333,20 +347,42 @@ describe('getWarmupPhaseAction', () => {
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: daysAgo(10, now),
                 channels: 0,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('join_channels');
+        });
+
+        test('growing with missed settling work → catches up before joining channels', () => {
+            const doc = makeDoc({
+                warmupPhase: WarmupPhase.GROWING,
+                enrolledAt: daysAgo(15, now),
+                channels: 150,
+                privacyUpdatedAt: daysAgo(5, now),
+            });
+            const result = getWarmupPhaseAction(doc, now);
+            expect(result.action).toBe('set_2fa');
         });
     });
 
     // ======= MATURING PHASE =======
 
     describe('MATURING phase', () => {
+        const fullySettledIdentity = {
+            privacyUpdatedAt: daysAgo(20, now),
+            twoFASetAt: daysAgo(18, now),
+            otherAuthsRemovedAt: daysAgo(16, now),
+            profilePicsDeletedAt: daysAgo(14, now),
+            nameBioUpdatedAt: daysAgo(12, now),
+            usernameUpdatedAt: daysAgo(10, now),
+        };
+
         test('maturing, no photo → upload_photo', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.MATURING,
                 enrolledAt: daysAgo(25, now),
                 channels: 250,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('upload_photo');
@@ -359,6 +395,7 @@ describe('getWarmupPhaseAction', () => {
                 channels: 250,
                 profilePicsUpdatedAt: daysAgo(1, now),
                 warmupJitter: 0,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('organic_only');
@@ -371,9 +408,24 @@ describe('getWarmupPhaseAction', () => {
                 channels: 250,
                 profilePicsUpdatedAt: daysAgo(3, now),
                 warmupJitter: 0,
+                ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('advance_to_ready');
+        });
+
+        test('maturing with missed identity work → catches up before photo upload', () => {
+            const doc = makeDoc({
+                warmupPhase: WarmupPhase.MATURING,
+                enrolledAt: daysAgo(25, now),
+                channels: 250,
+                privacyUpdatedAt: daysAgo(20, now),
+                twoFASetAt: daysAgo(18, now),
+                otherAuthsRemovedAt: daysAgo(16, now),
+                profilePicsDeletedAt: daysAgo(14, now),
+            });
+            const result = getWarmupPhaseAction(doc, now);
+            expect(result.action).toBe('update_name_bio');
         });
     });
 
@@ -439,6 +491,12 @@ describe('getWarmupPhaseAction', () => {
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: daysAgo(10, now),
                 channels: undefined,
+                privacyUpdatedAt: daysAgo(9, now),
+                twoFASetAt: daysAgo(7, now),
+                otherAuthsRemovedAt: daysAgo(5, now),
+                profilePicsDeletedAt: daysAgo(4, now),
+                nameBioUpdatedAt: daysAgo(3, now),
+                usernameUpdatedAt: daysAgo(2, now),
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('join_channels');
@@ -564,4 +622,221 @@ describe('isAccountWarmingUp', () => {
     test('session_rotated → false', () => expect(isAccountWarmingUp(WarmupPhase.SESSION_ROTATED)).toBe(false));
     test('undefined → true (treated as enrolled)', () => expect(isAccountWarmingUp(undefined)).toBe(true));
     test('null → true (treated as enrolled)', () => expect(isAccountWarmingUp(null)).toBe(true));
+});
+
+// ======= CATCH-UP LOGIC (growing/maturing with missed settling/identity) =======
+
+describe('Catch-up: growing phase with missed settling steps', () => {
+    const now = Date.now();
+
+    test('growing account with no privacy → set_privacy (catch-up)', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            // No settling steps done
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('set_privacy');
+        expect(result.phase).toBe(WarmupPhase.GROWING);
+    });
+
+    test('growing account with privacy done but no 2FA, gate passed → set_2fa', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(5, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('set_2fa');
+    });
+
+    test('growing account with privacy done but no 2FA, gate NOT passed → organic_only', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(1, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('organic_only');
+    });
+
+    test('growing account with settling done but no identity steps → delete_photos', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(10, now),
+            twoFASetAt: daysAgo(8, now),
+            otherAuthsRemovedAt: daysAgo(6, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('delete_photos');
+    });
+
+    test('growing account with settling done, photos deleted, name/bio gate passed → update_name_bio', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(10, now),
+            twoFASetAt: daysAgo(8, now),
+            otherAuthsRemovedAt: daysAgo(6, now),
+            profilePicsDeletedAt: daysAgo(4, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('update_name_bio');
+    });
+
+    test('growing account with settling+identity done, channels < 200 → join_channels (normal flow)', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 150,
+            privacyUpdatedAt: daysAgo(10, now),
+            twoFASetAt: daysAgo(8, now),
+            otherAuthsRemovedAt: daysAgo(6, now),
+            profilePicsDeletedAt: daysAgo(10, now),
+            nameBioUpdatedAt: daysAgo(5, now),
+            usernameUpdatedAt: daysAgo(3, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('join_channels');
+    });
+
+    test('growing account fully caught up, channels >= 200, day >= 18 → maturing upload_photo', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(20, now),
+            channels: 210,
+            privacyUpdatedAt: daysAgo(15, now),
+            twoFASetAt: daysAgo(13, now),
+            otherAuthsRemovedAt: daysAgo(11, now),
+            profilePicsDeletedAt: daysAgo(15, now),
+            nameBioUpdatedAt: daysAgo(10, now),
+            usernameUpdatedAt: daysAgo(8, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.phase).toBe(WarmupPhase.MATURING);
+        expect(result.action).toBe('upload_photo');
+    });
+});
+
+describe('Catch-up: maturing phase with missed settling steps', () => {
+    const now = Date.now();
+
+    test('maturing account with no privacy → set_privacy (catch-up)', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.MATURING,
+            enrolledAt: daysAgo(25, now),
+            channels: 250,
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('set_privacy');
+        expect(result.phase).toBe(WarmupPhase.MATURING);
+    });
+
+    test('maturing account with all settling+identity done, no photo → upload_photo (normal)', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.MATURING,
+            enrolledAt: daysAgo(25, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(20, now),
+            twoFASetAt: daysAgo(18, now),
+            otherAuthsRemovedAt: daysAgo(16, now),
+            profilePicsDeletedAt: daysAgo(20, now),
+            nameBioUpdatedAt: daysAgo(15, now),
+            usernameUpdatedAt: daysAgo(13, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('upload_photo');
+    });
+
+    test('maturing with all done including photo, day >= 20 → advance_to_ready', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.MATURING,
+            enrolledAt: daysAgo(22, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(20, now),
+            twoFASetAt: daysAgo(18, now),
+            otherAuthsRemovedAt: daysAgo(16, now),
+            profilePicsDeletedAt: daysAgo(20, now),
+            nameBioUpdatedAt: daysAgo(15, now),
+            usernameUpdatedAt: daysAgo(13, now),
+            profilePicsUpdatedAt: daysAgo(2, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('advance_to_ready');
+    });
+});
+
+describe('Catch-up: identity sub-step 2-day gates respected during catch-up', () => {
+    const now = Date.now();
+
+    test('growing: photos deleted 1 day ago, name/bio gate NOT passed → organic_only', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(10, now),
+            twoFASetAt: daysAgo(8, now),
+            otherAuthsRemovedAt: daysAgo(6, now),
+            profilePicsDeletedAt: daysAgo(1, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('organic_only');
+    });
+
+    test('growing: name/bio done 1 day ago, username gate NOT passed → organic_only', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(15, now),
+            channels: 250,
+            privacyUpdatedAt: daysAgo(10, now),
+            twoFASetAt: daysAgo(8, now),
+            otherAuthsRemovedAt: daysAgo(6, now),
+            profilePicsDeletedAt: daysAgo(5, now),
+            nameBioUpdatedAt: daysAgo(1, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('organic_only');
+    });
+});
+
+describe('Normal phases unaffected by catch-up', () => {
+    const now = Date.now();
+
+    test('settling account with all steps done transitions normally', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.SETTLING,
+            enrolledAt: daysAgo(5, now),
+            privacyUpdatedAt: daysAgo(4, now),
+            twoFASetAt: daysAgo(2, now),
+            otherAuthsRemovedAt: daysAgo(0.5, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        // All settling done, day >= 4 → should transition to identity
+        expect(result.phase).toBe(WarmupPhase.IDENTITY);
+        expect(result.action).toBe('delete_photos');
+    });
+
+    test('enrolled phase unchanged — no catch-up applied', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.ENROLLED,
+            enrolledAt: daysAgo(0.5, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('wait');
+    });
+
+    test('session_rotated unchanged — no catch-up applied', () => {
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
+            enrolledAt: daysAgo(30, now),
+        });
+        const result = getWarmupPhaseAction(doc, now);
+        expect(result.action).toBe('wait');
+    });
 });

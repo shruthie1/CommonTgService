@@ -180,8 +180,50 @@ export function getWarmupPhaseAction(
         return { phase: WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
     }
 
+    // ── Catch-up helper: legacy accounts may have been placed in growing/maturing
+    // by phase inference (based on channel count) but never completed settling or
+    // identity steps.  Redirect to the earliest missing step so the pipeline
+    // finishes everything before advancing.
+    const missedSettlingAction = (): WarmupAction | null => {
+        const privacyDone = ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
+        const twoFADone = ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
+        const authsRemoved = ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
+        if (!privacyDone) return { phase, action: 'set_privacy', organicIntensity: 'full' };
+        if (!twoFADone && daysSince(doc.privacyUpdatedAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'set_2fa', organicIntensity: 'full' };
+        }
+        if (!twoFADone) return { phase, action: 'organic_only', organicIntensity: 'medium' };
+        if (!authsRemoved && daysSince(doc.twoFASetAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'remove_other_auths', organicIntensity: 'medium' };
+        }
+        if (!authsRemoved) return { phase, action: 'organic_only', organicIntensity: 'light' };
+        return null;
+    };
+
+    const missedIdentityAction = (): WarmupAction | null => {
+        const photosDeleted = ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
+        const nameBioDone = ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
+        const usernameDone = ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (!photosDeleted) return { phase, action: 'delete_photos', organicIntensity: 'medium' };
+        if (!nameBioDone && daysSince(doc.profilePicsDeletedAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'update_name_bio', organicIntensity: 'medium' };
+        }
+        if (!nameBioDone) return { phase, action: 'organic_only', organicIntensity: 'light' };
+        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'update_username', organicIntensity: 'medium' };
+        }
+        if (!usernameDone) return { phase, action: 'organic_only', organicIntensity: 'light' };
+        return null;
+    };
+
     // Phase: GROWING (channel joining)
     if (phase === WarmupPhase.GROWING) {
+        // Catch-up: complete any missed settling/identity steps first
+        const settlingCatchup = missedSettlingAction();
+        if (settlingCatchup) return settlingCatchup;
+        const identityCatchup = missedIdentityAction();
+        if (identityCatchup) return identityCatchup;
+
         const channels = doc.channels || 0;
         if (channels < MIN_CHANNELS_FOR_MATURING) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
@@ -202,8 +244,14 @@ export function getWarmupPhaseAction(
         return { phase: WarmupPhase.GROWING, action: 'organic_only', organicIntensity: 'light' };
     }
 
-    // Phase: MATURING (profile photo only — 2FA already done in settling)
+    // Phase: MATURING (profile photo + catch-up for missed steps)
     if (phase === WarmupPhase.MATURING) {
+        // Catch-up: complete any missed settling/identity steps first
+        const settlingCatchup = missedSettlingAction();
+        if (settlingCatchup) return settlingCatchup;
+        const identityCatchup = missedIdentityAction();
+        if (identityCatchup) return identityCatchup;
+
         const hasPhoto = ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) > 0;
 
         if (!hasPhoto) {
