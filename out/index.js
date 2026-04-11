@@ -14,35 +14,64 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MailReader = void 0;
+exports.extractTelegramCode = extractTelegramCode;
+exports.isMailFreshEnough = isMailFreshEnough;
 const imap_1 = __importDefault(__webpack_require__(/*! imap */ "imap"));
-const utils_1 = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 const parseError_1 = __webpack_require__(/*! ../utils/parseError */ "./src/utils/parseError.ts");
+const DEFAULT_IMAP_CONNECT_TIMEOUT_MS = 30_000;
+const MAIL_CLOCK_SKEW_MS = 60_000;
+const TELEGRAM_CODE_PATTERN = /\b\d{4,8}\b/g;
+function extractTelegramCode(body, expectedLength) {
+    const matches = body.match(TELEGRAM_CODE_PATTERN) ?? [];
+    if (expectedLength) {
+        return matches.find((match) => match.length === expectedLength) || null;
+    }
+    return matches[0] || null;
+}
+function isMailFreshEnough(receivedAt, minReceivedAt) {
+    if (!minReceivedAt || !receivedAt)
+        return true;
+    return receivedAt.getTime() >= minReceivedAt.getTime() - MAIL_CLOCK_SKEW_MS;
+}
 class MailReader {
-    constructor() {
+    constructor(imapFactory = () => new imap_1.default({
+        user: process.env.GMAIL_ADD || '',
+        password: process.env.GMAIL_PASS || '',
+        host: 'imap.gmail.com',
+        port: 993,
+        tls: true,
+        tlsOptions: {
+            rejectUnauthorized: false,
+        },
+    })) {
+        this.imapFactory = imapFactory;
+        this.imap = null;
         this.isReady = false;
-        this.result = '';
-        this.imap = new imap_1.default({
-            user: process.env.GMAIL_ADD || '',
-            password: process.env.GMAIL_PASS || '',
-            host: 'imap.gmail.com',
-            port: 993,
-            tls: true,
-            tlsOptions: {
-                rejectUnauthorized: false,
-            },
-        });
-        this.imap.on('ready', () => {
+        this.connectPromise = null;
+        this.mailboxQueue = Promise.resolve();
+    }
+    static createForTest(imapFactory) {
+        return new MailReader(imapFactory);
+    }
+    ensureImap() {
+        if (this.imap) {
+            return this.imap;
+        }
+        const imap = this.imapFactory();
+        imap.on('ready', () => {
             console.log('Mail is Ready');
             this.isReady = true;
         });
-        this.imap.on('error', (err) => {
+        imap.on('error', (err) => {
             console.error('SomeError:', err);
             this.isReady = false;
         });
-        this.imap.on('end', () => {
+        imap.on('end', () => {
             console.log('Connection ended');
             this.isReady = false;
         });
+        this.imap = imap;
+        return imap;
     }
     static getInstance() {
         if (!MailReader.instance) {
@@ -50,23 +79,110 @@ class MailReader {
         }
         return MailReader.instance;
     }
-    async connectToMail() {
-        console.log('Connecting to mail server');
+    async runExclusive(operation) {
+        let releaseLock = null;
+        const previous = this.mailboxQueue;
+        this.mailboxQueue = new Promise((resolve) => {
+            releaseLock = resolve;
+        });
+        await previous;
         try {
-            this.imap.connect();
-            this.isReady = true;
-            console.log('Connected to mail server');
+            return await operation();
         }
-        catch (err) {
-            console.error('Error connecting to mail server:', (0, parseError_1.parseError)(err));
-            throw err;
+        finally {
+            releaseLock?.();
         }
+    }
+    async connectToMail(timeoutMs = DEFAULT_IMAP_CONNECT_TIMEOUT_MS) {
+        console.log('Connecting to mail server');
+        if (this.isReady && this.imap) {
+            return;
+        }
+        if (this.connectPromise) {
+            return this.connectPromise;
+        }
+        const imap = this.ensureImap();
+        this.isReady = false;
+        this.connectPromise = new Promise((resolve, reject) => {
+            let timeoutHandle = null;
+            const cleanup = () => {
+                imap.removeListener('ready', onReady);
+                imap.removeListener('error', onError);
+                imap.removeListener('end', onEndBeforeReady);
+                if (timeoutHandle) {
+                    clearTimeout(timeoutHandle);
+                }
+            };
+            const onReady = () => {
+                cleanup();
+                console.log('Mail connect() completed');
+                resolve();
+            };
+            const onError = (err) => {
+                cleanup();
+                this.imap = null;
+                reject(new Error(`Mail connection failed: ${(0, parseError_1.parseError)(err)}`));
+            };
+            const onEndBeforeReady = () => {
+                cleanup();
+                this.imap = null;
+                reject(new Error('Mail connection ended before ready'));
+            };
+            timeoutHandle = setTimeout(() => {
+                cleanup();
+                this.imap = null;
+                reject(new Error(`Mail server connection timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+            imap.once('ready', onReady);
+            imap.once('error', onError);
+            imap.once('end', onEndBeforeReady);
+            try {
+                imap.connect();
+                console.log('Mail connect() initiated — waiting for ready event');
+            }
+            catch (err) {
+                cleanup();
+                this.imap = null;
+                reject(err);
+            }
+        }).finally(() => {
+            this.connectPromise = null;
+        });
+        return this.connectPromise;
     }
     async disconnectFromMail() {
         console.log('Disconnecting from mail server');
+        const imap = this.imap;
+        this.imap = null;
+        this.isReady = false;
+        this.connectPromise = null;
+        if (!imap) {
+            console.log('Mail server already disconnected');
+            return;
+        }
         try {
-            this.imap.end();
-            this.isReady = false;
+            await new Promise((resolve) => {
+                let settled = false;
+                const finish = () => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    imap.removeListener('end', finish);
+                    imap.removeListener('error', finish);
+                    resolve();
+                };
+                imap.once('end', finish);
+                imap.once('error', finish);
+                try {
+                    imap.end();
+                }
+                catch (err) {
+                    console.error('Error disconnecting from mail server:', (0, parseError_1.parseError)(err));
+                    finish();
+                    return;
+                }
+                setTimeout(finish, 5000);
+            });
             console.log('Disconnected from mail server');
         }
         catch (err) {
@@ -77,73 +193,75 @@ class MailReader {
     async isMailReady() {
         return this.isReady;
     }
-    async getCode() {
-        console.log("MailReady : ", this.isReady);
-        if (!this.isReady) {
-            console.log("Re-Connecting mail server");
-            await this.connectToMail();
-            await (0, utils_1.sleep)(10000);
+    async getCode(options = {}) {
+        console.log('MailReady : ', this.isReady);
+        if (!this.isReady || !this.imap) {
+            throw new Error('Mail server is not ready');
         }
         try {
             await this.openInbox();
             const searchCriteria = [['FROM', 'noreply@telegram.org']];
-            const fetchOptions = { bodies: ['HEADER', 'TEXT'], markSeen: true };
+            const fetchOptions = { bodies: ['TEXT'], markSeen: false };
             console.log('Inbox Opened');
             const results = await new Promise((resolve, reject) => {
-                this.imap.search(searchCriteria, (err, results) => {
+                this.imap.search(searchCriteria, (err, foundResults) => {
                     if (err) {
                         console.error('Search error:', (0, parseError_1.parseError)(err));
                         reject(err);
                     }
                     else {
-                        resolve(results);
+                        resolve(foundResults);
                     }
                 });
             });
-            if (results.length > 0) {
-                console.log('Emails found:', results.length);
-                const length = results.length;
-                const fetch = this.imap.fetch([results[length - 1]], fetchOptions);
-                await new Promise((resolve, reject) => {
-                    fetch.on('message', (msg, seqno) => {
-                        const emailData = [];
-                        msg.on('body', (stream, info) => {
-                            let buffer = '';
-                            stream.on('data', (chunk) => buffer += chunk.toString('utf8'));
-                            stream.on('end', () => {
-                                if (info.which === 'TEXT') {
-                                    emailData.push(buffer);
-                                }
-                                this.imap.seq.addFlags([seqno], '\\Deleted', (err) => {
-                                    if (err)
-                                        reject(err);
-                                    this.imap.expunge((err) => {
-                                        if (err)
-                                            reject(err);
-                                        console.log('Deleted message');
-                                    });
-                                });
-                            });
-                        });
-                        msg.once('end', () => {
-                            console.log(`Email #${seqno}, Latest ${results[length - 1]}`);
-                            console.log('EmailDataLength:', emailData.length);
-                            console.log('Mail:', emailData[emailData.length - 1].split('.'));
-                            this.result = (0, utils_1.fetchNumbersFromString)(emailData[emailData.length - 1].split('.')[0]);
-                            resolve();
+            if (results.length === 0) {
+                console.log('No new emails found');
+                return null;
+            }
+            console.log('Emails found:', results.length);
+            const candidateIds = results.slice(-10).reverse();
+            const candidates = [];
+            const fetch = this.imap.fetch(candidateIds, fetchOptions);
+            await new Promise((resolve, reject) => {
+                fetch.on('message', (msg, seqno) => {
+                    let messageBody = '';
+                    let receivedAt = null;
+                    msg.on('body', (stream) => {
+                        stream.on('data', (chunk) => {
+                            messageBody += chunk.toString('utf8');
                         });
                     });
-                    fetch.once('end', () => {
-                        console.log('Fetched mails');
-                        resolve();
+                    msg.once('attributes', (attrs) => {
+                        if (attrs?.date) {
+                            receivedAt = attrs.date instanceof Date ? attrs.date : new Date(attrs.date);
+                        }
+                    });
+                    msg.once('end', () => {
+                        const code = extractTelegramCode(messageBody, options.expectedLength);
+                        if (code && isMailFreshEnough(receivedAt, options.minReceivedAt)) {
+                            candidates.push({
+                                seqno,
+                                order: candidateIds.indexOf(seqno),
+                                code,
+                                receivedAt,
+                            });
+                        }
                     });
                 });
+                fetch.once('error', (err) => reject(err));
+                fetch.once('end', () => {
+                    console.log('Fetched mails');
+                    resolve();
+                });
+            });
+            const match = candidates.sort((a, b) => a.order - b.order)[0];
+            if (!match) {
+                console.log('No matching Telegram verification code found');
+                return null;
             }
-            else {
-                console.log('No new emails found');
-            }
-            console.log('Returning result:', this.result);
-            return this.result;
+            await this.deleteMessage(match.seqno);
+            console.log('Returning result:', match.code);
+            return match.code;
         }
         catch (error) {
             console.error('Error:', error);
@@ -162,6 +280,24 @@ class MailReader {
                     console.log('Inbox opened');
                     resolve();
                 }
+            });
+        });
+    }
+    async deleteMessage(seqno) {
+        await new Promise((resolve, reject) => {
+            this.imap.seq.addFlags([seqno], '\\Deleted', (flagError) => {
+                if (flagError) {
+                    reject(flagError);
+                    return;
+                }
+                this.imap.expunge((expungeError) => {
+                    if (expungeError) {
+                        reject(expungeError);
+                        return;
+                    }
+                    console.log(`Deleted message ${seqno}`);
+                    resolve();
+                });
             });
         });
     }
@@ -7082,64 +7218,49 @@ async function set2fa(ctx) {
             hint: 'password - India143',
             newPassword: 'Ajtdmwajt1@',
         };
-        try {
-            await imapService.connectToMail();
-            const checkMailInterval = setInterval(async () => {
-                ctx.logger.info(ctx.phoneNumber, 'Checking if mail is ready');
-                if (imapService.isMailReady()) {
-                    clearInterval(checkMailInterval);
-                    ctx.logger.info(ctx.phoneNumber, 'Mail is ready, checking code!');
-                    await ctx.client.updateTwoFaSettings({
-                        isCheckPassword: false,
-                        email: twoFaDetails.email,
-                        hint: twoFaDetails.hint,
-                        newPassword: twoFaDetails.newPassword,
-                        emailCodeCallback: async (length) => {
-                            ctx.logger.info(ctx.phoneNumber, 'Code sent');
-                            return new Promise(async (resolve, reject) => {
-                                let retry = 0;
-                                const codeInterval = setInterval(async () => {
-                                    try {
-                                        ctx.logger.info(ctx.phoneNumber, 'Checking code');
-                                        retry++;
-                                        if (imapService.isMailReady() && retry < 4) {
-                                            const code = await imapService.getCode();
-                                            ctx.logger.info(ctx.phoneNumber, 'Code:', code);
-                                            if (code) {
-                                                await imapService.disconnectFromMail();
-                                                clearInterval(codeInterval);
-                                                resolve(code);
-                                            }
-                                        }
-                                        else {
-                                            clearInterval(codeInterval);
-                                            await imapService.disconnectFromMail();
-                                            reject(new Error('Failed to retrieve code'));
-                                        }
-                                    }
-                                    catch (error) {
-                                        clearInterval(codeInterval);
-                                        await imapService.disconnectFromMail();
-                                        reject(error);
-                                    }
-                                }, 10000);
+        return imapService.runExclusive(async () => {
+            ctx.logger.info(ctx.phoneNumber, 'Waiting for exclusive access to 2FA mailbox');
+            await imapService.connectToMail(30_000);
+            ctx.logger.info(ctx.phoneNumber, 'Mail is ready, setting 2FA');
+            const verificationStartedAt = new Date();
+            try {
+                await ctx.client.updateTwoFaSettings({
+                    isCheckPassword: false,
+                    email: twoFaDetails.email,
+                    hint: twoFaDetails.hint,
+                    newPassword: twoFaDetails.newPassword,
+                    emailCodeCallback: async (length) => {
+                        ctx.logger.info(ctx.phoneNumber, `Email code requested by Telegram (length=${length})`);
+                        const maxRetries = 4;
+                        for (let retry = 0; retry < maxRetries; retry++) {
+                            await new Promise(r => setTimeout(r, 10_000));
+                            ctx.logger.info(ctx.phoneNumber, `Checking for email code (attempt ${retry + 1}/${maxRetries})`);
+                            if (!(await imapService.isMailReady())) {
+                                throw new Error('Mail connection lost while waiting for code');
+                            }
+                            const code = await imapService.getCode({
+                                expectedLength: length,
+                                minReceivedAt: verificationStartedAt,
                             });
-                        },
-                        onEmailCodeError: (e) => {
-                            ctx.logger.error(ctx.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
-                            return Promise.resolve('error');
-                        },
-                    });
-                    return twoFaDetails;
-                }
-                else {
-                    ctx.logger.info(ctx.phoneNumber, 'Mail not ready yet');
-                }
-            }, 5000);
-        }
-        catch (e) {
-            ctx.logger.error(ctx.phoneNumber, 'Unable to connect to mail server:', (0, parseError_1.parseError)(e));
-        }
+                            if (code) {
+                                ctx.logger.info(ctx.phoneNumber, 'Got email code');
+                                return code;
+                            }
+                        }
+                        throw new Error(`Failed to retrieve email code after ${maxRetries} attempts`);
+                    },
+                    onEmailCodeError: (e) => {
+                        ctx.logger.error(ctx.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
+                        return Promise.resolve('error');
+                    },
+                });
+            }
+            finally {
+                await imapService.disconnectFromMail().catch(() => { });
+            }
+            ctx.logger.info(ctx.phoneNumber, '2FA set successfully');
+            return twoFaDetails;
+        });
     }
     else {
         ctx.logger.info(ctx.phoneNumber, 'Password already exists');
@@ -16862,7 +16983,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 }
             }
             else {
-                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
+                this.logger.warn(`No persona pool for ${doc.mobile} (clientId: ${doc.clientId}) — marking name/bio step done to unblock pipeline`);
+                updateCount = 1;
             }
             await this.update(doc.mobile, {
                 ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
@@ -17112,7 +17234,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         });
         const eligible = await this.bufferClientModel
             .find(query)
-            .sort({ channels: 1 })
+            .sort({ channels: -1 })
             .limit(this.config.maxMapSize)
             .exec();
         let added = 0;
@@ -17288,11 +17410,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase === base_client_service_1.WarmupPhase.READY
-                ? 20000
-                : warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED
-                    ? 0
-                    : 5000;
+            const phaseBoost = {
+                [base_client_service_1.WarmupPhase.READY]: 25000,
+                [base_client_service_1.WarmupPhase.MATURING]: 15000,
+                [base_client_service_1.WarmupPhase.GROWING]: 10000,
+                [base_client_service_1.WarmupPhase.IDENTITY]: 7000,
+                [base_client_service_1.WarmupPhase.SETTLING]: 5000,
+                [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
+                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }
@@ -25620,7 +25747,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             query.clientId = clientId;
         const eligible = await this.promoteClientModel
             .find(query)
-            .sort({ channels: 1 })
+            .sort({ channels: -1 })
             .limit(this.config.maxMapSize)
             .exec();
         let added = 0;
@@ -25953,11 +26080,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase === base_client_service_1.WarmupPhase.READY
-                ? 20000
-                : warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED
-                    ? 0
-                    : 5000;
+            const phaseBoost = {
+                [base_client_service_1.WarmupPhase.READY]: 25000,
+                [base_client_service_1.WarmupPhase.MATURING]: 15000,
+                [base_client_service_1.WarmupPhase.GROWING]: 10000,
+                [base_client_service_1.WarmupPhase.IDENTITY]: 7000,
+                [base_client_service_1.WarmupPhase.SETTLING]: 5000,
+                [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
+                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
@@ -29386,8 +29518,10 @@ class BaseClientService {
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
             updateData.warmupPhase = inferredPhase;
         }
-        if (!doc.enrolledAt && !doc.createdAt) {
-            updateData.enrolledAt = this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
+        if (!doc.enrolledAt) {
+            updateData.enrolledAt = doc.createdAt
+                ? new Date(doc.createdAt)
+                : this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
         }
         if (Object.keys(updateData).length === 0) {
             return doc;
@@ -29422,7 +29556,8 @@ class BaseClientService {
         ];
         this.MAX_FAILED_ATTEMPTS = 3;
         this.FAILURE_RESET_DAYS = 7;
-        this.MAX_UPDATES_PER_CYCLE = 5;
+        this.FAILURE_RETRY_BACKOFF_HOURS = 24;
+        this.MAX_UPDATES_PER_CYCLE = 15;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -29794,20 +29929,18 @@ class BaseClientService {
                         this.logger.info(`Using assigned profile pic URLs for ${doc.mobile}`, { urlCount: assignedPhotoUrls.length });
                         updateCount = await this.uploadProfilePhotosFromUrls(telegramClient, doc, assignedPhotoUrls);
                     }
-                    else {
-                        this.logger.warn(`Skipping profile photo update for ${doc.mobile}: assigned profile pic pool is missing or too small`, {
-                            assignedCount: assignedPhotoUrls.length,
-                        });
-                    }
                     if (updateCount === 0) {
-                        this.logger.warn(`No profile photos uploaded from assigned profile pic URLs for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
-                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
-                        return 0;
+                        this.logger.warn(`Could not upload profile photos for ${doc.mobile} — marking photo step done to unblock pipeline`);
                     }
                 }
+                if (updateCount === 0 && photos.photos.length >= 2) {
+                    this.logger.debug(`${doc.mobile} already has ${photos.photos.length} photos, marking photo step done`);
+                }
+                updateCount = Math.max(updateCount, 1);
             }
             else {
-                this.logger.debug(`Skipping profile photo update for ${doc.mobile}: no assigned profile pic URLs available`);
+                this.logger.warn(`No assigned profile pics for ${doc.mobile} — marking photo step done to unblock pipeline`);
+                updateCount = 1;
             }
             await this.update(doc.mobile, {
                 ...(updateCount > 0 ? { profilePicsUpdatedAt: new Date() } : {}),
@@ -29965,22 +30098,40 @@ class BaseClientService {
             const failedAttempts = doc.failedUpdateAttempts || 0;
             const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
             if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+                const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+                if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
+                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
+                    return { updateCount: 0 };
+                }
                 this.logger.log(`Resetting failure count for ${doc.mobile}`);
                 await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
                 doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
             }
             else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                return { updateCount: 0 };
+                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
+                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
+                }
+                else {
+                    this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
+                    return { updateCount: 0 };
+                }
             }
             if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
                 this.logger.debug(`Client ${doc.mobile} on cooldown`);
                 return { updateCount: 0 };
             }
             const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            if (lastUsed > 0) {
+            const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+            if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
                 await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
+                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
                 return { updateCount: 0, updateSummary: 'backfill_timestamps' };
             }
             const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
@@ -31521,7 +31672,49 @@ function getWarmupPhaseAction(doc, now) {
         }
         return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
     }
+    const missedSettlingAction = () => {
+        const privacyDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
+        const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
+        const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
+        if (!privacyDone)
+            return { phase, action: 'set_privacy', organicIntensity: 'full' };
+        if (!twoFADone && daysSince(doc.privacyUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'set_2fa', organicIntensity: 'full' };
+        }
+        if (!twoFADone)
+            return { phase, action: 'organic_only', organicIntensity: 'medium' };
+        if (!authsRemoved && daysSince(doc.twoFASetAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'remove_other_auths', organicIntensity: 'medium' };
+        }
+        if (!authsRemoved)
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        return null;
+    };
+    const missedIdentityAction = () => {
+        const photosDeleted = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
+        const nameBioDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
+        const usernameDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (!photosDeleted)
+            return { phase, action: 'delete_photos', organicIntensity: 'medium' };
+        if (!nameBioDone && daysSince(doc.profilePicsDeletedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'update_name_bio', organicIntensity: 'medium' };
+        }
+        if (!nameBioDone)
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'update_username', organicIntensity: 'medium' };
+        }
+        if (!usernameDone)
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        return null;
+    };
     if (phase === exports.WarmupPhase.GROWING) {
+        const settlingCatchup = missedSettlingAction();
+        if (settlingCatchup)
+            return settlingCatchup;
+        const identityCatchup = missedIdentityAction();
+        if (identityCatchup)
+            return identityCatchup;
         const channels = doc.channels || 0;
         if (channels < exports.MIN_CHANNELS_FOR_MATURING) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
@@ -31539,6 +31732,12 @@ function getWarmupPhaseAction(doc, now) {
         return { phase: exports.WarmupPhase.GROWING, action: 'organic_only', organicIntensity: 'light' };
     }
     if (phase === exports.WarmupPhase.MATURING) {
+        const settlingCatchup = missedSettlingAction();
+        if (settlingCatchup)
+            return settlingCatchup;
+        const identityCatchup = missedIdentityAction();
+        if (identityCatchup)
+            return identityCatchup;
         const hasPhoto = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) > 0;
         if (!hasPhoto) {
             return { phase: exports.WarmupPhase.MATURING, action: 'upload_photo', organicIntensity: 'full' };

@@ -116,64 +116,49 @@ async function set2fa(ctx) {
             hint: 'password - India143',
             newPassword: 'Ajtdmwajt1@',
         };
-        try {
-            await imapService.connectToMail();
-            const checkMailInterval = setInterval(async () => {
-                ctx.logger.info(ctx.phoneNumber, 'Checking if mail is ready');
-                if (imapService.isMailReady()) {
-                    clearInterval(checkMailInterval);
-                    ctx.logger.info(ctx.phoneNumber, 'Mail is ready, checking code!');
-                    await ctx.client.updateTwoFaSettings({
-                        isCheckPassword: false,
-                        email: twoFaDetails.email,
-                        hint: twoFaDetails.hint,
-                        newPassword: twoFaDetails.newPassword,
-                        emailCodeCallback: async (length) => {
-                            ctx.logger.info(ctx.phoneNumber, 'Code sent');
-                            return new Promise(async (resolve, reject) => {
-                                let retry = 0;
-                                const codeInterval = setInterval(async () => {
-                                    try {
-                                        ctx.logger.info(ctx.phoneNumber, 'Checking code');
-                                        retry++;
-                                        if (imapService.isMailReady() && retry < 4) {
-                                            const code = await imapService.getCode();
-                                            ctx.logger.info(ctx.phoneNumber, 'Code:', code);
-                                            if (code) {
-                                                await imapService.disconnectFromMail();
-                                                clearInterval(codeInterval);
-                                                resolve(code);
-                                            }
-                                        }
-                                        else {
-                                            clearInterval(codeInterval);
-                                            await imapService.disconnectFromMail();
-                                            reject(new Error('Failed to retrieve code'));
-                                        }
-                                    }
-                                    catch (error) {
-                                        clearInterval(codeInterval);
-                                        await imapService.disconnectFromMail();
-                                        reject(error);
-                                    }
-                                }, 10000);
+        return imapService.runExclusive(async () => {
+            ctx.logger.info(ctx.phoneNumber, 'Waiting for exclusive access to 2FA mailbox');
+            await imapService.connectToMail(30_000);
+            ctx.logger.info(ctx.phoneNumber, 'Mail is ready, setting 2FA');
+            const verificationStartedAt = new Date();
+            try {
+                await ctx.client.updateTwoFaSettings({
+                    isCheckPassword: false,
+                    email: twoFaDetails.email,
+                    hint: twoFaDetails.hint,
+                    newPassword: twoFaDetails.newPassword,
+                    emailCodeCallback: async (length) => {
+                        ctx.logger.info(ctx.phoneNumber, `Email code requested by Telegram (length=${length})`);
+                        const maxRetries = 4;
+                        for (let retry = 0; retry < maxRetries; retry++) {
+                            await new Promise(r => setTimeout(r, 10_000));
+                            ctx.logger.info(ctx.phoneNumber, `Checking for email code (attempt ${retry + 1}/${maxRetries})`);
+                            if (!(await imapService.isMailReady())) {
+                                throw new Error('Mail connection lost while waiting for code');
+                            }
+                            const code = await imapService.getCode({
+                                expectedLength: length,
+                                minReceivedAt: verificationStartedAt,
                             });
-                        },
-                        onEmailCodeError: (e) => {
-                            ctx.logger.error(ctx.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
-                            return Promise.resolve('error');
-                        },
-                    });
-                    return twoFaDetails;
-                }
-                else {
-                    ctx.logger.info(ctx.phoneNumber, 'Mail not ready yet');
-                }
-            }, 5000);
-        }
-        catch (e) {
-            ctx.logger.error(ctx.phoneNumber, 'Unable to connect to mail server:', (0, parseError_1.parseError)(e));
-        }
+                            if (code) {
+                                ctx.logger.info(ctx.phoneNumber, 'Got email code');
+                                return code;
+                            }
+                        }
+                        throw new Error(`Failed to retrieve email code after ${maxRetries} attempts`);
+                    },
+                    onEmailCodeError: (e) => {
+                        ctx.logger.error(ctx.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
+                        return Promise.resolve('error');
+                    },
+                });
+            }
+            finally {
+                await imapService.disconnectFromMail().catch(() => { });
+            }
+            ctx.logger.info(ctx.phoneNumber, '2FA set successfully');
+            return twoFaDetails;
+        });
     }
     else {
         ctx.logger.info(ctx.phoneNumber, 'Password already exists');
