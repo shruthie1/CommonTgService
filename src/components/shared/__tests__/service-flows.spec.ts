@@ -647,6 +647,150 @@ describe('Service flow reliability', () => {
         expect(processSpy).toHaveBeenNthCalledWith(2, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
     });
 
+    test('checkPromoteClients does not enroll beyond the healthy per-client cap', async () => {
+        const cappedDocs = Array.from({ length: 30 }, (_, index) => ({
+            mobile: `900cap${index}`,
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.READY,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            failedUpdateAttempts: 0,
+            inUse: false,
+            enrolledAt: new Date('2026-04-01T00:00:00.000Z'),
+        })) as any[];
+
+        const promoteModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true) {
+                    if (query?.clientId?.$ne === null) {
+                        return { exec: jest.fn().mockResolvedValue(cappedDocs) };
+                    }
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([]),
+            countDocuments: jest.fn().mockResolvedValue(30),
+        };
+
+        const service = makePromoteService(promoteModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+        ]);
+        jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 0, updateSummary: 'noop' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 4,
+            windowNeeds: [],
+            totalActive: 30,
+            totalNeededForCount: 4,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        const dynamicSpy = jest.spyOn(service as any, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        });
+        jest.spyOn(service as any, 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
+
+        await service.checkPromoteClients();
+
+        expect(dynamicSpy).not.toHaveBeenCalled();
+    });
+
+    test('checkPromoteClients ignores unhealthy warmup docs when applying the per-client cap', async () => {
+        const staleDocs = Array.from({ length: 35 }, (_, index) => ({
+            mobile: `900stale${index}`,
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.SETTLING,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            failedUpdateAttempts: 3,
+            inUse: false,
+            enrolledAt: new Date('2026-01-01T00:00:00.000Z'),
+        })) as any[];
+
+        const promoteModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true) {
+                    if (query?.clientId?.$ne === null) {
+                        return { exec: jest.fn().mockResolvedValue(staleDocs) };
+                    }
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([]),
+            countDocuments: jest.fn().mockResolvedValue(35),
+        };
+
+        const service = makePromoteService(promoteModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+        ]);
+        jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 0, updateSummary: 'noop' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 4,
+            windowNeeds: [],
+            totalActive: 35,
+            totalNeededForCount: 4,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        const dynamicSpy = jest.spyOn(service as any, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        });
+        jest.spyOn(service as any, 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
+
+        await service.checkPromoteClients();
+
+        expect(dynamicSpy).toHaveBeenCalledWith(
+            [],
+            expect.any(Array),
+            [
+                expect.objectContaining({
+                    clientId: 'client-1',
+                    totalNeeded: 4,
+                }),
+            ],
+            expect.any(Map),
+        );
+    });
+
+    test('dynamic promote enrollment only fills remaining healthy capacity for a client', async () => {
+        const service = makePromoteService({} as any, [{ clientId: 'client-1', mobile: 'main-1' }]);
+        (service as any).usersService.executeQuery = jest.fn().mockResolvedValue([
+            { mobile: '929001', tgId: 'tg-1' },
+            { mobile: '929002', tgId: 'tg-2' },
+            { mobile: '929003', tgId: 'tg-3' },
+        ]);
+        const createSpy = jest.spyOn(service as any, 'createPromoteClientFromUser').mockResolvedValue(true);
+
+        const result = await (service as any).addNewUserstoPromoteClientsDynamic(
+            [],
+            [],
+            [{
+                clientId: 'client-1',
+                totalNeeded: 5,
+                windowNeeds: [],
+                totalActive: 29,
+                totalNeededForCount: 5,
+                calculationReason: 'test',
+                priority: 0,
+            }],
+            new Map([['client-1', 29]]),
+        );
+
+        expect(createSpy).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+            createdCount: 1,
+            attemptedCount: 1,
+            createdEntries: ['client-1 | 929001'],
+        });
+    });
+
     test('checkBufferClients skips health checks for ready accounts and processes them directly', async () => {
         const readyDoc = {
             mobile: '91001',
@@ -770,6 +914,150 @@ describe('Service flow reliability', () => {
 
         expect(processSpy).toHaveBeenNthCalledWith(1, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
         expect(processSpy).toHaveBeenNthCalledWith(2, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+    });
+
+    test('checkBufferClients does not enroll beyond the healthy per-client cap', async () => {
+        const cappedDocs = Array.from({ length: 20 }, (_, index) => ({
+            mobile: `910cap${index}`,
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.READY,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            failedUpdateAttempts: 0,
+            inUse: false,
+            enrolledAt: new Date('2026-04-01T00:00:00.000Z'),
+        })) as any[];
+
+        const bufferModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true && query?.clientId?.$ne === null) {
+                    return { exec: jest.fn().mockResolvedValue(cappedDocs) };
+                }
+                if (query?.clientId?.$exists === true) {
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([]),
+            countDocuments: jest.fn().mockResolvedValue(20),
+        };
+
+        const service = makeBufferService(bufferModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+        ]);
+        jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 0, updateSummary: 'noop' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 4,
+            windowNeeds: [],
+            totalActive: 20,
+            totalNeededForCount: 4,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        const dynamicSpy = jest.spyOn(service as any, 'addNewUserstoBufferClientsDynamic').mockResolvedValue({
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        });
+        jest.spyOn(service as any, 'sendBufferCheckSummaryNotification').mockResolvedValue(undefined);
+
+        await service.checkBufferClients();
+
+        expect(dynamicSpy).not.toHaveBeenCalled();
+    });
+
+    test('checkBufferClients ignores unhealthy warmup docs when applying the per-client cap', async () => {
+        const staleDocs = Array.from({ length: 25 }, (_, index) => ({
+            mobile: `910stale${index}`,
+            clientId: 'client-1',
+            warmupPhase: WarmupPhase.SETTLING,
+            lastChecked: null,
+            lastUpdateAttempt: null,
+            lastUsed: null,
+            failedUpdateAttempts: 3,
+            inUse: false,
+            enrolledAt: new Date('2026-01-01T00:00:00.000Z'),
+        })) as any[];
+
+        const bufferModel: any = {
+            find: jest.fn((query?: Record<string, any>) => {
+                if (query?.clientId?.$exists === true && query?.clientId?.$ne === null) {
+                    return { exec: jest.fn().mockResolvedValue(staleDocs) };
+                }
+                if (query?.clientId?.$exists === true) {
+                    return { distinct: jest.fn().mockResolvedValue([]) };
+                }
+                return createQueryChain(() => []);
+            }),
+            aggregate: jest.fn().mockResolvedValue([]),
+            countDocuments: jest.fn().mockResolvedValue(25),
+        };
+
+        const service = makeBufferService(bufferModel, [
+            { clientId: 'client-1', mobile: 'main-1' },
+        ]);
+        jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 0, updateSummary: 'noop' });
+        jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+            totalNeeded: 4,
+            windowNeeds: [],
+            totalActive: 25,
+            totalNeededForCount: 4,
+            calculationReason: 'test',
+            priority: 0,
+        });
+        const dynamicSpy = jest.spyOn(service as any, 'addNewUserstoBufferClientsDynamic').mockResolvedValue({
+            createdCount: 0,
+            attemptedCount: 0,
+            createdEntries: [],
+        });
+        jest.spyOn(service as any, 'sendBufferCheckSummaryNotification').mockResolvedValue(undefined);
+
+        await service.checkBufferClients();
+
+        expect(dynamicSpy).toHaveBeenCalledWith(
+            [],
+            expect.any(Array),
+            [
+                expect.objectContaining({
+                    clientId: 'client-1',
+                    totalNeeded: 4,
+                }),
+            ],
+            expect.any(Map),
+        );
+    });
+
+    test('dynamic buffer enrollment only fills remaining healthy capacity for a client', async () => {
+        const service = makeBufferService({} as any, [{ clientId: 'client-1', mobile: 'main-1' }]);
+        (service as any).usersService.executeQuery = jest.fn().mockResolvedValue([
+            { mobile: '919001', tgId: 'tg-1' },
+            { mobile: '919002', tgId: 'tg-2' },
+            { mobile: '919003', tgId: 'tg-3' },
+        ]);
+        const createSpy = jest.spyOn(service as any, 'createBufferClientFromUser').mockResolvedValue(true);
+
+        const result = await (service as any).addNewUserstoBufferClientsDynamic(
+            [],
+            [],
+            [{
+                clientId: 'client-1',
+                totalNeeded: 5,
+                windowNeeds: [],
+                totalActive: 19,
+                totalNeededForCount: 5,
+                calculationReason: 'test',
+                priority: 0,
+            }],
+            new Map([['client-1', 19]]),
+        );
+
+        expect(createSpy).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+            createdCount: 1,
+            attemptedCount: 1,
+            createdEntries: ['client-1 | 919001'],
+        });
     });
 
     test('buffer join query does not filter by warmup phase', async () => {

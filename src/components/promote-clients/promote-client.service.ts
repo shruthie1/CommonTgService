@@ -49,6 +49,7 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
+    private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
 
     private bufferClientService: BufferClientService;
 
@@ -110,6 +111,28 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             maxChannelJoinsPerDay: 20,
             joinsPerMobilePerRound: 3,
         };
+    }
+
+    private isHealthyPromoteClientForCap(doc: Partial<PromoteClientDocument>, now: number): boolean {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as PromoteClientDocument);
+        if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
+            return true;
+        }
+
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            return false;
+        }
+
+        const enrolledAtMs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledAtMs > 0) {
+            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
+            if (daysSinceEnrolled > 45) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // ---- Promote-specific: updateNameAndBio (uses firstName + petName) ----
@@ -754,14 +777,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
         const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
 
-        const promoteClientsPerClient = new Map<string, number>(
-            assignedPromoteClients
-                .filter((doc) => !!doc.clientId)
-                .reduce((acc, doc) => {
-                    acc.set(doc.clientId, (acc.get(doc.clientId) || 0) + 1);
-                    return acc;
-                }, new Map<string, number>()),
-        );
+        const healthyPromoteClientsPerClient = new Map<string, number>();
+        for (const doc of assignedPromoteClients) {
+            if (!doc.clientId) continue;
+            if (!this.isHealthyPromoteClientForCap(doc, now)) continue;
+            healthyPromoteClientsPerClient.set(doc.clientId, (healthyPromoteClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
 
         let totalUpdates = 0;
         const updatedEntries: string[] = [];
@@ -841,9 +862,28 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingPromoteClients.push({ clientId: client.clientId, ...availabilityNeeds });
+            if (availabilityNeeds.totalNeeded <= 0) continue;
+
+            const healthyCount = healthyPromoteClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - healthyCount);
+            if (remainingCapacity <= 0) {
+                this.logger.debug(`Skipping dynamic promote enrollment for ${client.clientId}: healthy pool already at cap`, {
+                    healthyCount,
+                    cap: this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT,
+                    requested: availabilityNeeds.totalNeeded,
+                });
+                continue;
             }
+
+            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+            clientNeedingPromoteClients.push({
+                clientId: client.clientId,
+                ...availabilityNeeds,
+                totalNeeded: cappedNeeded,
+                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT}`
+                    : availabilityNeeds.calculationReason,
+            });
         }
 
         clientNeedingPromoteClients.sort((a, b) => a.priority - b.priority);
@@ -861,7 +901,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             createdEntries: [],
         };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
         }
 
         await this.sendPromoteCheckSummaryNotification(
@@ -1020,10 +1060,17 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
         const today = ClientHelperUtils.getTodayDateString();
         const assignmentQueue: Array<{ clientId: string; priority: number }> = [];
+        const projectedHealthyCounts = new Map(promoteClientsPerClient || []);
 
         for (const clientNeed of clientsNeedingPromoteClients) {
-            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
+            for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
+            }
+            if (cappedNeed > 0) {
+                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
             }
         }
 

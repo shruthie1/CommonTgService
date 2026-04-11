@@ -48,13 +48,12 @@ export class UsersService {
             score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
             await sleep(1000);
           }
-          this.updateByFilter({ mobile: user.mobile }, { score: score });
-          // this.telegramService.forwardMediaToBot(user.mobile, null);
-          const newSession = await this.telegramService.createNewSession(user.mobile);
-          const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup" , score: score});
-          await newUserBackup.save();
+          await this.updateByFilter({ mobile: user.mobile }, { score });
+          // Session backups are handled later by warmup rotation; user creation should only persist the signup session.
         } catch (error) {
           console.log("Error in creating new session", error);
+        } finally {
+          await connectionManager.unregisterClient(user.mobile).catch(() => undefined);
         }
       }, 3000);
       const newUser = new this.userModel(user);

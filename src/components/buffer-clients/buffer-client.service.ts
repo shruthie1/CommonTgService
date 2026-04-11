@@ -50,6 +50,7 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
+    private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
 
     private promoteClientService: PromoteClientService;
 
@@ -101,6 +102,28 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     private isPrimaryClientMobile(mobile: string, primaryClientMobiles: Set<string>): boolean {
         return !!mobile && primaryClientMobiles.has(mobile);
+    }
+
+    private isHealthyBufferClientForCap(doc: Partial<BufferClientDocument>, now: number): boolean {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as BufferClientDocument);
+        if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
+            return true;
+        }
+
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            return false;
+        }
+
+        const enrolledAtMs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledAtMs > 0) {
+            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
+            if (daysSinceEnrolled > 45) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // ---- Abstract implementations ----
@@ -729,10 +752,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             ...assignedBufferMobiles,
         ].filter(Boolean);
 
-        const bufferClientsPerClient = new Map<string, number>();
+        const healthyBufferClientsPerClient = new Map<string, number>();
         for (const doc of assignedBufferClients) {
             if (!doc.clientId) continue;
-            bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
+            if (!this.isHealthyBufferClientForCap(doc, now)) continue;
+            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
         }
 
         let totalUpdates = 0;
@@ -824,9 +848,28 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingBufferClients.push({ clientId: client.clientId, ...availabilityNeeds });
+            if (availabilityNeeds.totalNeeded <= 0) continue;
+
+            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
+            if (remainingCapacity <= 0) {
+                this.logger.debug(`Skipping dynamic buffer enrollment for ${client.clientId}: healthy pool already at cap`, {
+                    healthyCount,
+                    cap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                    requested: availabilityNeeds.totalNeeded,
+                });
+                continue;
             }
+
+            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+            clientNeedingBufferClients.push({
+                clientId: client.clientId,
+                ...availabilityNeeds,
+                totalNeeded: cappedNeeded,
+                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT}`
+                    : availabilityNeeds.calculationReason,
+            });
         }
 
         clientNeedingBufferClients.sort((a, b) => a.priority - b.priority);
@@ -844,7 +887,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             createdEntries: [],
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
         }
 
         await this.sendBufferCheckSummaryNotification(
@@ -1123,10 +1166,17 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         const today = ClientHelperUtils.getTodayDateString();
         const assignmentQueue: Array<{ clientId: string; priority: number }> = [];
+        const projectedHealthyCounts = new Map(bufferClientsPerClient || []);
 
         for (const clientNeed of clientsNeedingBufferClients) {
-            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
+            for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
+            }
+            if (cappedNeed > 0) {
+                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
             }
         }
 
