@@ -12,6 +12,10 @@ exports.INTIMATE_KEYWORDS = [
     'fuck',
     'boobs',
     'dick',
+    'password',
+    'email',
+    'otp',
+    'username',
     'pussy',
     'hug'
 ];
@@ -20,11 +24,18 @@ function scoreRelationship(chat) {
     const msgScore = Math.min(messages, 3000) * 1.0;
     const mediaScore = Math.min(mediaCount, 300) * 3.0;
     const voiceScore = Math.min(voiceCount, 100) * 4.0;
-    const callScore = calls.incoming * 8.0 +
-        (calls.total - calls.incoming) * 3.0 +
-        calls.videoCalls * 12.0 +
-        Math.min(calls.totalDuration, 36000) * 0.02 +
-        Math.min(calls.avgDuration, 1800) * 0.1;
+    const hasIncoming = calls.incoming > 0;
+    const outgoing = calls.total - calls.incoming;
+    const bidirectionalBonus = hasIncoming && outgoing > 0
+        ? Math.min(outgoing, calls.incoming) * 2.0
+        : 0;
+    const callScore = hasIncoming
+        ? calls.incoming * 8.0 +
+            bidirectionalBonus +
+            calls.videoCalls * 12.0 +
+            Math.min(calls.totalDuration, 36000) * 0.02 +
+            Math.min(calls.avgDuration, 1800) * 0.1
+        : 0;
     const intimateScore = Math.min(intimateMessageCount, 500) * 10.0;
     const mutualScore = isMutualContact ? 50 : 0;
     const commonChatScore = Math.min(commonChats, 10) * 15.0;
