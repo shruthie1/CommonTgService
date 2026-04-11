@@ -11,7 +11,7 @@ export interface MailCodeLookupOptions {
 }
 
 export function extractTelegramCode(body: string, expectedLength?: number): string | null {
-    const matches = body.match(TELEGRAM_CODE_PATTERN) || [];
+    const matches: string[] = body.match(TELEGRAM_CODE_PATTERN) ?? [];
     if (expectedLength) {
         return matches.find((match) => match.length === expectedLength) || null;
     }
