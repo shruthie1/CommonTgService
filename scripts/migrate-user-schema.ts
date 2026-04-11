@@ -1,9 +1,13 @@
 /**
- * One-time migration: flatten User fields → nested structure
+ * One-time migration: clean up User schema
+ * - Remove calls.chats[] (per-chat data now lives in relationships.top)
+ * - Initialize relationships block
+ * - Remove old top-level score field
+ * - Create indexes
  *
  * Run: npx ts-node scripts/migrate-user-schema.ts
  *
- * Safe to run multiple times — uses $rename which is a no-op if source field doesn't exist.
+ * Safe to run multiple times — guards with $exists checks.
  */
 import { MongoClient } from 'mongodb';
 
@@ -22,37 +26,14 @@ async function migrate() {
 
   console.log('Starting user schema migration...');
 
-  // Step 1: Rename flat fields to stats.*
-  const renameResult = await users.updateMany(
-    { stats: { $exists: false } },
-    {
-      $rename: {
-        channels: 'stats.channels',
-        personalChats: 'stats.personalChats',
-        totalChats: 'stats.totalChats',
-        contacts: 'stats.contacts',
-        msgs: 'stats.msgs',
-        photoCount: 'stats.photoCount',
-        videoCount: 'stats.videoCount',
-        movieCount: 'stats.movieCount',
-        ownPhotoCount: 'stats.ownPhotoCount',
-        otherPhotoCount: 'stats.otherPhotoCount',
-        ownVideoCount: 'stats.ownVideoCount',
-        otherVideoCount: 'stats.otherVideoCount',
-        lastActive: 'stats.lastActive',
-      },
-    },
-  );
-  console.log(`Renamed flat fields → stats.*: ${renameResult.modifiedCount} docs`);
-
-  // Step 2: Remove calls.chats (moved to relationships.top)
+  // Step 1: Remove calls.chats (per-chat data now in relationships.top)
   const unsetResult = await users.updateMany(
     { 'calls.chats': { $exists: true } },
     { $unset: { 'calls.chats': '' } },
   );
   console.log(`Removed calls.chats: ${unsetResult.modifiedCount} docs`);
 
-  // Step 3: Remove old score field, init relationships block
+  // Step 2: Remove old score field, init relationships block
   const relResult = await users.updateMany(
     { relationships: { $exists: false } },
     {
@@ -64,12 +45,12 @@ async function migrate() {
   );
   console.log(`Initialized relationships block: ${relResult.modifiedCount} docs`);
 
-  // Step 4: Create indexes
+  // Step 3: Create indexes
   await users.createIndex({ 'relationships.bestScore': -1 });
   console.log('Created index: relationships.bestScore');
 
-  await users.createIndex({ 'stats.lastActive': -1 });
-  console.log('Created index: stats.lastActive');
+  await users.createIndex({ lastActive: -1 });
+  console.log('Created index: lastActive');
 
   console.log('Migration complete.');
   await client.close();

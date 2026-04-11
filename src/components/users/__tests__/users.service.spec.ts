@@ -70,12 +70,10 @@ describe('UsersService', () => {
             twoFA: false,
             password: null,
             expired: false,
-            stats: {
-                channels: 0, personalChats: 0, totalChats: 0, contacts: 0, msgs: 0,
-                photoCount: 0, videoCount: 0, movieCount: 0,
-                ownPhotoCount: 0, otherPhotoCount: 0, ownVideoCount: 0, otherVideoCount: 0,
-                lastActive: '2026-04-11',
-            },
+            channels: 0, personalChats: 0, totalChats: 0, contacts: 0, msgs: 0,
+            photoCount: 0, videoCount: 0, movieCount: 0,
+            ownPhotoCount: 0, otherPhotoCount: 0, ownVideoCount: 0, otherVideoCount: 0,
+            lastActive: '2026-04-11',
             calls: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
         } as any);
 
