@@ -20,6 +20,16 @@ const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 400; // 400 DAYS
 const _directHttpsAgent = new https.Agent({ keepAlive: true, timeout: 10000 });
 const _directHttpAgent = new http.Agent({ keepAlive: true, timeout: 10000 });
 
+type ProxySource =
+  | "none"
+  | "redis_map"
+  | "next_api"
+  | "env_fallback"
+  | "config_cache"
+  | "config_cache_stripped"
+  | "proxy_map_reconciled"
+  | "config_cache_fallback";
+
 // ════════════════════════════════════════════════════════════
 // Env helpers
 // ════════════════════════════════════════════════════════════
@@ -139,6 +149,28 @@ async function fetchNextProxy(clientId?: string): Promise<ProxyInterface> {
   };
 }
 
+function logResolvedConfig(
+  mobile: string,
+  details: {
+    cacheHit: boolean;
+    proxyEnabled: boolean;
+    proxyApplied: boolean;
+    proxySource: ProxySource;
+    proxy?: ProxyInterface;
+    note?: string;
+  }
+): void {
+  logger.info("Resolved Telegram client config", {
+    mobile,
+    cacheHit: details.cacheHit,
+    proxyEnabled: details.proxyEnabled,
+    proxyApplied: details.proxyApplied,
+    proxySource: details.proxySource,
+    proxy: details.proxy ? `${details.proxy.ip}:${details.proxy.port}` : "none",
+    note: details.note,
+  });
+}
+
 async function reportProxyInactive(ip: string, port: number): Promise<boolean> {
   const { baseUrl, apiKey, timeout } = getApiConfig();
   const url = `${baseUrl}/proxy-ips/${ip}/${port}`;
@@ -236,7 +268,7 @@ const _inflightProxy = new Map<string, Promise<ProxyInterface>>();
 // Per-mobile proxy — sticky via Redis, auto-tracked for health
 // ════════════════════════════════════════════════════════════
 
-async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
+async function _resolveProxyWithSource(mobile: string): Promise<{ proxy: ProxyInterface; source: ProxySource }> {
   const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
 
   // 1. Redis sticky cache
@@ -245,7 +277,7 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
     logger.debug("Proxy cache hit", { mobile, ip: cached.ip, port: cached.port });
     const proxy = { ...cached, socksType: 5 as const };
     _registerMobile(mobile, proxy);
-    return proxy;
+    return { proxy, source: "redis_map" };
   }
 
   // 2. Round-robin from IP Management /next (handles clientId → shared fallback internally)
@@ -257,7 +289,7 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
     }
     logger.info("Assigned proxy via /next", { mobile, ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
     _registerMobile(mobile, proxy);
-    return proxy;
+    return { proxy, source: "next_api" };
   } catch (err: any) {
     logger.warn("IP Management /next failed", { mobile, error: err.message });
   }
@@ -268,7 +300,7 @@ async function _resolveProxy(mobile: string): Promise<ProxyInterface> {
     try { await RedisClient.set(mapKey, envProxy, 0); } catch { }
     logger.info("Assigned proxy from env", { mobile, ip: envProxy.ip });
     _registerMobile(mobile, envProxy);
-    return envProxy;
+    return { proxy: envProxy, source: "env_fallback" };
   }
 
   throw new Error("No proxies available from /next or env");
@@ -285,7 +317,7 @@ export async function getProxyForMobile(mobile: string): Promise<ProxyInterface>
   const inflight = _inflightProxy.get(mobile);
   if (inflight) return inflight;
 
-  const promise = _resolveProxy(mobile).finally(() => {
+  const promise = _resolveProxyWithSource(mobile).then((result) => result.proxy).finally(() => {
     _inflightProxy.delete(mobile);
   });
   _inflightProxy.set(mobile, promise);
@@ -656,9 +688,17 @@ export async function generateTGConfig(
 
     if (proxiesEnabled && !cached.proxy) {
       try {
-        const p = await getProxyForMobile(mobile);
-        const withProxy = { ...cached, proxy: p };
+        const { proxy, source } = await _resolveProxyWithSource(mobile);
+        const withProxy = { ...cached, proxy };
         try { await RedisClient.set(redisKey, withProxy, ttl); } catch { }
+        logResolvedConfig(mobile, {
+          cacheHit: true,
+          proxyEnabled: true,
+          proxyApplied: true,
+          proxySource: source,
+          proxy,
+          note: "attached proxy to cached config",
+        });
         return cachedToResult(withProxy);
       } catch (err: any) {
         logger.debug("Failed to attach proxy to cached config", { mobile, error: err.message });
@@ -669,13 +709,20 @@ export async function generateTGConfig(
       // Strip proxy from returned config but keep it in Redis cache —
       // when PROXY_ENABLED flips back on, the proxy is still there.
       const { proxy: _, ...withoutProxy } = cached;
+      logResolvedConfig(mobile, {
+        cacheHit: true,
+        proxyEnabled: false,
+        proxyApplied: false,
+        proxySource: "config_cache_stripped",
+        note: "cached proxy stripped because PROXY_ENABLED is false",
+      });
       return cachedToResult(withoutProxy as CachedTGConfig);
     }
 
     // Reconcile: proxy map is the source of truth for proxy assignment
     if (proxiesEnabled && cached.proxy) {
       try {
-        const currentProxy = await getProxyForMobile(mobile);
+        const { proxy: currentProxy } = await _resolveProxyWithSource(mobile);
         const cachedKey = `${cached.proxy.ip}:${cached.proxy.port}`;
         const mapKey = `${currentProxy.ip}:${currentProxy.port}`;
         if (cachedKey !== mapKey) {
@@ -684,20 +731,64 @@ export async function generateTGConfig(
           try { await RedisClient.set(redisKey, reconciled, ttl); } catch { }
           logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
           _registerMobile(mobile, currentProxy);
+          logResolvedConfig(mobile, {
+            cacheHit: true,
+            proxyEnabled: true,
+            proxyApplied: true,
+            proxySource: "proxy_map_reconciled",
+            proxy: currentProxy,
+            note: `reconciled cached proxy ${cachedKey} -> ${mapKey}`,
+          });
           return cachedToResult(reconciled);
         }
-      } catch { }
+        logResolvedConfig(mobile, {
+          cacheHit: true,
+          proxyEnabled: true,
+          proxyApplied: true,
+          proxySource: "config_cache",
+          proxy: cached.proxy as ProxyInterface,
+          note: "cached config proxy matches sticky proxy mapping",
+        });
+      } catch {
+        logResolvedConfig(mobile, {
+          cacheHit: true,
+          proxyEnabled: true,
+          proxyApplied: true,
+          proxySource: "config_cache_fallback",
+          proxy: cached.proxy as ProxyInterface,
+          note: "proxy map lookup failed; using cached proxy from config",
+        });
+      }
       _registerMobile(mobile, cached.proxy as ProxyInterface);
+      if (!cached.proxy) {
+        logResolvedConfig(mobile, {
+          cacheHit: true,
+          proxyEnabled: true,
+          proxyApplied: false,
+          proxySource: "none",
+        });
+      }
+      return cachedToResult(cached);
     }
 
+    logResolvedConfig(mobile, {
+      cacheHit: true,
+      proxyEnabled: proxiesEnabled,
+      proxyApplied: false,
+      proxySource: "none",
+      note: "cached config without proxy",
+    });
     return cachedToResult(cached);
   }
 
   // Generate new config
   let proxy: ProxyInterface | undefined;
+  let proxySource: ProxySource = "none";
   if (proxiesEnabled) {
     try {
-      proxy = await getProxyForMobile(mobile);
+      const resolved = await _resolveProxyWithSource(mobile);
+      proxy = resolved.proxy;
+      proxySource = resolved.source;
     } catch (err: any) {
       logger.warn("No proxy available — proceeding without", { mobile, error: err.message });
     }
@@ -719,6 +810,14 @@ export async function generateTGConfig(
     system: realisticConfig.systemVersion,
     app: realisticConfig.appVersion,
     proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none",
+  });
+
+  logResolvedConfig(mobile, {
+    cacheHit: false,
+    proxyEnabled: proxiesEnabled,
+    proxyApplied: Boolean(proxy),
+    proxySource: proxy ? proxySource : "none",
+    proxy,
   });
 
   return cachedToResult(toStore);

@@ -320,7 +320,7 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return channelOps.joinChannel(this.ctx, entity);
         }
 
-        async leaveChannels(chats: string[]): Promise<void> {
+        async leaveChannels(chats: string[]): Promise<channelOps.LeaveChannelsResult> {
             return channelOps.leaveChannels(this.ctx, chats);
         }
 

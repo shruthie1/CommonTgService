@@ -1482,9 +1482,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 }
 
                 const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                await client.leaveChannels(channelsToProcess);
-                const leftCount = channelsToProcess.length;
-                this.logger.debug(`${mobile} left ${leftCount} channels successfully`);
+                const leaveResult = await client.leaveChannels(channelsToProcess);
+                const leftCount = leaveResult?.successCount ?? channelsToProcess.length;
+                const skippedCount = leaveResult?.skipCount ?? 0;
+                this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
 
                 // Decrement stored channel count so refill can pick this mobile up again
                 if (leftCount > 0) {

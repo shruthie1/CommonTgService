@@ -880,6 +880,26 @@ describe('Service flow reliability', () => {
         expect(timeoutSpy).toHaveBeenCalled();
     });
 
+    test('leave queue decrements stored channel count only for actual successful leaves', async () => {
+        const updateOne = jest.fn().mockResolvedValue({});
+        const service = new TestBaseService({ updateOne });
+
+        (service as any).leaveChannelMap.set('9990013333', ['stale-1']);
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+            leaveChannels: jest.fn().mockResolvedValue({
+                successCount: 0,
+                skipCount: 1,
+                totalCount: 1,
+            }),
+        } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+
+        await (service as any).processLeaveChannelSequentially();
+
+        expect(updateOne).not.toHaveBeenCalled();
+        expect((service as any).leaveChannelMap.has('9990013333')).toBe(false);
+    });
+
     test('operational selection self-heals legacy used accounts before querying session-rotated pool', async () => {
         let normalized = false;
         const legacyDoc = {
