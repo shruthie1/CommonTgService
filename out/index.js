@@ -13005,7 +13005,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     async cleanupStaleSessions() {
         for (const [phone, session] of TgSignupService_1.activeClients) {
             try {
-                if (Date.now() - session.createdAt > TgSignupService_1.LOGIN_TIMEOUT &&
+                if (Date.now() - session.lastActivityAt > TgSignupService_1.LOGIN_TIMEOUT &&
                     (!session.client || !session.client.connected)) {
                     await this.disconnectClient(phone);
                 }
@@ -13021,6 +13021,66 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             throw new common_1.BadRequestException('Please enter a valid phone number');
         }
         return phone;
+    }
+    validateVerificationCode(code) {
+        const normalized = String(code || '').trim();
+        if (!/^\d{5}$/.test(normalized)) {
+            throw new common_1.BadRequestException('Code must be exactly 5 digits');
+        }
+        return normalized;
+    }
+    refreshSessionTimeout(phone, session) {
+        clearTimeout(session.timeoutId);
+        session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
+        session.lastActivityAt = Date.now();
+    }
+    captureSessionSnapshot(session) {
+        try {
+            session.sessionSnapshot = session.client?.session?.save?.() || session.sessionSnapshot || '';
+        }
+        catch {
+        }
+    }
+    async buildTelegramClient(sessionSnapshot, apiId, apiHash, tgParams) {
+        const client = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionSnapshot || ''), apiId, apiHash, tgParams);
+        await client.setLogLevel(Logger_1.LogLevel.ERROR);
+        return client;
+    }
+    async ensureConnectedClient(phone, session) {
+        if (session.client?.connected) {
+            return session.client;
+        }
+        try {
+            await session.client?.connect();
+            this.captureSessionSnapshot(session);
+            session.lastActivityAt = Date.now();
+            return session.client;
+        }
+        catch (error) {
+            this.logger.warn(`Connection lost for ${phone}, rebuilding signup client`);
+        }
+        this.captureSessionSnapshot(session);
+        try {
+            await session.client?.destroy();
+        }
+        catch {
+        }
+        const rebuiltClient = await this.buildTelegramClient(session.sessionSnapshot, session.apiId, session.apiHash, session.tgParams);
+        await rebuiltClient.connect();
+        session.client = rebuiltClient;
+        this.captureSessionSnapshot(session);
+        session.lastActivityAt = Date.now();
+        return rebuiltClient;
+    }
+    mapSentCodeResult(sendResult) {
+        if (sendResult instanceof tl_1.Api.auth.SentCodeSuccess) {
+            this.logger.error('Unexpected immediate login during send/resend code');
+            throw new common_1.BadRequestException('Unexpected immediate login');
+        }
+        return {
+            phoneCodeHash: sendResult.phoneCodeHash,
+            isCodeViaApp: sendResult.type instanceof tl_1.Api.auth.SentCodeTypeApp,
+        };
     }
     async disconnectClient(phone) {
         const session = TgSignupService_1.activeClients.get(phone);
@@ -13042,13 +13102,26 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         try {
             phone = this.validatePhoneNumber(phone);
             const existingSession = TgSignupService_1.activeClients.get(phone);
-            if (existingSession && existingSession.client?.connected) {
-                await this.disconnectClient(phone);
+            if (existingSession) {
+                this.refreshSessionTimeout(phone, existingSession);
+                try {
+                    const client = await this.ensureConnectedClient(phone, existingSession);
+                    const resendResult = await client.invoke(new tl_1.Api.auth.ResendCode({
+                        phoneNumber: phone,
+                        phoneCodeHash: existingSession.phoneCodeHash,
+                    }));
+                    const mapped = this.mapSentCodeResult(resendResult);
+                    existingSession.phoneCodeHash = mapped.phoneCodeHash;
+                    this.captureSessionSnapshot(existingSession);
+                    return mapped;
+                }
+                catch (error) {
+                    this.logger.warn(`Resend failed for ${phone}; falling back to a fresh sendCode`);
+                    await this.disconnectClient(phone);
+                }
             }
             const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
-            const session = new sessions_1.StringSession('');
-            const client = new telegram_1.TelegramClient(session, apiId, apiHash, tgParams);
-            await client.setLogLevel(Logger_1.LogLevel.ERROR);
+            const client = await this.buildTelegramClient('', apiId, apiHash, tgParams);
             await client.connect();
             const sendResult = await client.invoke(new tl_1.Api.auth.SendCode({
                 phoneNumber: phone,
@@ -13059,25 +13132,28 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                     allowAppHash: true,
                 }),
             }));
-            if (sendResult instanceof tl_1.Api.auth.SentCodeSuccess) {
-                this.logger.error(`Unexpected immediate login for ${phone}`);
-                throw new common_1.BadRequestException('Unexpected immediate login');
-            }
             const timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
-            TgSignupService_1.activeClients.set(phone, {
+            const mapped = this.mapSentCodeResult(sendResult);
+            const activeSession = {
                 client,
-                phoneCodeHash: sendResult.phoneCodeHash,
+                phoneCodeHash: mapped.phoneCodeHash,
                 timeoutId,
-                createdAt: Date.now()
-            });
-            return {
-                phoneCodeHash: sendResult.phoneCodeHash,
-                isCodeViaApp: sendResult.type instanceof tl_1.Api.auth.SentCodeTypeApp,
+                createdAt: Date.now(),
+                lastActivityAt: Date.now(),
+                apiId,
+                apiHash,
+                tgParams,
+                sessionSnapshot: client.session.save() || '',
             };
+            TgSignupService_1.activeClients.set(phone, activeSession);
+            return mapped;
         }
         catch (error) {
             this.logger.error(`Failed to send code to ${phone}: ${error.message}`, error.stack);
             await this.disconnectClient(phone);
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
             if (error.errorMessage?.includes('PHONE_NUMBER_BANNED')) {
                 throw new common_1.BadRequestException('This phone number has been banned from Telegram');
             }
@@ -13093,32 +13169,15 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     async verifyCode(phone, code, password) {
         try {
             phone = this.validatePhoneNumber(phone);
+            code = this.validateVerificationCode(code);
             const session = TgSignupService_1.activeClients.get(phone);
             if (!session) {
                 this.logger.warn(`No active signup session found for ${phone}`);
                 throw new common_1.BadRequestException('Session Expired. Please start again');
             }
-            clearTimeout(session.timeoutId);
-            session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
-            if (!session.client?.connected) {
-                try {
-                    await session.client?.connect();
-                }
-                catch (error) {
-                    this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
-                    try {
-                        const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
-                        const newSession = new sessions_1.StringSession('');
-                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, tgParams);
-                        await newClient.connect();
-                        session.client = newClient;
-                    }
-                    catch (reconnectError) {
-                        throw new common_1.BadRequestException('Connection failed. Please try verifying again.');
-                    }
-                }
-            }
-            const { client, phoneCodeHash } = session;
+            this.refreshSessionTimeout(phone, session);
+            const client = await this.ensureConnectedClient(phone, session);
+            const { phoneCodeHash } = session;
             try {
                 this.logger.debug(`Attempting to sign in with code for ${phone}`);
                 const signInResult = await client.invoke(new tl_1.Api.auth.SignIn({
@@ -13139,6 +13198,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 if (!sessionString) {
                     throw new Error('Failed to generate session string');
                 }
+                session.sessionSnapshot = sessionString;
                 const userData = await this.processLoginResult(signInResult.user, sessionString, password);
                 await this.disconnectClient(phone);
                 return userData;
@@ -13153,7 +13213,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                             requires2FA: true
                         };
                     }
-                    return await this.handle2FALogin(phone, session.client, password);
+                    return await this.handle2FALogin(phone, client, password);
                 }
                 if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
                     error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {
@@ -16862,6 +16922,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
         this.bufferClientModel = bufferClientModel;
+        this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
         this.promoteClientService = promoteClientServiceRef;
     }
     async getPrimaryClientMobiles(clientId) {
@@ -16877,6 +16938,24 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     isPrimaryClientMobile(mobile, primaryClientMobiles) {
         return !!mobile && primaryClientMobiles.has(mobile);
+    }
+    isHealthyBufferClientForCap(doc, now) {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        if (phase === base_client_service_1.WarmupPhase.READY || phase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            return true;
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            return false;
+        }
+        const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledAtMs > 0) {
+            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
+            if (daysSinceEnrolled > 45) {
+                return false;
+            }
+        }
+        return true;
     }
     get model() {
         return this.bufferClientModel;
@@ -17425,11 +17504,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             ...promoteClients.map((c) => c.mobile),
             ...assignedBufferMobiles,
         ].filter(Boolean);
-        const bufferClientsPerClient = new Map();
+        const healthyBufferClientsPerClient = new Map();
         for (const doc of assignedBufferClients) {
             if (!doc.clientId)
                 continue;
-            bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
+            if (!this.isHealthyBufferClientForCap(doc, now))
+                continue;
+            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
         }
         let totalUpdates = 0;
         const updatedEntries = [];
@@ -17493,9 +17574,27 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const clientNeedingBufferClients = [];
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingBufferClients.push({ clientId: client.clientId, ...availabilityNeeds });
+            if (availabilityNeeds.totalNeeded <= 0)
+                continue;
+            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
+            if (remainingCapacity <= 0) {
+                this.logger.debug(`Skipping dynamic buffer enrollment for ${client.clientId}: healthy pool already at cap`, {
+                    healthyCount,
+                    cap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                    requested: availabilityNeeds.totalNeeded,
+                });
+                continue;
             }
+            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+            clientNeedingBufferClients.push({
+                clientId: client.clientId,
+                ...availabilityNeeds,
+                totalNeeded: cappedNeeded,
+                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT}`
+                    : availabilityNeeds.calculationReason,
+            });
         }
         clientNeedingBufferClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
@@ -17512,7 +17611,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             createdEntries: [],
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
         }
         await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
@@ -17710,9 +17809,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }, { tgId: 1 }, totalNeeded + 5);
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const assignmentQueue = [];
+        const projectedHealthyCounts = new Map(bufferClientsPerClient || []);
         for (const clientNeed of clientsNeedingBufferClients) {
-            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
+            for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
+            }
+            if (cappedNeed > 0) {
+                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
             }
         }
         let attemptedCount = 0;
@@ -25515,6 +25621,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
         this.promoteClientModel = promoteClientModel;
+        this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
         this.bufferClientService = bufferClientServiceRef;
     }
     get model() {
@@ -25539,6 +25646,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             maxChannelJoinsPerDay: 20,
             joinsPerMobilePerRound: 3,
         };
+    }
+    isHealthyPromoteClientForCap(doc, now) {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        if (phase === base_client_service_1.WarmupPhase.READY || phase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            return true;
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            return false;
+        }
+        const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledAtMs > 0) {
+            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
+            if (daysSinceEnrolled > 45) {
+                return false;
+            }
+        }
+        return true;
     }
     async updateNameAndBio(doc, client, failedAttempts) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -26100,12 +26225,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             .exec();
         const assignedPromoteMobiles = assignedPromoteClients.map((doc) => doc.mobile);
         const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
-        const promoteClientsPerClient = new Map(assignedPromoteClients
-            .filter((doc) => !!doc.clientId)
-            .reduce((acc, doc) => {
-            acc.set(doc.clientId, (acc.get(doc.clientId) || 0) + 1);
-            return acc;
-        }, new Map()));
+        const healthyPromoteClientsPerClient = new Map();
+        for (const doc of assignedPromoteClients) {
+            if (!doc.clientId)
+                continue;
+            if (!this.isHealthyPromoteClientForCap(doc, now))
+                continue;
+            healthyPromoteClientsPerClient.set(doc.clientId, (healthyPromoteClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
         let totalUpdates = 0;
         const updatedEntries = [];
         const promoteClientsToProcess = [];
@@ -26163,9 +26290,27 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const clientNeedingPromoteClients = [];
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingPromoteClients.push({ clientId: client.clientId, ...availabilityNeeds });
+            if (availabilityNeeds.totalNeeded <= 0)
+                continue;
+            const healthyCount = healthyPromoteClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - healthyCount);
+            if (remainingCapacity <= 0) {
+                this.logger.debug(`Skipping dynamic promote enrollment for ${client.clientId}: healthy pool already at cap`, {
+                    healthyCount,
+                    cap: this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT,
+                    requested: availabilityNeeds.totalNeeded,
+                });
+                continue;
             }
+            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+            clientNeedingPromoteClients.push({
+                clientId: client.clientId,
+                ...availabilityNeeds,
+                totalNeeded: cappedNeeded,
+                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT}`
+                    : availabilityNeeds.calculationReason,
+            });
         }
         clientNeedingPromoteClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
@@ -26182,7 +26327,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             createdEntries: [],
         };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
         }
         await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
@@ -26279,9 +26424,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }, { tgId: 1 }, totalNeeded + 5);
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const assignmentQueue = [];
+        const projectedHealthyCounts = new Map(promoteClientsPerClient || []);
         for (const clientNeed of clientsNeedingPromoteClients) {
-            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
+            for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
+            }
+            if (cappedNeed > 0) {
+                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
             }
         }
         let attemptedCount = 0;
@@ -36110,13 +36262,13 @@ let UsersService = class UsersService {
                         score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
                         await (0, Helpers_1.sleep)(1000);
                     }
-                    this.updateByFilter({ mobile: user.mobile }, { score: score });
-                    const newSession = await this.telegramService.createNewSession(user.mobile);
-                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup", score: score });
-                    await newUserBackup.save();
+                    await this.updateByFilter({ mobile: user.mobile }, { score });
                 }
                 catch (error) {
                     console.log("Error in creating new session", error);
+                }
+                finally {
+                    await connection_manager_1.connectionManager.unregisterClient(user.mobile).catch(() => undefined);
                 }
             }, 3000);
             const newUser = new this.userModel(user);
