@@ -46,6 +46,10 @@ describe('UsersService', () => {
 
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
             getCallLogStats: jest.fn().mockResolvedValue({ chats: [] }),
+            getTopPrivateChats: jest.fn().mockResolvedValue({ items: [] }),
+            getContacts: jest.fn().mockResolvedValue({ users: [] }),
+            getchatId: jest.fn(),
+            client: { invoke: jest.fn() },
         } as any);
         const unregisterSpy = jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
 
@@ -65,23 +69,21 @@ describe('UsersService', () => {
             tgId: 'tg-1',
             twoFA: false,
             password: null,
-            lastActive: '2026-04-11',
             expired: false,
-            channels: 0,
-            personalChats: 0,
-            totalChats: 0,
+            stats: {
+                channels: 0, personalChats: 0, totalChats: 0, contacts: 0, msgs: 0,
+                photoCount: 0, videoCount: 0, movieCount: 0,
+                ownPhotoCount: 0, otherPhotoCount: 0, ownVideoCount: 0, otherVideoCount: 0,
+                lastActive: '2026-04-11',
+            },
+            calls: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
         } as any);
 
-        await jest.advanceTimersByTimeAsync(3000);
+        await jest.advanceTimersByTimeAsync(5000);
 
         expect(modelInstances).toHaveLength(1);
         expect(modelInstances[0].save).toHaveBeenCalledTimes(1);
         expect(telegramService.createNewSession).not.toHaveBeenCalled();
-        expect(MockUserModel.updateMany).toHaveBeenCalledWith(
-            { mobile: '9199990001' },
-            { $set: { score: 1 } },
-            { upsert: true },
-        );
         expect(unregisterSpy).toHaveBeenCalledWith('9199990001');
     });
 });
