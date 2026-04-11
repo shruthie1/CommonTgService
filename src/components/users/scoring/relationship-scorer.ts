@@ -42,12 +42,21 @@ export function scoreRelationship(chat: RelationshipCandidate): number {
   const mediaScore = Math.min(mediaCount, 300) * 3.0;
   const voiceScore = Math.min(voiceCount, 100) * 4.0;
 
-  const callScore =
-    calls.incoming * 8.0 +
-    (calls.total - calls.incoming) * 3.0 +
-    calls.videoCalls * 12.0 +
-    Math.min(calls.totalDuration, 36000) * 0.02 +
-    Math.min(calls.avgDuration, 1800) * 0.1;
+  // Calls only count as relationship signal if there are incoming calls (they call you).
+  // Outgoing-only calls = 0 (could be automated/spam/business).
+  // When bidirectional, outgoing adds a small bonus scaled by the incoming ratio.
+  const hasIncoming = calls.incoming > 0;
+  const outgoing = calls.total - calls.incoming;
+  const bidirectionalBonus = hasIncoming && outgoing > 0
+    ? Math.min(outgoing, calls.incoming) * 2.0  // capped at incoming count
+    : 0;
+  const callScore = hasIncoming
+    ? calls.incoming * 8.0 +
+      bidirectionalBonus +
+      calls.videoCalls * 12.0 +
+      Math.min(calls.totalDuration, 36000) * 0.02 +
+      Math.min(calls.avgDuration, 1800) * 0.1
+    : 0;
 
   const intimateScore = Math.min(intimateMessageCount, 500) * 10.0;
 
