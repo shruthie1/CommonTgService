@@ -44,6 +44,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
         this.bufferClientModel = bufferClientModel;
+        this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
         this.promoteClientService = promoteClientServiceRef;
     }
     async getPrimaryClientMobiles(clientId) {
@@ -59,6 +60,24 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     isPrimaryClientMobile(mobile, primaryClientMobiles) {
         return !!mobile && primaryClientMobiles.has(mobile);
+    }
+    isHealthyBufferClientForCap(doc, now) {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        if (phase === base_client_service_1.WarmupPhase.READY || phase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            return true;
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            return false;
+        }
+        const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledAtMs > 0) {
+            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
+            if (daysSinceEnrolled > 45) {
+                return false;
+            }
+        }
+        return true;
     }
     get model() {
         return this.bufferClientModel;
@@ -607,11 +626,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             ...promoteClients.map((c) => c.mobile),
             ...assignedBufferMobiles,
         ].filter(Boolean);
-        const bufferClientsPerClient = new Map();
+        const healthyBufferClientsPerClient = new Map();
         for (const doc of assignedBufferClients) {
             if (!doc.clientId)
                 continue;
-            bufferClientsPerClient.set(doc.clientId, (bufferClientsPerClient.get(doc.clientId) || 0) + 1);
+            if (!this.isHealthyBufferClientForCap(doc, now))
+                continue;
+            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
         }
         let totalUpdates = 0;
         const updatedEntries = [];
@@ -675,9 +696,27 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const clientNeedingBufferClients = [];
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingBufferClients.push({ clientId: client.clientId, ...availabilityNeeds });
+            if (availabilityNeeds.totalNeeded <= 0)
+                continue;
+            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
+            if (remainingCapacity <= 0) {
+                this.logger.debug(`Skipping dynamic buffer enrollment for ${client.clientId}: healthy pool already at cap`, {
+                    healthyCount,
+                    cap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                    requested: availabilityNeeds.totalNeeded,
+                });
+                continue;
             }
+            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+            clientNeedingBufferClients.push({
+                clientId: client.clientId,
+                ...availabilityNeeds,
+                totalNeeded: cappedNeeded,
+                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT}`
+                    : availabilityNeeds.calculationReason,
+            });
         }
         clientNeedingBufferClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
@@ -694,7 +733,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             createdEntries: [],
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, bufferClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
         }
         await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
@@ -892,9 +931,16 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }, { tgId: 1 }, totalNeeded + 5);
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const assignmentQueue = [];
+        const projectedHealthyCounts = new Map(bufferClientsPerClient || []);
         for (const clientNeed of clientsNeedingBufferClients) {
-            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
+            for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
+            }
+            if (cappedNeed > 0) {
+                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
             }
         }
         let attemptedCount = 0;

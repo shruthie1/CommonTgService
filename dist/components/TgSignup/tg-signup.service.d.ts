@@ -13,6 +13,12 @@ export declare class TgSignupService implements OnModuleDestroy {
     onModuleDestroy(): Promise<void>;
     private cleanupStaleSessions;
     private validatePhoneNumber;
+    private validateVerificationCode;
+    private refreshSessionTimeout;
+    private captureSessionSnapshot;
+    private buildTelegramClient;
+    private ensureConnectedClient;
+    private mapSentCodeResult;
     private disconnectClient;
     sendCode(phone: string): Promise<Pick<TgSignupResponse, 'phoneCodeHash' | 'isCodeViaApp'>>;
     verifyCode(phone: string, code: string, password?: string): Promise<TgSignupResponse>;

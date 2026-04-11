@@ -45,6 +45,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
         this.promoteClientModel = promoteClientModel;
+        this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
         this.bufferClientService = bufferClientServiceRef;
     }
     get model() {
@@ -69,6 +70,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             maxChannelJoinsPerDay: 20,
             joinsPerMobilePerRound: 3,
         };
+    }
+    isHealthyPromoteClientForCap(doc, now) {
+        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        if (phase === base_client_service_1.WarmupPhase.READY || phase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+            return true;
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            return false;
+        }
+        const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        if (enrolledAtMs > 0) {
+            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
+            if (daysSinceEnrolled > 45) {
+                return false;
+            }
+        }
+        return true;
     }
     async updateNameAndBio(doc, client, failedAttempts) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -630,12 +649,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             .exec();
         const assignedPromoteMobiles = assignedPromoteClients.map((doc) => doc.mobile);
         const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
-        const promoteClientsPerClient = new Map(assignedPromoteClients
-            .filter((doc) => !!doc.clientId)
-            .reduce((acc, doc) => {
-            acc.set(doc.clientId, (acc.get(doc.clientId) || 0) + 1);
-            return acc;
-        }, new Map()));
+        const healthyPromoteClientsPerClient = new Map();
+        for (const doc of assignedPromoteClients) {
+            if (!doc.clientId)
+                continue;
+            if (!this.isHealthyPromoteClientForCap(doc, now))
+                continue;
+            healthyPromoteClientsPerClient.set(doc.clientId, (healthyPromoteClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
         let totalUpdates = 0;
         const updatedEntries = [];
         const promoteClientsToProcess = [];
@@ -693,9 +714,27 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const clientNeedingPromoteClients = [];
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingPromoteClients.push({ clientId: client.clientId, ...availabilityNeeds });
+            if (availabilityNeeds.totalNeeded <= 0)
+                continue;
+            const healthyCount = healthyPromoteClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - healthyCount);
+            if (remainingCapacity <= 0) {
+                this.logger.debug(`Skipping dynamic promote enrollment for ${client.clientId}: healthy pool already at cap`, {
+                    healthyCount,
+                    cap: this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT,
+                    requested: availabilityNeeds.totalNeeded,
+                });
+                continue;
             }
+            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+            clientNeedingPromoteClients.push({
+                clientId: client.clientId,
+                ...availabilityNeeds,
+                totalNeeded: cappedNeeded,
+                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT}`
+                    : availabilityNeeds.calculationReason,
+            });
         }
         clientNeedingPromoteClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
@@ -712,7 +751,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             createdEntries: [],
         };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, promoteClientsPerClient);
+            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
         }
         await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
@@ -809,9 +848,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }, { tgId: 1 }, totalNeeded + 5);
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         const assignmentQueue = [];
+        const projectedHealthyCounts = new Map(promoteClientsPerClient || []);
         for (const clientNeed of clientsNeedingPromoteClients) {
-            for (let i = 0; i < clientNeed.totalNeeded; i++) {
+            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
+            for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
+            }
+            if (cappedNeed > 0) {
+                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
             }
         }
         let attemptedCount = 0;

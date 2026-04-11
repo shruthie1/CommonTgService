@@ -48,13 +48,13 @@ let UsersService = class UsersService {
                         score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
                         await (0, Helpers_1.sleep)(1000);
                     }
-                    this.updateByFilter({ mobile: user.mobile }, { score: score });
-                    const newSession = await this.telegramService.createNewSession(user.mobile);
-                    const newUserBackup = new this.userModel({ ...user, session: newSession, lastName: "Backup", score: score });
-                    await newUserBackup.save();
+                    await this.updateByFilter({ mobile: user.mobile }, { score });
                 }
                 catch (error) {
                     console.log("Error in creating new session", error);
+                }
+                finally {
+                    await connection_manager_1.connectionManager.unregisterClient(user.mobile).catch(() => undefined);
                 }
             }, 3000);
             const newUser = new this.userModel(user);

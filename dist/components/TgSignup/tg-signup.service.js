@@ -36,7 +36,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     async cleanupStaleSessions() {
         for (const [phone, session] of TgSignupService_1.activeClients) {
             try {
-                if (Date.now() - session.createdAt > TgSignupService_1.LOGIN_TIMEOUT &&
+                if (Date.now() - session.lastActivityAt > TgSignupService_1.LOGIN_TIMEOUT &&
                     (!session.client || !session.client.connected)) {
                     await this.disconnectClient(phone);
                 }
@@ -52,6 +52,66 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
             throw new common_1.BadRequestException('Please enter a valid phone number');
         }
         return phone;
+    }
+    validateVerificationCode(code) {
+        const normalized = String(code || '').trim();
+        if (!/^\d{5}$/.test(normalized)) {
+            throw new common_1.BadRequestException('Code must be exactly 5 digits');
+        }
+        return normalized;
+    }
+    refreshSessionTimeout(phone, session) {
+        clearTimeout(session.timeoutId);
+        session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
+        session.lastActivityAt = Date.now();
+    }
+    captureSessionSnapshot(session) {
+        try {
+            session.sessionSnapshot = session.client?.session?.save?.() || session.sessionSnapshot || '';
+        }
+        catch {
+        }
+    }
+    async buildTelegramClient(sessionSnapshot, apiId, apiHash, tgParams) {
+        const client = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionSnapshot || ''), apiId, apiHash, tgParams);
+        await client.setLogLevel(Logger_1.LogLevel.ERROR);
+        return client;
+    }
+    async ensureConnectedClient(phone, session) {
+        if (session.client?.connected) {
+            return session.client;
+        }
+        try {
+            await session.client?.connect();
+            this.captureSessionSnapshot(session);
+            session.lastActivityAt = Date.now();
+            return session.client;
+        }
+        catch (error) {
+            this.logger.warn(`Connection lost for ${phone}, rebuilding signup client`);
+        }
+        this.captureSessionSnapshot(session);
+        try {
+            await session.client?.destroy();
+        }
+        catch {
+        }
+        const rebuiltClient = await this.buildTelegramClient(session.sessionSnapshot, session.apiId, session.apiHash, session.tgParams);
+        await rebuiltClient.connect();
+        session.client = rebuiltClient;
+        this.captureSessionSnapshot(session);
+        session.lastActivityAt = Date.now();
+        return rebuiltClient;
+    }
+    mapSentCodeResult(sendResult) {
+        if (sendResult instanceof tl_1.Api.auth.SentCodeSuccess) {
+            this.logger.error('Unexpected immediate login during send/resend code');
+            throw new common_1.BadRequestException('Unexpected immediate login');
+        }
+        return {
+            phoneCodeHash: sendResult.phoneCodeHash,
+            isCodeViaApp: sendResult.type instanceof tl_1.Api.auth.SentCodeTypeApp,
+        };
     }
     async disconnectClient(phone) {
         const session = TgSignupService_1.activeClients.get(phone);
@@ -73,13 +133,26 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         try {
             phone = this.validatePhoneNumber(phone);
             const existingSession = TgSignupService_1.activeClients.get(phone);
-            if (existingSession && existingSession.client?.connected) {
-                await this.disconnectClient(phone);
+            if (existingSession) {
+                this.refreshSessionTimeout(phone, existingSession);
+                try {
+                    const client = await this.ensureConnectedClient(phone, existingSession);
+                    const resendResult = await client.invoke(new tl_1.Api.auth.ResendCode({
+                        phoneNumber: phone,
+                        phoneCodeHash: existingSession.phoneCodeHash,
+                    }));
+                    const mapped = this.mapSentCodeResult(resendResult);
+                    existingSession.phoneCodeHash = mapped.phoneCodeHash;
+                    this.captureSessionSnapshot(existingSession);
+                    return mapped;
+                }
+                catch (error) {
+                    this.logger.warn(`Resend failed for ${phone}; falling back to a fresh sendCode`);
+                    await this.disconnectClient(phone);
+                }
             }
             const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
-            const session = new sessions_1.StringSession('');
-            const client = new telegram_1.TelegramClient(session, apiId, apiHash, tgParams);
-            await client.setLogLevel(Logger_1.LogLevel.ERROR);
+            const client = await this.buildTelegramClient('', apiId, apiHash, tgParams);
             await client.connect();
             const sendResult = await client.invoke(new tl_1.Api.auth.SendCode({
                 phoneNumber: phone,
@@ -90,25 +163,28 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                     allowAppHash: true,
                 }),
             }));
-            if (sendResult instanceof tl_1.Api.auth.SentCodeSuccess) {
-                this.logger.error(`Unexpected immediate login for ${phone}`);
-                throw new common_1.BadRequestException('Unexpected immediate login');
-            }
             const timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
-            TgSignupService_1.activeClients.set(phone, {
+            const mapped = this.mapSentCodeResult(sendResult);
+            const activeSession = {
                 client,
-                phoneCodeHash: sendResult.phoneCodeHash,
+                phoneCodeHash: mapped.phoneCodeHash,
                 timeoutId,
-                createdAt: Date.now()
-            });
-            return {
-                phoneCodeHash: sendResult.phoneCodeHash,
-                isCodeViaApp: sendResult.type instanceof tl_1.Api.auth.SentCodeTypeApp,
+                createdAt: Date.now(),
+                lastActivityAt: Date.now(),
+                apiId,
+                apiHash,
+                tgParams,
+                sessionSnapshot: client.session.save() || '',
             };
+            TgSignupService_1.activeClients.set(phone, activeSession);
+            return mapped;
         }
         catch (error) {
             this.logger.error(`Failed to send code to ${phone}: ${error.message}`, error.stack);
             await this.disconnectClient(phone);
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
             if (error.errorMessage?.includes('PHONE_NUMBER_BANNED')) {
                 throw new common_1.BadRequestException('This phone number has been banned from Telegram');
             }
@@ -124,32 +200,15 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     async verifyCode(phone, code, password) {
         try {
             phone = this.validatePhoneNumber(phone);
+            code = this.validateVerificationCode(code);
             const session = TgSignupService_1.activeClients.get(phone);
             if (!session) {
                 this.logger.warn(`No active signup session found for ${phone}`);
                 throw new common_1.BadRequestException('Session Expired. Please start again');
             }
-            clearTimeout(session.timeoutId);
-            session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
-            if (!session.client?.connected) {
-                try {
-                    await session.client?.connect();
-                }
-                catch (error) {
-                    this.logger.warn(`Connection lost for ${phone}, attempting to reconnect`);
-                    try {
-                        const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(phone);
-                        const newSession = new sessions_1.StringSession('');
-                        const newClient = new telegram_1.TelegramClient(newSession, apiId, apiHash, tgParams);
-                        await newClient.connect();
-                        session.client = newClient;
-                    }
-                    catch (reconnectError) {
-                        throw new common_1.BadRequestException('Connection failed. Please try verifying again.');
-                    }
-                }
-            }
-            const { client, phoneCodeHash } = session;
+            this.refreshSessionTimeout(phone, session);
+            const client = await this.ensureConnectedClient(phone, session);
+            const { phoneCodeHash } = session;
             try {
                 this.logger.debug(`Attempting to sign in with code for ${phone}`);
                 const signInResult = await client.invoke(new tl_1.Api.auth.SignIn({
@@ -170,6 +229,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 if (!sessionString) {
                     throw new Error('Failed to generate session string');
                 }
+                session.sessionSnapshot = sessionString;
                 const userData = await this.processLoginResult(signInResult.user, sessionString, password);
                 await this.disconnectClient(phone);
                 return userData;
@@ -184,7 +244,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                             requires2FA: true
                         };
                     }
-                    return await this.handle2FALogin(phone, session.client, password);
+                    return await this.handle2FALogin(phone, client, password);
                 }
                 if (error.errorMessage?.includes('PHONE_CODE_INVALID') ||
                     error.errorMessage?.includes('PHONE_CODE_EXPIRED')) {

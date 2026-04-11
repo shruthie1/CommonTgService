@@ -14,11 +14,13 @@ import { BotsService } from '../bots';
 import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } from '../shared/base-client.service';
 export declare class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private promoteClientModel;
+    private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT;
     private bufferClientService;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientServiceRef: BufferClientService, sessionService: SessionService, botsService: BotsService);
     get model(): Model<PromoteClientDocument>;
     get clientType(): 'promote';
     get config(): ClientConfig;
+    private isHealthyPromoteClientForCap;
     updateNameAndBio(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
     updateUsername(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;

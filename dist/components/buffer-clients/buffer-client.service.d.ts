@@ -15,10 +15,12 @@ import { BotsService } from '../bots';
 import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } from '../shared/base-client.service';
 export declare class BufferClientService extends BaseClientService<BufferClientDocument> {
     private bufferClientModel;
+    private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT;
     private promoteClientService;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientServiceRef: PromoteClientService, sessionService: SessionService, botsService: BotsService);
     private getPrimaryClientMobiles;
     private isPrimaryClientMobile;
+    private isHealthyBufferClientForCap;
     get model(): Model<BufferClientDocument>;
     get clientType(): 'buffer';
     get config(): ClientConfig;
