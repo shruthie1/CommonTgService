@@ -1,9 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, TransformFnParams } from 'class-transformer';
-import { IsOptional, IsString, IsArray, IsUrl, Matches, ArrayNotEmpty } from 'class-validator';
+import { IsOptional, IsString, IsUrl, Matches } from 'class-validator';
 
 export class SearchClientDto {
-    @ApiPropertyOptional({ description: 'Client ID of the client' })
+    @ApiPropertyOptional({ description: 'Client ID' })
     @Transform(({ value }: TransformFnParams) => value?.trim().toLowerCase())
     @IsOptional()
     @IsString()
@@ -16,79 +16,72 @@ export class SearchClientDto {
     @IsString()
     dbcoll?: string;
 
-    @ApiPropertyOptional({ description: 'Channel link of the client' })
+    @ApiPropertyOptional({ description: 'Channel link' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsString()
     channelLink?: string;
 
-    @ApiPropertyOptional({ description: 'Link of the client' })
+    @ApiPropertyOptional({ description: 'Client link' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsUrl({}, { message: 'Invalid URL format' })
     link?: string;
 
-    @ApiPropertyOptional({ description: 'Name of the client' })
+    @ApiPropertyOptional({ description: 'Display name' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsString()
     name?: string;
 
-    @ApiPropertyOptional({ description: 'Phone number of the client' })
+    @ApiPropertyOptional({ description: 'Mobile number' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @Matches(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' })
     number?: string;
 
-    @ApiPropertyOptional({ description: 'Password of the client' })
+    @ApiPropertyOptional({ description: 'Password' })
     @IsOptional()
     @IsString()
     password?: string;
 
-    @ApiPropertyOptional({ description: 'Repl link of the client' })
+    @ApiPropertyOptional({ description: 'tg-aut repl link' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsUrl({}, { message: 'Invalid URL format' })
     repl?: string;
 
-    @ApiPropertyOptional({ description: 'Promotion Repl link of the client' })
+    @ApiPropertyOptional({ description: 'Promote repl link' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsUrl({}, { message: 'Invalid URL format' })
     promoteRepl?: string;
 
-    @ApiPropertyOptional({ description: 'Clientname of the client' })
+    @ApiPropertyOptional({ description: 'Client name' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsString()
     clientName?: string;
 
-    @ApiPropertyOptional({ description: 'Deployment key URL' })
+    @ApiPropertyOptional({ description: 'Deploy restart URL' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsUrl({}, { message: 'Invalid URL format' })
     deployKey?: string;
 
-    @ApiPropertyOptional({ description: 'Product associated with the client' })
+    @ApiPropertyOptional({ description: 'Product identifier' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsString()
     product?: string;
 
-    @ApiPropertyOptional({ description: 'Search by client ID that has promote mobiles assigned' })
-    @Transform(({ value }: TransformFnParams) => value?.trim().toLowerCase())
-    @IsOptional()
-    @IsString()
-    @Matches(/^(true|false)$/i, { message: 'hasPromoteMobiles must be either "true" or "false"' })
-    hasPromoteMobiles?: string;
-
-    @ApiPropertyOptional({ description: 'Paytm QR ID of the client' })
+    @ApiPropertyOptional({ description: 'Paytm QR ID' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsString()
     qrId?: string;
 
-    @ApiPropertyOptional({ description: 'Google Pay ID of the client' })
+    @ApiPropertyOptional({ description: 'Google Pay ID' })
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @IsString()

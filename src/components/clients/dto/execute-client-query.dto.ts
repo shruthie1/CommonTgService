@@ -3,23 +3,23 @@ import { Type } from 'class-transformer';
 import { IsInt, IsObject, IsOptional, Min } from 'class-validator';
 
 export class ExecuteClientQueryDto {
-  @ApiProperty({ type: 'object', additionalProperties: true, example: { clientId: 'client-a' } })
+  @ApiProperty({ description: 'MongoDB filter object', type: 'object', additionalProperties: true })
   @IsObject()
   query: Record<string, unknown>;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true, example: { clientId: 1 } })
+  @ApiPropertyOptional({ description: 'Sort specification', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
   sort?: Record<string, 1 | -1 | 'asc' | 'desc'>;
 
-  @ApiPropertyOptional({ example: 20, minimum: 1 })
+  @ApiPropertyOptional({ description: 'Max results to return', minimum: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   limit?: number;
 
-  @ApiPropertyOptional({ example: 0, minimum: 0 })
+  @ApiPropertyOptional({ description: 'Results to skip', minimum: 0 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

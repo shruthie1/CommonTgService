@@ -13,7 +13,6 @@ import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
-import { EnhancedSearchClientDto } from './dto/enhanced-search-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { sleep } from 'telegram/Helpers';
 import { UsersService } from '../users/users.service';
@@ -31,10 +30,6 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
-import {
-  PromoteClient,
-  PromoteClientDocument,
-} from '../promote-clients/schemas/promote-client.schema';
 import { SortOrder } from 'mongoose';
 import path from 'path';
 import * as fs from 'fs';
@@ -58,17 +53,12 @@ const CONFIG = {
   CACHE_WARMUP_THRESHOLD: 20,
   COOLDOWN_PERIOD: 240000, // 4 minutes
   UPDATE_CLIENT_COOLDOWN: 30000, // 30 seconds
+  MAP_CLEANUP_INTERVAL: 10 * 60 * 1000, // 10 minutes
 };
 
 interface CacheMetadata {
   lastUpdated: number;
   isStale: boolean;
-}
-
-interface SearchResult {
-  clients: Client[];
-  searchType: 'direct' | 'promoteMobile' | 'mixed';
-  promoteMobileMatches?: Array<{ clientId: string; mobile: string }>;
 }
 
 interface SafeSetupBufferCandidate {
@@ -101,7 +91,7 @@ interface PersonaAssignmentLike {
   assignedProfilePics?: string[];
 }
 
-type ClientSearchFilter = Partial<SearchClientDto & Pick<EnhancedSearchClientDto, 'promoteMobileNumber'>>;
+type ClientSearchFilter = Partial<SearchClientDto>;
 type ClientMongoQuery = Record<string, unknown>;
 type ClientQuerySort = Record<string, SortOrder | { $meta: unknown }>;
 
@@ -114,14 +104,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   private cacheMetadata: CacheMetadata = { lastUpdated: 0, isStale: true };
   private checkInterval: NodeJS.Timeout | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
+  private cleanupInterval: NodeJS.Timeout | null = null;
   private isInitialized = false;
   private isShuttingDown = false;
   private refreshPromise: Promise<void> | null = null;
 
   constructor(
     @InjectModel(Client.name) private readonly clientModel: Model<ClientDocument>,
-    @InjectModel(PromoteClient.name)
-    private readonly promoteClientModel: Model<PromoteClientDocument>,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
     @Inject(forwardRef(() => BufferClientService))
@@ -145,9 +134,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     try {
       if (this.checkInterval) clearInterval(this.checkInterval);
       if (this.refreshInterval) clearInterval(this.refreshInterval);
+      if (this.cleanupInterval) clearInterval(this.cleanupInterval);
       if (this.refreshPromise) await this.refreshPromise;
       await connectionManager.shutdown();
       this.clientsMap.clear();
+      this.lastUpdateMap.clear();
+      this.setupCooldownMap.clear();
     } catch (e) {
       parseError(e, 'Error during Client Service shutdown');
     }
@@ -165,6 +157,26 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.updateCacheMetadata();
     }, 60000);
     this.refreshInterval.unref();
+
+    this.cleanupInterval = setInterval(() => {
+      if (this.isShuttingDown) return;
+      this.purgeExpiredCooldowns();
+    }, CONFIG.MAP_CLEANUP_INTERVAL);
+    this.cleanupInterval.unref();
+  }
+
+  private purgeExpiredCooldowns(): void {
+    const now = Date.now();
+    for (const [clientId, timestamp] of this.setupCooldownMap) {
+      if (now > timestamp + CONFIG.COOLDOWN_PERIOD) {
+        this.setupCooldownMap.delete(clientId);
+      }
+    }
+    for (const [clientId, timestamp] of this.lastUpdateMap) {
+      if (now - timestamp > CONFIG.UPDATE_CLIENT_COOLDOWN) {
+        this.lastUpdateMap.delete(clientId);
+      }
+    }
   }
 
   private async performPeriodicRefresh(): Promise<void> {
@@ -246,7 +258,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   async findAllMaskedObject(query?: SearchClientDto): Promise<Record<string, Partial<Client>>> {
-    const filteredClients = query ? (await this.enhancedSearch(query)).clients : await this.findAll();
+    const filteredClients = query ? await this.search(query) : await this.findAll();
     return filteredClients.reduce((acc, client) => {
       const { session, mobile, password, ...maskedClient } = client;
       acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
@@ -321,64 +333,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   async search(filter: ClientSearchFilter | ClientMongoQuery): Promise<Client[]> {
     try {
-      let workingFilter: ClientSearchFilter | ClientMongoQuery = { ...filter };
-      if (workingFilter.hasPromoteMobiles !== undefined) {
-        workingFilter = await this.processPromoteMobileFilter(workingFilter);
-      }
-      workingFilter = this.processTextSearchFields(workingFilter);
+      const workingFilter = this.processTextSearchFields({ ...filter });
       return this.executeWithRetry(() => this.clientModel.find(workingFilter).lean().exec());
     } catch (error) {
       const errorDetails = parseError(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
-      throw new InternalServerErrorException(errorDetails.message);
-    }
-  }
-
-  async searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]> {
-    if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0) return [];
-    const promoteClients = await this.executeWithRetry(() =>
-      this.promoteClientModel
-        .find({ mobile: { $in: mobileNumbers }, clientId: { $exists: true } })
-        .lean()
-        .exec(),
-    );
-    const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
-    return this.executeWithRetry(() =>
-      this.clientModel.find({ clientId: { $in: clientIds } }).lean().exec(),
-    );
-  }
-
-  async enhancedSearch(filter: ClientSearchFilter): Promise<SearchResult> {
-    try {
-      const workingFilter: ClientSearchFilter = { ...filter };
-      let searchType: 'direct' | 'promoteMobile' | 'mixed' = 'direct';
-      let promoteMobileMatches: Array<{ clientId: string; mobile: string }> = [];
-      if (workingFilter.promoteMobileNumber) {
-        searchType = 'promoteMobile';
-        const mobileNumber = workingFilter.promoteMobileNumber;
-        delete workingFilter.promoteMobileNumber;
-        const promoteClients = await this.executeWithRetry(() =>
-          this.promoteClientModel
-            .find({
-              mobile: { $regex: new RegExp(this.escapeRegex(mobileNumber), 'i') },
-              clientId: { $exists: true },
-            })
-            .lean()
-            .exec(),
-        );
-        promoteMobileMatches = promoteClients.map((pc) => ({
-          clientId: pc.clientId,
-          mobile: pc.mobile,
-        }));
-        (workingFilter as ClientMongoQuery).clientId = { $in: promoteClients.map((pc) => pc.clientId) };
-      }
-      const clients = await this.search(workingFilter);
-      return {
-        clients,
-        searchType,
-        promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
-      };
-    } catch (error) {
-      const errorDetails = parseError(error, `Failed to perform enhanced search with filter ${JSON.stringify(filter)}`);
       throw new InternalServerErrorException(errorDetails.message);
     }
   }
@@ -425,22 +383,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       fetchWithTimeout(`${process.env.uptimebot}/refreshmap`, { timeout: 5000 }),
     ]);
     this.logger.debug('External maps refreshed');
-  }
-
-  private async processPromoteMobileFilter(filter: ClientSearchFilter | ClientMongoQuery): Promise<ClientMongoQuery> {
-    const nextFilter: ClientMongoQuery = { ...(filter as ClientMongoQuery) };
-    const hasPromoteMobilesValue = typeof filter.hasPromoteMobiles === 'string'
-      ? filter.hasPromoteMobiles
-      : String(filter.hasPromoteMobiles);
-    const hasPromoteMobiles = hasPromoteMobilesValue.toLowerCase() === 'true';
-    delete nextFilter.hasPromoteMobiles;
-    const clientsWithPromoteMobiles = await this.executeWithRetry(() =>
-      this.promoteClientModel.find({ clientId: { $exists: true } }).distinct('clientId').lean(),
-    );
-    nextFilter.clientId = hasPromoteMobiles
-      ? { $in: clientsWithPromoteMobiles }
-      : { $nin: clientsWithPromoteMobiles };
-    return nextFilter;
   }
 
   private processTextSearchFields(filter: ClientSearchFilter | ClientMongoQuery): ClientMongoQuery {
@@ -1081,66 +1023,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return queryExec.exec();
   }
 
-  async getPromoteMobiles(clientId: string): Promise<string[]> {
-    if (!clientId) throw new BadRequestException('ClientId is required');
-    const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
-    return promoteClients.map((pc) => pc.mobile).filter((mobile) => mobile);
-  }
-
-  async getAllPromoteMobiles(): Promise<string[]> {
-    const allPromoteClients = await this.promoteClientModel
-      .find({ clientId: { $exists: true } })
-      .lean();
-    return allPromoteClients.map((pc) => pc.mobile);
-  }
-
-  async isPromoteMobile(mobile: string): Promise<{ isPromote: boolean; clientId?: string }> {
-    const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
-    return {
-      isPromote: !!promoteClient && !!promoteClient.clientId,
-      clientId: promoteClient?.clientId,
-    };
-  }
-
-  async addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client> {
-    const client = await this.clientModel.findOne({ clientId }).lean();
-    if (!client) throw new NotFoundException(`Client ${clientId} not found`);
-    const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
-    if (existingPromoteClient) {
-      if (existingPromoteClient.clientId === clientId) {
-        throw new BadRequestException(
-          `Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`,
-        );
-      } else if (existingPromoteClient.clientId) {
-        throw new BadRequestException(
-          `Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`,
-        );
-      } else {
-        await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
-      }
-    } else {
-      throw new NotFoundException(
-        `Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`,
-      );
-    }
-    return client;
-  }
-
-  async removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client> {
-    const client = await this.clientModel.findOne({ clientId }).lean();
-    if (!client) throw new NotFoundException(`Client ${clientId} not found`);
-    const result = await this.promoteClientModel.updateOne(
-      { mobile: mobileNumber, clientId },
-      { $unset: { clientId: 1 } },
-    );
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(
-        `Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`,
-      );
-    }
-    return client;
-  }
-
   async getPersonaPool(clientId: string) {
     const client = await this.findOne(clientId, false);
     if (!client) return null;
@@ -1214,7 +1096,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  async getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'promote' | 'activeClient') {
+  async getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'activeClient') {
     const assignments: PersonaAssignmentRecord[] = [];
 
     const projection = {
@@ -1233,18 +1115,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         assignedBio: b.assignedBio || null,
         assignedProfilePics: b.assignedProfilePics || [],
         source: 'buffer' as const,
-      })));
-    }
-    if (scope === 'all' || scope === 'promote') {
-      const promotes = await this.promoteClientModel
-        .find(filter, projection).lean();
-      assignments.push(...promotes.map(p => ({
-        mobile: p.mobile,
-        assignedFirstName: p.assignedFirstName,
-        assignedLastName: p.assignedLastName || null,
-        assignedBio: p.assignedBio || null,
-        assignedProfilePics: p.assignedProfilePics || [],
-        source: 'promote' as const,
       })));
     }
     if (scope === 'all' || scope === 'activeClient') {

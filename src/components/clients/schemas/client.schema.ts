@@ -14,96 +14,95 @@ export type ClientDocument = Client & Document;
     },
 })
 export class Client {
-    @ApiProperty({ example: 'paid_giirl_shruthiee', description: 'Channel link of the user' })
+    @ApiProperty({ description: 'Channel link' })
     @Prop({ required: true })
     channelLink: string;
 
-    @ApiProperty({ example: 'shruthi', description: 'Database collection name' })
+    @ApiProperty({ description: 'Database collection name' })
     @Prop({ required: true })
     dbcoll: string;
 
-    @ApiProperty({ example: 'PaidGirl.netlify.app/Shruthi1', description: 'Link of the user' })
+    @ApiProperty({ description: 'Client link' })
     @Prop({ required: true })
     link: string;
 
-    @ApiProperty({ example: 'Shruthi Reddy', description: 'Name of the user' })
+    @ApiProperty({ description: 'Display name' })
     @Prop({ required: true })
     name: string;
 
-    @ApiProperty({ example: '916265240911', description: 'mobile number of the user' })
-    @Prop({ required: true })
+    @ApiProperty({ description: 'Mobile number' })
+    @Prop({ required: true, unique: true })
     mobile: string;
 
-    @ApiProperty({ example: 'Ajtdmwajt1@', description: 'Password of the user' })
+    @ApiProperty({ description: '2FA password' })
     @Prop({ required: true })
     password: string;
 
-    @ApiProperty({ example: 'https://shruthi1.glitch.me', description: 'Repl link of the user' })
+    @ApiProperty({ description: 'tg-aut repl link' })
     @Prop({ required: true })
     repl: string;
 
-    @ApiProperty({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' })
+    @ApiProperty({ description: 'Promote repl link' })
     @Prop({ required: true })
     promoteRepl: string;
 
-    @ApiProperty({ example: '1BQANOTEuM==', description: 'Session token' })
+    @ApiProperty({ description: 'Telegram session string' })
     @Prop({ required: true })
     session: string;
 
-    @ApiProperty({ example: 'ShruthiRedd2', description: 'Username of the user' })
+    @ApiProperty({ description: 'Telegram username' })
     @Prop({ required: true })
     username: string;
 
-    @ApiProperty({ example: 'shruthi1', description: 'Client ID of the user' })
-    @Prop({ required: true })
+    @ApiProperty({ description: 'Unique client identifier' })
+    @Prop({ required: true, unique: true })
     clientId: string;
 
-    @ApiProperty({ example: 'https://shruthi1.glitch.me/exit', description: 'Deployment key URL' })
+    @ApiProperty({ description: 'Deploy restart URL' })
     @Prop({ required: true })
     deployKey: string;
 
-    @ApiProperty({ example: 'booklet_10', description: 'Product associated with the user' })
+    @ApiProperty({ description: 'Product identifier' })
     @Prop({ required: true })
     product: string;
 
-    @ApiProperty({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' })
+    @ApiProperty({ description: 'Paytm QR ID' })
     @Prop({ required: true })
     qrId: string;
 
-    @ApiProperty({ example: 'myred1808@postbank', description: 'Google Pay ID of the user' })
+    @ApiProperty({ description: 'Google Pay ID' })
     @Prop({ required: true })
     gpayId: string;
 
-    @ApiProperty({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' })
+    @ApiProperty({ description: 'Dedicated proxy IPs', required: false })
     @Prop({ required: false, type: [String], default: [] })
     dedicatedIps?: string[];
 
-    @ApiProperty({ example: 'US', description: 'Preferred country for IP assignment', required: false })
+    @ApiProperty({ description: 'Preferred IP country (ISO 2-letter)', required: false })
     @Prop({ required: false, default: null })
     preferredIpCountry?: string;
 
-    @ApiProperty({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false })
+    @ApiProperty({ description: 'Auto-assign IPs to mobile numbers', required: false })
     @Prop({ required: false, type: Boolean, default: false })
     autoAssignIps?: boolean;
 
-    // ---- Persona Pool fields ----
-    @ApiProperty({ description: 'Pool of first names for persona assignment', required: false })
+    @ApiProperty({ description: 'First name pool for persona assignment', required: false })
     @Prop({ required: false, type: [String], default: [] })
     firstNames: string[];
 
-    @ApiProperty({ description: 'Pool of last names for buffer-client persona assignment', required: false })
+    @ApiProperty({ description: 'Last name pool for buffer clients', required: false })
     @Prop({ required: false, type: [String], default: [] })
     bufferLastNames: string[];
 
-    @ApiProperty({ description: 'Pool of last names for promote-client persona assignment', required: false })
+    @ApiProperty({ description: 'Last name pool for promote clients', required: false })
     @Prop({ required: false, type: [String], default: [] })
     promoteLastNames: string[];
 
-    @ApiProperty({ description: 'Pool of bios for persona assignment', required: false })
+    @ApiProperty({ description: 'Bio pool for persona assignment', required: false })
     @Prop({ required: false, type: [String], default: [] })
     bios: string[];
 
-    @ApiProperty({ description: 'Pool of profile pic URLs', required: false })
+    @ApiProperty({ description: 'Profile pic URL pool', required: false })
     @Prop({ required: false, type: [String], default: [] })
     profilePics: string[];
 
