@@ -3,23 +3,13 @@ import { Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
-import { EnhancedSearchClientDto } from './dto/enhanced-search-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { UsersService } from '../users/users.service';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { SearchClientDto } from './dto/search-client.dto';
 import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
-import { PromoteClientDocument } from '../promote-clients/schemas/promote-client.schema';
 import { SortOrder } from 'mongoose';
 import { TelegramService } from '../Telegram/Telegram.service';
-interface SearchResult {
-    clients: Client[];
-    searchType: 'direct' | 'promoteMobile' | 'mixed';
-    promoteMobileMatches?: Array<{
-        clientId: string;
-        mobile: string;
-    }>;
-}
 export interface PersonaAssignmentRecord {
     mobile: string;
     assignedFirstName: string | null;
@@ -28,14 +18,13 @@ export interface PersonaAssignmentRecord {
     assignedProfilePics: string[];
     source: 'buffer' | 'promote' | 'activeClient';
 }
-type ClientSearchFilter = Partial<SearchClientDto & Pick<EnhancedSearchClientDto, 'promoteMobileNumber'>>;
+type ClientSearchFilter = Partial<SearchClientDto>;
 type ClientMongoQuery = Record<string, unknown>;
 type ClientQuerySort = Record<string, SortOrder | {
     $meta: unknown;
 }>;
 export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private readonly clientModel;
-    private readonly promoteClientModel;
     private readonly telegramService;
     private readonly bufferClientService;
     private readonly usersService;
@@ -46,13 +35,15 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private cacheMetadata;
     private checkInterval;
     private refreshInterval;
+    private cleanupInterval;
     private isInitialized;
     private isShuttingDown;
     private refreshPromise;
-    constructor(clientModel: Model<ClientDocument>, promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService);
+    constructor(clientModel: Model<ClientDocument>, telegramService: TelegramService, bufferClientService: BufferClientService, usersService: UsersService);
     onModuleInit(): Promise<void>;
     onModuleDestroy(): Promise<void>;
     private startPeriodicTasks;
+    private purgeExpiredCooldowns;
     private performPeriodicRefresh;
     private updateCacheMetadata;
     private refreshCacheFromDatabase;
@@ -67,15 +58,12 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client>;
     remove(clientId: string): Promise<Client>;
     search(filter: ClientSearchFilter | ClientMongoQuery): Promise<Client[]>;
-    searchClientsByPromoteMobile(mobileNumbers: string[]): Promise<Client[]>;
-    enhancedSearch(filter: ClientSearchFilter): Promise<SearchResult>;
     private ensureInitialized;
     private cleanUpdateObject;
     private notifyClientUpdate;
     private notify;
     private performPostUpdateTasks;
     private refreshExternalMaps;
-    private processPromoteMobileFilter;
     private processTextSearchFields;
     private escapeRegex;
     private executeWithRetry;
@@ -113,14 +101,6 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private updateClientPhotos;
     updateClients(): Promise<void>;
     executeQuery(query: ExecuteClientQueryDto['query'], sort?: ClientQuerySort, limit?: number, skip?: number): Promise<Client[]>;
-    getPromoteMobiles(clientId: string): Promise<string[]>;
-    getAllPromoteMobiles(): Promise<string[]>;
-    isPromoteMobile(mobile: string): Promise<{
-        isPromote: boolean;
-        clientId?: string;
-    }>;
-    addPromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
-    removePromoteMobile(clientId: string, mobileNumber: string): Promise<Client>;
     getPersonaPool(clientId: string): Promise<{
         firstNames: string[];
         bufferLastNames: string[];
@@ -132,7 +112,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private buildPersonaAssignmentFilter;
     private hasPersonaAssignment;
     getActiveClientAssignment(client: Partial<Client> | null | undefined): Promise<PersonaAssignmentRecord | null>;
-    getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'promote' | 'activeClient'): Promise<{
+    getExistingAssignments(clientId: string, scope: 'all' | 'buffer' | 'activeClient'): Promise<{
         assignments: PersonaAssignmentRecord[];
     }>;
 }

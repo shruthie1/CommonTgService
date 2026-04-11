@@ -11,6 +11,7 @@ export declare class UsersService {
     private telegramService;
     private clientsService;
     private readonly botsService;
+    private readonly logger;
     constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService, botsService: BotsService);
     create(user: CreateUserDto): Promise<User | undefined>;
     top(options: {
@@ -37,24 +38,28 @@ export declare class UsersService {
     delete(tgId: string): Promise<void>;
     deleteById(userId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
-    executeQuery(query: QueryFilter<UserDocument>, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<User[]>;
-    getTopInteractionUsers(options: {
+    computeRelationshipScore(mobile: string): Promise<void>;
+    topRelationships(options: {
         page?: number;
         limit?: number;
         minScore?: number;
-        minCalls?: number;
-        minPhotos?: number;
-        minVideos?: number;
-        excludeTwoFA?: boolean;
-        excludeAudited?: boolean;
         gender?: string;
+        excludeTwoFA?: boolean;
     }): Promise<{
-        users: Array<User & {
-            interactionScore: number;
-        }>;
+        users: (User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+            _id: import("mongoose").Types.ObjectId;
+        }> & {
+            __v: number;
+        })[];
         total: number;
         page: number;
         limit: number;
         totalPages: number;
     }>;
+    getUserRelationships(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+        _id: import("mongoose").Types.ObjectId;
+    }> & {
+        __v: number;
+    }>;
+    executeQuery(query: QueryFilter<UserDocument>, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<User[]>;
 }

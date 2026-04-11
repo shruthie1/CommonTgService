@@ -11,7 +11,6 @@ export declare class SearchClientDto {
     clientName?: string;
     deployKey?: string;
     product?: string;
-    hasPromoteMobiles?: string;
     qrId?: string;
     gpayId?: string;
 }

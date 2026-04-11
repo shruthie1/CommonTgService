@@ -62,7 +62,6 @@ const parseError_1 = require("../../utils/parseError");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const logbots_1 = require("../../utils/logbots");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
-const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
 const path_1 = __importDefault(require("path"));
 const fs = __importStar(require("fs"));
 const tl_1 = require("telegram/tl");
@@ -80,11 +79,11 @@ const CONFIG = {
     CACHE_WARMUP_THRESHOLD: 20,
     COOLDOWN_PERIOD: 240000,
     UPDATE_CLIENT_COOLDOWN: 30000,
+    MAP_CLEANUP_INTERVAL: 10 * 60 * 1000,
 };
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService) {
+    constructor(clientModel, telegramService, bufferClientService, usersService) {
         this.clientModel = clientModel;
-        this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
@@ -95,6 +94,7 @@ let ClientService = ClientService_1 = class ClientService {
         this.cacheMetadata = { lastUpdated: 0, isStale: true };
         this.checkInterval = null;
         this.refreshInterval = null;
+        this.cleanupInterval = null;
         this.isInitialized = false;
         this.isShuttingDown = false;
         this.refreshPromise = null;
@@ -116,10 +116,14 @@ let ClientService = ClientService_1 = class ClientService {
                 clearInterval(this.checkInterval);
             if (this.refreshInterval)
                 clearInterval(this.refreshInterval);
+            if (this.cleanupInterval)
+                clearInterval(this.cleanupInterval);
             if (this.refreshPromise)
                 await this.refreshPromise;
             await connection_manager_1.connectionManager.shutdown();
             this.clientsMap.clear();
+            this.lastUpdateMap.clear();
+            this.setupCooldownMap.clear();
         }
         catch (e) {
             (0, parseError_1.parseError)(e, 'Error during Client Service shutdown');
@@ -138,6 +142,25 @@ let ClientService = ClientService_1 = class ClientService {
             this.updateCacheMetadata();
         }, 60000);
         this.refreshInterval.unref();
+        this.cleanupInterval = setInterval(() => {
+            if (this.isShuttingDown)
+                return;
+            this.purgeExpiredCooldowns();
+        }, CONFIG.MAP_CLEANUP_INTERVAL);
+        this.cleanupInterval.unref();
+    }
+    purgeExpiredCooldowns() {
+        const now = Date.now();
+        for (const [clientId, timestamp] of this.setupCooldownMap) {
+            if (now > timestamp + CONFIG.COOLDOWN_PERIOD) {
+                this.setupCooldownMap.delete(clientId);
+            }
+        }
+        for (const [clientId, timestamp] of this.lastUpdateMap) {
+            if (now - timestamp > CONFIG.UPDATE_CLIENT_COOLDOWN) {
+                this.lastUpdateMap.delete(clientId);
+            }
+        }
     }
     async performPeriodicRefresh() {
         if (this.refreshPromise) {
@@ -209,7 +232,7 @@ let ClientService = ClientService_1 = class ClientService {
         }, {});
     }
     async findAllMaskedObject(query) {
-        const filteredClients = query ? (await this.enhancedSearch(query)).clients : await this.findAll();
+        const filteredClients = query ? await this.search(query) : await this.findAll();
         return filteredClients.reduce((acc, client) => {
             const { session, mobile, password, ...maskedClient } = client;
             acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
@@ -274,59 +297,11 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async search(filter) {
         try {
-            let workingFilter = { ...filter };
-            if (workingFilter.hasPromoteMobiles !== undefined) {
-                workingFilter = await this.processPromoteMobileFilter(workingFilter);
-            }
-            workingFilter = this.processTextSearchFields(workingFilter);
+            const workingFilter = this.processTextSearchFields({ ...filter });
             return this.executeWithRetry(() => this.clientModel.find(workingFilter).lean().exec());
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
-            throw new common_1.InternalServerErrorException(errorDetails.message);
-        }
-    }
-    async searchClientsByPromoteMobile(mobileNumbers) {
-        if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0)
-            return [];
-        const promoteClients = await this.executeWithRetry(() => this.promoteClientModel
-            .find({ mobile: { $in: mobileNumbers }, clientId: { $exists: true } })
-            .lean()
-            .exec());
-        const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
-        return this.executeWithRetry(() => this.clientModel.find({ clientId: { $in: clientIds } }).lean().exec());
-    }
-    async enhancedSearch(filter) {
-        try {
-            const workingFilter = { ...filter };
-            let searchType = 'direct';
-            let promoteMobileMatches = [];
-            if (workingFilter.promoteMobileNumber) {
-                searchType = 'promoteMobile';
-                const mobileNumber = workingFilter.promoteMobileNumber;
-                delete workingFilter.promoteMobileNumber;
-                const promoteClients = await this.executeWithRetry(() => this.promoteClientModel
-                    .find({
-                    mobile: { $regex: new RegExp(this.escapeRegex(mobileNumber), 'i') },
-                    clientId: { $exists: true },
-                })
-                    .lean()
-                    .exec());
-                promoteMobileMatches = promoteClients.map((pc) => ({
-                    clientId: pc.clientId,
-                    mobile: pc.mobile,
-                }));
-                workingFilter.clientId = { $in: promoteClients.map((pc) => pc.clientId) };
-            }
-            const clients = await this.search(workingFilter);
-            return {
-                clients,
-                searchType,
-                promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
-            };
-        }
-        catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to perform enhanced search with filter ${JSON.stringify(filter)}`);
             throw new common_1.InternalServerErrorException(errorDetails.message);
         }
     }
@@ -369,19 +344,6 @@ let ClientService = ClientService_1 = class ClientService {
             (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`, { timeout: 5000 }),
         ]);
         this.logger.debug('External maps refreshed');
-    }
-    async processPromoteMobileFilter(filter) {
-        const nextFilter = { ...filter };
-        const hasPromoteMobilesValue = typeof filter.hasPromoteMobiles === 'string'
-            ? filter.hasPromoteMobiles
-            : String(filter.hasPromoteMobiles);
-        const hasPromoteMobiles = hasPromoteMobilesValue.toLowerCase() === 'true';
-        delete nextFilter.hasPromoteMobiles;
-        const clientsWithPromoteMobiles = await this.executeWithRetry(() => this.promoteClientModel.find({ clientId: { $exists: true } }).distinct('clientId').lean());
-        nextFilter.clientId = hasPromoteMobiles
-            ? { $in: clientsWithPromoteMobiles }
-            : { $nin: clientsWithPromoteMobiles };
-        return nextFilter;
     }
     processTextSearchFields(filter) {
         const nextFilter = { ...filter };
@@ -955,56 +917,6 @@ let ClientService = ClientService_1 = class ClientService {
             queryExec.skip(skip);
         return queryExec.exec();
     }
-    async getPromoteMobiles(clientId) {
-        if (!clientId)
-            throw new common_1.BadRequestException('ClientId is required');
-        const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
-        return promoteClients.map((pc) => pc.mobile).filter((mobile) => mobile);
-    }
-    async getAllPromoteMobiles() {
-        const allPromoteClients = await this.promoteClientModel
-            .find({ clientId: { $exists: true } })
-            .lean();
-        return allPromoteClients.map((pc) => pc.mobile);
-    }
-    async isPromoteMobile(mobile) {
-        const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
-        return {
-            isPromote: !!promoteClient && !!promoteClient.clientId,
-            clientId: promoteClient?.clientId,
-        };
-    }
-    async addPromoteMobile(clientId, mobileNumber) {
-        const client = await this.clientModel.findOne({ clientId }).lean();
-        if (!client)
-            throw new common_1.NotFoundException(`Client ${clientId} not found`);
-        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
-        if (existingPromoteClient) {
-            if (existingPromoteClient.clientId === clientId) {
-                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
-            }
-            else if (existingPromoteClient.clientId) {
-                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
-            }
-            else {
-                await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
-            }
-        }
-        else {
-            throw new common_1.NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
-        }
-        return client;
-    }
-    async removePromoteMobile(clientId, mobileNumber) {
-        const client = await this.clientModel.findOne({ clientId }).lean();
-        if (!client)
-            throw new common_1.NotFoundException(`Client ${clientId} not found`);
-        const result = await this.promoteClientModel.updateOne({ mobile: mobileNumber, clientId }, { $unset: { clientId: 1 } });
-        if (result.matchedCount === 0) {
-            throw new common_1.NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
-        }
-        return client;
-    }
     async getPersonaPool(clientId) {
         const client = await this.findOne(clientId, false);
         if (!client)
@@ -1087,18 +999,6 @@ let ClientService = ClientService_1 = class ClientService {
                 source: 'buffer',
             })));
         }
-        if (scope === 'all' || scope === 'promote') {
-            const promotes = await this.promoteClientModel
-                .find(filter, projection).lean();
-            assignments.push(...promotes.map(p => ({
-                mobile: p.mobile,
-                assignedFirstName: p.assignedFirstName,
-                assignedLastName: p.assignedLastName || null,
-                assignedBio: p.assignedBio || null,
-                assignedProfilePics: p.assignedProfilePics || [],
-                source: 'promote',
-            })));
-        }
         if (scope === 'all' || scope === 'activeClient') {
             const client = await this.findOne(clientId, false);
             const activeClientAssignment = await this.getActiveClientAssignment(client);
@@ -1121,12 +1021,10 @@ exports.ClientService = ClientService;
 exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
-    __param(1, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
-    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService])

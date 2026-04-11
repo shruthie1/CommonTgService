@@ -8,6 +8,17 @@ export declare class UsersController {
     constructor(usersService: UsersService);
     create(createUserDto: CreateUserDto): Promise<User>;
     search(queryParams: SearchUserDto): Promise<User[]>;
+    topRelationships(page?: string, limit?: string, minScore?: string, gender?: string, excludeTwoFA?: string): Promise<{
+        users: (User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+            _id: import("mongoose").Types.ObjectId;
+        }> & {
+            __v: number;
+        })[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
     getTopInteractionUsers(page?: string, limit?: string, minScore?: string, minCalls?: string, minPhotos?: string, minVideos?: string, excludeTwoFA?: string, excludeAudited?: string, gender?: string): Promise<{
         users: User[];
         total: number;
@@ -16,6 +27,16 @@ export declare class UsersController {
         totalPages: number;
     }>;
     findAll(limit?: string, skip?: string): Promise<User[]>;
+    getUserRelationships(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+        _id: import("mongoose").Types.ObjectId;
+    }> & {
+        __v: number;
+    }>;
+    recomputeScore(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+        _id: import("mongoose").Types.ObjectId;
+    }> & {
+        __v: number;
+    }>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
     remove(tgId: string): Promise<void>;

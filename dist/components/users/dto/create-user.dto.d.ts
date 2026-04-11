@@ -1,38 +1,33 @@
-import { PerChatCallStats } from '../../Telegram/manager/types';
+export declare class UserCallsDto {
+    totalCalls: number;
+    outgoing: number;
+    incoming: number;
+    video: number;
+    audio: number;
+}
 export declare class CreateUserDto {
     mobile: string;
     session: string;
     firstName: string;
     lastName?: string | null;
     username?: string | null;
-    channels: number;
-    personalChats: number;
-    msgs: number;
-    totalChats: number;
-    lastActive: string;
     tgId: string;
+    gender?: string | null;
     twoFA: boolean;
     expired: boolean;
     password: string;
-    movieCount: number;
+    channels: number;
+    personalChats: number;
+    totalChats: number;
+    contacts: number;
+    msgs: number;
     photoCount: number;
     videoCount: number;
-    gender?: string | null;
-    otherPhotoCount: number;
-    otherVideoCount: number;
+    movieCount: number;
     ownPhotoCount: number;
+    otherPhotoCount: number;
     ownVideoCount: number;
-    contacts: number;
-    starred: boolean;
-    score: number;
-    calls: {
-        totalCalls: number;
-        outgoing: number;
-        incoming: number;
-        video: number;
-        audio: number;
-        chats: (PerChatCallStats & {
-            chatId: string;
-        })[];
-    };
+    otherVideoCount: number;
+    lastActive: string | null;
+    calls?: UserCallsDto;
 }
