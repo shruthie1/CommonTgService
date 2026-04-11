@@ -82,6 +82,10 @@ export class BufferClient {
   @Prop({ required: false, type: Date, default: null })
   profilePicsDeletedAt: Date;
 
+  @ApiPropertyOptional({ description: 'Username set during warmup identity phase.', example: 'SaraKum42' })
+  @Prop({ required: false, type: String, default: null })
+  username: string;
+
   @ApiPropertyOptional({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' })
   @Prop({ required: false, type: Date, default: null })
   usernameUpdatedAt: Date;

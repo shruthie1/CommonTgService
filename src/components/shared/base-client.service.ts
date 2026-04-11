@@ -86,6 +86,7 @@ export interface BaseClientDocument extends Document {
     profilePicsUpdatedAt?: Date;
     nameBioUpdatedAt?: Date;
     profilePicsDeletedAt?: Date;
+    username?: string;
     usernameUpdatedAt?: Date;
     createdAt?: Date;
     updatedAt?: Date;
@@ -122,6 +123,7 @@ export type BaseClientUpdate = Partial<Pick<
     | 'profilePicsUpdatedAt'
     | 'nameBioUpdatedAt'
     | 'profilePicsDeletedAt'
+    | 'username'
     | 'usernameUpdatedAt'
     | 'createdAt'
     | 'updatedAt'

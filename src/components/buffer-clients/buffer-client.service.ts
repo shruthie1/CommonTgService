@@ -329,14 +329,26 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: updateUsername (sets username via updateUsernameForAClient) ----
 
     async updateUsername(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number> {
+        // If username is already stored in DB, skip entirely — no TG connection needed
+        if (doc.username) {
+            this.logger.debug(`Username already set for ${doc.mobile}: @${doc.username}, skipping TG update`);
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: doc.usernameUpdatedAt || new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+            });
+            return 1;
+        }
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
             await performOrganicActivity(telegramClient, 'light');
 
             const me = await telegramClient.getMe();
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
-            await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            const updatedUsername = await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
             await this.update(doc.mobile, {
+                username: updatedUsername || me.username,
                 usernameUpdatedAt: new Date(),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,

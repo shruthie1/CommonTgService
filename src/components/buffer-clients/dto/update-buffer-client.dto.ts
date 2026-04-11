@@ -16,6 +16,11 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     nameBioUpdatedAt?: Date;
     @ApiPropertyOptional({ description: 'Timestamp when legacy profile photos were deleted.', example: '2026-03-14T08:00:00.000Z' })
     profilePicsDeletedAt?: Date;
+    @ApiPropertyOptional({ description: 'Username set during warmup.', example: 'SaraKum42' })
+    @IsOptional()
+    @IsString()
+    username?: string;
+
     @ApiPropertyOptional({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' })
     usernameUpdatedAt?: Date;
     @ApiPropertyOptional({ description: 'Timestamp of the most recent health check.', example: '2026-04-02T09:15:00.000Z' })

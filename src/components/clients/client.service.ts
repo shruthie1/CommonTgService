@@ -645,20 +645,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         hasAssignedFirstName: !!bufferDoc?.assignedFirstName,
         assignedPhotoCount: bufferDoc?.assignedProfilePics?.length || 0,
       });
-      const updatedUsername = await this.telegramService.updateUsernameForAClient(
-        newMobile,
-        clientId,
-        this.getExpectedClientName(existingClient, {
-          mobile: bufferDoc?.mobile || newMobile,
-          assignedFirstName: bufferDoc?.assignedFirstName || null,
-          assignedLastName: bufferDoc?.assignedLastName || null,
-          assignedBio: bufferDoc?.assignedBio || null,
-          assignedProfilePics: bufferDoc?.assignedProfilePics || [],
-          source: 'activeClient',
-        }),
-        me.username,
-      );
-      await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: @${me.username}\nNewUsername: @${updatedUsername}`);
+      // Use the username already set during warmup — no Telegram API call needed
+      const updatedUsername = bufferDoc?.username || me.username;
+      this.logger.info(`[${clientId}] Using pre-set buffer username: @${updatedUsername} (current TG: @${me.username})`);
+      await this.notify(`Cutover username for NewNumber: ${newMobile}\nUsername: @${updatedUsername}`);
       if (!newSession?.trim()) {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
@@ -689,7 +679,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
       this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
       setTimeout(() => {
-        void this.updateClient(clientId, 'Delayed update after buffer removal', true).catch((delayedError) => {
+        void this.updateClient(clientId, 'Delayed update after buffer removal', true, false, true).catch((delayedError) => {
           parseError(delayedError, `[${clientId}] delayed updateClient failed`);
         });
       }, 15000);
@@ -865,7 +855,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     throw new BadRequestException(`Distinct backup session was not persisted for ${mobile}`);
   }
 
-  async updateClient(clientId: string, message: string = '', skipDeploy = false, throwOnFailure = false): Promise<boolean> {
+  async updateClient(clientId: string, message: string = '', skipDeploy = false, throwOnFailure = false, skipUsername = false): Promise<boolean> {
     this.logger.log(`Updating Client: ${clientId} - ${message}`);
     if (!this.canUpdateClient(clientId)) return false;
     const client = await this.findOne(clientId);
@@ -891,7 +881,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           mirroredActiveName,
         });
       }
-      await this.updateClientUsername(client, me, activeAssignment);
+      if (!skipUsername) {
+        await this.updateClientUsername(client, me, activeAssignment);
+      } else {
+        this.logger.debug(`[${clientId}] Skipping username update — already set from buffer`);
+      }
       const nameBioReady = await this.updateClientIdentity(client, telegramClient, me, activeAssignment);
       const privacyReady = await this.updateClientPrivacy(client, telegramClient);
       const photosReady = await this.updateClientPhotos(client, telegramClient, activeAssignment);
@@ -961,6 +955,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async updateClientUsername(client: Client, me: Api.User, activeAssignment: PersonaAssignmentRecord | null) {
+    // Username was already set during buffer warmup — skip if Telegram still has it
+    if (client.username && me.username === client.username) {
+      this.logger.debug(`[${client.clientId}] Username @${me.username} matches stored value, skipping update`);
+      return;
+    }
     const updatedUsername = await this.telegramService.updateUsernameForAClient(
       client.mobile,
       client.clientId,
