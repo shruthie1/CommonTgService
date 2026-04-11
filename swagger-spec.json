@@ -5594,7 +5594,7 @@
         },
         "responses": {
           "default": {
-            "description": "The user data has been successfully created.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5604,7 +5604,7 @@
             }
           }
         },
-        "summary": "Create user data",
+        "summary": "Create a client",
         "tags": [
           "Clients"
         ]
@@ -5614,7 +5614,7 @@
         "parameters": [],
         "responses": {
           "default": {
-            "description": "All user data returned successfully.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5627,7 +5627,7 @@
             }
           }
         },
-        "summary": "Get all user data",
+        "summary": "Get all clients",
         "tags": [
           "Clients"
         ]
@@ -5677,7 +5677,7 @@
             "name": "name",
             "required": false,
             "in": "query",
-            "description": "Name of the client",
+            "description": "Display name",
             "schema": {
               "type": "string"
             }
@@ -5686,7 +5686,7 @@
             "name": "number",
             "required": false,
             "in": "query",
-            "description": "Phone number of the client",
+            "description": "Mobile number",
             "schema": {
               "type": "string"
             }
@@ -5695,7 +5695,7 @@
             "name": "password",
             "required": false,
             "in": "query",
-            "description": "Password of the client",
+            "description": "Password",
             "schema": {
               "type": "string"
             }
@@ -5704,7 +5704,7 @@
             "name": "repl",
             "required": false,
             "in": "query",
-            "description": "Repl link of the client",
+            "description": "tg-aut repl link",
             "schema": {
               "type": "string"
             }
@@ -5713,7 +5713,7 @@
             "name": "promoteRepl",
             "required": false,
             "in": "query",
-            "description": "Promotion Repl link of the client",
+            "description": "Promote repl link",
             "schema": {
               "type": "string"
             }
@@ -5722,7 +5722,7 @@
             "name": "clientName",
             "required": false,
             "in": "query",
-            "description": "Clientname of the client",
+            "description": "Client name",
             "schema": {
               "type": "string"
             }
@@ -5731,7 +5731,7 @@
             "name": "deployKey",
             "required": false,
             "in": "query",
-            "description": "Deployment key URL",
+            "description": "Deploy restart URL",
             "schema": {
               "type": "string"
             }
@@ -5740,16 +5740,7 @@
             "name": "product",
             "required": false,
             "in": "query",
-            "description": "Product associated with the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "hasPromoteMobiles",
-            "required": false,
-            "in": "query",
-            "description": "Search by client ID that has promote mobiles assigned",
+            "description": "Product identifier",
             "schema": {
               "type": "string"
             }
@@ -5758,7 +5749,7 @@
             "name": "qrId",
             "required": false,
             "in": "query",
-            "description": "Paytm QR ID of the client",
+            "description": "Paytm QR ID",
             "schema": {
               "type": "string"
             }
@@ -5767,7 +5758,7 @@
             "name": "gpayId",
             "required": false,
             "in": "query",
-            "description": "Google Pay ID of the client",
+            "description": "Google Pay ID",
             "schema": {
               "type": "string"
             }
@@ -5775,7 +5766,7 @@
         ],
         "responses": {
           "default": {
-            "description": "Matching user data returned successfully.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5788,207 +5779,7 @@
             }
           }
         },
-        "summary": "Search user data",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
-    "/clients/search/promote-mobile": {
-      "get": {
-        "operationId": "ClientController_searchByPromoteMobile",
-        "parameters": [
-          {
-            "name": "mobile",
-            "required": true,
-            "in": "query",
-            "description": "Promote mobile number to search for",
-            "schema": {
-              "example": "916265240911",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "default": {
-            "description": "Clients with matching promote mobiles returned successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PromoteMobileSearchResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Search clients by promote mobile numbers",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
-    "/clients/search/enhanced": {
-      "get": {
-        "operationId": "ClientController_enhancedSearch",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": false,
-            "in": "query",
-            "description": "Client ID of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "dbcoll",
-            "required": false,
-            "in": "query",
-            "description": "Database collection name",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "channelLink",
-            "required": false,
-            "in": "query",
-            "description": "Channel link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "link",
-            "required": false,
-            "in": "query",
-            "description": "Link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "name",
-            "required": false,
-            "in": "query",
-            "description": "Name of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "number",
-            "required": false,
-            "in": "query",
-            "description": "Phone number of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "password",
-            "required": false,
-            "in": "query",
-            "description": "Password of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "repl",
-            "required": false,
-            "in": "query",
-            "description": "Repl link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "promoteRepl",
-            "required": false,
-            "in": "query",
-            "description": "Promotion Repl link of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "clientName",
-            "required": false,
-            "in": "query",
-            "description": "Clientname of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "deployKey",
-            "required": false,
-            "in": "query",
-            "description": "Deployment key URL",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "product",
-            "required": false,
-            "in": "query",
-            "description": "Product associated with the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "hasPromoteMobiles",
-            "required": false,
-            "in": "query",
-            "description": "Filter by clients that have promote mobiles (true/false)",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "qrId",
-            "required": false,
-            "in": "query",
-            "description": "Paytm QR ID of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "gpayId",
-            "required": false,
-            "in": "query",
-            "description": "Google Pay ID of the client",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "promoteMobileNumber",
-            "required": false,
-            "in": "query",
-            "description": "Promote mobile number to search for",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "default": {
-            "description": "Enhanced search results with promote mobile context.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EnhancedClientSearchResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Enhanced search with promote mobile support",
+        "summary": "Search clients",
         "tags": [
           "Clients"
         ]
@@ -6002,25 +5793,17 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "default": {
-            "description": "Return the user data.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+          "200": {
+            "description": ""
           }
         },
-        "summary": "Get user data by ID",
+        "summary": "Refresh client profile on Telegram",
         "tags": [
           "Clients"
         ]
@@ -6032,7 +5815,7 @@
         "parameters": [],
         "responses": {
           "default": {
-            "description": "All user data returned successfully.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6045,7 +5828,7 @@
             }
           }
         },
-        "summary": "Get all user data with masked fields",
+        "summary": "Get all clients (sensitive fields masked)",
         "tags": [
           "Clients"
         ]
@@ -6059,7 +5842,6 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -6067,7 +5849,7 @@
         ],
         "responses": {
           "default": {
-            "description": "User data returned successfully.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6077,7 +5859,7 @@
             }
           }
         },
-        "summary": "Get user data with masked fields by ID",
+        "summary": "Get client by ID (sensitive fields masked)",
         "tags": [
           "Clients"
         ]
@@ -6091,7 +5873,6 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -6116,7 +5897,6 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -6129,7 +5909,6 @@
               "enum": [
                 "all",
                 "buffer",
-                "promote",
                 "activeClient"
               ],
               "type": "string"
@@ -6141,7 +5920,7 @@
             "description": ""
           }
         },
-        "summary": "Get existing persona assignments for a client",
+        "summary": "Get existing persona assignments",
         "tags": [
           "Clients"
         ]
@@ -6155,7 +5934,6 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -6163,7 +5941,7 @@
         ],
         "responses": {
           "default": {
-            "description": "User data returned successfully.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6173,7 +5951,7 @@
             }
           }
         },
-        "summary": "Get user data by ID",
+        "summary": "Get client by ID",
         "tags": [
           "Clients"
         ]
@@ -6185,7 +5963,6 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -6203,7 +5980,7 @@
         },
         "responses": {
           "default": {
-            "description": "The user data has been successfully updated.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6213,7 +5990,7 @@
             }
           }
         },
-        "summary": "Update user data by ID",
+        "summary": "Update client",
         "tags": [
           "Clients"
         ]
@@ -6225,7 +6002,6 @@
             "name": "clientId",
             "required": true,
             "in": "path",
-            "description": "Client ID",
             "schema": {
               "type": "string"
             }
@@ -6233,7 +6009,7 @@
         ],
         "responses": {
           "default": {
-            "description": "The user data has been successfully deleted.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6243,7 +6019,7 @@
             }
           }
         },
-        "summary": "Delete user data by ID",
+        "summary": "Delete client",
         "tags": [
           "Clients"
         ]
@@ -6265,7 +6041,7 @@
         },
         "responses": {
           "default": {
-            "description": "Query executed successfully.",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -6278,91 +6054,7 @@
             }
           }
         },
-        "summary": "Execute a custom MongoDB query",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
-    "/clients/{clientId}/promoteMobile/add": {
-      "patch": {
-        "operationId": "ClientController_addPromoteMobile",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "The unique identifier of the client",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PromoteMobileAssignmentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "default": {
-            "description": "Mobile number assigned as promote mobile successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Client"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Add a mobile number as a promote mobile for a specific client",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
-    "/clients/{clientId}/promoteMobile/remove": {
-      "patch": {
-        "operationId": "ClientController_removePromoteMobile",
-        "parameters": [
-          {
-            "name": "clientId",
-            "required": true,
-            "in": "path",
-            "description": "The unique identifier of the client",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PromoteMobileAssignmentDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "default": {
-            "description": "Promote mobile assignment removed successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Client"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Remove a promote mobile assignment from a specific client",
+        "summary": "Execute custom MongoDB query",
         "tags": [
           "Clients"
         ]
@@ -7845,9 +7537,7 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Number of results to return (default: 100)",
             "schema": {
-              "example": 100,
               "type": "number"
             }
           },
@@ -7855,9 +7545,7 @@
             "name": "skip",
             "required": false,
             "in": "query",
-            "description": "Number of results to skip (default: 0)",
             "schema": {
-              "example": 0,
               "type": "number"
             }
           }
@@ -7881,7 +7569,7 @@
             "name": "tgId",
             "required": false,
             "in": "query",
-            "description": "Filter by Telegram ID",
+            "description": "Telegram ID",
             "schema": {
               "type": "string"
             }
@@ -7890,7 +7578,7 @@
             "name": "mobile",
             "required": false,
             "in": "query",
-            "description": "Filter by mobile number",
+            "description": "Mobile number",
             "schema": {
               "type": "string"
             }
@@ -7899,7 +7587,7 @@
             "name": "twoFA",
             "required": false,
             "in": "query",
-            "description": "Filter by twoFA status",
+            "description": "2FA status",
             "schema": {
               "type": "boolean"
             }
@@ -7908,7 +7596,7 @@
             "name": "expired",
             "required": false,
             "in": "query",
-            "description": "Filter by Expiration status",
+            "description": "Expiration status",
             "schema": {
               "type": "boolean"
             }
@@ -7917,7 +7605,7 @@
             "name": "session",
             "required": false,
             "in": "query",
-            "description": "Filter by session",
+            "description": "Session string",
             "schema": {
               "type": "string"
             }
@@ -7926,7 +7614,7 @@
             "name": "firstName",
             "required": false,
             "in": "query",
-            "description": "Filter by first name",
+            "description": "First name",
             "schema": {
               "type": "string"
             }
@@ -7935,7 +7623,7 @@
             "name": "lastName",
             "required": false,
             "in": "query",
-            "description": "Filter by last name",
+            "description": "Last name",
             "schema": {
               "type": "string"
             }
@@ -7944,153 +7632,36 @@
             "name": "username",
             "required": false,
             "in": "query",
-            "description": "Filter by username",
+            "description": "Telegram username",
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "name": "channels",
-            "required": false,
-            "in": "query",
-            "description": "Filter by channels count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "personalChats",
-            "required": false,
-            "in": "query",
-            "description": "Filter by personal chats count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "demoGiven",
-            "required": false,
-            "in": "query",
-            "description": "Filter by demo given status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "msgs",
-            "required": false,
-            "in": "query",
-            "description": "Filter by messages count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "totalChats",
-            "required": false,
-            "in": "query",
-            "description": "Filter by total chats count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "lastActive",
-            "required": false,
-            "in": "query",
-            "description": "Filter by last active timestamp",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "movieCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by movie count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "photoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by photo count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "videoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by video count",
-            "schema": {
-              "type": "number"
             }
           },
           {
             "name": "gender",
             "required": false,
             "in": "query",
-            "description": "Filter by gender",
+            "description": "Gender",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "otherPhotoCount",
+            "name": "demoGiven",
             "required": false,
             "in": "query",
-            "description": "Filter by other photo count",
+            "description": "Demo given status",
             "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "otherVideoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by other video count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "ownPhotoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by own photo count",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
-            "name": "ownVideoCount",
-            "required": false,
-            "in": "query",
-            "description": "Filter by own video count",
-            "schema": {
-              "type": "number"
+              "type": "boolean"
             }
           },
           {
             "name": "starred",
             "required": false,
             "in": "query",
-            "description": "Filter by starred status",
+            "description": "Starred status",
             "schema": {
               "type": "boolean"
-            }
-          },
-          {
-            "name": "score",
-            "required": false,
-            "in": "query",
-            "description": "Filter by score",
-            "schema": {
-              "type": "number"
             }
           }
         ],
@@ -8099,25 +7670,21 @@
             "description": ""
           }
         },
-        "summary": "Search users based on various parameters",
+        "summary": "Search users",
         "tags": [
           "Telegram Users"
         ]
       }
     },
-    "/user/top-interacted": {
+    "/user/top-relationships": {
       "get": {
-        "description": "Retrieves users ranked by interaction score calculated from saved DB stats. Score is based on photos, videos, calls, and other interactions. Movie count has negative weightage as it indicates less genuine interaction. Supports filtering and pagination for efficient data retrieval.",
-        "operationId": "UsersController_getTopInteractionUsers",
+        "operationId": "UsersController_topRelationships",
         "parameters": [
           {
             "name": "page",
             "required": false,
             "in": "query",
-            "description": "Page number (default: 1, minimum: 1)",
             "schema": {
-              "minimum": 1,
-              "example": 1,
               "type": "number"
             }
           },
@@ -8125,11 +7692,7 @@
             "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Number of results per page (default: 20, max: 100)",
             "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "example": 20,
               "type": "number"
             }
           },
@@ -8137,10 +7700,63 @@
             "name": "minScore",
             "required": false,
             "in": "query",
-            "description": "Minimum interaction score to include (default: 0)",
             "schema": {
-              "minimum": 0,
-              "example": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "gender",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "excludeTwoFA",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get users ranked by relationship quality",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/top-interacted": {
+      "get": {
+        "operationId": "UsersController_getTopInteractionUsers",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "minScore",
+            "required": false,
+            "in": "query",
+            "schema": {
               "type": "number"
             }
           },
@@ -8148,10 +7764,7 @@
             "name": "minCalls",
             "required": false,
             "in": "query",
-            "description": "Minimum total calls required (default: 0)",
             "schema": {
-              "minimum": 0,
-              "example": 5,
               "type": "number"
             }
           },
@@ -8159,10 +7772,7 @@
             "name": "minPhotos",
             "required": false,
             "in": "query",
-            "description": "Minimum photos required (default: 0)",
             "schema": {
-              "minimum": 0,
-              "example": 10,
               "type": "number"
             }
           },
@@ -8170,10 +7780,7 @@
             "name": "minVideos",
             "required": false,
             "in": "query",
-            "description": "Minimum videos required (default: 0)",
             "schema": {
-              "minimum": 0,
-              "example": 5,
               "type": "number"
             }
           },
@@ -8181,9 +7788,7 @@
             "name": "excludeTwoFA",
             "required": false,
             "in": "query",
-            "description": "Exclude users with 2FA enabled (default: false)",
             "schema": {
-              "example": false,
               "type": "boolean"
             }
           },
@@ -8191,9 +7796,7 @@
             "name": "excludeAudited",
             "required": false,
             "in": "query",
-            "description": "Exclude users whose mobile is in session_audits (default: false). Set true to show only non-audited.",
             "schema": {
-              "example": false,
               "type": "boolean"
             }
           },
@@ -8201,121 +7804,65 @@
             "name": "gender",
             "required": false,
             "in": "query",
-            "description": "Filter by gender",
             "schema": {
-              "example": "male",
               "type": "string"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Users retrieved successfully with interaction scores",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "users": {
-                      "type": "array",
-                      "description": "List of users with interaction scores",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "description": "User ID"
-                          },
-                          "mobile": {
-                            "type": "string"
-                          },
-                          "tgId": {
-                            "type": "string"
-                          },
-                          "firstName": {
-                            "type": "string"
-                          },
-                          "lastName": {
-                            "type": "string"
-                          },
-                          "username": {
-                            "type": "string"
-                          },
-                          "photoCount": {
-                            "type": "number"
-                          },
-                          "videoCount": {
-                            "type": "number"
-                          },
-                          "ownPhotoCount": {
-                            "type": "number"
-                          },
-                          "ownVideoCount": {
-                            "type": "number"
-                          },
-                          "otherPhotoCount": {
-                            "type": "number"
-                          },
-                          "otherVideoCount": {
-                            "type": "number"
-                          },
-                          "movieCount": {
-                            "type": "number",
-                            "description": "Has negative impact on score"
-                          },
-                          "calls": {
-                            "type": "object",
-                            "properties": {
-                              "outgoing": {
-                                "type": "number"
-                              },
-                              "incoming": {
-                                "type": "number"
-                              },
-                              "video": {
-                                "type": "number"
-                              },
-                              "totalCalls": {
-                                "type": "number"
-                              }
-                            }
-                          },
-                          "interactionScore": {
-                            "type": "number",
-                            "description": "Calculated interaction score (higher = more active/engaged)"
-                          }
-                        }
-                      }
-                    },
-                    "total": {
-                      "type": "number",
-                      "description": "Total number of users matching filters"
-                    },
-                    "page": {
-                      "type": "number",
-                      "description": "Current page number"
-                    },
-                    "limit": {
-                      "type": "number",
-                      "description": "Results per page"
-                    },
-                    "totalPages": {
-                      "type": "number",
-                      "description": "Total number of pages"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request - invalid query parameters"
-          },
-          "500": {
-            "description": "Internal Server Error"
+            "description": ""
           }
         },
-        "summary": "Get users with top interaction scores",
+        "summary": "Get users ranked by interaction score",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/{mobile}/relationships": {
+      "get": {
+        "operationId": "UsersController_getUserRelationships",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get relationship details for a specific user",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/recompute-score/{mobile}": {
+      "post": {
+        "operationId": "UsersController_recomputeScore",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Recompute relationship score (live Telegram connection)",
         "tags": [
           "Telegram Users"
         ]
@@ -8329,7 +7876,6 @@
             "name": "tgId",
             "required": true,
             "in": "path",
-            "description": "The Telegram ID of the user",
             "schema": {
               "type": "string"
             }
@@ -8340,7 +7886,7 @@
             "description": ""
           }
         },
-        "summary": "Get a user by tgId",
+        "summary": "Get user by tgId",
         "tags": [
           "Telegram Users"
         ]
@@ -8352,7 +7898,6 @@
             "name": "tgId",
             "required": true,
             "in": "path",
-            "description": "The Telegram ID of the user",
             "schema": {
               "type": "string"
             }
@@ -8373,7 +7918,7 @@
             "description": ""
           }
         },
-        "summary": "Update a user by tgId",
+        "summary": "Update user by tgId",
         "tags": [
           "Telegram Users"
         ]
@@ -8385,7 +7930,6 @@
             "name": "tgId",
             "required": true,
             "in": "path",
-            "description": "The Telegram ID of the user",
             "schema": {
               "type": "string"
             }
@@ -8396,7 +7940,7 @@
             "description": ""
           }
         },
-        "summary": "Delete a user by tgId",
+        "summary": "Delete user by tgId",
         "tags": [
           "Telegram Users"
         ]
@@ -8411,7 +7955,7 @@
             "description": ""
           }
         },
-        "summary": "Execute a custom MongoDB query",
+        "summary": "Execute custom MongoDB query",
         "tags": [
           "Telegram Users"
         ]
@@ -13573,85 +13117,66 @@
         "properties": {
           "channelLink": {
             "type": "string",
-            "example": "paid_giirl_shruthiee",
-            "description": "Channel link of the user"
+            "description": "Channel link"
           },
           "dbcoll": {
             "type": "string",
-            "example": "shruthi",
             "description": "Database collection name"
           },
           "link": {
             "type": "string",
-            "example": "PaidGirl.netlify.app/Shruthi1",
-            "description": "Link of the user"
+            "description": "Client link"
           },
           "name": {
             "type": "string",
-            "example": "Shruthi Reddy",
-            "description": "Name of the user"
+            "description": "Display name"
           },
           "mobile": {
             "type": "string",
-            "example": "+916265240911",
-            "description": "Phone number of the user"
+            "description": "Mobile number"
           },
           "password": {
             "type": "string",
-            "example": "Ajtdmwajt1@",
-            "description": "Password of the user"
+            "description": "2FA password"
           },
           "repl": {
             "type": "string",
-            "example": "https://shruthi1.glitch.me",
-            "description": "Repl link of the user"
+            "description": "tg-aut repl link"
           },
           "promoteRepl": {
             "type": "string",
-            "example": "https://shruthiprom0101.glitch.me",
-            "description": "Promotion Repl link of the user"
+            "description": "Promote repl link"
           },
           "session": {
             "type": "string",
-            "example": "1BQANOTEuMTA4LjUg==",
-            "description": "Session token"
+            "description": "Telegram session string"
           },
           "username": {
             "type": "string",
-            "example": "ShruthiRedd2",
-            "description": "Username of the user"
+            "description": "Telegram username"
           },
           "clientId": {
             "type": "string",
-            "example": "shruthi1",
-            "description": "Client ID of the user"
+            "description": "Unique client identifier"
           },
           "deployKey": {
             "type": "string",
-            "example": "https://shruthi1.glitch.me/exit",
-            "description": "Deployment key URL"
+            "description": "Deploy restart URL"
           },
           "product": {
             "type": "string",
-            "example": "booklet_10",
-            "description": "Product associated with the user"
+            "description": "Product identifier"
           },
           "qrId": {
             "type": "string",
-            "example": "paytmqr281005050101xv6mfg02t4m9@paytm",
-            "description": "Paytm QR ID of the user"
+            "description": "Paytm QR ID"
           },
           "gpayId": {
             "type": "string",
-            "example": "myred1808@postbank",
-            "description": "Google Pay ID of the user"
+            "description": "Google Pay ID"
           },
           "dedicatedIps": {
-            "example": [
-              "192.168.1.100:8080",
-              "192.168.1.101:8080"
-            ],
-            "description": "Dedicated proxy IPs assigned to this client",
+            "description": "Dedicated proxy IPs",
             "type": "array",
             "items": {
               "type": "string"
@@ -13659,44 +13184,42 @@
           },
           "preferredIpCountry": {
             "type": "string",
-            "example": "US",
-            "description": "Preferred country for IP assignment"
+            "description": "Preferred IP country (ISO 2-letter)"
           },
           "autoAssignIps": {
             "type": "boolean",
-            "example": true,
-            "description": "Whether to auto-assign IPs to mobile numbers"
+            "description": "Auto-assign IPs to mobile numbers"
           },
           "firstNames": {
-            "description": "Pool of first names",
+            "description": "First name pool for persona assignment",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "bufferLastNames": {
-            "description": "Pool of last names for buffer clients",
+            "description": "Last name pool for buffer clients",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "promoteLastNames": {
-            "description": "Pool of last names for promote clients",
+            "description": "Last name pool for promote clients",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "bios": {
-            "description": "Pool of bios",
+            "description": "Bio pool",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "profilePics": {
-            "description": "Pool of profile pic URLs",
+            "description": "Profile pic URL pool",
             "type": "array",
             "items": {
               "type": "string"
@@ -13724,85 +13247,66 @@
         "properties": {
           "channelLink": {
             "type": "string",
-            "example": "paid_giirl_shruthiee",
-            "description": "Channel link of the user"
+            "description": "Channel link"
           },
           "dbcoll": {
             "type": "string",
-            "example": "shruthi",
             "description": "Database collection name"
           },
           "link": {
             "type": "string",
-            "example": "PaidGirl.netlify.app/Shruthi1",
-            "description": "Link of the user"
+            "description": "Client link"
           },
           "name": {
             "type": "string",
-            "example": "Shruthi Reddy",
-            "description": "Name of the user"
+            "description": "Display name"
           },
           "mobile": {
             "type": "string",
-            "example": "916265240911",
-            "description": "mobile number of the user"
+            "description": "Mobile number"
           },
           "password": {
             "type": "string",
-            "example": "Ajtdmwajt1@",
-            "description": "Password of the user"
+            "description": "2FA password"
           },
           "repl": {
             "type": "string",
-            "example": "https://shruthi1.glitch.me",
-            "description": "Repl link of the user"
+            "description": "tg-aut repl link"
           },
           "promoteRepl": {
             "type": "string",
-            "example": "https://shruthiprom0101.glitch.me",
-            "description": "Promotion Repl link of the user"
+            "description": "Promote repl link"
           },
           "session": {
             "type": "string",
-            "example": "1BQANOTEuM==",
-            "description": "Session token"
+            "description": "Telegram session string"
           },
           "username": {
             "type": "string",
-            "example": "ShruthiRedd2",
-            "description": "Username of the user"
+            "description": "Telegram username"
           },
           "clientId": {
             "type": "string",
-            "example": "shruthi1",
-            "description": "Client ID of the user"
+            "description": "Unique client identifier"
           },
           "deployKey": {
             "type": "string",
-            "example": "https://shruthi1.glitch.me/exit",
-            "description": "Deployment key URL"
+            "description": "Deploy restart URL"
           },
           "product": {
             "type": "string",
-            "example": "booklet_10",
-            "description": "Product associated with the user"
+            "description": "Product identifier"
           },
           "qrId": {
             "type": "string",
-            "example": "paytmqr281005050101xv6mfg02t4m9@paytm",
-            "description": "Paytm QR ID of the user"
+            "description": "Paytm QR ID"
           },
           "gpayId": {
             "type": "string",
-            "example": "myred1808@postbank",
-            "description": "Google Pay ID of the user"
+            "description": "Google Pay ID"
           },
           "dedicatedIps": {
-            "example": [
-              "192.168.1.100:8080",
-              "192.168.1.101:8080"
-            ],
-            "description": "Dedicated proxy IPs assigned to this client",
+            "description": "Dedicated proxy IPs",
             "type": "array",
             "items": {
               "type": "string"
@@ -13810,44 +13314,42 @@
           },
           "preferredIpCountry": {
             "type": "string",
-            "example": "US",
-            "description": "Preferred country for IP assignment"
+            "description": "Preferred IP country (ISO 2-letter)"
           },
           "autoAssignIps": {
             "type": "boolean",
-            "example": true,
-            "description": "Whether to auto-assign IPs to mobile numbers"
+            "description": "Auto-assign IPs to mobile numbers"
           },
           "firstNames": {
-            "description": "Pool of first names for persona assignment",
+            "description": "First name pool for persona assignment",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "bufferLastNames": {
-            "description": "Pool of last names for buffer-client persona assignment",
+            "description": "Last name pool for buffer clients",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "promoteLastNames": {
-            "description": "Pool of last names for promote-client persona assignment",
+            "description": "Last name pool for promote clients",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "bios": {
-            "description": "Pool of bios for persona assignment",
+            "description": "Bio pool for persona assignment",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "profilePics": {
-            "description": "Pool of profile pic URLs",
+            "description": "Profile pic URL pool",
             "type": "array",
             "items": {
               "type": "string"
@@ -13869,86 +13371,7 @@
           "deployKey",
           "product",
           "qrId",
-          "gpayId",
-          "dedicatedIps"
-        ]
-      },
-      "PromoteMobileMatchDto": {
-        "type": "object",
-        "properties": {
-          "clientId": {
-            "type": "string",
-            "example": "client-a"
-          },
-          "mobile": {
-            "type": "string",
-            "example": "916265240911"
-          }
-        },
-        "required": [
-          "clientId",
-          "mobile"
-        ]
-      },
-      "PromoteMobileSearchResponseDto": {
-        "type": "object",
-        "properties": {
-          "clients": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Client"
-            }
-          },
-          "matches": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromoteMobileMatchDto"
-            }
-          },
-          "searchedMobile": {
-            "type": "string",
-            "example": "916265240911"
-          }
-        },
-        "required": [
-          "clients",
-          "matches",
-          "searchedMobile"
-        ]
-      },
-      "EnhancedClientSearchResponseDto": {
-        "type": "object",
-        "properties": {
-          "clients": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Client"
-            }
-          },
-          "searchType": {
-            "type": "string",
-            "enum": [
-              "direct",
-              "promoteMobile",
-              "mixed"
-            ],
-            "example": "promoteMobile"
-          },
-          "promoteMobileMatches": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromoteMobileMatchDto"
-            }
-          },
-          "totalResults": {
-            "type": "number",
-            "example": 4
-          }
-        },
-        "required": [
-          "clients",
-          "searchType",
-          "totalResults"
+          "gpayId"
         ]
       },
       "UpdateClientDto": {
@@ -13956,85 +13379,66 @@
         "properties": {
           "channelLink": {
             "type": "string",
-            "example": "paid_giirl_shruthiee",
-            "description": "Channel link of the user"
+            "description": "Channel link"
           },
           "dbcoll": {
             "type": "string",
-            "example": "shruthi",
             "description": "Database collection name"
           },
           "link": {
             "type": "string",
-            "example": "PaidGirl.netlify.app/Shruthi1",
-            "description": "Link of the user"
+            "description": "Client link"
           },
           "name": {
             "type": "string",
-            "example": "Shruthi Reddy",
-            "description": "Name of the user"
+            "description": "Display name"
           },
           "mobile": {
             "type": "string",
-            "example": "+916265240911",
-            "description": "Phone number of the user"
+            "description": "Mobile number"
           },
           "password": {
             "type": "string",
-            "example": "Ajtdmwajt1@",
-            "description": "Password of the user"
+            "description": "2FA password"
           },
           "repl": {
             "type": "string",
-            "example": "https://shruthi1.glitch.me",
-            "description": "Repl link of the user"
+            "description": "tg-aut repl link"
           },
           "promoteRepl": {
             "type": "string",
-            "example": "https://shruthiprom0101.glitch.me",
-            "description": "Promotion Repl link of the user"
+            "description": "Promote repl link"
           },
           "session": {
             "type": "string",
-            "example": "1BQANOTEuMTA4LjUg==",
-            "description": "Session token"
+            "description": "Telegram session string"
           },
           "username": {
             "type": "string",
-            "example": "ShruthiRedd2",
-            "description": "Username of the user"
+            "description": "Telegram username"
           },
           "clientId": {
             "type": "string",
-            "example": "shruthi1",
-            "description": "Client ID of the user"
+            "description": "Unique client identifier"
           },
           "deployKey": {
             "type": "string",
-            "example": "https://shruthi1.glitch.me/exit",
-            "description": "Deployment key URL"
+            "description": "Deploy restart URL"
           },
           "product": {
             "type": "string",
-            "example": "booklet_10",
-            "description": "Product associated with the user"
+            "description": "Product identifier"
           },
           "qrId": {
             "type": "string",
-            "example": "paytmqr281005050101xv6mfg02t4m9@paytm",
-            "description": "Paytm QR ID of the user"
+            "description": "Paytm QR ID"
           },
           "gpayId": {
             "type": "string",
-            "example": "myred1808@postbank",
-            "description": "Google Pay ID of the user"
+            "description": "Google Pay ID"
           },
           "dedicatedIps": {
-            "example": [
-              "192.168.1.100:8080",
-              "192.168.1.101:8080"
-            ],
-            "description": "Dedicated proxy IPs assigned to this client",
+            "description": "Dedicated proxy IPs",
             "type": "array",
             "items": {
               "type": "string"
@@ -14042,44 +13446,42 @@
           },
           "preferredIpCountry": {
             "type": "string",
-            "example": "US",
-            "description": "Preferred country for IP assignment"
+            "description": "Preferred IP country (ISO 2-letter)"
           },
           "autoAssignIps": {
             "type": "boolean",
-            "example": true,
-            "description": "Whether to auto-assign IPs to mobile numbers"
+            "description": "Auto-assign IPs to mobile numbers"
           },
           "firstNames": {
-            "description": "Pool of first names",
+            "description": "First name pool for persona assignment",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "bufferLastNames": {
-            "description": "Pool of last names for buffer clients",
+            "description": "Last name pool for buffer clients",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "promoteLastNames": {
-            "description": "Pool of last names for promote clients",
+            "description": "Last name pool for promote clients",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "bios": {
-            "description": "Pool of bios",
+            "description": "Bio pool",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "profilePics": {
-            "description": "Pool of profile pic URLs",
+            "description": "Profile pic URL pool",
             "type": "array",
             "items": {
               "type": "string"
@@ -14092,43 +13494,27 @@
         "properties": {
           "query": {
             "type": "object",
-            "additionalProperties": true,
-            "example": {
-              "clientId": "client-a"
-            }
+            "description": "MongoDB filter object",
+            "additionalProperties": true
           },
           "sort": {
             "type": "object",
-            "additionalProperties": true,
-            "example": {
-              "clientId": 1
-            }
+            "description": "Sort specification",
+            "additionalProperties": true
           },
           "limit": {
             "type": "number",
-            "example": 20,
+            "description": "Max results to return",
             "minimum": 1
           },
           "skip": {
             "type": "number",
-            "example": 0,
+            "description": "Results to skip",
             "minimum": 0
           }
         },
         "required": [
           "query"
-        ]
-      },
-      "PromoteMobileAssignmentDto": {
-        "type": "object",
-        "properties": {
-          "mobileNumber": {
-            "type": "string",
-            "example": "916265240911"
-          }
-        },
-        "required": [
-          "mobileNumber"
         ]
       },
       "CreateEventDto": {
@@ -14888,170 +14274,177 @@
           }
         }
       },
+      "UserStatsDto": {
+        "type": "object",
+        "properties": {
+          "channels": {
+            "type": "number",
+            "description": "Channel count"
+          },
+          "personalChats": {
+            "type": "number",
+            "description": "Personal chat count"
+          },
+          "totalChats": {
+            "type": "number",
+            "description": "Total chat count"
+          },
+          "contacts": {
+            "type": "number",
+            "description": "Contact count"
+          },
+          "msgs": {
+            "type": "number",
+            "description": "Message count"
+          },
+          "photoCount": {
+            "type": "number",
+            "description": "Total photo count"
+          },
+          "videoCount": {
+            "type": "number",
+            "description": "Total video count"
+          },
+          "movieCount": {
+            "type": "number",
+            "description": "Movie file count"
+          },
+          "ownPhotoCount": {
+            "type": "number",
+            "description": "Sent photo count"
+          },
+          "otherPhotoCount": {
+            "type": "number",
+            "description": "Received photo count"
+          },
+          "ownVideoCount": {
+            "type": "number",
+            "description": "Sent video count"
+          },
+          "otherVideoCount": {
+            "type": "number",
+            "description": "Received video count"
+          },
+          "lastActive": {
+            "type": "string",
+            "description": "Last active timestamp"
+          }
+        },
+        "required": [
+          "channels",
+          "personalChats",
+          "totalChats",
+          "contacts",
+          "msgs",
+          "photoCount",
+          "videoCount",
+          "movieCount",
+          "ownPhotoCount",
+          "otherPhotoCount",
+          "ownVideoCount",
+          "otherVideoCount"
+        ]
+      },
+      "UserCallsDto": {
+        "type": "object",
+        "properties": {
+          "totalCalls": {
+            "type": "number",
+            "description": "Total calls"
+          },
+          "outgoing": {
+            "type": "number",
+            "description": "Outgoing calls"
+          },
+          "incoming": {
+            "type": "number",
+            "description": "Incoming calls"
+          },
+          "video": {
+            "type": "number",
+            "description": "Video calls"
+          },
+          "audio": {
+            "type": "number",
+            "description": "Audio calls"
+          }
+        },
+        "required": [
+          "totalCalls",
+          "outgoing",
+          "incoming",
+          "video",
+          "audio"
+        ]
+      },
       "CreateUserDto": {
         "type": "object",
         "properties": {
           "mobile": {
             "type": "string",
-            "description": "Mobile number of the user",
-            "example": "917330803480"
+            "description": "Mobile number"
           },
           "session": {
             "type": "string",
-            "description": "Session information of the user",
-            "example": "string"
+            "description": "Telegram session string"
           },
           "firstName": {
             "type": "string",
-            "description": "First name of the user",
-            "example": "Praveen"
+            "description": "First name"
           },
           "lastName": {
             "type": "string",
-            "description": "Last name of the user",
-            "example": null
+            "description": "Last name"
           },
           "username": {
             "type": "string",
-            "description": "Username of the user",
-            "example": null
-          },
-          "channels": {
-            "type": "number",
-            "description": "Number of channels",
-            "example": 56
-          },
-          "personalChats": {
-            "type": "number",
-            "description": "Number of personal chats",
-            "example": 74
-          },
-          "msgs": {
-            "type": "number",
-            "description": "Number of messages",
-            "example": 0
-          },
-          "totalChats": {
-            "type": "number",
-            "description": "Total number of chats",
-            "example": 195
-          },
-          "lastActive": {
-            "type": "string",
-            "description": "Timestamp of last active",
-            "example": "2024-06-03"
+            "description": "Telegram username"
           },
           "tgId": {
             "type": "string",
-            "description": "Telegram ID of the user",
-            "example": "2022068676"
-          },
-          "twoFA": {
-            "type": "boolean",
-            "description": "TwoFA status",
-            "example": false
-          },
-          "expired": {
-            "type": "boolean",
-            "description": "Expiration status",
-            "example": false
-          },
-          "password": {
-            "type": "string",
-            "description": "password",
-            "example": "pass"
-          },
-          "movieCount": {
-            "type": "number",
-            "description": "Number of movies",
-            "example": 0
-          },
-          "photoCount": {
-            "type": "number",
-            "description": "Number of photos",
-            "example": 0
-          },
-          "videoCount": {
-            "type": "number",
-            "description": "Number of videos",
-            "example": 0
+            "description": "Telegram user ID"
           },
           "gender": {
             "type": "string",
-            "description": "Gender of the user",
-            "example": null
+            "description": "Gender"
           },
-          "otherPhotoCount": {
-            "type": "number",
-            "description": "Number of other photos",
-            "example": 0
-          },
-          "otherVideoCount": {
-            "type": "number",
-            "description": "Number of other videos",
-            "example": 0
-          },
-          "ownPhotoCount": {
-            "type": "number",
-            "description": "Number of own photos",
-            "example": 0
-          },
-          "ownVideoCount": {
-            "type": "number",
-            "description": "Number of own videos",
-            "example": 0
-          },
-          "contacts": {
-            "type": "number",
-            "description": "Number of contacts",
-            "example": 105
-          },
-          "starred": {
+          "twoFA": {
             "type": "boolean",
-            "description": "Starred status",
-            "example": false
+            "description": "2FA enabled"
           },
-          "score": {
-            "type": "number",
-            "description": "User score",
-            "example": 0
+          "expired": {
+            "type": "boolean",
+            "description": "Account expired"
+          },
+          "password": {
+            "type": "string",
+            "description": "2FA password"
+          },
+          "stats": {
+            "description": "Account statistics",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserStatsDto"
+              }
+            ]
           },
           "calls": {
-            "type": "object",
-            "description": "Per-chat call statistics",
-            "example": {
-              "totalCalls": 0,
-              "outgoing": 0,
-              "incoming": 0,
-              "video": 0,
-              "audio": 0,
-              "chats": []
-            }
+            "description": "Call statistics",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserCallsDto"
+              }
+            ]
           }
         },
         "required": [
           "mobile",
           "session",
           "firstName",
-          "channels",
-          "personalChats",
-          "msgs",
-          "totalChats",
-          "lastActive",
           "tgId",
           "twoFA",
           "expired",
-          "password",
-          "movieCount",
-          "photoCount",
-          "videoCount",
-          "otherPhotoCount",
-          "otherVideoCount",
-          "ownPhotoCount",
-          "ownVideoCount",
-          "contacts",
-          "starred",
-          "score"
+          "password"
         ]
       },
       "UpdateUserDto": {
@@ -15210,6 +14603,11 @@
             "type": "string",
             "description": "Timestamp when legacy profile photos were removed.",
             "example": "2026-03-14T08:00:00.000Z"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username set during warmup identity phase.",
+            "example": "SaraKum42"
           },
           "usernameUpdatedAt": {
             "format": "date-time",
@@ -15509,6 +14907,11 @@
             "type": "string",
             "description": "Timestamp when legacy profile photos were deleted.",
             "example": "2026-03-14T08:00:00.000Z"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username set during warmup.",
+            "example": "SaraKum42"
           },
           "usernameUpdatedAt": {
             "format": "date-time",

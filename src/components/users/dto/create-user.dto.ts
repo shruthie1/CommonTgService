@@ -1,46 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class UserStatsDto {
-  @ApiProperty({ description: 'Channel count' })
-  channels: number = 0;
-
-  @ApiProperty({ description: 'Personal chat count' })
-  personalChats: number = 0;
-
-  @ApiProperty({ description: 'Total chat count' })
-  totalChats: number = 0;
-
-  @ApiProperty({ description: 'Contact count' })
-  contacts: number = 0;
-
-  @ApiProperty({ description: 'Message count' })
-  msgs: number = 0;
-
-  @ApiProperty({ description: 'Total photo count' })
-  photoCount: number = 0;
-
-  @ApiProperty({ description: 'Total video count' })
-  videoCount: number = 0;
-
-  @ApiProperty({ description: 'Movie file count' })
-  movieCount: number = 0;
-
-  @ApiProperty({ description: 'Sent photo count' })
-  ownPhotoCount: number = 0;
-
-  @ApiProperty({ description: 'Received photo count' })
-  otherPhotoCount: number = 0;
-
-  @ApiProperty({ description: 'Sent video count' })
-  ownVideoCount: number = 0;
-
-  @ApiProperty({ description: 'Received video count' })
-  otherVideoCount: number = 0;
-
-  @ApiPropertyOptional({ description: 'Last active timestamp' })
-  lastActive: string | null = null;
-}
-
 export class UserCallsDto {
   @ApiProperty({ description: 'Total calls' })
   totalCalls: number = 0;
@@ -89,8 +48,44 @@ export class CreateUserDto {
   @ApiProperty({ description: '2FA password' })
   password: string = null;
 
-  @ApiPropertyOptional({ description: 'Account statistics' })
-  stats?: UserStatsDto = new UserStatsDto();
+  @ApiProperty({ description: 'Channel count' })
+  channels: number = 0;
+
+  @ApiProperty({ description: 'Personal chat count' })
+  personalChats: number = 0;
+
+  @ApiProperty({ description: 'Total chat count' })
+  totalChats: number = 0;
+
+  @ApiProperty({ description: 'Contact count' })
+  contacts: number = 0;
+
+  @ApiProperty({ description: 'Message count' })
+  msgs: number = 0;
+
+  @ApiProperty({ description: 'Total photo count' })
+  photoCount: number = 0;
+
+  @ApiProperty({ description: 'Total video count' })
+  videoCount: number = 0;
+
+  @ApiProperty({ description: 'Movie file count' })
+  movieCount: number = 0;
+
+  @ApiProperty({ description: 'Sent photo count' })
+  ownPhotoCount: number = 0;
+
+  @ApiProperty({ description: 'Received photo count' })
+  otherPhotoCount: number = 0;
+
+  @ApiProperty({ description: 'Sent video count' })
+  ownVideoCount: number = 0;
+
+  @ApiProperty({ description: 'Received video count' })
+  otherVideoCount: number = 0;
+
+  @ApiPropertyOptional({ description: 'Last active timestamp' })
+  lastActive: string | null = null;
 
   @ApiPropertyOptional({ description: 'Call statistics' })
   calls?: UserCallsDto = new UserCallsDto();

@@ -64,31 +64,57 @@ export class User {
   demoGiven: boolean;
 
   // --- Account-level stats ---
-  @ApiProperty({ description: 'Account statistics', required: false })
-  @Prop({
-    type: mongoose.Schema.Types.Mixed,
-    default: {
-      channels: 0, personalChats: 0, totalChats: 0, contacts: 0, msgs: 0,
-      photoCount: 0, videoCount: 0, movieCount: 0,
-      ownPhotoCount: 0, otherPhotoCount: 0, ownVideoCount: 0, otherVideoCount: 0,
-      lastActive: null,
-    },
-  })
-  stats: {
-    channels: number;
-    personalChats: number;
-    totalChats: number;
-    contacts: number;
-    msgs: number;
-    photoCount: number;
-    videoCount: number;
-    movieCount: number;
-    ownPhotoCount: number;
-    otherPhotoCount: number;
-    ownVideoCount: number;
-    otherVideoCount: number;
-    lastActive: string | null;
-  };
+  @ApiProperty({ description: 'Channel count' })
+  @Prop()
+  channels: number;
+
+  @ApiProperty({ description: 'Personal chat count' })
+  @Prop()
+  personalChats: number;
+
+  @ApiProperty({ description: 'Total chat count' })
+  @Prop()
+  totalChats: number;
+
+  @ApiProperty({ description: 'Contact count' })
+  @Prop()
+  contacts: number;
+
+  @ApiProperty({ description: 'Message count' })
+  @Prop()
+  msgs: number;
+
+  @ApiProperty({ description: 'Total photo count' })
+  @Prop()
+  photoCount: number;
+
+  @ApiProperty({ description: 'Total video count' })
+  @Prop()
+  videoCount: number;
+
+  @ApiProperty({ description: 'Movie file count' })
+  @Prop()
+  movieCount: number;
+
+  @ApiProperty({ description: 'Sent photo count' })
+  @Prop()
+  ownPhotoCount: number;
+
+  @ApiProperty({ description: 'Received photo count' })
+  @Prop()
+  otherPhotoCount: number;
+
+  @ApiProperty({ description: 'Sent video count' })
+  @Prop()
+  ownVideoCount: number;
+
+  @ApiProperty({ description: 'Received video count' })
+  @Prop()
+  otherVideoCount: number;
+
+  @ApiProperty({ description: 'Last active timestamp' })
+  @Prop()
+  lastActive: string;
 
   // --- Call summary (account-level) ---
   @ApiProperty({ description: 'Call statistics', required: false })
@@ -141,4 +167,4 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 UserSchema.index({ 'relationships.bestScore': -1 });
-UserSchema.index({ 'stats.lastActive': -1 });
+UserSchema.index({ lastActive: -1 });

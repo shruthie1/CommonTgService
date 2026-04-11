@@ -95,8 +95,8 @@ export class UsersService {
     if (excludeTwoFA) query.twoFA = { $ne: true };
     if (gender) query.gender = gender;
     if (minCalls > 0) query['calls.totalCalls'] = { $gte: minCalls };
-    if (minPhotos > 0) query['stats.photoCount'] = { $gte: minPhotos };
-    if (minVideos > 0) query['stats.videoCount'] = { $gte: minVideos };
+    if (minPhotos > 0) query['photoCount'] = { $gte: minPhotos };
+    if (minVideos > 0) query['videoCount'] = { $gte: minVideos };
 
     const total = await this.userModel.countDocuments(query).exec();
     const totalPages = Math.ceil(total / limitNum);
