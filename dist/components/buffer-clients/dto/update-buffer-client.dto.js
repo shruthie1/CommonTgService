@@ -42,6 +42,12 @@ __decorate([
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup.', example: 'SaraKum42' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateBufferClientDto.prototype, "username", void 0);
+__decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "usernameUpdatedAt", void 0);

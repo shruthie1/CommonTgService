@@ -16893,13 +16893,24 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async updateUsername(doc, client, failedAttempts) {
+        if (doc.username) {
+            this.logger.debug(`Username already set for ${doc.mobile}: @${doc.username}, skipping TG update`);
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: doc.usernameUpdatedAt || new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+            });
+            return 1;
+        }
         const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
             await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
             const me = await telegramClient.getMe();
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
-            await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            const updatedUsername = await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
             await this.update(doc.mobile, {
+                username: updatedUsername || me.username,
                 usernameUpdatedAt: new Date(),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,
@@ -18017,6 +18028,12 @@ __decorate([
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup.', example: 'SaraKum42' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateBufferClientDto.prototype, "username", void 0);
+__decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "usernameUpdatedAt", void 0);
@@ -18229,6 +18246,11 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "profilePicsDeletedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup identity phase.', example: 'SaraKum42' }),
+    (0, mongoose_1.Prop)({ required: false, type: String, default: null }),
+    __metadata("design:type", String)
+], BufferClient.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
@@ -20396,15 +20418,9 @@ let ClientService = ClientService_1 = class ClientService {
                 hasAssignedFirstName: !!bufferDoc?.assignedFirstName,
                 assignedPhotoCount: bufferDoc?.assignedProfilePics?.length || 0,
             });
-            const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, this.getExpectedClientName(existingClient, {
-                mobile: bufferDoc?.mobile || newMobile,
-                assignedFirstName: bufferDoc?.assignedFirstName || null,
-                assignedLastName: bufferDoc?.assignedLastName || null,
-                assignedBio: bufferDoc?.assignedBio || null,
-                assignedProfilePics: bufferDoc?.assignedProfilePics || [],
-                source: 'activeClient',
-            }), me.username);
-            await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: @${me.username}\nNewUsername: @${updatedUsername}`);
+            const updatedUsername = bufferDoc?.username || me.username;
+            this.logger.info(`[${clientId}] Using pre-set buffer username: @${updatedUsername} (current TG: @${me.username})`);
+            await this.notify(`Cutover username for NewNumber: ${newMobile}\nUsername: @${updatedUsername}`);
             if (!newSession?.trim()) {
                 throw new common_1.BadRequestException(`Invalid replacement session for ${newMobile}`);
             }
@@ -20432,7 +20448,7 @@ let ClientService = ClientService_1 = class ClientService {
             }
             this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
             setTimeout(() => {
-                void this.updateClient(clientId, 'Delayed update after buffer removal', true).catch((delayedError) => {
+                void this.updateClient(clientId, 'Delayed update after buffer removal', true, false, true).catch((delayedError) => {
                     (0, parseError_1.parseError)(delayedError, `[${clientId}] delayed updateClient failed`);
                 });
             }, 15000);
@@ -20592,7 +20608,7 @@ let ClientService = ClientService_1 = class ClientService {
         }
         throw new common_1.BadRequestException(`Distinct backup session was not persisted for ${mobile}`);
     }
-    async updateClient(clientId, message = '', skipDeploy = false, throwOnFailure = false) {
+    async updateClient(clientId, message = '', skipDeploy = false, throwOnFailure = false, skipUsername = false) {
         this.logger.log(`Updating Client: ${clientId} - ${message}`);
         if (!this.canUpdateClient(clientId))
             return false;
@@ -20622,7 +20638,12 @@ let ClientService = ClientService_1 = class ClientService {
                     mirroredActiveName,
                 });
             }
-            await this.updateClientUsername(client, me, activeAssignment);
+            if (!skipUsername) {
+                await this.updateClientUsername(client, me, activeAssignment);
+            }
+            else {
+                this.logger.debug(`[${clientId}] Skipping username update — already set from buffer`);
+            }
             const nameBioReady = await this.updateClientIdentity(client, telegramClient, me, activeAssignment);
             const privacyReady = await this.updateClientPrivacy(client, telegramClient);
             const photosReady = await this.updateClientPhotos(client, telegramClient, activeAssignment);
@@ -20688,6 +20709,10 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async updateClientUsername(client, me, activeAssignment) {
+        if (client.username && me.username === client.username) {
+            this.logger.debug(`[${client.clientId}] Username @${me.username} matches stored value, skipping update`);
+            return;
+        }
         const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, this.getExpectedClientName(client, activeAssignment), me.username);
         if (updatedUsername) {
             await this.update(client.clientId, { username: updatedUsername });

@@ -102,7 +102,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private archiveOldClient;
     private findSafeSetupBufferCandidate;
     private assertDistinctUserBackupSession;
-    updateClient(clientId: string, message?: string, skipDeploy?: boolean, throwOnFailure?: boolean): Promise<boolean>;
+    updateClient(clientId: string, message?: string, skipDeploy?: boolean, throwOnFailure?: boolean, skipUsername?: boolean): Promise<boolean>;
     private canUpdateClient;
     private buildMirroredActiveName;
     private getExpectedClientName;
