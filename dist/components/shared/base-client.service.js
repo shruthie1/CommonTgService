@@ -1127,9 +1127,10 @@ class BaseClientService {
                     this.removeFromLeaveMap(mobile);
                 }
                 const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                await client.leaveChannels(channelsToProcess);
-                const leftCount = channelsToProcess.length;
-                this.logger.debug(`${mobile} left ${leftCount} channels successfully`);
+                const leaveResult = await client.leaveChannels(channelsToProcess);
+                const leftCount = leaveResult?.successCount ?? channelsToProcess.length;
+                const skippedCount = leaveResult?.skipCount ?? 0;
+                this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
                 if (leftCount > 0) {
                     try {
                         await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });

@@ -7408,6 +7408,7 @@ const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
 const connection_manager_1 = __webpack_require__(/*! ../utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
+const dialog_chat_utils_1 = __webpack_require__(/*! ../../../utils/telegram-utils/dialog-chat-utils */ "./src/utils/telegram-utils/dialog-chat-utils.ts");
 async function createGroup(ctx) {
     const groupName = 'Saved Messages';
     const groupDescription = ctx.phoneNumber;
@@ -7518,49 +7519,21 @@ async function leaveChannels(ctx, chats) {
     ctx.logger.info(ctx.phoneNumber, 'ChatsLength: ', chats.length);
     if (chats.length === 0) {
         ctx.logger.info(ctx.phoneNumber, 'No chats to leave');
-        return;
+        return { successCount: 0, skipCount: 0, totalCount: 0 };
     }
-    const chatsToLeave = new Set();
-    for (const id of chats) {
-        chatsToLeave.add(id);
-        if (id.startsWith('-100')) {
-            chatsToLeave.add(id.substring(4));
-        }
-        else {
-            chatsToLeave.add(`-100${id}`);
-        }
-    }
+    const requestedIds = chats.map((id) => (0, dialog_chat_utils_1.normalizeChatId)(id));
+    const requestedIdSet = new Set(requestedIds);
     const entityMap = new Map();
-    let foundCount = 0;
     try {
         for await (const dialog of ctx.client.iterDialogs({})) {
             const entity = dialog.entity;
-            if (entity instanceof telegram_1.Api.Channel || entity instanceof telegram_1.Api.Chat) {
-                const entityId = entity.id.toString();
-                if (chatsToLeave.has(entityId)) {
-                    entityMap.set(entityId, { entity, dialog });
-                    foundCount++;
-                    if (foundCount >= chats.length) {
-                        ctx.logger.debug(ctx.phoneNumber, `Found all ${foundCount} chats, stopping iteration early`);
+            if ((0, dialog_chat_utils_1.isChannelOrGroupEntity)(entity)) {
+                const normalizedId = (0, dialog_chat_utils_1.normalizeChatId)(entity.id.toString());
+                if (requestedIdSet.has(normalizedId) && !entityMap.has(normalizedId)) {
+                    entityMap.set(normalizedId, { entity, dialog });
+                    if (entityMap.size >= requestedIdSet.size) {
+                        ctx.logger.debug(ctx.phoneNumber, `Found all ${entityMap.size} chats, stopping iteration early`);
                         break;
-                    }
-                }
-                if (entityId.startsWith('-100')) {
-                    const shortId = entityId.substring(4);
-                    if (chatsToLeave.has(shortId) && !entityMap.has(shortId)) {
-                        entityMap.set(shortId, { entity, dialog });
-                        foundCount++;
-                        if (foundCount >= chats.length)
-                            break;
-                    }
-                }
-                else {
-                    const longId = `-100${entityId}`;
-                    if (chatsToLeave.has(longId) && !entityMap.has(longId)) {
-                        entityMap.set(longId, { entity, dialog });
-                        foundCount++;
-                        if (foundCount >= chats.length)
-                            break;
                     }
                 }
             }
@@ -7573,15 +7546,14 @@ async function leaveChannels(ctx, chats) {
     }
     if (entityMap.size === 0) {
         ctx.logger.warn(ctx.phoneNumber, 'No matching chats found in dialogs to leave');
-        return;
+        return { successCount: 0, skipCount: chats.length, totalCount: chats.length };
     }
     const me = await ctx.client.getMe();
     let successCount = 0;
     let skipCount = 0;
     for (const id of chats) {
         try {
-            const entityData = entityMap.get(id) ||
-                entityMap.get(id.startsWith('-100') ? id.substring(4) : `-100${id}`);
+            const entityData = entityMap.get((0, dialog_chat_utils_1.normalizeChatId)(id));
             if (!entityData) {
                 ctx.logger.warn(ctx.phoneNumber, `Chat ${id} not found in dialogs, skipping`);
                 skipCount++;
@@ -7627,6 +7599,7 @@ async function leaveChannels(ctx, chats) {
         }
     }
     ctx.logger.info(ctx.phoneNumber, `Leaving Channels/Groups: Completed! Success: ${successCount}, Skipped: ${skipCount}, Total: ${chats.length}`);
+    return { successCount, skipCount, totalCount: chats.length };
 }
 async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
     try {
@@ -11749,6 +11722,17 @@ async function fetchNextProxy(clientId) {
         timeout: envInt("PROXY_TIMEOUT", 10),
     };
 }
+function logResolvedConfig(mobile, details) {
+    logger.info("Resolved Telegram client config", {
+        mobile,
+        cacheHit: details.cacheHit,
+        proxyEnabled: details.proxyEnabled,
+        proxyApplied: details.proxyApplied,
+        proxySource: details.proxySource,
+        proxy: details.proxy ? `${details.proxy.ip}:${details.proxy.port}` : "none",
+        note: details.note,
+    });
+}
 async function reportProxyInactive(ip, port) {
     const { baseUrl, apiKey, timeout } = getApiConfig();
     const url = `${baseUrl}/proxy-ips/${ip}/${port}`;
@@ -11821,14 +11805,14 @@ async function checkProxyHealth(proxy, timeoutMs) {
     }
 }
 const _inflightProxy = new Map();
-async function _resolveProxy(mobile) {
+async function _resolveProxyWithSource(mobile) {
     const mapKey = `${PROXY_MAP_PREFIX}${mobile}`;
     const cached = await redisClient_1.RedisClient.getObject(mapKey);
     if (cached && cached.ip) {
         logger.debug("Proxy cache hit", { mobile, ip: cached.ip, port: cached.port });
         const proxy = { ...cached, socksType: 5 };
         _registerMobile(mobile, proxy);
-        return proxy;
+        return { proxy, source: "redis_map" };
     }
     const { clientId } = getApiConfig();
     try {
@@ -11841,7 +11825,7 @@ async function _resolveProxy(mobile) {
         }
         logger.info("Assigned proxy via /next", { mobile, ip: proxy.ip, port: proxy.port, clientId: clientId || "none" });
         _registerMobile(mobile, proxy);
-        return proxy;
+        return { proxy, source: "next_api" };
     }
     catch (err) {
         logger.warn("IP Management /next failed", { mobile, error: err.message });
@@ -11854,7 +11838,7 @@ async function _resolveProxy(mobile) {
         catch { }
         logger.info("Assigned proxy from env", { mobile, ip: envProxy.ip });
         _registerMobile(mobile, envProxy);
-        return envProxy;
+        return { proxy: envProxy, source: "env_fallback" };
     }
     throw new Error("No proxies available from /next or env");
 }
@@ -11864,7 +11848,7 @@ async function getProxyForMobile(mobile) {
     const inflight = _inflightProxy.get(mobile);
     if (inflight)
         return inflight;
-    const promise = _resolveProxy(mobile).finally(() => {
+    const promise = _resolveProxyWithSource(mobile).then((result) => result.proxy).finally(() => {
         _inflightProxy.delete(mobile);
     });
     _inflightProxy.set(mobile, promise);
@@ -12131,12 +12115,20 @@ async function generateTGConfig(mobile, ttl = CONFIG_TTL_SECONDS) {
         logger.debug("Config cache hit", { mobile });
         if (proxiesEnabled && !cached.proxy) {
             try {
-                const p = await getProxyForMobile(mobile);
-                const withProxy = { ...cached, proxy: p };
+                const { proxy, source } = await _resolveProxyWithSource(mobile);
+                const withProxy = { ...cached, proxy };
                 try {
                     await redisClient_1.RedisClient.set(redisKey, withProxy, ttl);
                 }
                 catch { }
+                logResolvedConfig(mobile, {
+                    cacheHit: true,
+                    proxyEnabled: true,
+                    proxyApplied: true,
+                    proxySource: source,
+                    proxy,
+                    note: "attached proxy to cached config",
+                });
                 return cachedToResult(withProxy);
             }
             catch (err) {
@@ -12145,11 +12137,18 @@ async function generateTGConfig(mobile, ttl = CONFIG_TTL_SECONDS) {
         }
         if (!proxiesEnabled && cached.proxy) {
             const { proxy: _, ...withoutProxy } = cached;
+            logResolvedConfig(mobile, {
+                cacheHit: true,
+                proxyEnabled: false,
+                proxyApplied: false,
+                proxySource: "config_cache_stripped",
+                note: "cached proxy stripped because PROXY_ENABLED is false",
+            });
             return cachedToResult(withoutProxy);
         }
         if (proxiesEnabled && cached.proxy) {
             try {
-                const currentProxy = await getProxyForMobile(mobile);
+                const { proxy: currentProxy } = await _resolveProxyWithSource(mobile);
                 const cachedKey = `${cached.proxy.ip}:${cached.proxy.port}`;
                 const mapKey = `${currentProxy.ip}:${currentProxy.port}`;
                 if (cachedKey !== mapKey) {
@@ -12160,18 +12159,62 @@ async function generateTGConfig(mobile, ttl = CONFIG_TTL_SECONDS) {
                     catch { }
                     logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
                     _registerMobile(mobile, currentProxy);
+                    logResolvedConfig(mobile, {
+                        cacheHit: true,
+                        proxyEnabled: true,
+                        proxyApplied: true,
+                        proxySource: "proxy_map_reconciled",
+                        proxy: currentProxy,
+                        note: `reconciled cached proxy ${cachedKey} -> ${mapKey}`,
+                    });
                     return cachedToResult(reconciled);
                 }
+                logResolvedConfig(mobile, {
+                    cacheHit: true,
+                    proxyEnabled: true,
+                    proxyApplied: true,
+                    proxySource: "config_cache",
+                    proxy: cached.proxy,
+                    note: "cached config proxy matches sticky proxy mapping",
+                });
             }
-            catch { }
+            catch {
+                logResolvedConfig(mobile, {
+                    cacheHit: true,
+                    proxyEnabled: true,
+                    proxyApplied: true,
+                    proxySource: "config_cache_fallback",
+                    proxy: cached.proxy,
+                    note: "proxy map lookup failed; using cached proxy from config",
+                });
+            }
             _registerMobile(mobile, cached.proxy);
+            if (!cached.proxy) {
+                logResolvedConfig(mobile, {
+                    cacheHit: true,
+                    proxyEnabled: true,
+                    proxyApplied: false,
+                    proxySource: "none",
+                });
+            }
+            return cachedToResult(cached);
         }
+        logResolvedConfig(mobile, {
+            cacheHit: true,
+            proxyEnabled: proxiesEnabled,
+            proxyApplied: false,
+            proxySource: "none",
+            note: "cached config without proxy",
+        });
         return cachedToResult(cached);
     }
     let proxy;
+    let proxySource = "none";
     if (proxiesEnabled) {
         try {
-            proxy = await getProxyForMobile(mobile);
+            const resolved = await _resolveProxyWithSource(mobile);
+            proxy = resolved.proxy;
+            proxySource = resolved.source;
         }
         catch (err) {
             logger.warn("No proxy available — proceeding without", { mobile, error: err.message });
@@ -12191,6 +12234,13 @@ async function generateTGConfig(mobile, ttl = CONFIG_TTL_SECONDS) {
         system: realisticConfig.systemVersion,
         app: realisticConfig.appVersion,
         proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none",
+    });
+    logResolvedConfig(mobile, {
+        cacheHit: false,
+        proxyEnabled: proxiesEnabled,
+        proxyApplied: Boolean(proxy),
+        proxySource: proxy ? proxySource : "none",
+        proxy,
     });
     return cachedToResult(toStore);
 }
@@ -30487,9 +30537,10 @@ class BaseClientService {
                     this.removeFromLeaveMap(mobile);
                 }
                 const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                await client.leaveChannels(channelsToProcess);
-                const leftCount = channelsToProcess.length;
-                this.logger.debug(`${mobile} left ${leftCount} channels successfully`);
+                const leaveResult = await client.leaveChannels(channelsToProcess);
+                const leftCount = leaveResult?.successCount ?? channelsToProcess.length;
+                const skippedCount = leaveResult?.skipCount ?? 0;
+                this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
                 if (leftCount > 0) {
                     try {
                         await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });
@@ -39684,7 +39735,9 @@ RedisClient.instance = null;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.channelInfo = channelInfo;
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const parseError_1 = __webpack_require__(/*! ../parseError */ "./src/utils/parseError.ts");
+const dialog_chat_utils_1 = __webpack_require__(/*! ./dialog-chat-utils */ "./src/utils/telegram-utils/dialog-chat-utils.ts");
 async function channelInfo(client, sendIds = false) {
     if (!client)
         throw new Error('Client is not initialized');
@@ -39696,16 +39749,21 @@ async function channelInfo(client, sendIds = false) {
     for await (const dialog of client.iterDialogs({ limit: 1500 })) {
         if (dialog.isChannel || dialog.isGroup) {
             try {
-                const chatEntity = dialog.entity.toJSON();
-                const { broadcast, defaultBannedRights, id } = chatEntity;
+                const entity = dialog.entity;
+                if (!(0, dialog_chat_utils_1.isChannelOrGroupEntity)(entity)) {
+                    continue;
+                }
+                const broadcast = entity instanceof telegram_1.Api.Channel ? entity.broadcast : false;
+                const defaultBannedRights = 'defaultBannedRights' in entity ? entity.defaultBannedRights : undefined;
+                const id = (0, dialog_chat_utils_1.normalizeChatId)(entity.id.toString());
                 totalCount++;
                 if (!broadcast && !defaultBannedRights?.sendMessages) {
                     canSendTrueCount++;
-                    channelArray.push(id.toString()?.replace(/^-100/, ""));
+                    channelArray.push(id);
                 }
                 else {
                     canSendFalseCount++;
-                    canSendFalseChats.push(id.toString()?.replace(/^-100/, ""));
+                    canSendFalseChats.push(id);
                 }
             }
             catch (error) {
@@ -39721,6 +39779,32 @@ async function channelInfo(client, sendIds = false) {
         ids: sendIds ? channelArray : [],
         canSendFalseChats
     };
+}
+
+
+/***/ },
+
+/***/ "./src/utils/telegram-utils/dialog-chat-utils.ts"
+/*!*******************************************************!*\
+  !*** ./src/utils/telegram-utils/dialog-chat-utils.ts ***!
+  \*******************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeChatId = normalizeChatId;
+exports.expandChatIdVariants = expandChatIdVariants;
+exports.isChannelOrGroupEntity = isChannelOrGroupEntity;
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
+function normalizeChatId(id) {
+    return id.toString().replace(/^-100/, '');
+}
+function expandChatIdVariants(id) {
+    const normalized = normalizeChatId(id);
+    return [normalized, `-100${normalized}`];
+}
+function isChannelOrGroupEntity(entity) {
+    return entity instanceof telegram_1.Api.Channel || entity instanceof telegram_1.Api.Chat;
 }
 
 

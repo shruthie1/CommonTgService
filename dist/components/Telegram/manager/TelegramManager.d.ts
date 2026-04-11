@@ -6,6 +6,7 @@ import { EntityLike } from 'telegram/define';
 import { ActiveClientSetup, GroupCreationResult, PaginatedGroupMembers, AdminInfo, BannedUserInfo, SessionInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams, SelfMessagesInfo, TopPrivateChatsResult, ChatStatistics, MessageStats, ChatListResult, ContactStats, ImportContactResult, BlockListResult, ChatFolder, PrivacyBatchSettings, MessageScheduleOptions, EditMessageOptions, MediaBatchOptions, AlbumSendResult, VoiceMessageOptions, BotCreationResult, ChatSettingsUpdate, GroupSettingsUpdate, TerminateSessionOptions, DeleteChatParams, BotCreationOptions, ChatFolderCreateOptions, ForwardResult, PaginatedMessages, ChatMediaCounts, ChatCallHistory, CallHistoryEntry, PerChatCallStats, MediaAlbumOptions, GroupOptions } from './types';
 import { SearchMessagesDto, SearchMessagesResponseDto } from '../dto/message-search.dto';
 import { SendTgMessageDto } from '../dto/send-message.dto';
+import * as channelOps from './channel-operations';
 import * as chatOps from './chat-operations';
 import { IterDialogsParams } from 'telegram/client/dialogs';
 import { Dialog } from 'telegram/tl/custom/dialog';
@@ -114,7 +115,7 @@ declare class TelegramManager {
     archiveChat(id: bigInt.BigInteger, accessHash: bigInt.BigInteger): Promise<Api.TypeUpdates>;
     forwardMedia(channel: string, fromChatId: string): Promise<void>;
     joinChannel(entity: EntityLike): Promise<Api.TypeUpdates>;
-    leaveChannels(chats: string[]): Promise<void>;
+    leaveChannels(chats: string[]): Promise<channelOps.LeaveChannelsResult>;
     getGrpMembers(entity: EntityLike, offset?: number, limit?: number): Promise<PaginatedGroupMembers>;
     addGroupMembers(groupId: string, members: string[]): Promise<void>;
     removeGroupMembers(groupId: string, members: string[]): Promise<void>;
