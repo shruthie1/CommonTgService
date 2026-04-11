@@ -158,8 +158,10 @@ class BaseClientService {
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
             updateData.warmupPhase = inferredPhase;
         }
-        if (!doc.enrolledAt && !doc.createdAt) {
-            updateData.enrolledAt = this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
+        if (!doc.enrolledAt) {
+            updateData.enrolledAt = doc.createdAt
+                ? new Date(doc.createdAt)
+                : this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
         }
         if (Object.keys(updateData).length === 0) {
             return doc;
@@ -194,7 +196,8 @@ class BaseClientService {
         ];
         this.MAX_FAILED_ATTEMPTS = 3;
         this.FAILURE_RESET_DAYS = 7;
-        this.MAX_UPDATES_PER_CYCLE = 5;
+        this.FAILURE_RETRY_BACKOFF_HOURS = 24;
+        this.MAX_UPDATES_PER_CYCLE = 15;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -566,20 +569,18 @@ class BaseClientService {
                         this.logger.info(`Using assigned profile pic URLs for ${doc.mobile}`, { urlCount: assignedPhotoUrls.length });
                         updateCount = await this.uploadProfilePhotosFromUrls(telegramClient, doc, assignedPhotoUrls);
                     }
-                    else {
-                        this.logger.warn(`Skipping profile photo update for ${doc.mobile}: assigned profile pic pool is missing or too small`, {
-                            assignedCount: assignedPhotoUrls.length,
-                        });
-                    }
                     if (updateCount === 0) {
-                        this.logger.warn(`No profile photos uploaded from assigned profile pic URLs for ${doc.mobile}, skipping profilePicsUpdatedAt stamp`);
-                        await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(50000, 5000, 40000, 60000));
-                        return 0;
+                        this.logger.warn(`Could not upload profile photos for ${doc.mobile} — marking photo step done to unblock pipeline`);
                     }
                 }
+                if (updateCount === 0 && photos.photos.length >= 2) {
+                    this.logger.debug(`${doc.mobile} already has ${photos.photos.length} photos, marking photo step done`);
+                }
+                updateCount = Math.max(updateCount, 1);
             }
             else {
-                this.logger.debug(`Skipping profile photo update for ${doc.mobile}: no assigned profile pic URLs available`);
+                this.logger.warn(`No assigned profile pics for ${doc.mobile} — marking photo step done to unblock pipeline`);
+                updateCount = 1;
             }
             await this.update(doc.mobile, {
                 ...(updateCount > 0 ? { profilePicsUpdatedAt: new Date() } : {}),
@@ -737,22 +738,40 @@ class BaseClientService {
             const failedAttempts = doc.failedUpdateAttempts || 0;
             const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
             if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+                const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+                if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
+                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
+                    return { updateCount: 0 };
+                }
                 this.logger.log(`Resetting failure count for ${doc.mobile}`);
                 await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
                 doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
             }
             else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                return { updateCount: 0 };
+                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
+                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
+                }
+                else {
+                    this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
+                    return { updateCount: 0 };
+                }
             }
             if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
                 this.logger.debug(`Client ${doc.mobile} on cooldown`);
                 return { updateCount: 0 };
             }
             const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            if (lastUsed > 0) {
+            const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+            if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
                 await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used, assuming configured`);
+                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
                 return { updateCount: 0, updateSummary: 'backfill_timestamps' };
             }
             const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);

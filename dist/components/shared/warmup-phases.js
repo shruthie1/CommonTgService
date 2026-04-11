@@ -87,7 +87,49 @@ function getWarmupPhaseAction(doc, now) {
         }
         return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
     }
+    const missedSettlingAction = () => {
+        const privacyDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
+        const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
+        const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
+        if (!privacyDone)
+            return { phase, action: 'set_privacy', organicIntensity: 'full' };
+        if (!twoFADone && daysSince(doc.privacyUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'set_2fa', organicIntensity: 'full' };
+        }
+        if (!twoFADone)
+            return { phase, action: 'organic_only', organicIntensity: 'medium' };
+        if (!authsRemoved && daysSince(doc.twoFASetAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'remove_other_auths', organicIntensity: 'medium' };
+        }
+        if (!authsRemoved)
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        return null;
+    };
+    const missedIdentityAction = () => {
+        const photosDeleted = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
+        const nameBioDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
+        const usernameDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (!photosDeleted)
+            return { phase, action: 'delete_photos', organicIntensity: 'medium' };
+        if (!nameBioDone && daysSince(doc.profilePicsDeletedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'update_name_bio', organicIntensity: 'medium' };
+        }
+        if (!nameBioDone)
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            return { phase, action: 'update_username', organicIntensity: 'medium' };
+        }
+        if (!usernameDone)
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        return null;
+    };
     if (phase === exports.WarmupPhase.GROWING) {
+        const settlingCatchup = missedSettlingAction();
+        if (settlingCatchup)
+            return settlingCatchup;
+        const identityCatchup = missedIdentityAction();
+        if (identityCatchup)
+            return identityCatchup;
         const channels = doc.channels || 0;
         if (channels < exports.MIN_CHANNELS_FOR_MATURING) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
@@ -105,6 +147,12 @@ function getWarmupPhaseAction(doc, now) {
         return { phase: exports.WarmupPhase.GROWING, action: 'organic_only', organicIntensity: 'light' };
     }
     if (phase === exports.WarmupPhase.MATURING) {
+        const settlingCatchup = missedSettlingAction();
+        if (settlingCatchup)
+            return settlingCatchup;
+        const identityCatchup = missedIdentityAction();
+        if (identityCatchup)
+            return identityCatchup;
         const hasPhoto = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) > 0;
         if (!hasPhoto) {
             return { phase: exports.WarmupPhase.MATURING, action: 'upload_photo', organicIntensity: 'full' };

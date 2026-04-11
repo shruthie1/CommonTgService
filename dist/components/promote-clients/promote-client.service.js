@@ -327,7 +327,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             query.clientId = clientId;
         const eligible = await this.promoteClientModel
             .find(query)
-            .sort({ channels: 1 })
+            .sort({ channels: -1 })
             .limit(this.config.maxMapSize)
             .exec();
         let added = 0;
@@ -660,11 +660,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            const warmupBoost = warmupPhase === base_client_service_1.WarmupPhase.READY
-                ? 20000
-                : warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED
-                    ? 0
-                    : 5000;
+            const phaseBoost = {
+                [base_client_service_1.WarmupPhase.READY]: 25000,
+                [base_client_service_1.WarmupPhase.MATURING]: 15000,
+                [base_client_service_1.WarmupPhase.GROWING]: 10000,
+                [base_client_service_1.WarmupPhase.IDENTITY]: 7000,
+                [base_client_service_1.WarmupPhase.SETTLING]: 5000,
+                [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
+                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
             const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
