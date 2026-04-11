@@ -2,11 +2,16 @@ import { Api } from 'telegram';
 import bigInt from 'big-integer';
 import { EntityLike } from 'telegram/define';
 import { TgContext, GroupCreationResult, PaginatedGroupMembers, AdminInfo, BannedUserInfo, GroupSettingsUpdate, GroupOptions } from './types';
+export interface LeaveChannelsResult {
+    successCount: number;
+    skipCount: number;
+    totalCount: number;
+}
 export declare function createGroup(ctx: TgContext): Promise<GroupCreationResult>;
 export declare function archiveChat(ctx: TgContext, id: bigInt.BigInteger, accessHash: bigInt.BigInteger): Promise<Api.TypeUpdates>;
 export declare function forwardMedia(ctx: TgContext, channel: string, fromChatId: string): Promise<void>;
 export declare function joinChannel(ctx: TgContext, entity: EntityLike): Promise<Api.TypeUpdates>;
-export declare function leaveChannels(ctx: TgContext, chats: string[]): Promise<void>;
+export declare function leaveChannels(ctx: TgContext, chats: string[]): Promise<LeaveChannelsResult>;
 export declare function getGrpMembers(ctx: TgContext, entity: EntityLike, offset?: number, limit?: number): Promise<PaginatedGroupMembers>;
 export declare function addGroupMembers(ctx: TgContext, groupId: string, members: string[]): Promise<void>;
 export declare function removeGroupMembers(ctx: TgContext, groupId: string, members: string[]): Promise<void>;

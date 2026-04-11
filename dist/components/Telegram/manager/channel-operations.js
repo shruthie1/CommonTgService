@@ -27,6 +27,7 @@ const parseError_1 = require("../../../utils/parseError");
 const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentError"));
 const helpers_1 = require("./helpers");
 const connection_manager_1 = require("../utils/connection-manager");
+const dialog_chat_utils_1 = require("../../../utils/telegram-utils/dialog-chat-utils");
 async function createGroup(ctx) {
     const groupName = 'Saved Messages';
     const groupDescription = ctx.phoneNumber;
@@ -137,49 +138,21 @@ async function leaveChannels(ctx, chats) {
     ctx.logger.info(ctx.phoneNumber, 'ChatsLength: ', chats.length);
     if (chats.length === 0) {
         ctx.logger.info(ctx.phoneNumber, 'No chats to leave');
-        return;
+        return { successCount: 0, skipCount: 0, totalCount: 0 };
     }
-    const chatsToLeave = new Set();
-    for (const id of chats) {
-        chatsToLeave.add(id);
-        if (id.startsWith('-100')) {
-            chatsToLeave.add(id.substring(4));
-        }
-        else {
-            chatsToLeave.add(`-100${id}`);
-        }
-    }
+    const requestedIds = chats.map((id) => (0, dialog_chat_utils_1.normalizeChatId)(id));
+    const requestedIdSet = new Set(requestedIds);
     const entityMap = new Map();
-    let foundCount = 0;
     try {
         for await (const dialog of ctx.client.iterDialogs({})) {
             const entity = dialog.entity;
-            if (entity instanceof telegram_1.Api.Channel || entity instanceof telegram_1.Api.Chat) {
-                const entityId = entity.id.toString();
-                if (chatsToLeave.has(entityId)) {
-                    entityMap.set(entityId, { entity, dialog });
-                    foundCount++;
-                    if (foundCount >= chats.length) {
-                        ctx.logger.debug(ctx.phoneNumber, `Found all ${foundCount} chats, stopping iteration early`);
+            if ((0, dialog_chat_utils_1.isChannelOrGroupEntity)(entity)) {
+                const normalizedId = (0, dialog_chat_utils_1.normalizeChatId)(entity.id.toString());
+                if (requestedIdSet.has(normalizedId) && !entityMap.has(normalizedId)) {
+                    entityMap.set(normalizedId, { entity, dialog });
+                    if (entityMap.size >= requestedIdSet.size) {
+                        ctx.logger.debug(ctx.phoneNumber, `Found all ${entityMap.size} chats, stopping iteration early`);
                         break;
-                    }
-                }
-                if (entityId.startsWith('-100')) {
-                    const shortId = entityId.substring(4);
-                    if (chatsToLeave.has(shortId) && !entityMap.has(shortId)) {
-                        entityMap.set(shortId, { entity, dialog });
-                        foundCount++;
-                        if (foundCount >= chats.length)
-                            break;
-                    }
-                }
-                else {
-                    const longId = `-100${entityId}`;
-                    if (chatsToLeave.has(longId) && !entityMap.has(longId)) {
-                        entityMap.set(longId, { entity, dialog });
-                        foundCount++;
-                        if (foundCount >= chats.length)
-                            break;
                     }
                 }
             }
@@ -192,15 +165,14 @@ async function leaveChannels(ctx, chats) {
     }
     if (entityMap.size === 0) {
         ctx.logger.warn(ctx.phoneNumber, 'No matching chats found in dialogs to leave');
-        return;
+        return { successCount: 0, skipCount: chats.length, totalCount: chats.length };
     }
     const me = await ctx.client.getMe();
     let successCount = 0;
     let skipCount = 0;
     for (const id of chats) {
         try {
-            const entityData = entityMap.get(id) ||
-                entityMap.get(id.startsWith('-100') ? id.substring(4) : `-100${id}`);
+            const entityData = entityMap.get((0, dialog_chat_utils_1.normalizeChatId)(id));
             if (!entityData) {
                 ctx.logger.warn(ctx.phoneNumber, `Chat ${id} not found in dialogs, skipping`);
                 skipCount++;
@@ -246,6 +218,7 @@ async function leaveChannels(ctx, chats) {
         }
     }
     ctx.logger.info(ctx.phoneNumber, `Leaving Channels/Groups: Completed! Success: ${successCount}, Skipped: ${skipCount}, Total: ${chats.length}`);
+    return { successCount, skipCount, totalCount: chats.length };
 }
 async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
     try {
