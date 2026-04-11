@@ -6,6 +6,10 @@ export const INTIMATE_KEYWORDS = [
   'fuck', 
   'boobs',
   'dick',
+  'password',
+  'email',
+  'otp',
+  'username',
   'pussy',
   'hug'
 ];
