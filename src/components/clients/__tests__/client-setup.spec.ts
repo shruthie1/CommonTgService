@@ -9,7 +9,6 @@ describe('ClientService session separation safeguards', () => {
     }) {
         return new ClientService(
             {} as any,
-            {} as any,
             overrides?.telegramService || { createNewSession: jest.fn() },
             overrides?.bufferClientService || {
                 executeQuery: jest.fn(),
