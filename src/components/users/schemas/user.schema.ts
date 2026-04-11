@@ -1,7 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Document } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
-import { PerChatCallStats } from '../../Telegram/manager/types';
 
 export type UserDocument = User & Document;
 
@@ -10,125 +9,92 @@ export type UserDocument = User & Document;
   toJSON: {
     virtuals: true,
     transform: (doc, ret) => {
-      ret['id'] = ret._id;
       delete ret._id;
       return ret;
     },
   },
 })
 export class User {
-  @ApiProperty()
+  // --- Identity ---
+  @ApiProperty({ description: 'Mobile number' })
   @Prop({ required: true, unique: true })
   mobile: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Telegram session string' })
   @Prop({ required: true, unique: true })
   session: string;
 
-  @ApiProperty()
-  @Prop()
-  firstName: string;
-
-  @ApiProperty({ required: false })
-  @Prop()
-  lastName: string | null;
-
-  @ApiProperty({ required: false })
-  @Prop()
-  username: string | null;
-
-  @ApiProperty()
-  @Prop()
-  channels: number;
-
-  @ApiProperty()
-  @Prop()
-  personalChats: number;
-
-  @ApiProperty()
-  @Prop()
-  demoGiven: boolean;
-
-  @ApiProperty()
-  @Prop()
-  msgs: number;
-
-  @ApiProperty()
-  @Prop()
-  totalChats: number;
-
-  @ApiProperty()
-  @Prop()
-  lastActive: string;
-
-  @ApiProperty()
+  @ApiProperty({ description: 'Telegram user ID' })
   @Prop({ required: true, unique: true })
   tgId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'First name' })
   @Prop()
-  movieCount: number;
+  firstName: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Last name', required: false })
   @Prop()
-  photoCount: number;
+  lastName: string | null;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Telegram username', required: false })
   @Prop()
-  videoCount: number;
+  username: string | null;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ description: 'Gender', required: false })
   @Prop()
   gender: string | null;
 
+  // --- Account state ---
   @Prop({ required: false, type: Boolean })
-  twoFA: boolean = false
+  twoFA: boolean = false;
 
   @Prop({ required: false, type: Boolean, default: false })
-  expired: boolean = false
+  expired: boolean = false;
 
   @Prop({ required: false })
-  password: string = null
+  password: string = null;
 
-  @ApiProperty()
-  @Prop()
-  otherPhotoCount: number;
-
-  @ApiProperty()
-  @Prop()
-  otherVideoCount: number;
-
-  @ApiProperty()
-  @Prop()
-  ownPhotoCount: number;
-
-  @ApiProperty()
-  @Prop()
-  ownVideoCount: number;
-
-  @ApiProperty()
-  @Prop()
-  contacts: number;
-
-  @ApiProperty()
+  // --- Operational flags ---
+  @ApiProperty({ description: 'Starred for manual review' })
   @Prop({ required: false, type: Boolean, default: false })
   starred: boolean = false;
 
-  @ApiProperty()
-  @Prop({ required: false, type: Number, default: 0 })
-  score: number = 0;
+  @ApiProperty({ description: 'Whether demo was given' })
+  @Prop()
+  demoGiven: boolean;
 
-  @ApiProperty()
+  // --- Account-level stats ---
+  @ApiProperty({ description: 'Account statistics', required: false })
   @Prop({
     type: mongoose.Schema.Types.Mixed,
     default: {
-      totalCalls: 0,
-      outgoing: 0,
-      incoming: 0,
-      video: 0,
-      audio: 0,
-      chats: [],
+      channels: 0, personalChats: 0, totalChats: 0, contacts: 0, msgs: 0,
+      photoCount: 0, videoCount: 0, movieCount: 0,
+      ownPhotoCount: 0, otherPhotoCount: 0, ownVideoCount: 0, otherVideoCount: 0,
+      lastActive: null,
     },
+  })
+  stats: {
+    channels: number;
+    personalChats: number;
+    totalChats: number;
+    contacts: number;
+    msgs: number;
+    photoCount: number;
+    videoCount: number;
+    movieCount: number;
+    ownPhotoCount: number;
+    otherPhotoCount: number;
+    ownVideoCount: number;
+    otherVideoCount: number;
+    lastActive: string | null;
+  };
+
+  // --- Call summary (account-level) ---
+  @ApiProperty({ description: 'Call statistics', required: false })
+  @Prop({
+    type: mongoose.Schema.Types.Mixed,
+    default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
   })
   calls: {
     totalCalls: number;
@@ -136,9 +102,43 @@ export class User {
     incoming: number;
     video: number;
     audio: number;
-    chats: (PerChatCallStats & { chatId: string })[];
   };
 
+  // --- Relationship scoring ---
+  @ApiProperty({ description: 'Relationship analysis', required: false })
+  @Prop({
+    type: mongoose.Schema.Types.Mixed,
+    default: { score: 0, bestScore: 0, computedAt: null, top: [] },
+  })
+  relationships: {
+    score: number;
+    bestScore: number;
+    computedAt: Date | null;
+    top: Array<{
+      chatId: string;
+      name: string;
+      username: string | null;
+      phone: string | null;
+      messages: number;
+      mediaCount: number;
+      voiceCount: number;
+      intimateMessageCount: number;
+      calls: {
+        total: number;
+        incoming: number;
+        videoCalls: number;
+        avgDuration: number;
+        totalDuration: number;
+      };
+      commonChats: number;
+      isMutualContact: boolean;
+      lastMessageDate: string | null;
+      score: number;
+    }>;
+  };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+UserSchema.index({ 'relationships.bestScore': -1 });
+UserSchema.index({ 'stats.lastActive': -1 });
