@@ -1,42 +1,63 @@
 import mongoose, { Document } from 'mongoose';
-import { PerChatCallStats } from '../../Telegram/manager/types';
 export type UserDocument = User & Document;
 export declare class User {
     mobile: string;
     session: string;
+    tgId: string;
     firstName: string;
     lastName: string | null;
     username: string | null;
-    channels: number;
-    personalChats: number;
-    demoGiven: boolean;
-    msgs: number;
-    totalChats: number;
-    lastActive: string;
-    tgId: string;
-    movieCount: number;
-    photoCount: number;
-    videoCount: number;
     gender: string | null;
     twoFA: boolean;
     expired: boolean;
     password: string;
-    otherPhotoCount: number;
-    otherVideoCount: number;
-    ownPhotoCount: number;
-    ownVideoCount: number;
-    contacts: number;
     starred: boolean;
-    score: number;
+    demoGiven: boolean;
+    channels: number;
+    personalChats: number;
+    totalChats: number;
+    contacts: number;
+    msgs: number;
+    photoCount: number;
+    videoCount: number;
+    movieCount: number;
+    ownPhotoCount: number;
+    otherPhotoCount: number;
+    ownVideoCount: number;
+    otherVideoCount: number;
+    lastActive: string;
     calls: {
         totalCalls: number;
         outgoing: number;
         incoming: number;
         video: number;
         audio: number;
-        chats: (PerChatCallStats & {
+    };
+    relationships: {
+        score: number;
+        bestScore: number;
+        computedAt: Date | null;
+        top: Array<{
             chatId: string;
-        })[];
+            name: string;
+            username: string | null;
+            phone: string | null;
+            messages: number;
+            mediaCount: number;
+            voiceCount: number;
+            intimateMessageCount: number;
+            calls: {
+                total: number;
+                incoming: number;
+                videoCalls: number;
+                avgDuration: number;
+                totalDuration: number;
+            };
+            commonChats: number;
+            isMutualContact: boolean;
+            lastMessageDate: string | null;
+            score: number;
+        }>;
     };
 }
 export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any, any, any, (mongoose.Document<unknown, any, User, any, mongoose.DefaultSchemaOptions> & User & {
@@ -76,6 +97,15 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
+    tgId?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
     firstName?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
@@ -95,96 +125,6 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         id: string;
     }>;
     username?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    channels?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    personalChats?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    demoGiven?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    msgs?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    totalChats?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    lastActive?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    tgId?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    movieCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    photoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
-        id: string;
-    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
-        _id: mongoose.Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & {
-        id: string;
-    }>;
-    videoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -229,7 +169,7 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
-    otherPhotoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+    starred?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -238,7 +178,7 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
-    otherVideoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+    demoGiven?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -247,7 +187,7 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
-    ownPhotoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+    channels?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -256,7 +196,16 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
-    ownVideoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+    personalChats?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    totalChats?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -274,7 +223,7 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
-    starred?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
+    msgs?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -283,7 +232,70 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
     }, "id"> & {
         id: string;
     }>;
-    score?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+    photoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    videoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    movieCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    ownPhotoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    otherPhotoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    ownVideoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    otherVideoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    lastActive?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
@@ -298,9 +310,40 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         incoming: number;
         video: number;
         audio: number;
-        chats: (PerChatCallStats & {
+    }, User, mongoose.Document<unknown, {}, User, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    relationships?: mongoose.SchemaDefinitionProperty<{
+        score: number;
+        bestScore: number;
+        computedAt: Date | null;
+        top: Array<{
             chatId: string;
-        })[];
+            name: string;
+            username: string | null;
+            phone: string | null;
+            messages: number;
+            mediaCount: number;
+            voiceCount: number;
+            intimateMessageCount: number;
+            calls: {
+                total: number;
+                incoming: number;
+                videoCalls: number;
+                avgDuration: number;
+                totalDuration: number;
+            };
+            commonChats: number;
+            isMutualContact: boolean;
+            lastMessageDate: string | null;
+            score: number;
+        }>;
     }, User, mongoose.Document<unknown, {}, User, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {

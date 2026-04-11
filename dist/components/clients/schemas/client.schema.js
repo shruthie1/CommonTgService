@@ -16,117 +16,117 @@ let Client = class Client {
 };
 exports.Client = Client;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'paid_giirl_shruthiee', description: 'Channel link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Channel link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "channelLink", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Database collection name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Database collection name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "dbcoll", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'PaidGirl.netlify.app/Shruthi1', description: 'Link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "link", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Shruthi Reddy', description: 'Name of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Display name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'mobile number of the user' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], Client.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Ajtdmwajt1@', description: 'Password of the user' }),
+    (0, swagger_1.ApiProperty)({ description: '2FA password' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthi1.glitch.me', description: 'Repl link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'tg-aut repl link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "repl", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthiprom0101.glitch.me', description: 'Promotion Repl link of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Promote repl link' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "promoteRepl", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==', description: 'Session token' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram session string' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram username' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID of the user' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique client identifier' }),
+    (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], Client.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'https://shruthi1.glitch.me/exit', description: 'Deployment key URL' }),
+    (0, swagger_1.ApiProperty)({ description: 'Deploy restart URL' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "deployKey", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'booklet_10', description: 'Product associated with the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Product identifier' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'paytmqr281005050101xv6mfg02t4m9@paytm', description: 'Paytm QR ID of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paytm QR ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "qrId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'myred1808@postbank', description: 'Google Pay ID of the user' }),
+    (0, swagger_1.ApiProperty)({ description: 'Google Pay ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ['192.168.1.100:8080', '192.168.1.101:8080'], description: 'Dedicated proxy IPs assigned to this client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Dedicated proxy IPs', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "dedicatedIps", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Preferred country for IP assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Preferred IP country (ISO 2-letter)', required: false }),
     (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Client.prototype, "preferredIpCountry", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to auto-assign IPs to mobile numbers', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Auto-assign IPs to mobile numbers', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], Client.prototype, "autoAssignIps", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of first names for persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'First name pool for persona assignment', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "firstNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for buffer-client persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last name pool for buffer clients', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "bufferLastNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of last names for promote-client persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Last name pool for promote clients', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "promoteLastNames", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of bios for persona assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Bio pool for persona assignment', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "bios", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool of profile pic URLs', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile pic URL pool', required: false }),
     (0, mongoose_1.Prop)({ required: false, type: [String], default: [] }),
     __metadata("design:type", Array)
 ], Client.prototype, "profilePics", void 0);

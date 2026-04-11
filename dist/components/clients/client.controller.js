@@ -20,11 +20,7 @@ const create_client_dto_1 = require("./dto/create-client.dto");
 const client_schema_1 = require("./schemas/client.schema");
 const search_client_dto_1 = require("./dto/search-client.dto");
 const update_client_dto_1 = require("./dto/update-client.dto");
-const enhanced_search_client_dto_1 = require("./dto/enhanced-search-client.dto");
 const execute_client_query_dto_1 = require("./dto/execute-client-query.dto");
-const promote_mobile_assignment_dto_1 = require("./dto/promote-mobile-assignment.dto");
-const promote_mobile_search_query_dto_1 = require("./dto/promote-mobile-search-query.dto");
-const client_response_dto_1 = require("./dto/client-response.dto");
 const decorators_1 = require("../../decorators");
 const interceptors_1 = require("../../interceptors");
 let ClientController = class ClientController {
@@ -40,23 +36,6 @@ let ClientController = class ClientController {
     }
     async search(query) {
         return await this.clientService.search(this.sanitizeQuery(query));
-    }
-    async searchByPromoteMobile(query) {
-        const result = await this.clientService.enhancedSearch({ promoteMobileNumber: query.mobile });
-        return {
-            clients: result.clients,
-            matches: result.promoteMobileMatches || [],
-            searchedMobile: query.mobile,
-        };
-    }
-    async enhancedSearch(query) {
-        const result = await this.clientService.enhancedSearch(this.sanitizeQuery(query));
-        return {
-            clients: result.clients,
-            searchType: result.searchType,
-            promoteMobileMatches: result.promoteMobileMatches,
-            totalResults: result.clients.length,
-        };
     }
     async updateClient(clientId) {
         const updated = await this.clientService.updateClient(clientId, '', false, true);
@@ -90,19 +69,13 @@ let ClientController = class ClientController {
         const { query, sort, limit, skip } = requestBody;
         return await this.clientService.executeQuery(query, sort, limit, skip);
     }
-    async addPromoteMobile(clientId, body) {
-        return this.clientService.addPromoteMobile(clientId, body.mobileNumber);
-    }
-    async removePromoteMobile(clientId, body) {
-        return await this.clientService.removePromoteMobile(clientId, body.mobileNumber);
-    }
 };
 exports.ClientController = ClientController;
 __decorate([
     (0, common_1.Post)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Create user data' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a client' }),
     (0, swagger_1.ApiBody)({ type: create_client_dto_1.CreateClientDto }),
-    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully created.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
@@ -110,49 +83,17 @@ __decorate([
 ], ClientController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)('search'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search user data' }),
-    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'dbcoll', required: false, description: 'Database collection name' }),
-    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
-    (0, swagger_1.ApiQuery)({ name: 'link', required: false, description: 'Client link' }),
-    (0, swagger_1.ApiResponse)({ description: 'Matching user data returned successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Search clients' }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "search", null);
 __decorate([
-    (0, common_1.Get)('search/promote-mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Search clients by promote mobile numbers' }),
-    (0, swagger_1.ApiQuery)({ name: 'mobile', required: true, description: 'Promote mobile number to search for' }),
-    (0, swagger_1.ApiResponse)({
-        description: 'Clients with matching promote mobiles returned successfully.',
-        type: client_response_dto_1.PromoteMobileSearchResponseDto,
-    }),
-    __param(0, (0, common_1.Query)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [promote_mobile_search_query_dto_1.PromoteMobileSearchQueryDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "searchByPromoteMobile", null);
-__decorate([
-    (0, common_1.Get)('search/enhanced'),
-    (0, swagger_1.ApiOperation)({ summary: 'Enhanced search with promote mobile support' }),
-    (0, swagger_1.ApiQuery)({ name: 'promoteMobileNumber', required: false, description: 'Promote mobile number to search for' }),
-    (0, swagger_1.ApiQuery)({ name: 'hasPromoteMobiles', required: false, description: 'Filter by clients that have promote mobiles (true/false)' }),
-    (0, swagger_1.ApiResponse)({
-        description: 'Enhanced search results with promote mobile context.',
-        type: client_response_dto_1.EnhancedClientSearchResponseDto,
-    }),
-    __param(0, (0, common_1.Query)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [enhanced_search_client_dto_1.EnhancedSearchClientDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "enhancedSearch", null);
-__decorate([
     (0, common_1.Get)('updateClient/:clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'Return the user data.', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh client profile on Telegram' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -162,8 +103,8 @@ __decorate([
     (0, common_1.Get)('maskedCls'),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data with masked fields' }),
-    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all clients (sensitive fields masked)' }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -172,9 +113,9 @@ __decorate([
     (0, common_1.Get)('maskedCls/:clientId'),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data with masked fields by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get client by ID (sensitive fields masked)' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -184,8 +125,8 @@ __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all user data' }),
-    (0, swagger_1.ApiResponse)({ description: 'All user data returned successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all clients' }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -193,7 +134,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':clientId/persona-pool'),
     (0, swagger_1.ApiOperation)({ summary: 'Get persona pool for a client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -201,9 +142,9 @@ __decorate([
 ], ClientController.prototype, "getPersonaPool", null);
 __decorate([
     (0, common_1.Get)(':clientId/existing-assignments'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get existing persona assignments for a client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiQuery)({ name: 'scope', required: false, enum: ['all', 'buffer', 'promote', 'activeClient'] }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get existing persona assignments' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiQuery)({ name: 'scope', required: false, enum: ['all', 'buffer', 'activeClient'] }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Query)('scope')),
     __metadata("design:type", Function),
@@ -212,9 +153,9 @@ __decorate([
 ], ClientController.prototype, "getExistingAssignments", null);
 __decorate([
     (0, common_1.Get)(':clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'User data returned successfully.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get client by ID' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -222,10 +163,10 @@ __decorate([
 ], ClientController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
     (0, swagger_1.ApiBody)({ type: update_client_dto_1.UpdateClientDto }),
-    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully updated.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -234,9 +175,9 @@ __decorate([
 ], ClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':clientId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID' }),
-    (0, swagger_1.ApiResponse)({ description: 'The user data has been successfully deleted.', type: client_schema_1.Client }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete client' }),
+    (0, swagger_1.ApiParam)({ name: 'clientId' }),
+    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -244,38 +185,14 @@ __decorate([
 ], ClientController.prototype, "remove", null);
 __decorate([
     (0, common_1.Post)('query'),
-    (0, swagger_1.ApiOperation)({ summary: 'Execute a custom MongoDB query' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),
     (0, swagger_1.ApiBody)({ type: execute_client_query_dto_1.ExecuteClientQueryDto }),
-    (0, swagger_1.ApiResponse)({ description: 'Query executed successfully.', type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [execute_client_query_dto_1.ExecuteClientQueryDto]),
     __metadata("design:returntype", Promise)
 ], ClientController.prototype, "executeQuery", null);
-__decorate([
-    (0, common_1.Patch)(':clientId/promoteMobile/add'),
-    (0, swagger_1.ApiOperation)({ summary: 'Add a mobile number as a promote mobile for a specific client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ type: promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto }),
-    (0, swagger_1.ApiResponse)({ description: 'Mobile number assigned as promote mobile successfully.', type: client_schema_1.Client }),
-    __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "addPromoteMobile", null);
-__decorate([
-    (0, common_1.Patch)(':clientId/promoteMobile/remove'),
-    (0, swagger_1.ApiOperation)({ summary: 'Remove a promote mobile assignment from a specific client' }),
-    (0, swagger_1.ApiParam)({ name: 'clientId', description: 'The unique identifier of the client' }),
-    (0, swagger_1.ApiBody)({ type: promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto }),
-    (0, swagger_1.ApiResponse)({ description: 'Promote mobile assignment removed successfully.', type: client_schema_1.Client }),
-    __param(0, (0, common_1.Param)('clientId')),
-    __param(1, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, promote_mobile_assignment_dto_1.PromoteMobileAssignmentDto]),
-    __metadata("design:returntype", Promise)
-], ClientController.prototype, "removePromoteMobile", null);
 exports.ClientController = ClientController = __decorate([
     (0, swagger_1.ApiTags)('Clients'),
     (0, common_1.Controller)('clients'),

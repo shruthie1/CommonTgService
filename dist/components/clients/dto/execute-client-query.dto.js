@@ -17,18 +17,18 @@ class ExecuteClientQueryDto {
 }
 exports.ExecuteClientQueryDto = ExecuteClientQueryDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ type: 'object', additionalProperties: true, example: { clientId: 'client-a' } }),
+    (0, swagger_1.ApiProperty)({ description: 'MongoDB filter object', type: 'object', additionalProperties: true }),
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], ExecuteClientQueryDto.prototype, "query", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ type: 'object', additionalProperties: true, example: { clientId: 1 } }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sort specification', type: 'object', additionalProperties: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsObject)(),
     __metadata("design:type", Object)
 ], ExecuteClientQueryDto.prototype, "sort", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 20, minimum: 1 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Max results to return', minimum: 1 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),
@@ -36,7 +36,7 @@ __decorate([
     __metadata("design:type", Number)
 ], ExecuteClientQueryDto.prototype, "limit", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ example: 0, minimum: 0 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Results to skip', minimum: 0 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsInt)(),

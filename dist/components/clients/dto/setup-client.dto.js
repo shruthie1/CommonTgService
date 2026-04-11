@@ -23,36 +23,27 @@ class SetupClientQueryDto {
 }
 exports.SetupClientQueryDto = SetupClientQueryDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        type: Number,
-        default: 0
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Days to push availability forward', default: 0 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SetupClientQueryDto.prototype, "days", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        default: true
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Archive the old client back to buffer pool', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(toBoolean),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "archiveOld", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        type: String
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Specific mobile to use as replacement' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SetupClientQueryDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({
-        default: true
-    }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Run privacy/cleanup formalities on old account', default: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Transform)(toBoolean),
     (0, class_validator_1.IsBoolean)(),

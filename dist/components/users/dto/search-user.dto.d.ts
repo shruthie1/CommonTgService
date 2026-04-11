@@ -7,20 +7,7 @@ export declare class SearchUserDto {
     firstName?: string;
     lastName?: string;
     username?: string;
-    channels?: number;
-    personalChats?: number;
-    demoGiven?: boolean;
-    msgs?: number;
-    totalChats?: number;
-    lastActive?: string;
-    movieCount?: number;
-    photoCount?: number;
-    videoCount?: number;
     gender?: string;
-    otherPhotoCount?: number;
-    otherVideoCount?: number;
-    ownPhotoCount?: number;
-    ownVideoCount?: number;
+    demoGiven?: boolean;
     starred?: boolean;
-    score?: number;
 }
