@@ -18,6 +18,7 @@ export declare class BufferClient {
     profilePicsUpdatedAt: Date;
     nameBioUpdatedAt: Date;
     profilePicsDeletedAt: Date;
+    username: string;
     usernameUpdatedAt: Date;
     createdAt: Date;
     updatedAt: Date;
@@ -182,6 +183,15 @@ export declare const BufferClientSchema: import("mongoose").Schema<BufferClient,
         id: string;
     }>;
     profilePicsDeletedAt?: import("mongoose").SchemaDefinitionProperty<Date, BufferClient, Document<unknown, {}, BufferClient, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    username?: import("mongoose").SchemaDefinitionProperty<string, BufferClient, Document<unknown, {}, BufferClient, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<BufferClient & {
         _id: import("mongoose").Types.ObjectId;

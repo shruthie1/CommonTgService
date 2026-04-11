@@ -55,6 +55,7 @@ export interface BaseClientDocument extends Document {
     profilePicsUpdatedAt?: Date;
     nameBioUpdatedAt?: Date;
     profilePicsDeletedAt?: Date;
+    username?: string;
     usernameUpdatedAt?: Date;
     createdAt?: Date;
     updatedAt?: Date;
@@ -71,7 +72,7 @@ export interface BaseClientDocument extends Document {
     assignedBio?: string;
     assignedProfilePics?: string[];
 }
-export type BaseClientUpdate = Partial<Pick<BaseClientDocument, 'session' | 'availableDate' | 'channels' | 'clientId' | 'status' | 'message' | 'lastUsed' | 'lastChecked' | 'inUse' | 'privacyUpdatedAt' | 'twoFASetAt' | 'otherAuthsRemovedAt' | 'profilePicsUpdatedAt' | 'nameBioUpdatedAt' | 'profilePicsDeletedAt' | 'usernameUpdatedAt' | 'createdAt' | 'updatedAt' | 'lastUpdateAttempt' | 'failedUpdateAttempts' | 'lastUpdateFailure' | 'warmupPhase' | 'warmupJitter' | 'enrolledAt' | 'organicActivityAt' | 'sessionRotatedAt'>>;
+export type BaseClientUpdate = Partial<Pick<BaseClientDocument, 'session' | 'availableDate' | 'channels' | 'clientId' | 'status' | 'message' | 'lastUsed' | 'lastChecked' | 'inUse' | 'privacyUpdatedAt' | 'twoFASetAt' | 'otherAuthsRemovedAt' | 'profilePicsUpdatedAt' | 'nameBioUpdatedAt' | 'profilePicsDeletedAt' | 'username' | 'usernameUpdatedAt' | 'createdAt' | 'updatedAt' | 'lastUpdateAttempt' | 'failedUpdateAttempts' | 'lastUpdateFailure' | 'warmupPhase' | 'warmupJitter' | 'enrolledAt' | 'organicActivityAt' | 'sessionRotatedAt'>>;
 export interface ProcessClientResult {
     updateCount: number;
     updateSummary?: string | null;

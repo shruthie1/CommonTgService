@@ -246,13 +246,24 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async updateUsername(doc, client, failedAttempts) {
+        if (doc.username) {
+            this.logger.debug(`Username already set for ${doc.mobile}: @${doc.username}, skipping TG update`);
+            await this.update(doc.mobile, {
+                usernameUpdatedAt: doc.usernameUpdatedAt || new Date(),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+            });
+            return 1;
+        }
         const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
             await (0, base_client_service_1.performOrganicActivity)(telegramClient, 'light');
             const me = await telegramClient.getMe();
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
-            await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
+            const updatedUsername = await this.telegramService.updateUsernameForAClient(doc.mobile, client.clientId, client.name, me.username);
             await this.update(doc.mobile, {
+                username: updatedUsername || me.username,
                 usernameUpdatedAt: new Date(),
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: 0,

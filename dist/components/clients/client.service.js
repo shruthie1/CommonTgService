@@ -557,15 +557,9 @@ let ClientService = ClientService_1 = class ClientService {
                 hasAssignedFirstName: !!bufferDoc?.assignedFirstName,
                 assignedPhotoCount: bufferDoc?.assignedProfilePics?.length || 0,
             });
-            const updatedUsername = await this.telegramService.updateUsernameForAClient(newMobile, clientId, this.getExpectedClientName(existingClient, {
-                mobile: bufferDoc?.mobile || newMobile,
-                assignedFirstName: bufferDoc?.assignedFirstName || null,
-                assignedLastName: bufferDoc?.assignedLastName || null,
-                assignedBio: bufferDoc?.assignedBio || null,
-                assignedProfilePics: bufferDoc?.assignedProfilePics || [],
-                source: 'activeClient',
-            }), me.username);
-            await this.notify(`Updated username for NewNumber: ${newMobile}\noldUsername: @${me.username}\nNewUsername: @${updatedUsername}`);
+            const updatedUsername = bufferDoc?.username || me.username;
+            this.logger.info(`[${clientId}] Using pre-set buffer username: @${updatedUsername} (current TG: @${me.username})`);
+            await this.notify(`Cutover username for NewNumber: ${newMobile}\nUsername: @${updatedUsername}`);
             if (!newSession?.trim()) {
                 throw new common_1.BadRequestException(`Invalid replacement session for ${newMobile}`);
             }
@@ -593,7 +587,7 @@ let ClientService = ClientService_1 = class ClientService {
             }
             this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
             setTimeout(() => {
-                void this.updateClient(clientId, 'Delayed update after buffer removal', true).catch((delayedError) => {
+                void this.updateClient(clientId, 'Delayed update after buffer removal', true, false, true).catch((delayedError) => {
                     (0, parseError_1.parseError)(delayedError, `[${clientId}] delayed updateClient failed`);
                 });
             }, 15000);
@@ -753,7 +747,7 @@ let ClientService = ClientService_1 = class ClientService {
         }
         throw new common_1.BadRequestException(`Distinct backup session was not persisted for ${mobile}`);
     }
-    async updateClient(clientId, message = '', skipDeploy = false, throwOnFailure = false) {
+    async updateClient(clientId, message = '', skipDeploy = false, throwOnFailure = false, skipUsername = false) {
         this.logger.log(`Updating Client: ${clientId} - ${message}`);
         if (!this.canUpdateClient(clientId))
             return false;
@@ -783,7 +777,12 @@ let ClientService = ClientService_1 = class ClientService {
                     mirroredActiveName,
                 });
             }
-            await this.updateClientUsername(client, me, activeAssignment);
+            if (!skipUsername) {
+                await this.updateClientUsername(client, me, activeAssignment);
+            }
+            else {
+                this.logger.debug(`[${clientId}] Skipping username update — already set from buffer`);
+            }
             const nameBioReady = await this.updateClientIdentity(client, telegramClient, me, activeAssignment);
             const privacyReady = await this.updateClientPrivacy(client, telegramClient);
             const photosReady = await this.updateClientPhotos(client, telegramClient, activeAssignment);
@@ -849,6 +848,10 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async updateClientUsername(client, me, activeAssignment) {
+        if (client.username && me.username === client.username) {
+            this.logger.debug(`[${client.clientId}] Username @${me.username} matches stored value, skipping update`);
+            return;
+        }
         const updatedUsername = await this.telegramService.updateUsernameForAClient(client.mobile, client.clientId, this.getExpectedClientName(client, activeAssignment), me.username);
         if (updatedUsername) {
             await this.update(client.clientId, { username: updatedUsername });
