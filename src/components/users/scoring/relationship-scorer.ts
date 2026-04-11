@@ -1,12 +1,13 @@
 export const INTIMATE_KEYWORDS = [
-  'love', 'luv', 'lub',
+  'love', 'luv', 
   'kiss',
-  'hug',
-  'miss you',
-  'baby', 'bae',
-  'darling', 'sweetheart', 'jaan',
-  'good night', 'good morning',
-  'i love you', 'ily',
+  'sex',
+  'baby', 'babe',
+  'fuck', 
+  'boobs',
+  'dick',
+  'pussy',
+  'hug'
 ];
 
 export interface RelationshipCandidate {
