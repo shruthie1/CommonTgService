@@ -155,6 +155,7 @@ export class User {
         videoCalls: number;
         avgDuration: number;
         totalDuration: number;
+        meaningfulCalls: number;
       };
       commonChats: number;
       isMutualContact: boolean;

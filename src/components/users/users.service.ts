@@ -310,28 +310,43 @@ export class UsersService {
             continue;
           }
 
-          // Media + voice counts via GetSearchCounters (1 API call for all filters)
-          let mediaCount = 0;
+          // Media + voice counts via GetSearchCounters (1 API call, 4 filters)
+          // Photos + round videos = personal media (full weight)
+          // Regular videos counted separately (discounted — could be forwarded large files)
+          // Documents excluded entirely (not relationship signals)
+          let photoCount = 0;
+          let videoCount = 0;
+          let roundVideoCount = 0;
           let voiceCount = 0;
           try {
             const counters = await telegramClient.client.invoke(
               new Api.messages.GetSearchCounters({
                 peer: chatPeer,
                 filters: [
-                  new Api.InputMessagesFilterPhotoVideo(),
+                  new Api.InputMessagesFilterPhotos(),
+                  new Api.InputMessagesFilterVideo(),
+                  new Api.InputMessagesFilterRoundVideo(),
                   new Api.InputMessagesFilterVoice(),
                 ],
               }),
             );
             const counterArr = counters as any as Array<{ count: number }>;
-            mediaCount = counterArr?.[0]?.count ?? 0;
-            voiceCount = counterArr?.[1]?.count ?? 0;
+            photoCount = counterArr?.[0]?.count ?? 0;
+            videoCount = counterArr?.[1]?.count ?? 0;
+            roundVideoCount = counterArr?.[2]?.count ?? 0;
+            voiceCount = counterArr?.[3]?.count ?? 0;
           } catch { }
+          // Personal media = photos + round videos (always small/personal)
+          // Regular videos discounted 50% (many are forwarded movies/clips >20MB)
+          const mediaCount = photoCount + roundVideoCount + Math.floor(videoCount * 0.5);
 
-          // Call stats from global call log search for this peer
-          let callStats = { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0, outgoing: 0, audioCalls: 0 };
+          // Call stats — includeCalls=true to get per-call entries for duration filtering
+          let callStats = { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0, outgoing: 0, audioCalls: 0, meaningfulCalls: 0 };
           try {
-            const callHistory = await telegramClient.getChatCallHistory(candidate.id, 200, false);
+            const callHistory = await telegramClient.getChatCallHistory(candidate.id, 200, true);
+            const meaningfulCalls = (callHistory as any).calls
+              ? (callHistory as any).calls.filter((c: any) => c.durationSeconds > 30).length
+              : (callHistory.averageDuration > 30 ? callHistory.totalCalls : 0);
             callStats = {
               totalCalls: callHistory.totalCalls,
               incoming: callHistory.incoming,
@@ -340,6 +355,7 @@ export class UsersService {
               audioCalls: callHistory.audioCalls,
               totalDuration: callHistory.totalDuration,
               averageDuration: callHistory.averageDuration,
+              meaningfulCalls,
             };
             callAgg.totalCalls += callStats.totalCalls;
             callAgg.incoming += callStats.incoming;
@@ -400,6 +416,7 @@ export class UsersService {
               videoCalls: callStats.videoCalls,
               avgDuration: callStats.averageDuration,
               totalDuration: callStats.totalDuration,
+              meaningfulCalls: callStats.meaningfulCalls,
             },
             commonChats,
             isMutualContact: mutualChatIds.has(candidate.id),
