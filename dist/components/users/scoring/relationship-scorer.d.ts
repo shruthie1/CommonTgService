@@ -1,4 +1,5 @@
 export declare const INTIMATE_KEYWORDS: string[];
+export declare const NEGATIVE_KEYWORDS: string[];
 export interface RelationshipCandidate {
     chatId: string;
     name: string;
@@ -8,12 +9,14 @@ export interface RelationshipCandidate {
     mediaCount: number;
     voiceCount: number;
     intimateMessageCount: number;
+    negativeKeywordCount: number;
     calls: {
         total: number;
         incoming: number;
         videoCalls: number;
         avgDuration: number;
         totalDuration: number;
+        meaningfulCalls: number;
     };
     commonChats: number;
     isMutualContact: boolean;

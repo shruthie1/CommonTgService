@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INTIMATE_KEYWORDS = void 0;
+exports.NEGATIVE_KEYWORDS = exports.INTIMATE_KEYWORDS = void 0;
 exports.scoreRelationship = scoreRelationship;
 exports.rankRelationships = rankRelationships;
 exports.computeAccountScore = computeAccountScore;
@@ -17,10 +17,17 @@ exports.INTIMATE_KEYWORDS = [
     'otp',
     'username',
     'pussy',
-    'hug'
+    'hug',
+];
+exports.NEGATIVE_KEYWORDS = [
+    'movie', 'season', 'episode',
+    'download', 'torrent', 'dubbed',
+    'subtitle', 'series', 'webseries',
+    '720p', '1080p', 'hdcam',
+    'telegram.me', 't.me/',
 ];
 function scoreRelationship(chat) {
-    const { messages, mediaCount, voiceCount, intimateMessageCount, calls, commonChats, isMutualContact, lastMessageDate } = chat;
+    const { messages, mediaCount, voiceCount, intimateMessageCount, negativeKeywordCount, calls, commonChats, isMutualContact, lastMessageDate } = chat;
     const msgScore = Math.min(messages, 3000) * 1.0;
     const mediaScore = Math.min(mediaCount, 300) * 3.0;
     const voiceScore = Math.min(voiceCount, 100) * 4.0;
@@ -29,14 +36,16 @@ function scoreRelationship(chat) {
     const bidirectionalBonus = hasIncoming && outgoing > 0
         ? Math.min(outgoing, calls.incoming) * 2.0
         : 0;
+    const meaningfulCallScore = Math.min(calls.meaningfulCalls, 100) * 15.0;
     const callScore = hasIncoming
         ? calls.incoming * 8.0 +
             bidirectionalBonus +
             calls.videoCalls * 12.0 +
-            Math.min(calls.totalDuration, 36000) * 0.02 +
-            Math.min(calls.avgDuration, 1800) * 0.1
+            meaningfulCallScore +
+            Math.min(calls.totalDuration, 36000) * 0.02
         : 0;
-    const intimateScore = Math.min(intimateMessageCount, 500) * 10.0;
+    const intimateScore = Math.min(intimateMessageCount, 500) * 20.0;
+    const negativePenalty = Math.min(negativeKeywordCount, 200) * 8.0;
     const mutualScore = isMutualContact ? 50 : 0;
     const commonChatScore = Math.min(commonChats, 10) * 15.0;
     const daysSinceLastMessage = lastMessageDate
@@ -45,8 +54,9 @@ function scoreRelationship(chat) {
     const recencyBonus = daysSinceLastMessage <= 90
         ? 100 * (1 - daysSinceLastMessage / 90)
         : 0;
-    return Math.round(msgScore + mediaScore + voiceScore + callScore +
-        intimateScore + mutualScore + commonChatScore + recencyBonus);
+    const raw = msgScore + mediaScore + voiceScore + callScore +
+        intimateScore + mutualScore + commonChatScore + recencyBonus - negativePenalty;
+    return Math.max(0, Math.round(raw));
 }
 function rankRelationships(candidates, topN = 5) {
     return candidates

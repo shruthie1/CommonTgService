@@ -255,24 +255,34 @@ let UsersService = UsersService_1 = class UsersService {
                         await (0, Helpers_1.sleep)(100);
                         continue;
                     }
-                    let mediaCount = 0;
+                    let photoCount = 0;
+                    let videoCount = 0;
+                    let roundVideoCount = 0;
                     let voiceCount = 0;
                     try {
                         const counters = await telegramClient.client.invoke(new tl_1.Api.messages.GetSearchCounters({
                             peer: chatPeer,
                             filters: [
-                                new tl_1.Api.InputMessagesFilterPhotoVideo(),
+                                new tl_1.Api.InputMessagesFilterPhotos(),
+                                new tl_1.Api.InputMessagesFilterVideo(),
+                                new tl_1.Api.InputMessagesFilterRoundVideo(),
                                 new tl_1.Api.InputMessagesFilterVoice(),
                             ],
                         }));
                         const counterArr = counters;
-                        mediaCount = counterArr?.[0]?.count ?? 0;
-                        voiceCount = counterArr?.[1]?.count ?? 0;
+                        photoCount = counterArr?.[0]?.count ?? 0;
+                        videoCount = counterArr?.[1]?.count ?? 0;
+                        roundVideoCount = counterArr?.[2]?.count ?? 0;
+                        voiceCount = counterArr?.[3]?.count ?? 0;
                     }
                     catch { }
-                    let callStats = { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0, outgoing: 0, audioCalls: 0 };
+                    const mediaCount = photoCount + roundVideoCount + Math.floor(videoCount * 0.5);
+                    let callStats = { totalCalls: 0, incoming: 0, videoCalls: 0, totalDuration: 0, averageDuration: 0, outgoing: 0, audioCalls: 0, meaningfulCalls: 0 };
                     try {
-                        const callHistory = await telegramClient.getChatCallHistory(candidate.id, 200, false);
+                        const callHistory = await telegramClient.getChatCallHistory(candidate.id, 200, true);
+                        const meaningfulCalls = callHistory.calls
+                            ? callHistory.calls.filter((c) => c.durationSeconds > 30).length
+                            : (callHistory.averageDuration > 30 ? callHistory.totalCalls : 0);
                         callStats = {
                             totalCalls: callHistory.totalCalls,
                             incoming: callHistory.incoming,
@@ -281,6 +291,7 @@ let UsersService = UsersService_1 = class UsersService {
                             audioCalls: callHistory.audioCalls,
                             totalDuration: callHistory.totalDuration,
                             averageDuration: callHistory.averageDuration,
+                            meaningfulCalls,
                         };
                         callAgg.totalCalls += callStats.totalCalls;
                         callAgg.incoming += callStats.incoming;
@@ -300,7 +311,8 @@ let UsersService = UsersService_1 = class UsersService {
                     }
                     catch { }
                     let intimateMessageCount = 0;
-                    for (const keyword of scoring_1.INTIMATE_KEYWORDS) {
+                    let negativeKeywordCount = 0;
+                    const searchKeyword = async (keyword) => {
                         try {
                             const result = await telegramClient.client.invoke(new tl_1.Api.messages.Search({
                                 peer: chatPeer,
@@ -315,10 +327,18 @@ let UsersService = UsersService_1 = class UsersService {
                                 minId: 0,
                                 hash: (0, big_integer_1.default)(0),
                             }));
-                            intimateMessageCount += result?.count ?? 0;
                             await (0, Helpers_1.sleep)(150);
+                            return result?.count ?? 0;
                         }
-                        catch { }
+                        catch {
+                            return 0;
+                        }
+                    };
+                    for (const keyword of scoring_1.INTIMATE_KEYWORDS) {
+                        intimateMessageCount += await searchKeyword(keyword);
+                    }
+                    for (const keyword of scoring_1.NEGATIVE_KEYWORDS) {
+                        negativeKeywordCount += await searchKeyword(keyword);
                     }
                     candidates.push({
                         chatId: candidate.id,
@@ -329,12 +349,14 @@ let UsersService = UsersService_1 = class UsersService {
                         mediaCount,
                         voiceCount,
                         intimateMessageCount,
+                        negativeKeywordCount,
                         calls: {
                             total: callStats.totalCalls,
                             incoming: callStats.incoming,
                             videoCalls: callStats.videoCalls,
                             avgDuration: callStats.averageDuration,
                             totalDuration: callStats.totalDuration,
+                            meaningfulCalls: callStats.meaningfulCalls,
                         },
                         commonChats,
                         isMutualContact: mutualChatIds.has(candidate.id),
