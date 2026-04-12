@@ -121,15 +121,9 @@ let UsersService = UsersService_1 = class UsersService {
         return result.modifiedCount;
     }
     async delete(tgId) {
-        const result = await this.userModel.deleteOne({ tgId }).exec();
-        if (result.deletedCount === 0) {
+        const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
+        if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
-        }
-    }
-    async deleteById(userId) {
-        const result = await this.userModel.deleteOne({ _id: userId }).exec();
-        if (result.deletedCount === 0) {
-            throw new common_1.NotFoundException(`User with id ${userId} not found`);
         }
     }
     async search(filter) {
