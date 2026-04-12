@@ -899,11 +899,74 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.sendMediaBatch(options);
     }
 
-    // Password Management
-    async hasPassword(mobile: string): Promise<boolean> {
-        const telegramClient = await connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Check password status');
-        return await telegramClient.hasPassword();
+    // Security & Account Status
+    async getSecurityStatus(mobile: string) {
+        const wasConnected = connectionManager.hasClient(mobile);
+        try {
+            const telegramClient = await connectionManager.getClient(mobile);
+            this.logger.info(mobile, 'Fetching security status');
+
+            // 2FA password info
+            const passwordInfo = await telegramClient.client.invoke(new Api.account.GetPassword());
+            const has2FA = !!passwordInfo.hasPassword;
+            const hint = passwordInfo.hint || null;
+            const hasRecoveryEmail = !!passwordInfo.hasRecovery;
+            const pendingResetDate = passwordInfo.pendingResetDate
+                ? new Date(passwordInfo.pendingResetDate * 1000).toISOString()
+                : null;
+
+            // Active sessions
+            const authResult = await telegramClient.getAuths();
+            const sessions = (authResult.authorizations || []).map((auth: any) => ({
+                current: !!auth.current,
+                deviceModel: auth.deviceModel,
+                platform: auth.platform,
+                systemVersion: auth.systemVersion,
+                appName: auth.appName,
+                appVersion: auth.appVersion,
+                ip: auth.ip,
+                country: auth.country,
+                region: auth.region,
+                dateCreated: new Date(auth.dateCreated * 1000).toISOString(),
+                dateActive: new Date(auth.dateActive * 1000).toISOString(),
+                officialApp: !!auth.officialApp,
+            }));
+
+            // Account profile
+            const me = await telegramClient.getMe();
+
+            // Sync 2FA status to DB
+            try {
+                const users = await this.usersService.search({ mobile });
+                if (users[0]?.tgId && users[0].twoFA !== has2FA) {
+                    await this.usersService.update(users[0].tgId, { twoFA: has2FA });
+                }
+            } catch { }
+
+            return {
+                mobile,
+                tgId: me.id?.toString(),
+                username: me.username || null,
+                firstName: me.firstName,
+                lastName: me.lastName || null,
+                phone: me.phone,
+                security: {
+                    has2FA,
+                    hint,
+                    hasRecoveryEmail,
+                    pendingResetDate,
+                },
+                sessions: {
+                    count: sessions.length,
+                    current: sessions.find((s: any) => s.current) || null,
+                    others: sessions.filter((s: any) => !s.current),
+                },
+            };
+        } finally {
+            if (!wasConnected) {
+                await connectionManager.unregisterClient(mobile).catch(() => undefined);
+            }
+        }
     }
 
     // Contact Management

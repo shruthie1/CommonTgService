@@ -1471,12 +1471,11 @@ export class TelegramController {
         return this.telegramService.sendMediaBatch(mobile, options);
     }
 
-    @Get('security/2fa-status/:mobile')
-    @ApiOperation({ summary: 'Check if 2FA password is set' })
-    @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
-    @ApiResponse({ type: Object })
-    async hasPassword(@Param('mobile') mobile: string) {
-        return this.telegramService.hasPassword(mobile);
+    @Get('security/status/:mobile')
+    @ApiOperation({ summary: 'Get account security status — 2FA, sessions, profile (live Telegram check)' })
+    @ApiParam({ name: 'mobile' })
+    async getSecurityStatus(@Param('mobile') mobile: string) {
+        return this.telegramService.getSecurityStatus(mobile);
     }
 
     @Get('file/url/:mobile')
