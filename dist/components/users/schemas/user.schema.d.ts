@@ -46,12 +46,14 @@ export declare class User {
             mediaCount: number;
             voiceCount: number;
             intimateMessageCount: number;
+            negativeKeywordCount: number;
             calls: {
                 total: number;
                 incoming: number;
                 videoCalls: number;
                 avgDuration: number;
                 totalDuration: number;
+                meaningfulCalls: number;
             };
             commonChats: number;
             isMutualContact: boolean;
@@ -332,12 +334,14 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
             mediaCount: number;
             voiceCount: number;
             intimateMessageCount: number;
+            negativeKeywordCount: number;
             calls: {
                 total: number;
                 incoming: number;
                 videoCalls: number;
                 avgDuration: number;
                 totalDuration: number;
+                meaningfulCalls: number;
             };
             commonChats: number;
             isMutualContact: boolean;
