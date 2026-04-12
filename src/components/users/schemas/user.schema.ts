@@ -149,6 +149,7 @@ export class User {
       mediaCount: number;
       voiceCount: number;
       intimateMessageCount: number;
+      negativeKeywordCount: number;
       calls: {
         total: number;
         incoming: number;

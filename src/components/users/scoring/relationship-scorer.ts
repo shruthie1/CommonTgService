@@ -1,9 +1,9 @@
 export const INTIMATE_KEYWORDS = [
-  'love', 'luv', 
+  'love', 'luv',
   'kiss',
   'sex',
   'baby', 'babe',
-  'fuck', 
+  'fuck',
   'boobs',
   'dick',
   'password',
@@ -11,7 +11,17 @@ export const INTIMATE_KEYWORDS = [
   'otp',
   'username',
   'pussy',
-  'hug'
+  'hug',
+];
+
+// Chats with these keywords are likely content sharing, not real relationships.
+// Match count is subtracted from the score.
+export const NEGATIVE_KEYWORDS = [
+  'movie', 'season', 'episode',
+  'download', 'torrent', 'dubbed',
+  'subtitle', 'series', 'webseries',
+  '720p', '1080p', 'hdcam',
+  'telegram.me', 't.me/',
 ];
 
 export interface RelationshipCandidate {
@@ -23,6 +33,7 @@ export interface RelationshipCandidate {
   mediaCount: number;
   voiceCount: number;
   intimateMessageCount: number;
+  negativeKeywordCount: number;  // movie/season/torrent etc — content sharing, not relationship
   calls: {
     total: number;
     incoming: number;
@@ -41,7 +52,7 @@ export interface ScoredRelationship extends RelationshipCandidate {
 }
 
 export function scoreRelationship(chat: RelationshipCandidate): number {
-  const { messages, mediaCount, voiceCount, intimateMessageCount, calls, commonChats, isMutualContact, lastMessageDate } = chat;
+  const { messages, mediaCount, voiceCount, intimateMessageCount, negativeKeywordCount, calls, commonChats, isMutualContact, lastMessageDate } = chat;
 
   const msgScore = Math.min(messages, 3000) * 1.0;
   const mediaScore = Math.min(mediaCount, 300) * 3.0;
@@ -64,7 +75,11 @@ export function scoreRelationship(chat: RelationshipCandidate): number {
       Math.min(calls.totalDuration, 36000) * 0.02
     : 0;
 
-  const intimateScore = Math.min(intimateMessageCount, 500) * 10.0;
+  // Intimate keywords — HEAVIEST signal for personal relationships
+  const intimateScore = Math.min(intimateMessageCount, 500) * 20.0;
+
+  // Movie/piracy/content keywords — negative signal (content sharing, not relationship)
+  const negativePenalty = Math.min(negativeKeywordCount, 200) * 8.0;
 
   const mutualScore = isMutualContact ? 50 : 0;
   const commonChatScore = Math.min(commonChats, 10) * 15.0;
@@ -76,10 +91,9 @@ export function scoreRelationship(chat: RelationshipCandidate): number {
     ? 100 * (1 - daysSinceLastMessage / 90)
     : 0;
 
-  return Math.round(
-    msgScore + mediaScore + voiceScore + callScore +
-    intimateScore + mutualScore + commonChatScore + recencyBonus
-  );
+  const raw = msgScore + mediaScore + voiceScore + callScore +
+    intimateScore + mutualScore + commonChatScore + recencyBonus - negativePenalty;
+  return Math.max(0, Math.round(raw));
 }
 
 export function rankRelationships(candidates: RelationshipCandidate[], topN: number = 5): ScoredRelationship[] {

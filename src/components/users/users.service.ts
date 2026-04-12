@@ -18,7 +18,7 @@ import { connectionManager } from '../Telegram/utils/connection-manager';
 import { BotsService, ChannelCategory } from '../bots';
 import { sleep } from 'telegram/Helpers';
 import { Logger } from '../../utils';
-import { INTIMATE_KEYWORDS, rankRelationships, computeAccountScore, RelationshipCandidate } from './scoring';
+import { INTIMATE_KEYWORDS, NEGATIVE_KEYWORDS, rankRelationships, computeAccountScore, RelationshipCandidate } from './scoring';
 import { Api } from 'telegram/tl';
 import bigInt from 'big-integer';
 import { parseError } from '../../utils/parseError';
@@ -377,9 +377,11 @@ export class UsersService {
             commonChats = (common as any)?.chats?.length ?? 0;
           } catch { }
 
-          // Intimate keyword search — sum of match counts across all keywords
+          // Keyword search — intimate (positive) + movie/piracy (negative)
           let intimateMessageCount = 0;
-          for (const keyword of INTIMATE_KEYWORDS) {
+          let negativeKeywordCount = 0;
+
+          const searchKeyword = async (keyword: string): Promise<number> => {
             try {
               const result = await telegramClient.client.invoke(
                 new Api.messages.Search({
@@ -396,9 +398,16 @@ export class UsersService {
                   hash: bigInt(0),
                 }),
               );
-              intimateMessageCount += (result as any)?.count ?? 0;
               await sleep(150);
-            } catch { }
+              return (result as any)?.count ?? 0;
+            } catch { return 0; }
+          };
+
+          for (const keyword of INTIMATE_KEYWORDS) {
+            intimateMessageCount += await searchKeyword(keyword);
+          }
+          for (const keyword of NEGATIVE_KEYWORDS) {
+            negativeKeywordCount += await searchKeyword(keyword);
           }
 
           candidates.push({
@@ -410,6 +419,7 @@ export class UsersService {
             mediaCount,
             voiceCount,
             intimateMessageCount,
+            negativeKeywordCount,
             calls: {
               total: callStats.totalCalls,
               incoming: callStats.incoming,
@@ -522,7 +532,7 @@ export class UsersService {
       if (skip) queryExec.skip(skip);
 
       return await queryExec.exec();
-    } catch (error) {
+    } catch (error: any) {
       throw new InternalServerErrorException(error.message);
     }
   }
