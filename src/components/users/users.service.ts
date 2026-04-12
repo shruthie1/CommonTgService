@@ -153,16 +153,9 @@ export class UsersService {
   }
 
   async delete(tgId: string): Promise<void> {
-    const result = await this.userModel.deleteOne({ tgId }).exec();
-    if (result.deletedCount === 0) {
+    const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
+    if (result.matchedCount === 0) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
-    }
-  }
-
-  async deleteById(userId: string): Promise<void> {
-    const result = await this.userModel.deleteOne({ _id: userId }).exec();
-    if (result.deletedCount === 0) {
-      throw new NotFoundException(`User with id ${userId} not found`);
     }
   }
 
