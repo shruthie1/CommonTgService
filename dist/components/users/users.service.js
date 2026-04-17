@@ -95,6 +95,12 @@ let UsersService = UsersService_1 = class UsersService {
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
     }
+    async findAllSorted(limit = 100, skip = 0, sort) {
+        const query = this.userModel.find().lean();
+        if (sort)
+            query.sort(sort);
+        return query.skip(skip).limit(limit).exec();
+    }
     async findOne(tgId) {
         const doc = await this.userModel.findOne({ tgId }).exec();
         if (!doc) {
