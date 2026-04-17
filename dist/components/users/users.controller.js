@@ -105,6 +105,14 @@ let UsersController = class UsersController {
     async expire(tgId) {
         return this.usersService.delete(tgId);
     }
+    async aggregateSort(field, sortOrder, limit, skip) {
+        if (!field)
+            throw new common_1.BadRequestException('field is required');
+        const order = sortOrder === 'asc' ? 1 : -1;
+        const limitNum = limit ? parseInt(limit, 10) : 20;
+        const skipNum = skip ? parseInt(skip, 10) : 0;
+        return this.usersService.aggregateSort(field, order, limitNum, skipNum);
+    }
     async executeQuery(requestBody) {
         const { query, sort, limit, skip } = requestBody;
         return this.usersService.executeQuery(query, sort, limit, skip);
@@ -230,6 +238,21 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "expire", null);
+__decorate([
+    (0, common_1.Get)('aggregate-sort'),
+    (0, swagger_1.ApiOperation)({ summary: 'Sort users by computed/nested fields (global)' }),
+    (0, swagger_1.ApiQuery)({ name: 'field', required: true, type: String, description: 'Computed field: intimateTotal, privateMsgsTopContacts, privateMediaTopContacts, privateVoiceTotal, privateMsgsBestContact, relTopIntimate, relTopMedia, relTopVoice, relCommonChats, relTopCalls, relMeaningfulCalls, relMutualContacts, callPartners, totalCallDuration, longestCall, missedCalls, privateMsgsCallPartners' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'skip', required: false, type: Number }),
+    __param(0, (0, common_1.Query)('field')),
+    __param(1, (0, common_1.Query)('sortOrder')),
+    __param(2, (0, common_1.Query)('limit')),
+    __param(3, (0, common_1.Query)('skip')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "aggregateSort", null);
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),

@@ -40,5 +40,6 @@ export declare class UsersController {
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
     expire(tgId: string): Promise<void>;
+    aggregateSort(field: string, sortOrder?: string, limit?: string, skip?: string): Promise<any[]>;
     executeQuery(requestBody: any): Promise<any>;
 }
