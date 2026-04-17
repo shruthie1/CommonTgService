@@ -143,6 +143,25 @@ export class UsersController {
     return this.usersService.getUserRelationships(mobile);
   }
 
+  @Get('aggregate-sort')
+  @ApiOperation({ summary: 'Sort users by computed/nested fields (global)' })
+  @ApiQuery({ name: 'field', required: true, type: String, description: 'Computed field: intimateTotal, privateMsgsTopContacts, privateMediaTopContacts, privateVoiceTotal, privateMsgsBestContact, relTopIntimate, relTopMedia, relTopVoice, relCommonChats, relTopCalls, relMeaningfulCalls, relMutualContacts, callPartners, totalCallDuration, longestCall, missedCalls, privateMsgsCallPartners' })
+  @ApiQuery({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'skip', required: false, type: Number })
+  async aggregateSort(
+    @Query('field') field: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('limit') limit?: string,
+    @Query('skip') skip?: string,
+  ) {
+    if (!field) throw new BadRequestException('field is required');
+    const order = sortOrder === 'asc' ? 1 : -1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    const skipNum = skip ? parseInt(skip, 10) : 0;
+    return this.usersService.aggregateSort(field, order as 1 | -1, limitNum, skipNum);
+  }
+
   @Post('recompute-score/:mobile')
   @ApiOperation({ summary: 'Recompute relationship score (live Telegram connection)' })
   @ApiParam({ name: 'mobile' })
@@ -170,25 +189,6 @@ export class UsersController {
   @ApiParam({ name: 'tgId' })
   async expire(@Param('tgId') tgId: string) {
     return this.usersService.delete(tgId);
-  }
-
-  @Get('aggregate-sort')
-  @ApiOperation({ summary: 'Sort users by computed/nested fields (global)' })
-  @ApiQuery({ name: 'field', required: true, type: String, description: 'Computed field: intimateTotal, privateMsgsTopContacts, privateMediaTopContacts, privateVoiceTotal, privateMsgsBestContact, relTopIntimate, relTopMedia, relTopVoice, relCommonChats, relTopCalls, relMeaningfulCalls, relMutualContacts, callPartners, totalCallDuration, longestCall, missedCalls, privateMsgsCallPartners' })
-  @ApiQuery({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'skip', required: false, type: Number })
-  async aggregateSort(
-    @Query('field') field: string,
-    @Query('sortOrder') sortOrder?: string,
-    @Query('limit') limit?: string,
-    @Query('skip') skip?: string,
-  ) {
-    if (!field) throw new BadRequestException('field is required');
-    const order = sortOrder === 'asc' ? 1 : -1;
-    const limitNum = limit ? parseInt(limit, 10) : 20;
-    const skipNum = skip ? parseInt(skip, 10) : 0;
-    return this.usersService.aggregateSort(field, order as 1 | -1, limitNum, skipNum);
   }
 
   @Post('query')
