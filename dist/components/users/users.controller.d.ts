@@ -39,6 +39,6 @@ export declare class UsersController {
     }>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
-    remove(tgId: string): Promise<void>;
+    expire(tgId: string): Promise<void>;
     executeQuery(requestBody: any): Promise<any>;
 }

@@ -585,8 +585,8 @@ let TelegramController = class TelegramController {
     async sendMediaBatch(mobile, options) {
         return this.telegramService.sendMediaBatch(mobile, options);
     }
-    async hasPassword(mobile) {
-        return this.telegramService.hasPassword(mobile);
+    async getSecurityStatus(mobile) {
+        return this.telegramService.getSecurityStatus(mobile);
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -1831,15 +1831,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendMediaBatch", null);
 __decorate([
-    (0, common_1.Get)('security/2fa-status/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Check if 2FA password is set' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, common_1.Get)('security/status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get account security status — 2FA, sessions, profile (live Telegram check)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], TelegramController.prototype, "hasPassword", null);
+], TelegramController.prototype, "getSecurityStatus", null);
 __decorate([
     (0, common_1.Get)('file/url/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),

@@ -101,7 +101,7 @@ let UsersController = class UsersController {
     async update(tgId, updateUserDto) {
         return this.usersService.update(tgId, updateUserDto);
     }
-    async remove(tgId) {
+    async expire(tgId) {
         return this.usersService.delete(tgId);
     }
     async executeQuery(requestBody) {
@@ -217,14 +217,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "update", null);
 __decorate([
-    (0, common_1.Delete)(':tgId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user by tgId' }),
+    (0, common_1.Patch)(':tgId/expire'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark user as expired (soft delete)' }),
     (0, swagger_1.ApiParam)({ name: 'tgId' }),
     __param(0, (0, common_1.Param)('tgId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], UsersController.prototype, "remove", null);
+], UsersController.prototype, "expire", null);
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),

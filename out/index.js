@@ -1998,8 +1998,8 @@ let TelegramController = class TelegramController {
     async sendMediaBatch(mobile, options) {
         return this.telegramService.sendMediaBatch(mobile, options);
     }
-    async hasPassword(mobile) {
-        return this.telegramService.hasPassword(mobile);
+    async getSecurityStatus(mobile) {
+        return this.telegramService.getSecurityStatus(mobile);
     }
     async getFileUrl(mobile, url, filename) {
         return this.telegramService.getFileUrl(mobile, url, filename);
@@ -3244,15 +3244,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "sendMediaBatch", null);
 __decorate([
-    (0, common_1.Get)('security/2fa-status/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Check if 2FA password is set' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
-    (0, swagger_1.ApiResponse)({ type: Object }),
+    (0, common_1.Get)('security/status/:mobile'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get account security status — 2FA, sessions, profile (live Telegram check)' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], TelegramController.prototype, "hasPassword", null);
+], TelegramController.prototype, "getSecurityStatus", null);
 __decorate([
     (0, common_1.Get)('file/url/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Get downloadable URL for a file' }),
@@ -3580,6 +3579,7 @@ const telegram_logger_1 = __webpack_require__(/*! ./utils/telegram-logger */ "./
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
+const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
 let TelegramService = class TelegramService {
@@ -4159,10 +4159,66 @@ let TelegramService = class TelegramService {
         this.logger.info(mobile, 'Send media batch', { chatId: options.chatId, mediaCount: options.media.length });
         return await telegramClient.sendMediaBatch(options);
     }
-    async hasPassword(mobile) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Check password status');
-        return await telegramClient.hasPassword();
+    async getSecurityStatus(mobile) {
+        const wasConnected = connection_manager_1.connectionManager.hasClient(mobile);
+        try {
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+            this.logger.info(mobile, 'Fetching security status');
+            const passwordInfo = await telegramClient.client.invoke(new telegram_1.Api.account.GetPassword());
+            const has2FA = !!passwordInfo.hasPassword;
+            const hint = passwordInfo.hint || null;
+            const hasRecoveryEmail = !!passwordInfo.hasRecovery;
+            const pendingResetDate = passwordInfo.pendingResetDate
+                ? new Date(passwordInfo.pendingResetDate * 1000).toISOString()
+                : null;
+            const authResult = await telegramClient.getAuths();
+            const sessions = (authResult.authorizations || []).map((auth) => ({
+                current: !!auth.current,
+                deviceModel: auth.deviceModel,
+                platform: auth.platform,
+                systemVersion: auth.systemVersion,
+                appName: auth.appName,
+                appVersion: auth.appVersion,
+                ip: auth.ip,
+                country: auth.country,
+                region: auth.region,
+                dateCreated: new Date(auth.dateCreated * 1000).toISOString(),
+                dateActive: new Date(auth.dateActive * 1000).toISOString(),
+                officialApp: !!auth.officialApp,
+            }));
+            const me = await telegramClient.getMe();
+            try {
+                const users = await this.usersService.search({ mobile });
+                if (users[0]?.tgId && users[0].twoFA !== has2FA) {
+                    await this.usersService.update(users[0].tgId, { twoFA: has2FA });
+                }
+            }
+            catch { }
+            return {
+                mobile,
+                tgId: me.id?.toString(),
+                username: me.username || null,
+                firstName: me.firstName,
+                lastName: me.lastName || null,
+                phone: me.phone,
+                security: {
+                    has2FA,
+                    hint,
+                    hasRecoveryEmail,
+                    pendingResetDate,
+                },
+                sessions: {
+                    count: sessions.length,
+                    current: sessions.find((s) => s.current) || null,
+                    others: sessions.filter((s) => !s.current),
+                },
+            };
+        }
+        finally {
+            if (!wasConnected) {
+                await connection_manager_1.connectionManager.unregisterClient(mobile).catch(() => undefined);
+            }
+        }
     }
     async getContacts(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
@@ -35584,7 +35640,7 @@ let UsersController = class UsersController {
     async update(tgId, updateUserDto) {
         return this.usersService.update(tgId, updateUserDto);
     }
-    async remove(tgId) {
+    async expire(tgId) {
         return this.usersService.delete(tgId);
     }
     async executeQuery(requestBody) {
@@ -35700,14 +35756,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "update", null);
 __decorate([
-    (0, common_1.Delete)(':tgId'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user by tgId' }),
+    (0, common_1.Patch)(':tgId/expire'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mark user as expired (soft delete)' }),
     (0, swagger_1.ApiParam)({ name: 'tgId' }),
     __param(0, (0, common_1.Param)('tgId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
-], UsersController.prototype, "remove", null);
+], UsersController.prototype, "expire", null);
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),
@@ -35899,15 +35955,9 @@ let UsersService = UsersService_1 = class UsersService {
         return result.modifiedCount;
     }
     async delete(tgId) {
-        const result = await this.userModel.deleteOne({ tgId }).exec();
-        if (result.deletedCount === 0) {
+        const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
+        if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
-        }
-    }
-    async deleteById(userId) {
-        const result = await this.userModel.deleteOne({ _id: userId }).exec();
-        if (result.deletedCount === 0) {
-            throw new common_1.NotFoundException(`User with id ${userId} not found`);
         }
     }
     async search(filter) {

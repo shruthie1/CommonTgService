@@ -62,6 +62,7 @@ const telegram_logger_1 = require("./utils/telegram-logger");
 const fs = __importStar(require("fs"));
 const Helpers_1 = require("telegram/Helpers");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const telegram_1 = require("telegram");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 let TelegramService = class TelegramService {
@@ -641,10 +642,66 @@ let TelegramService = class TelegramService {
         this.logger.info(mobile, 'Send media batch', { chatId: options.chatId, mediaCount: options.media.length });
         return await telegramClient.sendMediaBatch(options);
     }
-    async hasPassword(mobile) {
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        this.logger.info(mobile, 'Check password status');
-        return await telegramClient.hasPassword();
+    async getSecurityStatus(mobile) {
+        const wasConnected = connection_manager_1.connectionManager.hasClient(mobile);
+        try {
+            const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+            this.logger.info(mobile, 'Fetching security status');
+            const passwordInfo = await telegramClient.client.invoke(new telegram_1.Api.account.GetPassword());
+            const has2FA = !!passwordInfo.hasPassword;
+            const hint = passwordInfo.hint || null;
+            const hasRecoveryEmail = !!passwordInfo.hasRecovery;
+            const pendingResetDate = passwordInfo.pendingResetDate
+                ? new Date(passwordInfo.pendingResetDate * 1000).toISOString()
+                : null;
+            const authResult = await telegramClient.getAuths();
+            const sessions = (authResult.authorizations || []).map((auth) => ({
+                current: !!auth.current,
+                deviceModel: auth.deviceModel,
+                platform: auth.platform,
+                systemVersion: auth.systemVersion,
+                appName: auth.appName,
+                appVersion: auth.appVersion,
+                ip: auth.ip,
+                country: auth.country,
+                region: auth.region,
+                dateCreated: new Date(auth.dateCreated * 1000).toISOString(),
+                dateActive: new Date(auth.dateActive * 1000).toISOString(),
+                officialApp: !!auth.officialApp,
+            }));
+            const me = await telegramClient.getMe();
+            try {
+                const users = await this.usersService.search({ mobile });
+                if (users[0]?.tgId && users[0].twoFA !== has2FA) {
+                    await this.usersService.update(users[0].tgId, { twoFA: has2FA });
+                }
+            }
+            catch { }
+            return {
+                mobile,
+                tgId: me.id?.toString(),
+                username: me.username || null,
+                firstName: me.firstName,
+                lastName: me.lastName || null,
+                phone: me.phone,
+                security: {
+                    has2FA,
+                    hint,
+                    hasRecoveryEmail,
+                    pendingResetDate,
+                },
+                sessions: {
+                    count: sessions.length,
+                    current: sessions.find((s) => s.current) || null,
+                    others: sessions.filter((s) => !s.current),
+                },
+            };
+        }
+        finally {
+            if (!wasConnected) {
+                await connection_manager_1.connectionManager.unregisterClient(mobile).catch(() => undefined);
+            }
+        }
     }
     async getContacts(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);

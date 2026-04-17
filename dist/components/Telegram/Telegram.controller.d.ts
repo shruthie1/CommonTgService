@@ -155,7 +155,51 @@ export declare class TelegramController {
         silent?: boolean;
         scheduleDate?: number;
     }): Promise<import("telegram").Api.TypeUpdates>;
-    hasPassword(mobile: string): Promise<boolean>;
+    getSecurityStatus(mobile: string): Promise<{
+        mobile: string;
+        tgId: string;
+        username: string;
+        firstName: string;
+        lastName: string;
+        phone: string;
+        security: {
+            has2FA: boolean;
+            hint: string;
+            hasRecoveryEmail: boolean;
+            pendingResetDate: string;
+        };
+        sessions: {
+            count: number;
+            current: {
+                current: boolean;
+                deviceModel: any;
+                platform: any;
+                systemVersion: any;
+                appName: any;
+                appVersion: any;
+                ip: any;
+                country: any;
+                region: any;
+                dateCreated: string;
+                dateActive: string;
+                officialApp: boolean;
+            };
+            others: {
+                current: boolean;
+                deviceModel: any;
+                platform: any;
+                systemVersion: any;
+                appName: any;
+                appVersion: any;
+                ip: any;
+                country: any;
+                region: any;
+                dateCreated: string;
+                dateActive: string;
+                officialApp: boolean;
+            }[];
+        };
+    }>;
     getFileUrl(mobile: string, url: string, filename: string): Promise<string>;
     getMessageStats(mobile: string, options: {
         chatId: string;

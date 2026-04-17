@@ -36,7 +36,6 @@ export declare class UsersService {
     update(tgId: string, updateDto: UpdateUserDto): Promise<number>;
     updateByFilter(filter: QueryFilter<UserDocument>, updateDto: UpdateUserDto): Promise<number>;
     delete(tgId: string): Promise<void>;
-    deleteById(userId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
     computeRelationshipScore(mobile: string): Promise<void>;
     topRelationships(options: {
