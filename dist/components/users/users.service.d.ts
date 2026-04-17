@@ -61,5 +61,6 @@ export declare class UsersService {
     }> & {
         __v: number;
     }>;
+    aggregateSort(computedField: string, sortOrder?: 1 | -1, limit?: number, skip?: number): Promise<any[]>;
     executeQuery(query: QueryFilter<UserDocument>, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<User[]>;
 }
