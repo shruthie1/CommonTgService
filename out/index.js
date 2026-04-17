@@ -35616,7 +35616,7 @@ let UsersController = class UsersController {
             gender,
         });
     }
-    async findAll(limit, skip) {
+    async findAll(limit, skip, sortBy, sortOrder) {
         const limitNum = limit ? parseInt(limit, 10) : 100;
         const skipNum = skip ? parseInt(skip, 10) : 0;
         if (isNaN(limitNum) || limitNum < 1) {
@@ -35625,7 +35625,8 @@ let UsersController = class UsersController {
         if (isNaN(skipNum) || skipNum < 0) {
             throw new common_1.BadRequestException('Skip must be a non-negative integer');
         }
-        return this.usersService.findAll(limitNum, skipNum);
+        const sort = sortBy ? { [sortBy]: (sortOrder === 'asc' ? 1 : -1) } : undefined;
+        return this.usersService.findAllSorted(limitNum, skipNum, sort);
     }
     async getUserRelationships(mobile) {
         return this.usersService.getUserRelationships(mobile);
@@ -35709,13 +35710,17 @@ __decorate([
 ], UsersController.prototype, "getTopInteractionUsers", null);
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all users' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all users with optional sorting' }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'skip', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String, description: 'Field to sort by (e.g. msgs, totalChats, contacts, calls.totalCalls, score, lastActive, otherPhotoCount, otherVideoCount, relationships.score)' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String, description: 'Sort order: asc or desc (default: desc)' }),
     __param(0, (0, common_1.Query)('limit')),
     __param(1, (0, common_1.Query)('skip')),
+    __param(2, (0, common_1.Query)('sortBy')),
+    __param(3, (0, common_1.Query)('sortOrder')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "findAll", null);
 __decorate([
@@ -35928,6 +35933,12 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
+    }
+    async findAllSorted(limit = 100, skip = 0, sort) {
+        const query = this.userModel.find().lean();
+        if (sort)
+            query.sort(sort);
+        return query.skip(skip).limit(limit).exec();
     }
     async findOne(tgId) {
         const doc = await this.userModel.findOne({ tgId }).exec();

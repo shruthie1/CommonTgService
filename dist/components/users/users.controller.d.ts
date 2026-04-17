@@ -26,7 +26,7 @@ export declare class UsersController {
         limit: number;
         totalPages: number;
     }>;
-    findAll(limit?: string, skip?: string): Promise<User[]>;
+    findAll(limit?: string, skip?: string, sortBy?: string, sortOrder?: string): Promise<User[]>;
     getUserRelationships(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {
