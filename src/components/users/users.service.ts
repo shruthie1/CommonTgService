@@ -121,6 +121,12 @@ export class UsersService {
     return this.userModel.find().limit(limit).skip(skip).exec();
   }
 
+  async findAllSorted(limit: number = 100, skip: number = 0, sort?: Record<string, 1 | -1>): Promise<User[]> {
+    const query = this.userModel.find().lean();
+    if (sort) query.sort(sort);
+    return query.skip(skip).limit(limit).exec();
+  }
+
   async findOne(tgId: string): Promise<User> {
     const doc = await this.userModel.findOne({ tgId }).exec();
     if (!doc) {

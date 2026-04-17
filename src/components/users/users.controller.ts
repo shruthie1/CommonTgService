@@ -111,12 +111,16 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all users' })
+  @ApiOperation({ summary: 'Get all users with optional sorting' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Field to sort by (e.g. msgs, totalChats, contacts, calls.totalCalls, score, lastActive, otherPhotoCount, otherVideoCount, relationships.score)' })
+  @ApiQuery({ name: 'sortOrder', required: false, type: String, description: 'Sort order: asc or desc (default: desc)' })
   async findAll(
     @Query('limit') limit?: string,
-    @Query('skip') skip?: string
+    @Query('skip') skip?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
   ) {
     const limitNum = limit ? parseInt(limit, 10) : 100;
     const skipNum = skip ? parseInt(skip, 10) : 0;
@@ -128,7 +132,8 @@ export class UsersController {
       throw new BadRequestException('Skip must be a non-negative integer');
     }
 
-    return this.usersService.findAll(limitNum, skipNum);
+    const sort = sortBy ? { [sortBy]: (sortOrder === 'asc' ? 1 : -1) as 1 | -1 } : undefined;
+    return this.usersService.findAllSorted(limitNum, skipNum, sort);
   }
 
   @Get(':mobile/relationships')
