@@ -513,6 +513,118 @@ export class UsersService {
     return user;
   }
 
+  async aggregateSort(
+    computedField: string,
+    sortOrder: 1 | -1 = -1,
+    limit: number = 20,
+    skip: number = 0,
+  ): Promise<any[]> {
+    const COMPUTED_FIELDS: Record<string, any> = {
+      intimateTotal: {
+        $reduce: {
+          input: { $ifNull: ['$relationships.top', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.intimateMessageCount', 0] }] },
+        },
+      },
+      privateMsgsTopContacts: {
+        $reduce: {
+          input: { $ifNull: ['$relationships.top', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.messages', 0] }] },
+        },
+      },
+      privateMediaTopContacts: {
+        $reduce: {
+          input: { $ifNull: ['$relationships.top', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.mediaCount', 0] }] },
+        },
+      },
+      privateVoiceTotal: {
+        $reduce: {
+          input: { $ifNull: ['$relationships.top', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.voiceCount', 0] }] },
+        },
+      },
+      privateMsgsBestContact: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.messages', 0] }, 0],
+      },
+      relTopIntimate: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.intimateMessageCount', 0] }, 0],
+      },
+      relTopMedia: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.mediaCount', 0] }, 0],
+      },
+      relTopVoice: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.voiceCount', 0] }, 0],
+      },
+      relCommonChats: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.commonChats', 0] }, 0],
+      },
+      relTopCalls: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.calls.total', 0] }, 0],
+      },
+      relMeaningfulCalls: {
+        $ifNull: [{ $arrayElemAt: ['$relationships.top.calls.meaningfulCalls', 0] }, 0],
+      },
+      relMutualContacts: {
+        $size: {
+          $filter: {
+            input: { $ifNull: ['$relationships.top', []] },
+            as: 'r',
+            cond: { $eq: ['$$r.isMutualContact', true] },
+          },
+        },
+      },
+      callPartners: {
+        $size: { $ifNull: ['$calls.chats', []] },
+      },
+      totalCallDuration: {
+        $reduce: {
+          input: { $ifNull: ['$calls.chats', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.totalDuration', 0] }] },
+        },
+      },
+      longestCall: {
+        $reduce: {
+          input: { $ifNull: ['$calls.chats', []] },
+          initialValue: 0,
+          in: { $max: ['$$value', { $ifNull: ['$$this.longestCall', 0] }] },
+        },
+      },
+      missedCalls: {
+        $reduce: {
+          input: { $ifNull: ['$calls.chats', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.missed', 0] }] },
+        },
+      },
+      privateMsgsCallPartners: {
+        $reduce: {
+          input: { $ifNull: ['$calls.chats', []] },
+          initialValue: 0,
+          in: { $add: ['$$value', { $ifNull: ['$$this.totalMessages', 0] }] },
+        },
+      },
+    };
+
+    const fieldExpr = COMPUTED_FIELDS[computedField];
+    if (!fieldExpr) {
+      throw new BadRequestException(`Unknown computed field: ${computedField}`);
+    }
+
+    return this.userModel.aggregate([
+      { $addFields: { _computedSort: fieldExpr } },
+      { $sort: { _computedSort: sortOrder } },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { _computedSort: 0 } },
+    ]).exec();
+  }
+
   async executeQuery(
     query: QueryFilter<UserDocument>,
     sort?: Record<string, 1 | -1>,
