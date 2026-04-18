@@ -22,7 +22,8 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message): 
         if (message.media instanceof Api.MessageMediaPhoto) {
             const sizes = (<Api.Photo>message.photo)?.sizes || [];
             if (sizes.length > 0) {
-                const preferredSize = sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
+                const preferredSize =
+                    sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
                     sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
                     sizes[sizes.length - 1] ||
                     sizes[0];
@@ -32,15 +33,32 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message): 
                 );
             }
         } else if (message.media instanceof Api.MessageMediaDocument) {
-            const thumbs = message.document?.thumbs || [];
+            const doc = message.document;
+            const thumbs = doc?.thumbs || [];
+
             if (thumbs.length > 0) {
-                const preferredThumb = thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 'm') ||
+                const preferredThumb =
+                    thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 'm') ||
+                    thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 's') ||
                     thumbs[thumbs.length - 1] ||
                     thumbs[0];
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
                     30000
                 );
+            }
+
+            // For stickers/small files without embedded thumbs, download the actual file
+            if (doc && doc instanceof Api.Document) {
+                const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
+                const isSmallGif = doc.mimeType === 'image/gif';
+                const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
+                if ((isSticker || isSmallGif) && fileSize < 512 * 1024) {
+                    return await downloadWithTimeout(
+                        ctx.client.downloadMedia(message) as Promise<Buffer>,
+                        30000
+                    );
+                }
             }
         }
     } catch (error) {
@@ -82,14 +100,21 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
         contentType = 'image/jpeg';
         filename = 'photo.jpg';
 
+        const sizes = photo?.sizes || [];
+        const bestSize =
+            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'w') ||
+            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'y') ||
+            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
+            sizes[sizes.length - 1];
+        const thumbSizeType = bestSize ? (bestSize as Api.PhotoSize).type || '' : '';
+
         const data = {
             id: photo.id,
             accessHash: photo.accessHash,
             fileReference: photo.fileReference,
         };
-        fileLocation = new Api.InputPhotoFileLocation({ ...data, thumbSize: 'm' });
+        fileLocation = new Api.InputPhotoFileLocation({ ...data, thumbSize: thumbSizeType });
 
-        const sizes = photo?.sizes || [];
         const largestSize = sizes[sizes.length - 1];
         if (largestSize && 'size' in largestSize) {
             fileSize = (largestSize as Api.PhotoSize).size || 0;
@@ -181,11 +206,27 @@ export async function getThumbnail(ctx: TgContext, messageId: number, chatId: st
 
     const etag = generateETag(messageId, chatId, `thumb-${messageId}`);
 
+    let contentType = 'image/jpeg';
+    let ext = 'jpg';
+    if (message.media instanceof Api.MessageMediaDocument) {
+        const doc = message.document;
+        if (doc && doc instanceof Api.Document) {
+            const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
+            if (isSticker && doc.mimeType) {
+                contentType = doc.mimeType;
+                ext = doc.mimeType === 'image/webp' ? 'webp' : doc.mimeType === 'video/webm' ? 'webm' : 'webp';
+            } else if (doc.mimeType === 'image/gif') {
+                contentType = 'image/gif';
+                ext = 'gif';
+            }
+        }
+    }
+
     return {
         buffer: thumbBuffer,
         etag,
-        contentType: 'image/jpeg',
-        filename: `thumbnail_${messageId}.jpg`,
+        contentType,
+        filename: `thumbnail_${messageId}.${ext}`,
     };
 }
 
@@ -223,10 +264,11 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
 
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
 
+    const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
-    const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
-        ? ['photo', 'video', 'document', 'voice']
-        : types.filter(t => t !== 'all') as ('photo' | 'video' | 'document' | 'voice')[];
+    const typesToFetch: string[] = hasAll
+        ? ALL_MEDIA_TYPES
+        : types.filter(t => t !== 'all');
 
     const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
     const baseQuery: Partial<IterMessagesParams> = {
@@ -243,24 +285,57 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
     const ent = await safeGetEntityById(ctx, chatId);
     ctx.logger.info(ctx.phoneNumber, 'getMediaMetadata', params);
 
+    const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
+
+    async function fetchWithPostFilter(type: string, fetchLimit: number): Promise<MediaMetadataItem[]> {
+        if (!NEEDS_POST_FILTER.has(type)) {
+            const messages = await ctx.client.getMessages(ent, {
+                ...baseQuery,
+                limit: fetchLimit,
+                filter: getSearchFilter(type),
+            });
+            return messages
+                .map(m => {
+                    const detectedType = m.media ? getMediaType(m.media) : type;
+                    return extractMediaMetaFromMessage(m, chatId, detectedType);
+                })
+                .filter(item => item.type === type);
+        }
+
+        const results: MediaMetadataItem[] = [];
+        let currentMaxId = maxId;
+        const maxIterations = 5;
+        const batchSize = Math.max(fetchLimit * 4, 100);
+
+        for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
+            const messages = await ctx.client.getMessages(ent, {
+                ...baseQuery,
+                limit: batchSize,
+                filter: getSearchFilter(type),
+                ...(currentMaxId ? { maxId: currentMaxId } : {}),
+            });
+            if (messages.length === 0) break;
+
+            for (const m of messages) {
+                const detectedType = m.media ? getMediaType(m.media) : type;
+                if (detectedType === type) {
+                    results.push(extractMediaMetaFromMessage(m, chatId, detectedType));
+                    if (results.length >= fetchLimit) break;
+                }
+            }
+            currentMaxId = messages[messages.length - 1].id;
+            if (messages.length < batchSize) break;
+        }
+        return results;
+    }
+
     let filteredMessages: MediaMetadataItem[];
 
     if (typesToFetch.length === 1) {
-        const messages = await ctx.client.getMessages(ent, {
-            ...baseQuery,
-            limit: queryLimit,
-            filter: getSearchFilter(typesToFetch[0]),
-        });
-        filteredMessages = messages.map(message => extractMediaMetaFromMessage(message, chatId, typesToFetch[0]));
+        filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     } else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(
-            typesToFetch.map(type =>
-                ctx.client.getMessages(ent, {
-                    ...baseQuery,
-                    limit,
-                    filter: getSearchFilter(type),
-                }).then(msgs => msgs.map(m => extractMediaMetaFromMessage(m, chatId, type)))
-            )
+            typesToFetch.map(type => fetchWithPostFilter(type, limit))
         );
         if (hasAll) {
             filteredMessages = resultsPerType.flat();
@@ -341,10 +416,11 @@ export async function getAllMediaMetaData(ctx: TgContext, params: MediaQueryPara
     if (!ctx.client) throw new Error('Client not initialized');
     const { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
 
+    const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
-    const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
-        ? ['photo', 'video', 'document', 'voice']
-        : types.filter(t => t !== 'all') as ('photo' | 'video' | 'document' | 'voice')[];
+    const typesToFetch: string[] = hasAll
+        ? ALL_MEDIA_TYPES
+        : types.filter(t => t !== 'all');
     let allMedia: MediaMetadataItem[] = [];
     let hasMore = true;
     let lastOffsetId = 0;
@@ -406,10 +482,11 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
 
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
 
+    const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
-    const typesToFetch: ('photo' | 'video' | 'document' | 'voice')[] = hasAll
-        ? ['photo', 'video', 'document', 'voice']
-        : types.filter(t => t !== 'all') as ('photo' | 'video' | 'document' | 'voice')[];
+    const typesToFetch: string[] = hasAll
+        ? ALL_MEDIA_TYPES
+        : types.filter(t => t !== 'all');
 
     const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
 

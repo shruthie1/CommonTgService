@@ -65,6 +65,7 @@ export class UsersService {
     excludeTwoFA?: boolean;
     excludeAudited?: boolean;
     gender?: string;
+    starred?: boolean;
   }): Promise<{
     users: User[];
     total: number;
@@ -81,19 +82,27 @@ export class UsersService {
       minVideos = 0,
       excludeTwoFA = false,
       gender,
+      starred,
     } = options;
 
     const pageNum = Math.max(1, Math.floor(page));
     const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
     const skip = (pageNum - 1) * limitNum;
 
+    let excludedMobiles: string[] = [];
+    try {
+      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    } catch { }
+
     const query: QueryFilter<UserDocument> = {
       expired: { $ne: true },
       'relationships.score': { $gte: minScore },
+      ...(excludedMobiles.length > 0 && { mobile: { $nin: excludedMobiles } }),
     };
 
     if (excludeTwoFA) query.twoFA = { $ne: true };
     if (gender) query.gender = gender;
+    if (starred) query.starred = true;
     if (minCalls > 0) query['calls.totalCalls'] = { $gte: minCalls };
     if (minPhotos > 0) query['photoCount'] = { $gte: minPhotos };
     if (minVideos > 0) query['videoCount'] = { $gte: minVideos };
@@ -111,6 +120,7 @@ export class UsersService {
       .sort({ 'relationships.score': -1 })
       .skip(skip)
       .limit(limitNum)
+      .allowDiskUse(true)
       .lean()
       .exec();
 
@@ -122,9 +132,15 @@ export class UsersService {
   }
 
   async findAllSorted(limit: number = 100, skip: number = 0, sort?: Record<string, 1 | -1>): Promise<User[]> {
-    const query = this.userModel.find().lean();
+    let excludedMobiles: string[] = [];
+    try {
+      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    } catch { }
+
+    const filter = excludedMobiles.length > 0 ? { mobile: { $nin: excludedMobiles } } : {};
+    const query = this.userModel.find(filter).lean();
     if (sort) query.sort(sort);
-    return query.skip(skip).limit(limit).exec();
+    return query.skip(skip).limit(limit).allowDiskUse(true).exec();
   }
 
   async findOne(tgId: string): Promise<User> {
@@ -158,6 +174,14 @@ export class UsersService {
     return result.modifiedCount;
   }
 
+  async toggleStar(mobile: string): Promise<{ mobile: string; starred: boolean }> {
+    const user = await this.userModel.findOne({ mobile }).select('mobile starred').exec();
+    if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
+    const newVal = !user.starred;
+    await this.userModel.updateOne({ mobile }, { $set: { starred: newVal } }).exec();
+    return { mobile, starred: newVal };
+  }
+
   async delete(tgId: string): Promise<void> {
     const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
     if (result.matchedCount === 0) {
@@ -172,7 +196,17 @@ export class UsersService {
       query.firstName = { $regex: new RegExp(query.firstName as string, 'i') };
     }
 
-    return this.userModel.find(query).sort({ updatedAt: -1 }).exec();
+    if (!filter.mobile) {
+      let excludedMobiles: string[] = [];
+      try {
+        excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+      } catch { }
+      if (excludedMobiles.length > 0) {
+        query.mobile = { $nin: excludedMobiles } as any;
+      }
+    }
+
+    return this.userModel.find(query).sort({ updatedAt: -1 }).limit(200).exec();
   }
 
   async computeRelationshipScore(mobile: string): Promise<void> {
@@ -190,6 +224,13 @@ export class UsersService {
       // Merge + dedup to get the best of both worlds
 
       const candidateMap = new Map<string, { id: string; name: string; username: string | null; phone: string | null; source: 'topPeers' | 'dialogs' | 'both' }>();
+      const excludedIds = new Set(['777000', '42', '333000', '178220800']);
+      try {
+        const ownAccountIds = await this.telegramService.getOwnAccountTgIds();
+        for (const id of ownAccountIds) excludedIds.add(id);
+      } catch (e) {
+        this.logger.warn(`[${mobile}] Failed to fetch own account IDs: ${(e as Error).message}`);
+      }
 
       // Source A: GetTopPeers (1 API call — most valuable signal)
       try {
@@ -215,7 +256,7 @@ export class UsersService {
           for (const category of topPeersResult.categories || []) {
             for (const topPeer of category.peers || []) {
               const peerId = (topPeer.peer as any)?.userId?.toString();
-              if (!peerId || peerId === selfId) continue;
+              if (!peerId || peerId === selfId || excludedIds.has(peerId)) continue;
               const user = userMap.get(peerId);
               if (!user) continue;
               candidateMap.set(peerId, {
@@ -241,7 +282,7 @@ export class UsersService {
           const user = d.entity as Api.User;
           if (user.bot) continue;
           const id = user.id.toString();
-          if (id === selfId) continue;
+          if (id === selfId || excludedIds.has(id)) continue;
 
           const existing = candidateMap.get(id);
           if (existing) {
@@ -289,6 +330,12 @@ export class UsersService {
 
       for (const candidate of allCandidates) {
         try {
+          if (excludedIds.has(candidate.id)) continue;
+          try {
+            const entity = await telegramClient.client.getEntity(candidate.id);
+            if ((entity as any).bot) continue;
+          } catch { }
+
           const chatPeer = await telegramClient.getchatId(candidate.id);
 
           // Message count (1 API call)
@@ -479,9 +526,15 @@ export class UsersService {
     const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
     const skip = (pageNum - 1) * limitNum;
 
+    let excludedMobiles: string[] = [];
+    try {
+      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    } catch { }
+
     const query: QueryFilter<UserDocument> = {
       expired: { $ne: true },
       'relationships.bestScore': { $gt: minScore },
+      ...(excludedMobiles.length > 0 && { mobile: { $nin: excludedMobiles } }),
     };
     if (excludeTwoFA) query.twoFA = { $ne: true };
     if (gender) query.gender = gender;
@@ -497,6 +550,7 @@ export class UsersService {
       .sort({ 'relationships.bestScore': -1 })
       .skip(skip)
       .limit(limitNum)
+      .allowDiskUse(true)
       .lean()
       .exec();
 
@@ -616,13 +670,24 @@ export class UsersService {
       throw new BadRequestException(`Unknown computed field: ${computedField}`);
     }
 
-    return this.userModel.aggregate([
+    let excludedMobiles: string[] = [];
+    try {
+      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    } catch { }
+
+    const pipeline: any[] = [];
+    if (excludedMobiles.length > 0) {
+      pipeline.push({ $match: { mobile: { $nin: excludedMobiles } } });
+    }
+    pipeline.push(
       { $addFields: { _computedSort: fieldExpr } },
       { $sort: { _computedSort: sortOrder } },
       { $skip: skip },
       { $limit: limit },
       { $project: { _computedSort: 0 } },
-    ]).exec();
+    );
+
+    return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
   }
 
   async executeQuery(
@@ -642,7 +707,7 @@ export class UsersService {
       if (limit) queryExec.limit(limit);
       if (skip) queryExec.skip(skip);
 
-      return await queryExec.exec();
+      return await queryExec.allowDiskUse(true).exec();
     } catch (error: any) {
       throw new InternalServerErrorException(error.message);
     }

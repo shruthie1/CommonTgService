@@ -18,6 +18,8 @@ import { CustomFile } from 'telegram/client/uploads';
 import { Dialog } from 'telegram/tl/custom/dialog';
 import bigInt from 'big-integer';
 
+const SYSTEM_CHAT_IDS = new Set(['777000']);
+
 // ---- Entity resolution ----
 
 export async function safeGetEntityById(ctx: TgContext, entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null> {
@@ -644,6 +646,7 @@ export async function getChats(ctx: TgContext, options: {
 
     for await (const dialog of ctx.client.iterDialogs(params)) {
         const entity = dialog.entity;
+        if (SYSTEM_CHAT_IDS.has(entity.id.toString())) continue;
         const match =
             peerType === 'all' ||
             (peerType === 'user' && entity instanceof Api.User) ||
@@ -864,12 +867,6 @@ async function fetchMessageMediaForChats(
                 });
                 mediaCount = (mediaResult as { total?: number })?.total ?? 0;
                 ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Media fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-                if (mediaCount < 1) {
-                    ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 1 media`);
-                    result[chatId] = null;
-                    skipped++;
-                    continue;
-                }
             }
             result[chatId] = { totalMessages, mediaCount, lastMessageDate };
         } catch (e) {
@@ -1034,6 +1031,7 @@ export async function getTopPrivateChats(
     limit: number = 45,
     enrichMedia: boolean = false,
     offsetDate?: number,
+    excludedTgIds?: Set<string>,
 ): Promise<TopPrivateChatsResult> {
     if (!ctx.client) throw new Error('Client not initialized');
     const globalStart = Date.now();
@@ -1073,7 +1071,7 @@ export async function getTopPrivateChats(
         const user = d.entity as Api.User;
         if (user.bot) continue;
         const id = user.id.toString();
-        if (id === selfChatId || seenIds.has(id)) continue;
+        if (id === selfChatId || seenIds.has(id) || SYSTEM_CHAT_IDS.has(id) || excludedTgIds?.has(id)) continue;
         seenIds.add(id);
         candidateChats.push(d);
         userEntityMap.set(id, user);
@@ -1169,7 +1167,7 @@ export async function getTopPrivateChats(
 
     // Filter: keep only chats with meaningful activity
     const filtered = items.filter(item =>
-        item.totalMessages >= 700 || item.mediaCount > 0 || item.calls.totalCalls > 0,
+        item.totalMessages >= 10 || item.mediaCount > 0 || item.calls.totalCalls > 0,
     );
 
     const hasMore = candidateChats.length >= clampedLimit && !!lastDialogDate;

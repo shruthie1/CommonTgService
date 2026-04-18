@@ -3,6 +3,8 @@ import TelegramManager from "./TelegramManager";
 import { BadRequestException, HttpException, Inject, Injectable, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { CloudinaryService } from '../../cloudinary';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
+import { BufferClientService } from '../buffer-clients/buffer-client.service';
+import { PromoteClientService } from '../promote-clients/promote-client.service';
 import * as path from 'path';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
@@ -30,6 +32,11 @@ import { getDialogs } from 'telegram/client/dialogs';
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
     private readonly logger: TelegramLogger;
+    private _cachedMobiles: string[] | null = null;
+    private _cachedMobilesAt = 0;
+    private _cachedTgIds: Set<string> | null = null;
+    private _cachedTgIdsAt = 0;
+    private static readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
     constructor(
         @Inject(forwardRef(() => UsersService))
@@ -38,9 +45,44 @@ export class TelegramService implements OnModuleDestroy {
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
+        private bufferClientService: BufferClientService,
+        @Inject(forwardRef(() => PromoteClientService))
+        private promoteClientService: PromoteClientService,
     ) {
         this.logger = new TelegramLogger('TgService');
         connectionManager.setUsersService(this.usersService);
+    }
+
+    async getOwnAccountTgIds(): Promise<Set<string>> {
+        if (this._cachedTgIds && (Date.now() - this._cachedTgIdsAt) < TelegramService.CACHE_TTL) {
+            return this._cachedTgIds;
+        }
+        const [bufferDocs, promoteDocs] = await Promise.all([
+            this.bufferClientService.model.find({}, { tgId: 1 }).lean(),
+            this.promoteClientService.model.find({}, { tgId: 1 }).lean(),
+        ]);
+        const ids = new Set<string>();
+        for (const d of bufferDocs) if (d.tgId) ids.add(d.tgId);
+        for (const d of promoteDocs) if (d.tgId) ids.add(d.tgId);
+        this._cachedTgIds = ids;
+        this._cachedTgIdsAt = Date.now();
+        return ids;
+    }
+
+    async getOwnAccountMobiles(): Promise<string[]> {
+        if (this._cachedMobiles && (Date.now() - this._cachedMobilesAt) < TelegramService.CACHE_TTL) {
+            return this._cachedMobiles;
+        }
+        const [bufferDocs, promoteDocs] = await Promise.all([
+            this.bufferClientService.model.find({}, { mobile: 1 }).lean(),
+            this.promoteClientService.model.find({}, { mobile: 1 }).lean(),
+        ]);
+        const mobiles = new Set<string>();
+        for (const d of bufferDocs) if (d.mobile && typeof d.mobile === 'string') mobiles.add(d.mobile);
+        for (const d of promoteDocs) if (d.mobile && typeof d.mobile === 'string') mobiles.add(d.mobile);
+        this._cachedMobiles = [...mobiles];
+        this._cachedMobilesAt = Date.now();
+        return this._cachedMobiles;
     }
 
     async onModuleDestroy() {
@@ -404,7 +446,7 @@ export class TelegramService implements OnModuleDestroy {
     async getMediaMetadata(mobile: string,
         params: {
             chatId: string;
-            types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+            types?: string[];
             startDate?: Date;
             endDate?: Date;
             limit?: number;
@@ -736,7 +778,7 @@ export class TelegramService implements OnModuleDestroy {
         mobile: string,
         params: {
             chatId: string;
-            types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+            types?: string[];
             startDate?: Date;
             endDate?: Date;
             limit?: number;
@@ -1121,7 +1163,8 @@ export class TelegramService implements OnModuleDestroy {
         const telegramClient = await connectionManager.getClient(mobile);
         this.logger.info(mobile, `Get top private chats with limit=${limit || 10}, enrichMedia=${!!enrichMedia}, offsetDate=${offsetDate ?? 'none'}`);
         try {
-            return await telegramClient.getTopPrivateChats(limit, enrichMedia, offsetDate);
+            const excludedTgIds = await this.getOwnAccountTgIds();
+            return await telegramClient.getTopPrivateChats(limit, enrichMedia, offsetDate, excludedTgIds);
         } catch (error) {
             this.logger.error(mobile, 'Error getting top private chats:', error);
             throw error;

@@ -3910,33 +3910,25 @@
         ]
       }
     },
-    "/telegram/security/2fa-status/{mobile}": {
+    "/telegram/security/status/{mobile}": {
       "get": {
-        "operationId": "TelegramController_hasPassword",
+        "operationId": "TelegramController_getSecurityStatus",
         "parameters": [
           {
             "name": "mobile",
             "required": true,
             "in": "path",
-            "description": "Mobile number",
             "schema": {
               "type": "string"
             }
           }
         ],
         "responses": {
-          "default": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
+          "200": {
+            "description": ""
           }
         },
-        "summary": "Check if 2FA password is set",
+        "summary": "Get account security status — 2FA, sessions, profile (live Telegram check)",
         "tags": [
           "Telegram"
         ]
@@ -7548,6 +7540,24 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Field to sort by (e.g. msgs, totalChats, contacts, calls.totalCalls, score, lastActive, otherPhotoCount, otherVideoCount, relationships.score)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "description": "Sort order: asc or desc (default: desc)",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7555,7 +7565,7 @@
             "description": ""
           }
         },
-        "summary": "Get all users",
+        "summary": "Get all users with optional sorting",
         "tags": [
           "Telegram Users"
         ]
@@ -7807,6 +7817,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "starred",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -7839,6 +7857,56 @@
           }
         },
         "summary": "Get relationship details for a specific user",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/aggregate-sort": {
+      "get": {
+        "operationId": "UsersController_aggregateSort",
+        "parameters": [
+          {
+            "name": "field",
+            "required": true,
+            "in": "query",
+            "description": "Computed field: intimateTotal, privateMsgsTopContacts, privateMediaTopContacts, privateVoiceTotal, privateMsgsBestContact, relTopIntimate, relTopMedia, relTopVoice, relCommonChats, relTopCalls, relMeaningfulCalls, relMutualContacts, callPartners, totalCallDuration, longestCall, missedCalls, privateMsgsCallPartners",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "description": "asc or desc (default: desc)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "skip",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Sort users by computed/nested fields (global)",
         "tags": [
           "Telegram Users"
         ]
@@ -7922,9 +7990,35 @@
         "tags": [
           "Telegram Users"
         ]
-      },
-      "delete": {
-        "operationId": "UsersController_remove",
+      }
+    },
+    "/user/{mobile}/star": {
+      "patch": {
+        "operationId": "UsersController_toggleStar",
+        "parameters": [
+          {
+            "name": "mobile",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Toggle starred status for a user",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/{tgId}/expire": {
+      "patch": {
+        "operationId": "UsersController_expire",
         "parameters": [
           {
             "name": "tgId",
@@ -7940,7 +8034,7 @@
             "description": ""
           }
         },
-        "summary": "Delete user by tgId",
+        "summary": "Mark user as expired (soft delete)",
         "tags": [
           "Telegram Users"
         ]
@@ -11770,6 +11864,9 @@
               "document",
               "voice",
               "audio",
+              "gif",
+              "roundVideo",
+              "sticker",
               "all"
             ]
           }
@@ -11797,6 +11894,9 @@
               "document",
               "voice",
               "audio",
+              "gif",
+              "roundVideo",
+              "sticker",
               "all"
             ]
           },
@@ -14274,77 +14374,6 @@
           }
         }
       },
-      "UserStatsDto": {
-        "type": "object",
-        "properties": {
-          "channels": {
-            "type": "number",
-            "description": "Channel count"
-          },
-          "personalChats": {
-            "type": "number",
-            "description": "Personal chat count"
-          },
-          "totalChats": {
-            "type": "number",
-            "description": "Total chat count"
-          },
-          "contacts": {
-            "type": "number",
-            "description": "Contact count"
-          },
-          "msgs": {
-            "type": "number",
-            "description": "Message count"
-          },
-          "photoCount": {
-            "type": "number",
-            "description": "Total photo count"
-          },
-          "videoCount": {
-            "type": "number",
-            "description": "Total video count"
-          },
-          "movieCount": {
-            "type": "number",
-            "description": "Movie file count"
-          },
-          "ownPhotoCount": {
-            "type": "number",
-            "description": "Sent photo count"
-          },
-          "otherPhotoCount": {
-            "type": "number",
-            "description": "Received photo count"
-          },
-          "ownVideoCount": {
-            "type": "number",
-            "description": "Sent video count"
-          },
-          "otherVideoCount": {
-            "type": "number",
-            "description": "Received video count"
-          },
-          "lastActive": {
-            "type": "string",
-            "description": "Last active timestamp"
-          }
-        },
-        "required": [
-          "channels",
-          "personalChats",
-          "totalChats",
-          "contacts",
-          "msgs",
-          "photoCount",
-          "videoCount",
-          "movieCount",
-          "ownPhotoCount",
-          "otherPhotoCount",
-          "ownVideoCount",
-          "otherVideoCount"
-        ]
-      },
       "UserCallsDto": {
         "type": "object",
         "properties": {
@@ -14420,13 +14449,57 @@
             "type": "string",
             "description": "2FA password"
           },
-          "stats": {
-            "description": "Account statistics",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/UserStatsDto"
-              }
-            ]
+          "channels": {
+            "type": "number",
+            "description": "Channel count"
+          },
+          "personalChats": {
+            "type": "number",
+            "description": "Personal chat count"
+          },
+          "totalChats": {
+            "type": "number",
+            "description": "Total chat count"
+          },
+          "contacts": {
+            "type": "number",
+            "description": "Contact count"
+          },
+          "msgs": {
+            "type": "number",
+            "description": "Message count"
+          },
+          "photoCount": {
+            "type": "number",
+            "description": "Total photo count"
+          },
+          "videoCount": {
+            "type": "number",
+            "description": "Total video count"
+          },
+          "movieCount": {
+            "type": "number",
+            "description": "Movie file count"
+          },
+          "ownPhotoCount": {
+            "type": "number",
+            "description": "Sent photo count"
+          },
+          "otherPhotoCount": {
+            "type": "number",
+            "description": "Received photo count"
+          },
+          "ownVideoCount": {
+            "type": "number",
+            "description": "Sent video count"
+          },
+          "otherVideoCount": {
+            "type": "number",
+            "description": "Received video count"
+          },
+          "lastActive": {
+            "type": "string",
+            "description": "Last active timestamp"
           },
           "calls": {
             "description": "Call statistics",
@@ -14444,7 +14517,19 @@
           "tgId",
           "twoFA",
           "expired",
-          "password"
+          "password",
+          "channels",
+          "personalChats",
+          "totalChats",
+          "contacts",
+          "msgs",
+          "photoCount",
+          "videoCount",
+          "movieCount",
+          "ownPhotoCount",
+          "otherPhotoCount",
+          "ownVideoCount",
+          "otherVideoCount"
         ]
       },
       "UpdateUserDto": {

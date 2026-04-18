@@ -57,6 +57,7 @@ export class UsersController {
   @ApiQuery({ name: 'excludeTwoFA', required: false, type: Boolean })
   @ApiQuery({ name: 'excludeAudited', required: false, type: Boolean })
   @ApiQuery({ name: 'gender', required: false, type: String })
+  @ApiQuery({ name: 'starred', required: false, type: Boolean })
   async getTopInteractionUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -66,7 +67,8 @@ export class UsersController {
     @Query('minVideos') minVideos?: string,
     @Query('excludeTwoFA') excludeTwoFA?: string,
     @Query('excludeAudited') excludeAudited?: string,
-    @Query('gender') gender?: string
+    @Query('gender') gender?: string,
+    @Query('starred') starred?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : undefined;
@@ -107,6 +109,7 @@ export class UsersController {
       excludeTwoFA: excludeTwoFABool,
       excludeAudited: excludeAuditedBool,
       gender,
+      starred: starred === 'true' ? true : undefined,
     });
   }
 
@@ -182,6 +185,13 @@ export class UsersController {
   @ApiParam({ name: 'tgId' })
   async update(@Param('tgId') tgId: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(tgId, updateUserDto);
+  }
+
+  @Patch(':mobile/star')
+  @ApiOperation({ summary: 'Toggle starred status for a user' })
+  @ApiParam({ name: 'mobile' })
+  async toggleStar(@Param('mobile') mobile: string) {
+    return this.usersService.toggleStar(mobile);
   }
 
   @Patch(':tgId/expire')

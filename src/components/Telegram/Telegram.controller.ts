@@ -487,9 +487,11 @@ export class TelegramController {
             
             // Support HTTP Range requests for video streaming
             const range = res.req.headers.range;
+            const ifRange = res.req.headers['if-range'];
             const chunkSize = 512 * 1024; // 512 KB chunks
-            
-            if (range && fileInfo.fileSize > 0) {
+            const rangeValid = range && fileInfo.fileSize > 0 && (!ifRange || ifRange === fileInfo.etag);
+
+            if (rangeValid) {
                 // Parse Range header: "bytes=start-end"
                 const parts = range.replace(/bytes=/, "").split("-");
                 const start = parseInt(parts[0], 10);
@@ -508,7 +510,7 @@ export class TelegramController {
                 res.setHeader('Content-Length', chunksize);
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 
                 // Enable progressive video playback
@@ -516,21 +518,32 @@ export class TelegramController {
                 res.setHeader('Access-Control-Allow-Origin', '*');
                 res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
 
-                // Stream only the requested range
+                // Align offset to Telegram's chunk boundary
+                const alignedStart = Math.floor(start / chunkSize) * chunkSize;
+                const skipBytes = start - alignedStart;
+                const fetchLimit = chunksize + skipBytes;
+                let skipped = 0;
+
                 for await (const chunk of this.telegramService.streamMediaFile(
-                    mobile, 
-                    fileInfo.fileLocation, 
-                    bigInt(start), 
-                    chunksize, 
+                    mobile,
+                    fileInfo.fileLocation,
+                    bigInt(alignedStart),
+                    fetchLimit,
                     chunkSize
                 )) {
-                    res.write(chunk);
+                    let data = chunk as Buffer;
+                    if (skipped < skipBytes) {
+                        const toSkip = Math.min(skipBytes - skipped, data.length);
+                        data = data.subarray(toSkip);
+                        skipped += toSkip;
+                    }
+                    if (data.length > 0) res.write(data);
                 }
             } else {
                 // Full file download
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
                 
@@ -555,11 +568,12 @@ export class TelegramController {
             }
             res.end();
         } catch (error) {
+            console.error(`[Download] Error messageId=${messageId} chatId=${chatId}:`, error.message || error, error.stack?.split('\n')[1]);
             if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found')) {
                 return res.status(404).send(error.message || 'File reference expired');
             }
             if (!res.headersSent) {
-                res.status(500).send('Error downloading media');
+                res.status(500).send(`Error downloading media: ${error.message || 'Unknown error'}`);
             }
         }
     }
@@ -629,7 +643,7 @@ export class TelegramController {
             // Set response headers
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
-            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
             
@@ -778,13 +792,13 @@ export class TelegramController {
         }
         
         // Parse types array - handle both string and array formats
-        let parsedTypes: ('photo' | 'video' | 'document' | 'voice' | 'all')[] | undefined;
+        let parsedTypes: string[] | undefined;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'audio', 'gif', 'roundVideo', 'sticker', 'all'];
             parsedTypes = typesArray
-                .filter(t => validTypes.includes(t.toLowerCase()))
-                .map(t => t.toLowerCase()) as ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+                .filter(t => validTypes.includes(t.toLowerCase()) || validTypes.includes(t))
+                .map(t => t);
             
             if (parsedTypes.length === 0) {
                 throw new BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
@@ -908,13 +922,13 @@ export class TelegramController {
         }
         
         // Parse types array - handle both string and array formats
-        let parsedTypes: ('photo' | 'video' | 'document' | 'voice' | 'all')[] | undefined;
+        let parsedTypes: string[] | undefined;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'audio', 'gif', 'roundVideo', 'sticker', 'all'];
             parsedTypes = typesArray
-                .filter(t => validTypes.includes(t.toLowerCase()))
-                .map(t => t.toLowerCase()) as ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+                .filter(t => validTypes.includes(t.toLowerCase()) || validTypes.includes(t))
+                .map(t => t);
             
             if (parsedTypes.length === 0) {
                 throw new BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);

@@ -24,6 +24,7 @@ export function getSearchFilter(filter: string): Api.TypeMessagesFilter {
         case 'gif': return new Api.InputMessagesFilterGif();
         case 'sticker': return new Api.InputMessagesFilterDocument();
         case 'animation': return new Api.InputMessagesFilterDocument();
+        case 'audio': return new Api.InputMessagesFilterMusic();
         case 'music': return new Api.InputMessagesFilterMusic();
         case 'chatPhoto': return new Api.InputMessagesFilterChatPhotos();
         case 'location': return new Api.InputMessagesFilterGeo();
@@ -35,14 +36,31 @@ export function getSearchFilter(filter: string): Api.TypeMessagesFilter {
 
 // ---- Media type detection ----
 
-export function getMediaType(media: Api.TypeMessageMedia): 'photo' | 'video' | 'document' {
+export function getMediaType(media: Api.TypeMessageMedia): string {
     if (media instanceof Api.MessageMediaPhoto) {
         return 'photo';
     } else if (media instanceof Api.MessageMediaDocument) {
         const document = media.document as Api.Document;
-        if (document?.attributes?.some(attr => attr instanceof Api.DocumentAttributeVideo)) {
-            return 'video';
+        if (!document?.attributes) return 'document';
+
+        const hasSticker = document.attributes.some(attr => attr instanceof Api.DocumentAttributeSticker);
+        if (hasSticker) return 'sticker';
+
+        const hasAnimated = document.attributes.some(attr => attr instanceof Api.DocumentAttributeAnimated);
+        if (hasAnimated) return 'gif';
+
+        const videoAttr = document.attributes.find(attr => attr instanceof Api.DocumentAttributeVideo) as Api.DocumentAttributeVideo | undefined;
+        if (videoAttr) {
+            return videoAttr.roundMessage ? 'roundVideo' : 'video';
         }
+
+        const audioAttr = document.attributes.find(attr => attr instanceof Api.DocumentAttributeAudio) as Api.DocumentAttributeAudio | undefined;
+        if (audioAttr) {
+            return audioAttr.voice ? 'voice' : 'audio';
+        }
+
+        if (document.mimeType === 'image/gif') return 'gif';
+
         return 'document';
     }
     return 'document';

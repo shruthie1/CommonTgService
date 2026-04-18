@@ -173,8 +173,8 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return chatOps.updateChatSettings(this.ctx, settings);
         }
 
-        async getTopPrivateChats(limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<TopPrivateChatsResult> {
-            return chatOps.getTopPrivateChats(this.ctx, limit, enrichMedia, offsetDate);
+        async getTopPrivateChats(limit?: number, enrichMedia?: boolean, offsetDate?: number, excludedTgIds?: Set<string>): Promise<TopPrivateChatsResult> {
+            return chatOps.getTopPrivateChats(this.ctx, limit, enrichMedia, offsetDate, excludedTgIds);
         }
 
         async createChatFolder(options: ChatFolderCreateOptions): Promise<{ id: number; name: string; options: Record<string, boolean> }> {
