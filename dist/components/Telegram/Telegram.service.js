@@ -437,11 +437,11 @@ let TelegramService = TelegramService_1 = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         yield* telegramClient.streamMediaFile(fileLocation, offset, limit, requestSize);
     }
-    async getThumbnail(mobile, messageId, chatId) {
+    async getThumbnail(mobile, messageId, chatId, quality = 'low') {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         try {
-            this.logger.info(mobile, 'Get thumbnail', { messageId, chatId });
-            return await telegramClient.getThumbnail(messageId, chatId);
+            this.logger.info(mobile, 'Get thumbnail', { messageId, chatId, quality });
+            return await telegramClient.getThumbnail(messageId, chatId, quality);
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting thumbnail:', error);

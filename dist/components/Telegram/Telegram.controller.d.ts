@@ -72,7 +72,7 @@ export declare class TelegramController {
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
     downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
-    getThumbnail(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
+    getThumbnail(mobile: string, chatId: string, messageId: number, quality: string, res: Response): Promise<Response<any, Record<string, any>>>;
     sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("./dto").AlbumSendResult>;
     getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./dto").MediaListResponse>;
     getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./dto").FilteredMediaListResponse>;

@@ -79,7 +79,7 @@ export declare class TelegramService implements OnModuleDestroy {
     }): Promise<import("./TelegramManager").MediaListResponse>;
     getMediaFileDownloadInfo(mobile: string, messageId: number, chatId: string): Promise<import("./TelegramManager").MediaFileDownloadInfo>;
     streamMediaFile(mobile: string, fileLocation: any, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer<ArrayBufferLike>, void, any>;
-    getThumbnail(mobile: string, messageId: number, chatId: string): Promise<import("./TelegramManager").ThumbnailResult>;
+    getThumbnail(mobile: string, messageId: number, chatId: string, quality?: 'low' | 'high'): Promise<import("./TelegramManager").ThumbnailResult>;
     forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<string>;
     leaveChannel(mobile: string, channel: string): Promise<string>;
