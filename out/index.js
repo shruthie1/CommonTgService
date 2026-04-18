@@ -10106,7 +10106,6 @@ const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
-const chat_operations_1 = __webpack_require__(/*! ./chat-operations */ "./src/components/Telegram/manager/chat-operations.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 async function getThumbnailBuffer(ctx, message, quality = 'low') {
     try {
@@ -10151,8 +10150,7 @@ async function getThumbnailBuffer(ctx, message, quality = 'low') {
     return null;
 }
 async function getMessageWithMedia(ctx, messageId, chatId) {
-    const entity = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
-    const messages = await ctx.client.getMessages(entity, { ids: [messageId] });
+    const messages = await ctx.client.getMessages(chatId, { ids: [messageId] });
     const message = messages[0];
     if (!message || message.media instanceof telegram_1.Api.MessageMediaEmpty) {
         throw new Error('Media not found');
@@ -10324,12 +10322,11 @@ async function getMediaMetadata(ctx, params) {
             maxDate: Math.floor(endDate.getTime() / 1000),
         }),
     };
-    const ent = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
     ctx.logger.info(ctx.phoneNumber, 'getMediaMetadata', params);
     const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
     async function fetchWithPostFilter(type, fetchLimit) {
         if (!NEEDS_POST_FILTER.has(type)) {
-            const messages = await ctx.client.getMessages(ent, {
+            const messages = await ctx.client.getMessages(chatId, {
                 ...baseQuery,
                 limit: fetchLimit,
                 filter: (0, helpers_1.getSearchFilter)(type),
@@ -10346,7 +10343,7 @@ async function getMediaMetadata(ctx, params) {
         const maxIterations = 5;
         const batchSize = Math.max(fetchLimit * 4, 100);
         for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
-            const messages = await ctx.client.getMessages(ent, {
+            const messages = await ctx.client.getMessages(chatId, {
                 ...baseQuery,
                 limit: batchSize,
                 filter: (0, helpers_1.getSearchFilter)(type),
@@ -10530,9 +10527,8 @@ async function getFilteredMedia(ctx, params) {
             maxDate: Math.floor(endDate.getTime() / 1000),
         }),
     };
-    const ent = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(ent, query);
+    const messages = await ctx.client.getMessages(chatId, query);
     ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
     const filteredMessages = messages.filter(message => {
         if (!message.media)
