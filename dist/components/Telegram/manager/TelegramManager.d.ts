@@ -104,7 +104,7 @@ declare class TelegramManager {
     deleteChat(params: DeleteChatParams): Promise<void>;
     getMediaUrl(message: Api.Message): Promise<string | Buffer>;
     getMediaMessages(): Promise<Api.messages.Messages>;
-    getThumbnail(messageId: number, chatId?: string): Promise<ThumbnailResult>;
+    getThumbnail(messageId: number, chatId?: string, quality?: 'low' | 'high'): Promise<ThumbnailResult>;
     getMediaFileDownloadInfo(messageId: number, chatId?: string): Promise<MediaFileDownloadInfo>;
     streamMediaFile(fileLocation: Api.TypeInputFileLocation, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer>;
     getMediaMetadata(params: MediaQueryParams): Promise<MediaListResponse>;

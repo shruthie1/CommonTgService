@@ -301,21 +301,22 @@ let TelegramController = class TelegramController {
             }
         }
     }
-    async getThumbnail(mobile, chatId, messageId, res) {
+    async getThumbnail(mobile, chatId, messageId, quality, res) {
         if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
             throw new common_1.BadRequestException('Message ID must be a positive integer');
         }
         if (!chatId || chatId.trim().length === 0) {
             throw new common_1.BadRequestException('Chat ID is required and cannot be empty');
         }
+        const q = quality === 'high' ? 'high' : 'low';
         try {
-            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId);
+            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId, q);
             if (res.req.headers['if-none-match'] === thumbnail.etag) {
                 return res.status(304).end();
             }
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
-            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
             return res.send(thumbnail.buffer);
@@ -1083,6 +1084,12 @@ __decorate([
         type: Number,
         example: 12345
     }),
+    (0, swagger_1.ApiQuery)({
+        name: 'quality',
+        required: false,
+        description: 'Thumbnail quality: low (smallest, fast) or high (medium size)',
+        enum: ['low', 'high'],
+    }),
     (0, swagger_1.ApiResponse)({
         status: 200,
         description: 'Thumbnail image (JPEG format)',
@@ -1105,9 +1112,10 @@ __decorate([
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('chatId')),
     __param(2, (0, common_1.Query)('messageId')),
-    __param(3, (0, common_1.Res)()),
+    __param(3, (0, common_1.Query)('quality')),
+    __param(4, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, Number, Object]),
+    __metadata("design:paramtypes", [String, String, Number, String, Object]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "getThumbnail", null);
 __decorate([

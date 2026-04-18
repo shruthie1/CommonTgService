@@ -444,28 +444,20 @@ async function getChatMediaCounts(ctx, chatId) {
             throw new Error(`Unsupported entity type for chatId: ${chatId}`);
         }
     }
-    const searchCount = (filter) => ctx.client.invoke(new telegram_1.Api.messages.Search({
-        peer: inputPeer,
-        q: '',
-        filter,
-        minDate: 0,
-        maxDate: 0,
-        offsetId: 0,
-        addOffset: 0,
-        limit: 1,
-        maxId: 0,
-        minId: 0,
-        hash: (0, big_integer_1.default)(0),
-    })).then(r => r.count ?? 0).catch(() => 0);
-    const [photo, video, roundVideo, document, voice, gif, audio, link, totalMessages] = await Promise.all([
-        searchCount(new telegram_1.Api.InputMessagesFilterPhotos()),
-        searchCount(new telegram_1.Api.InputMessagesFilterVideo()),
-        searchCount(new telegram_1.Api.InputMessagesFilterRoundVideo()),
-        searchCount(new telegram_1.Api.InputMessagesFilterDocument()),
-        searchCount(new telegram_1.Api.InputMessagesFilterVoice()),
-        searchCount(new telegram_1.Api.InputMessagesFilterGif()),
-        searchCount(new telegram_1.Api.InputMessagesFilterMusic()),
-        searchCount(new telegram_1.Api.InputMessagesFilterUrl()),
+    const [countersResult, totalMessages] = await Promise.all([
+        ctx.client.invoke(new telegram_1.Api.messages.GetSearchCounters({
+            peer: inputPeer,
+            filters: [
+                new telegram_1.Api.InputMessagesFilterPhotos(),
+                new telegram_1.Api.InputMessagesFilterVideo(),
+                new telegram_1.Api.InputMessagesFilterRoundVideo(),
+                new telegram_1.Api.InputMessagesFilterDocument(),
+                new telegram_1.Api.InputMessagesFilterVoice(),
+                new telegram_1.Api.InputMessagesFilterGif(),
+                new telegram_1.Api.InputMessagesFilterMusic(),
+                new telegram_1.Api.InputMessagesFilterUrl(),
+            ],
+        })).catch(() => []),
         ctx.client.invoke(new telegram_1.Api.messages.GetHistory({
             peer: inputPeer,
             offsetId: 0,
@@ -477,6 +469,15 @@ async function getChatMediaCounts(ctx, chatId) {
             hash: (0, big_integer_1.default)(0),
         })).then(r => r.count ?? 0).catch(() => 0),
     ]);
+    const counts = countersResult;
+    const photo = counts?.[0]?.count ?? 0;
+    const video = counts?.[1]?.count ?? 0;
+    const roundVideo = counts?.[2]?.count ?? 0;
+    const document = counts?.[3]?.count ?? 0;
+    const voice = counts?.[4]?.count ?? 0;
+    const gif = counts?.[5]?.count ?? 0;
+    const audio = counts?.[6]?.count ?? 0;
+    const link = counts?.[7]?.count ?? 0;
     return {
         totalMessages,
         photo, video, roundVideo, document, voice, gif, audio, link,

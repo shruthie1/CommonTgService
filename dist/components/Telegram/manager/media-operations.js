@@ -53,15 +53,18 @@ const big_integer_1 = __importDefault(require("big-integer"));
 const helpers_1 = require("./helpers");
 const chat_operations_1 = require("./chat-operations");
 const Helpers_1 = require("telegram/Helpers");
-async function getThumbnailBuffer(ctx, message) {
+async function getThumbnailBuffer(ctx, message, quality = 'low') {
     try {
         if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
             const sizes = message.photo?.sizes || [];
             if (sizes.length > 0) {
-                const preferredSize = sizes.find((s) => s.type === 'm') ||
-                    sizes.find((s) => s.type === 'x') ||
-                    sizes[sizes.length - 1] ||
-                    sizes[0];
+                const preferredSize = quality === 'high'
+                    ? (sizes.find((s) => s.type === 'x') ||
+                        sizes.find((s) => s.type === 'm') ||
+                        sizes[sizes.length - 1] || sizes[0])
+                    : (sizes.find((s) => s.type === 's') ||
+                        sizes.find((s) => s.type === 'm') ||
+                        sizes[0]);
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredSize }), 30000);
             }
         }
@@ -69,10 +72,12 @@ async function getThumbnailBuffer(ctx, message) {
             const doc = message.document;
             const thumbs = doc?.thumbs || [];
             if (thumbs.length > 0) {
-                const preferredThumb = thumbs.find((t) => t.type === 'm') ||
-                    thumbs.find((t) => t.type === 's') ||
-                    thumbs[thumbs.length - 1] ||
-                    thumbs[0];
+                const preferredThumb = quality === 'high'
+                    ? (thumbs.find((t) => t.type === 'm') ||
+                        thumbs.find((t) => t.type === 's') ||
+                        thumbs[thumbs.length - 1] || thumbs[0])
+                    : (thumbs.find((t) => t.type === 's') ||
+                        thumbs[0]);
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
             }
             if (doc && doc instanceof telegram_1.Api.Document) {
@@ -195,13 +200,13 @@ async function getMediaMessages(ctx) {
     }));
     return result;
 }
-async function getThumbnail(ctx, messageId, chatId = 'me') {
+async function getThumbnail(ctx, messageId, chatId = 'me', quality = 'low') {
     const message = await getMessageWithMedia(ctx, messageId, chatId);
-    const thumbBuffer = await getThumbnailBuffer(ctx, message);
+    const thumbBuffer = await getThumbnailBuffer(ctx, message, quality);
     if (!thumbBuffer) {
         throw new Error('Thumbnail not available for this media');
     }
-    const etag = (0, helpers_1.generateETag)(messageId, chatId, `thumb-${messageId}`);
+    const etag = (0, helpers_1.generateETag)(messageId, chatId, `thumb-${quality}-${messageId}`);
     let contentType = 'image/jpeg';
     let ext = 'jpg';
     if (message.media instanceof telegram_1.Api.MessageMediaDocument) {

@@ -227,8 +227,8 @@ class TelegramManager {
     async getMediaMessages() {
         return mediaOps.getMediaMessages(this.ctx);
     }
-    async getThumbnail(messageId, chatId = 'me') {
-        return mediaOps.getThumbnail(this.ctx, messageId, chatId);
+    async getThumbnail(messageId, chatId = 'me', quality = 'low') {
+        return mediaOps.getThumbnail(this.ctx, messageId, chatId, quality);
     }
     async getMediaFileDownloadInfo(messageId, chatId = 'me') {
         return mediaOps.getMediaFileDownloadInfo(this.ctx, messageId, chatId);
