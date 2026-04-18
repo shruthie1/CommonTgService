@@ -337,7 +337,7 @@ export interface AlbumSendResult {
 }
 export interface MediaQueryParams {
     chatId: string;
-    types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+    types?: string[];
     startDate?: Date;
     endDate?: Date;
     limit?: number;

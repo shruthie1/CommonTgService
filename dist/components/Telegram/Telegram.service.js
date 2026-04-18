@@ -47,6 +47,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var TelegramService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramService = void 0;
 const users_service_1 = require("../users/users.service");
@@ -54,6 +55,8 @@ const TelegramManager_1 = __importDefault(require("./TelegramManager"));
 const common_1 = require("@nestjs/common");
 const cloudinary_1 = require("../../cloudinary");
 const active_channels_service_1 = require("../active-channels/active-channels.service");
+const buffer_client_service_1 = require("../buffer-clients/buffer-client.service");
+const promote_client_service_1 = require("../promote-clients/promote-client.service");
 const path = __importStar(require("path"));
 const channels_service_1 = require("../channels/channels.service");
 const parseError_1 = require("../../utils/parseError");
@@ -65,13 +68,57 @@ const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
 const telegram_1 = require("telegram");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
-let TelegramService = class TelegramService {
-    constructor(usersService, activeChannelsService, channelsService) {
+let TelegramService = TelegramService_1 = class TelegramService {
+    constructor(usersService, activeChannelsService, channelsService, bufferClientService, promoteClientService) {
         this.usersService = usersService;
         this.activeChannelsService = activeChannelsService;
         this.channelsService = channelsService;
+        this.bufferClientService = bufferClientService;
+        this.promoteClientService = promoteClientService;
+        this._cachedMobiles = null;
+        this._cachedMobilesAt = 0;
+        this._cachedTgIds = null;
+        this._cachedTgIdsAt = 0;
         this.logger = new telegram_logger_1.TelegramLogger('TgService');
         connection_manager_1.connectionManager.setUsersService(this.usersService);
+    }
+    async getOwnAccountTgIds() {
+        if (this._cachedTgIds && (Date.now() - this._cachedTgIdsAt) < TelegramService_1.CACHE_TTL) {
+            return this._cachedTgIds;
+        }
+        const [bufferDocs, promoteDocs] = await Promise.all([
+            this.bufferClientService.model.find({}, { tgId: 1 }).lean(),
+            this.promoteClientService.model.find({}, { tgId: 1 }).lean(),
+        ]);
+        const ids = new Set();
+        for (const d of bufferDocs)
+            if (d.tgId)
+                ids.add(d.tgId);
+        for (const d of promoteDocs)
+            if (d.tgId)
+                ids.add(d.tgId);
+        this._cachedTgIds = ids;
+        this._cachedTgIdsAt = Date.now();
+        return ids;
+    }
+    async getOwnAccountMobiles() {
+        if (this._cachedMobiles && (Date.now() - this._cachedMobilesAt) < TelegramService_1.CACHE_TTL) {
+            return this._cachedMobiles;
+        }
+        const [bufferDocs, promoteDocs] = await Promise.all([
+            this.bufferClientService.model.find({}, { mobile: 1 }).lean(),
+            this.promoteClientService.model.find({}, { mobile: 1 }).lean(),
+        ]);
+        const mobiles = new Set();
+        for (const d of bufferDocs)
+            if (d.mobile && typeof d.mobile === 'string')
+                mobiles.add(d.mobile);
+        for (const d of promoteDocs)
+            if (d.mobile && typeof d.mobile === 'string')
+                mobiles.add(d.mobile);
+        this._cachedMobiles = [...mobiles];
+        this._cachedMobilesAt = Date.now();
+        return this._cachedMobiles;
     }
     async onModuleDestroy() {
         this.logger.info('system', 'Module destroy initiated');
@@ -810,7 +857,8 @@ let TelegramService = class TelegramService {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, `Get top private chats with limit=${limit || 10}, enrichMedia=${!!enrichMedia}, offsetDate=${offsetDate ?? 'none'}`);
         try {
-            return await telegramClient.getTopPrivateChats(limit, enrichMedia, offsetDate);
+            const excludedTgIds = await this.getOwnAccountTgIds();
+            return await telegramClient.getTopPrivateChats(limit, enrichMedia, offsetDate, excludedTgIds);
         }
         catch (error) {
             this.logger.error(mobile, 'Error getting top private chats:', error);
@@ -913,13 +961,17 @@ let TelegramService = class TelegramService {
     }
 };
 exports.TelegramService = TelegramService;
-exports.TelegramService = TelegramService = __decorate([
+TelegramService.CACHE_TTL = 5 * 60 * 1000;
+exports.TelegramService = TelegramService = TelegramService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
-        channels_service_1.ChannelsService])
+        channels_service_1.ChannelsService,
+        buffer_client_service_1.BufferClientService,
+        promote_client_service_1.PromoteClientService])
 ], TelegramService);
 //# sourceMappingURL=Telegram.service.js.map

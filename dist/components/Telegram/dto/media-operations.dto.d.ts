@@ -4,6 +4,9 @@ export declare enum MediaType {
     DOCUMENT = "document",
     VOICE = "voice",
     AUDIO = "audio",
+    GIF = "gif",
+    ROUND_VIDEO = "roundVideo",
+    STICKER = "sticker",
     ALL = "all"
 }
 export declare class BaseMediaOperationDto {

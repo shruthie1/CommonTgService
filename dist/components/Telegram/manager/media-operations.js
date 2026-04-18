@@ -66,12 +66,22 @@ async function getThumbnailBuffer(ctx, message) {
             }
         }
         else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-            const thumbs = message.document?.thumbs || [];
+            const doc = message.document;
+            const thumbs = doc?.thumbs || [];
             if (thumbs.length > 0) {
                 const preferredThumb = thumbs.find((t) => t.type === 'm') ||
+                    thumbs.find((t) => t.type === 's') ||
                     thumbs[thumbs.length - 1] ||
                     thumbs[0];
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
+            }
+            if (doc && doc instanceof telegram_1.Api.Document) {
+                const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
+                const isSmallGif = doc.mimeType === 'image/gif';
+                const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
+                if ((isSticker || isSmallGif) && fileSize < 512 * 1024) {
+                    return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
+                }
             }
         }
     }
@@ -104,13 +114,18 @@ function getMediaFileInfoFromMessage(message) {
         inputLocation = photo;
         contentType = 'image/jpeg';
         filename = 'photo.jpg';
+        const sizes = photo?.sizes || [];
+        const bestSize = sizes.find((s) => s.type === 'w') ||
+            sizes.find((s) => s.type === 'y') ||
+            sizes.find((s) => s.type === 'x') ||
+            sizes[sizes.length - 1];
+        const thumbSizeType = bestSize ? bestSize.type || '' : '';
         const data = {
             id: photo.id,
             accessHash: photo.accessHash,
             fileReference: photo.fileReference,
         };
-        fileLocation = new telegram_1.Api.InputPhotoFileLocation({ ...data, thumbSize: 'm' });
-        const sizes = photo?.sizes || [];
+        fileLocation = new telegram_1.Api.InputPhotoFileLocation({ ...data, thumbSize: thumbSizeType });
         const largestSize = sizes[sizes.length - 1];
         if (largestSize && 'size' in largestSize) {
             fileSize = largestSize.size || 0;
@@ -187,11 +202,27 @@ async function getThumbnail(ctx, messageId, chatId = 'me') {
         throw new Error('Thumbnail not available for this media');
     }
     const etag = (0, helpers_1.generateETag)(messageId, chatId, `thumb-${messageId}`);
+    let contentType = 'image/jpeg';
+    let ext = 'jpg';
+    if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+        const doc = message.document;
+        if (doc && doc instanceof telegram_1.Api.Document) {
+            const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
+            if (isSticker && doc.mimeType) {
+                contentType = doc.mimeType;
+                ext = doc.mimeType === 'image/webp' ? 'webp' : doc.mimeType === 'video/webm' ? 'webm' : 'webp';
+            }
+            else if (doc.mimeType === 'image/gif') {
+                contentType = 'image/gif';
+                ext = 'gif';
+            }
+        }
+    }
     return {
         buffer: thumbBuffer,
         etag,
-        contentType: 'image/jpeg',
-        filename: `thumbnail_${messageId}.jpg`,
+        contentType,
+        filename: `thumbnail_${messageId}.${ext}`,
     };
 }
 async function getMediaFileDownloadInfo(ctx, messageId, chatId = 'me') {
@@ -217,9 +248,10 @@ async function getMediaMetadata(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
-        ? ['photo', 'video', 'document', 'voice']
+        ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
     const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
     const baseQuery = {
@@ -234,21 +266,54 @@ async function getMediaMetadata(ctx, params) {
     };
     const ent = await (0, chat_operations_1.safeGetEntityById)(ctx, chatId);
     ctx.logger.info(ctx.phoneNumber, 'getMediaMetadata', params);
+    const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
+    async function fetchWithPostFilter(type, fetchLimit) {
+        if (!NEEDS_POST_FILTER.has(type)) {
+            const messages = await ctx.client.getMessages(ent, {
+                ...baseQuery,
+                limit: fetchLimit,
+                filter: (0, helpers_1.getSearchFilter)(type),
+            });
+            return messages
+                .map(m => {
+                const detectedType = m.media ? (0, helpers_1.getMediaType)(m.media) : type;
+                return (0, helpers_1.extractMediaMetaFromMessage)(m, chatId, detectedType);
+            })
+                .filter(item => item.type === type);
+        }
+        const results = [];
+        let currentMaxId = maxId;
+        const maxIterations = 5;
+        const batchSize = Math.max(fetchLimit * 4, 100);
+        for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
+            const messages = await ctx.client.getMessages(ent, {
+                ...baseQuery,
+                limit: batchSize,
+                filter: (0, helpers_1.getSearchFilter)(type),
+                ...(currentMaxId ? { maxId: currentMaxId } : {}),
+            });
+            if (messages.length === 0)
+                break;
+            for (const m of messages) {
+                const detectedType = m.media ? (0, helpers_1.getMediaType)(m.media) : type;
+                if (detectedType === type) {
+                    results.push((0, helpers_1.extractMediaMetaFromMessage)(m, chatId, detectedType));
+                    if (results.length >= fetchLimit)
+                        break;
+                }
+            }
+            currentMaxId = messages[messages.length - 1].id;
+            if (messages.length < batchSize)
+                break;
+        }
+        return results;
+    }
     let filteredMessages;
     if (typesToFetch.length === 1) {
-        const messages = await ctx.client.getMessages(ent, {
-            ...baseQuery,
-            limit: queryLimit,
-            filter: (0, helpers_1.getSearchFilter)(typesToFetch[0]),
-        });
-        filteredMessages = messages.map(message => (0, helpers_1.extractMediaMetaFromMessage)(message, chatId, typesToFetch[0]));
+        filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     }
     else if (typesToFetch.length > 1) {
-        const resultsPerType = await Promise.all(typesToFetch.map(type => ctx.client.getMessages(ent, {
-            ...baseQuery,
-            limit,
-            filter: (0, helpers_1.getSearchFilter)(type),
-        }).then(msgs => msgs.map(m => (0, helpers_1.extractMediaMetaFromMessage)(m, chatId, type)))));
+        const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, limit)));
         if (hasAll) {
             filteredMessages = resultsPerType.flat();
         }
@@ -325,9 +390,10 @@ async function getAllMediaMetaData(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const { chatId, types = ['all'], startDate, endDate, maxId, minId } = params;
+    const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
-        ? ['photo', 'video', 'document', 'voice']
+        ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
     let allMedia = [];
     let hasMore = true;
@@ -387,9 +453,10 @@ async function getFilteredMedia(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
-        ? ['photo', 'video', 'document', 'voice']
+        ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
     const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
     const query = {

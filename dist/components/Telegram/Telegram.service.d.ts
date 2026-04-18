@@ -1,6 +1,8 @@
 import { UsersService } from '../users/users.service';
 import { OnModuleDestroy } from '@nestjs/common';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
+import { BufferClientService } from '../buffer-clients/buffer-client.service';
+import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { EntityLike } from 'telegram/define';
@@ -17,8 +19,17 @@ export declare class TelegramService implements OnModuleDestroy {
     private usersService;
     private activeChannelsService;
     private channelsService;
+    private bufferClientService;
+    private promoteClientService;
     private readonly logger;
-    constructor(usersService: UsersService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService);
+    private _cachedMobiles;
+    private _cachedMobilesAt;
+    private _cachedTgIds;
+    private _cachedTgIdsAt;
+    private static readonly CACHE_TTL;
+    constructor(usersService: UsersService, activeChannelsService: ActiveChannelsService, channelsService: ChannelsService, bufferClientService: BufferClientService, promoteClientService: PromoteClientService);
+    getOwnAccountTgIds(): Promise<Set<string>>;
+    getOwnAccountMobiles(): Promise<string[]>;
     onModuleDestroy(): Promise<void>;
     getActiveClientSetup(newMobile?: string): ActiveClientSetup;
     hasActiveClientSetup(): boolean;
@@ -59,7 +70,7 @@ export declare class TelegramService implements OnModuleDestroy {
     updateUsernameForAClient(mobile: string, clientId: string, clientName: string, currentUsername: string): Promise<string>;
     getMediaMetadata(mobile: string, params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+        types?: string[];
         startDate?: Date;
         endDate?: Date;
         limit?: number;
@@ -150,7 +161,7 @@ export declare class TelegramService implements OnModuleDestroy {
     searchMessages(mobile: string, params: SearchMessagesDto): Promise<import("./dto/message-search.dto").SearchMessagesResponseDto>;
     getFilteredMedia(mobile: string, params: {
         chatId: string;
-        types?: ('photo' | 'video' | 'document' | 'voice' | 'all')[];
+        types?: string[];
         startDate?: Date;
         endDate?: Date;
         limit?: number;

@@ -38,7 +38,7 @@ let UsersController = class UsersController {
             excludeTwoFA: excludeTwoFA === 'true',
         });
     }
-    async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeTwoFA, excludeAudited, gender) {
+    async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeTwoFA, excludeAudited, gender, starred) {
         const pageNum = page ? parseInt(page, 10) : undefined;
         const limitNum = limit ? parseInt(limit, 10) : undefined;
         const minScoreNum = minScore ? parseFloat(minScore) : undefined;
@@ -75,6 +75,7 @@ let UsersController = class UsersController {
             excludeTwoFA: excludeTwoFABool,
             excludeAudited: excludeAuditedBool,
             gender,
+            starred: starred === 'true' ? true : undefined,
         });
     }
     async findAll(limit, skip, sortBy, sortOrder) {
@@ -109,6 +110,9 @@ let UsersController = class UsersController {
     }
     async update(tgId, updateUserDto) {
         return this.usersService.update(tgId, updateUserDto);
+    }
+    async toggleStar(mobile) {
+        return this.usersService.toggleStar(mobile);
     }
     async expire(tgId) {
         return this.usersService.delete(tgId);
@@ -164,6 +168,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'excludeTwoFA', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'excludeAudited', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'gender', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'starred', required: false, type: Boolean }),
     __param(0, (0, common_1.Query)('page')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('minScore')),
@@ -173,8 +178,9 @@ __decorate([
     __param(6, (0, common_1.Query)('excludeTwoFA')),
     __param(7, (0, common_1.Query)('excludeAudited')),
     __param(8, (0, common_1.Query)('gender')),
+    __param(9, (0, common_1.Query)('starred')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getTopInteractionUsers", null);
 __decorate([
@@ -244,6 +250,15 @@ __decorate([
     __metadata("design:paramtypes", [String, update_user_dto_1.UpdateUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "update", null);
+__decorate([
+    (0, common_1.Patch)(':mobile/star'),
+    (0, swagger_1.ApiOperation)({ summary: 'Toggle starred status for a user' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile' }),
+    __param(0, (0, common_1.Param)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "toggleStar", null);
 __decorate([
     (0, common_1.Patch)(':tgId/expire'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark user as expired (soft delete)' }),

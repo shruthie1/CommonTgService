@@ -235,8 +235,10 @@ let TelegramController = class TelegramController {
                 return res.status(304).end();
             }
             const range = res.req.headers.range;
+            const ifRange = res.req.headers['if-range'];
             const chunkSize = 512 * 1024;
-            if (range && fileInfo.fileSize > 0) {
+            const rangeValid = range && fileInfo.fileSize > 0 && (!ifRange || ifRange === fileInfo.etag);
+            if (rangeValid) {
                 const parts = range.replace(/bytes=/, "").split("-");
                 const start = parseInt(parts[0], 10);
                 const end = parts[1] ? parseInt(parts[1], 10) : fileInfo.fileSize - 1;
@@ -251,19 +253,30 @@ let TelegramController = class TelegramController {
                 res.setHeader('Content-Length', chunksize);
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('X-Content-Type-Options', 'nosniff');
                 res.setHeader('Access-Control-Allow-Origin', '*');
                 res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(start), chunksize, chunkSize)) {
-                    res.write(chunk);
+                const alignedStart = Math.floor(start / chunkSize) * chunkSize;
+                const skipBytes = start - alignedStart;
+                const fetchLimit = chunksize + skipBytes;
+                let skipped = 0;
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(alignedStart), fetchLimit, chunkSize)) {
+                    let data = chunk;
+                    if (skipped < skipBytes) {
+                        const toSkip = Math.min(skipBytes - skipped, data.length);
+                        data = data.subarray(toSkip);
+                        skipped += toSkip;
+                    }
+                    if (data.length > 0)
+                        res.write(data);
                 }
             }
             else {
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
                 res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -279,11 +292,12 @@ let TelegramController = class TelegramController {
             res.end();
         }
         catch (error) {
+            console.error(`[Download] Error messageId=${messageId} chatId=${chatId}:`, error.message || error, error.stack?.split('\n')[1]);
             if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found')) {
                 return res.status(404).send(error.message || 'File reference expired');
             }
             if (!res.headersSent) {
-                res.status(500).send('Error downloading media');
+                res.status(500).send(`Error downloading media: ${error.message || 'Unknown error'}`);
             }
         }
     }
@@ -301,7 +315,7 @@ let TelegramController = class TelegramController {
             }
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
-            res.setHeader('Cache-Control', 'public, max-age=3600');
+            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
             return res.send(thumbnail.buffer);
@@ -334,10 +348,10 @@ let TelegramController = class TelegramController {
         let parsedTypes;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'audio', 'gif', 'roundVideo', 'sticker', 'all'];
             parsedTypes = typesArray
-                .filter(t => validTypes.includes(t.toLowerCase()))
-                .map(t => t.toLowerCase());
+                .filter(t => validTypes.includes(t.toLowerCase()) || validTypes.includes(t))
+                .map(t => t);
             if (parsedTypes.length === 0) {
                 throw new common_1.BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
             }
@@ -379,10 +393,10 @@ let TelegramController = class TelegramController {
         let parsedTypes;
         if (types) {
             const typesArray = Array.isArray(types) ? types : [types];
-            const validTypes = ['photo', 'video', 'document', 'voice', 'all'];
+            const validTypes = ['photo', 'video', 'document', 'voice', 'audio', 'gif', 'roundVideo', 'sticker', 'all'];
             parsedTypes = typesArray
-                .filter(t => validTypes.includes(t.toLowerCase()))
-                .map(t => t.toLowerCase());
+                .filter(t => validTypes.includes(t.toLowerCase()) || validTypes.includes(t))
+                .map(t => t);
             if (parsedTypes.length === 0) {
                 throw new common_1.BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
             }

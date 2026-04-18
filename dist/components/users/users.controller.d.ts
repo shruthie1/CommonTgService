@@ -19,7 +19,7 @@ export declare class UsersController {
         limit: number;
         totalPages: number;
     }>;
-    getTopInteractionUsers(page?: string, limit?: string, minScore?: string, minCalls?: string, minPhotos?: string, minVideos?: string, excludeTwoFA?: string, excludeAudited?: string, gender?: string): Promise<{
+    getTopInteractionUsers(page?: string, limit?: string, minScore?: string, minCalls?: string, minPhotos?: string, minVideos?: string, excludeTwoFA?: string, excludeAudited?: string, gender?: string, starred?: string): Promise<{
         users: User[];
         total: number;
         page: number;
@@ -40,6 +40,10 @@ export declare class UsersController {
     }>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
+    toggleStar(mobile: string): Promise<{
+        mobile: string;
+        starred: boolean;
+    }>;
     expire(tgId: string): Promise<void>;
     executeQuery(requestBody: any): Promise<any>;
 }

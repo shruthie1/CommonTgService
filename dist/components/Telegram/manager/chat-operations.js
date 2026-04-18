@@ -30,6 +30,7 @@ const helpers_1 = require("./helpers");
 const media_operations_1 = require("./media-operations");
 const uploads_1 = require("telegram/client/uploads");
 const big_integer_1 = __importDefault(require("big-integer"));
+const SYSTEM_CHAT_IDS = new Set(['777000']);
 async function safeGetEntityById(ctx, entityId) {
     if (!ctx.client)
         throw new Error('Client not initialized');
@@ -622,6 +623,8 @@ async function getChats(ctx, options) {
     const me = await ctx.client.getMe();
     for await (const dialog of ctx.client.iterDialogs(params)) {
         const entity = dialog.entity;
+        if (SYSTEM_CHAT_IDS.has(entity.id.toString()))
+            continue;
         const match = peerType === 'all' ||
             (peerType === 'user' && entity instanceof telegram_1.Api.User) ||
             (peerType === 'group' && entity instanceof telegram_1.Api.Chat) ||
@@ -812,12 +815,6 @@ async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false, c
                 });
                 mediaCount = mediaResult?.total ?? 0;
                 ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Media fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-                if (mediaCount < 1) {
-                    ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 1 media`);
-                    result[chatId] = null;
-                    skipped++;
-                    continue;
-                }
             }
             result[chatId] = { totalMessages, mediaCount, lastMessageDate };
         }
@@ -957,7 +954,7 @@ function buildTopPrivateChat(user, chatId, stats, weights, mediaCounts, callSumm
         calls,
     };
 }
-async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDate) {
+async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDate, excludedTgIds) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const globalStart = Date.now();
@@ -994,7 +991,7 @@ async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDa
         if (user.bot)
             continue;
         const id = user.id.toString();
-        if (id === selfChatId || seenIds.has(id))
+        if (id === selfChatId || seenIds.has(id) || SYSTEM_CHAT_IDS.has(id) || excludedTgIds?.has(id))
             continue;
         seenIds.add(id);
         candidateChats.push(d);
@@ -1069,7 +1066,7 @@ async function getTopPrivateChats(ctx, limit = 45, enrichMedia = false, offsetDa
         }
     }
     items.sort((a, b) => b.interactionScore - a.interactionScore);
-    const filtered = items.filter(item => item.totalMessages >= 700 || item.mediaCount > 0 || item.calls.totalCalls > 0);
+    const filtered = items.filter(item => item.totalMessages >= 10 || item.mediaCount > 0 || item.calls.totalCalls > 0);
     const hasMore = candidateChats.length >= clampedLimit && !!lastDialogDate;
     const nextOffsetDate = hasMore ? lastDialogDate : undefined;
     ctx.logger.info(ctx.phoneNumber, `getTopPrivateChats completed in ${Date.now() - globalStart}ms. Returning ${filtered.length}/${items.length} items, hasMore=${hasMore}, nextOffsetDate=${nextOffsetDate}`);
