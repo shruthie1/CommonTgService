@@ -448,32 +448,22 @@ export async function getChatMediaCounts(ctx: TgContext, chatId: string): Promis
         }
     }
 
-    const searchCount = (filter: Api.TypeMessagesFilter) =>
+    const [countersResult, totalMessages] = await Promise.all([
         ctx.client.invoke(
-            new Api.messages.Search({
+            new Api.messages.GetSearchCounters({
                 peer: inputPeer,
-                q: '',
-                filter,
-                minDate: 0,
-                maxDate: 0,
-                offsetId: 0,
-                addOffset: 0,
-                limit: 1,
-                maxId: 0,
-                minId: 0,
-                hash: bigInt(0),
+                filters: [
+                    new Api.InputMessagesFilterPhotos(),
+                    new Api.InputMessagesFilterVideo(),
+                    new Api.InputMessagesFilterRoundVideo(),
+                    new Api.InputMessagesFilterDocument(),
+                    new Api.InputMessagesFilterVoice(),
+                    new Api.InputMessagesFilterGif(),
+                    new Api.InputMessagesFilterMusic(),
+                    new Api.InputMessagesFilterUrl(),
+                ],
             })
-        ).then(r => (r as { count?: number }).count ?? 0).catch(() => 0);
-
-    const [photo, video, roundVideo, document, voice, gif, audio, link, totalMessages] = await Promise.all([
-        searchCount(new Api.InputMessagesFilterPhotos()),
-        searchCount(new Api.InputMessagesFilterVideo()),
-        searchCount(new Api.InputMessagesFilterRoundVideo()),
-        searchCount(new Api.InputMessagesFilterDocument()),
-        searchCount(new Api.InputMessagesFilterVoice()),
-        searchCount(new Api.InputMessagesFilterGif()),
-        searchCount(new Api.InputMessagesFilterMusic()),
-        searchCount(new Api.InputMessagesFilterUrl()),
+        ).catch(() => []),
         ctx.client.invoke(
             new Api.messages.GetHistory({
                 peer: inputPeer,
@@ -487,6 +477,16 @@ export async function getChatMediaCounts(ctx: TgContext, chatId: string): Promis
             })
         ).then(r => (r as { count?: number }).count ?? 0).catch(() => 0),
     ]);
+
+    const counts = countersResult as any as Array<{ count: number }>;
+    const photo = counts?.[0]?.count ?? 0;
+    const video = counts?.[1]?.count ?? 0;
+    const roundVideo = counts?.[2]?.count ?? 0;
+    const document = counts?.[3]?.count ?? 0;
+    const voice = counts?.[4]?.count ?? 0;
+    const gif = counts?.[5]?.count ?? 0;
+    const audio = counts?.[6]?.count ?? 0;
+    const link = counts?.[7]?.count ?? 0;
 
     return {
         totalMessages,

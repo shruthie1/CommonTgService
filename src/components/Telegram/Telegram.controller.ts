@@ -590,63 +590,72 @@ export class TelegramController {
         description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
         example: 'me'
     })
-    @ApiQuery({ 
-        name: 'messageId', 
-        required: true, 
+    @ApiQuery({
+        name: 'messageId',
+        required: true,
         description: 'Message ID containing the media (must be a positive number)',
         type: Number,
         example: 12345
     })
-    @ApiResponse({ 
+    @ApiQuery({
+        name: 'quality',
+        required: false,
+        description: 'Thumbnail quality: low (smallest, fast) or high (medium size)',
+        enum: ['low', 'high'],
+    })
+    @ApiResponse({
         status: 200,
         description: 'Thumbnail image (JPEG format)',
         content: {
             'image/jpeg': { schema: { type: 'string', format: 'binary' } }
         }
     })
-    @ApiResponse({ 
+    @ApiResponse({
         status: 304,
         description: 'Not modified (when using If-None-Match header for caching)'
     })
-    @ApiResponse({ 
-        status: 404, 
-        description: 'Thumbnail not found - message ID does not exist, message has no media, or thumbnail is not available' 
+    @ApiResponse({
+        status: 404,
+        description: 'Thumbnail not found - message ID does not exist, message has no media, or thumbnail is not available'
     })
-    @ApiResponse({ 
+    @ApiResponse({
         status: 500,
         description: 'Error getting thumbnail'
     })
     async getThumbnail(
-        @Param('mobile') mobile: string, 
-        @Query('chatId') chatId: string, 
-        @Query('messageId') messageId: number, 
+        @Param('mobile') mobile: string,
+        @Query('chatId') chatId: string,
+        @Query('messageId') messageId: number,
+        @Query('quality') quality: string,
         @Res() res: Response
     ) {
         // Validate messageId
         if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
             throw new BadRequestException('Message ID must be a positive integer');
         }
-        
+
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
             throw new BadRequestException('Chat ID is required and cannot be empty');
         }
-        
+
+        const q: 'low' | 'high' = quality === 'high' ? 'high' : 'low';
+
         try {
-            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId);
-            
+            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId, q);
+
             // Check If-None-Match header for 304 Not Modified
             if (res.req.headers['if-none-match'] === thumbnail.etag) {
                 return res.status(304).end();
             }
-            
+
             // Set response headers
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
-            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
-            
+
             return res.send(thumbnail.buffer);
         } catch (error) {
             if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found') || error.message?.includes('not available')) {

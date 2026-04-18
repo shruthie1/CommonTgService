@@ -478,11 +478,11 @@ export class TelegramService implements OnModuleDestroy {
         yield* telegramClient.streamMediaFile(fileLocation, offset, limit, requestSize);
     }
 
-    async getThumbnail(mobile: string, messageId: number, chatId: string) {
+    async getThumbnail(mobile: string, messageId: number, chatId: string, quality: 'low' | 'high' = 'low') {
         const telegramClient = await connectionManager.getClient(mobile);
         try {
-            this.logger.info(mobile, 'Get thumbnail', { messageId, chatId });
-            return await telegramClient.getThumbnail(messageId, chatId);
+            this.logger.info(mobile, 'Get thumbnail', { messageId, chatId, quality });
+            return await telegramClient.getThumbnail(messageId, chatId, quality);
         } catch (error) {
             this.logger.error(mobile, 'Error getting thumbnail:', error);
             throw error;

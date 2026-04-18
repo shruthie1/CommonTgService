@@ -1726,6 +1726,19 @@
               "example": 12345,
               "type": "number"
             }
+          },
+          {
+            "name": "quality",
+            "required": false,
+            "in": "query",
+            "description": "Thumbnail quality: low (smallest, fast) or high (medium size)",
+            "schema": {
+              "enum": [
+                "low",
+                "high"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {

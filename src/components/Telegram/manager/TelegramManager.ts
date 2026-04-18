@@ -269,8 +269,8 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return mediaOps.getMediaMessages(this.ctx);
         }
 
-        async getThumbnail(messageId: number, chatId: string = 'me'): Promise<ThumbnailResult> {
-            return mediaOps.getThumbnail(this.ctx, messageId, chatId);
+        async getThumbnail(messageId: number, chatId: string = 'me', quality: 'low' | 'high' = 'low'): Promise<ThumbnailResult> {
+            return mediaOps.getThumbnail(this.ctx, messageId, chatId, quality);
         }
 
         async getMediaFileDownloadInfo(messageId: number, chatId: string = 'me'): Promise<MediaFileDownloadInfo> {

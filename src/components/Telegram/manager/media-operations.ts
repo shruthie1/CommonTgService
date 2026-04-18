@@ -17,16 +17,18 @@ import { sleep } from 'telegram/Helpers';
 
 // ---- Thumbnail ----
 
-export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message): Promise<Buffer | null> {
+export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, quality: 'low' | 'high' = 'low'): Promise<Buffer | null> {
     try {
         if (message.media instanceof Api.MessageMediaPhoto) {
             const sizes = (<Api.Photo>message.photo)?.sizes || [];
             if (sizes.length > 0) {
-                const preferredSize =
-                    sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
-                    sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
-                    sizes[sizes.length - 1] ||
-                    sizes[0];
+                const preferredSize = quality === 'high'
+                    ? (sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
+                       sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
+                       sizes[sizes.length - 1] || sizes[0])
+                    : (sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 's') ||
+                       sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
+                       sizes[0]);
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message, { thumb: preferredSize }) as Promise<Buffer>,
                     30000
@@ -37,11 +39,12 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message): 
             const thumbs = doc?.thumbs || [];
 
             if (thumbs.length > 0) {
-                const preferredThumb =
-                    thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 'm') ||
-                    thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 's') ||
-                    thumbs[thumbs.length - 1] ||
-                    thumbs[0];
+                const preferredThumb = quality === 'high'
+                    ? (thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 'm') ||
+                       thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 's') ||
+                       thumbs[thumbs.length - 1] || thumbs[0])
+                    : (thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 's') ||
+                       thumbs[0]);
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
                     30000
@@ -196,15 +199,15 @@ export async function getMediaMessages(ctx: TgContext): Promise<Api.messages.Mes
     return result;
 }
 
-export async function getThumbnail(ctx: TgContext, messageId: number, chatId: string = 'me'): Promise<ThumbnailResult> {
+export async function getThumbnail(ctx: TgContext, messageId: number, chatId: string = 'me', quality: 'low' | 'high' = 'low'): Promise<ThumbnailResult> {
     const message = await getMessageWithMedia(ctx, messageId, chatId);
-    const thumbBuffer = await getThumbnailBuffer(ctx, message);
+    const thumbBuffer = await getThumbnailBuffer(ctx, message, quality);
 
     if (!thumbBuffer) {
         throw new Error('Thumbnail not available for this media');
     }
 
-    const etag = generateETag(messageId, chatId, `thumb-${messageId}`);
+    const etag = generateETag(messageId, chatId, `thumb-${quality}-${messageId}`);
 
     let contentType = 'image/jpeg';
     let ext = 'jpg';
