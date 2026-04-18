@@ -12,7 +12,6 @@ import {
     FILE_DOWNLOAD_TIMEOUT, MAX_FILE_SIZE, TEMP_FILE_CLEANUP_DELAY,
     THUMBNAIL_CONCURRENCY_LIMIT, THUMBNAIL_BATCH_DELAY_MS,
 } from './helpers';
-import { safeGetEntityById } from './chat-operations';
 import { sleep } from 'telegram/Helpers';
 
 // ---- Thumbnail ----
@@ -73,8 +72,7 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
 // ---- Message with media ----
 
 async function getMessageWithMedia(ctx: TgContext, messageId: number, chatId: string): Promise<Api.Message> {
-    const entity = await safeGetEntityById(ctx, chatId);
-    const messages = await ctx.client.getMessages(entity, { ids: [messageId] });
+    const messages = await ctx.client.getMessages(chatId, { ids: [messageId] });
     const message = <Api.Message>messages[0];
 
     if (!message || message.media instanceof Api.MessageMediaEmpty) {
@@ -285,14 +283,13 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         } as Partial<IterMessagesParams>),
     };
 
-    const ent = await safeGetEntityById(ctx, chatId);
     ctx.logger.info(ctx.phoneNumber, 'getMediaMetadata', params);
 
     const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
 
     async function fetchWithPostFilter(type: string, fetchLimit: number): Promise<MediaMetadataItem[]> {
         if (!NEEDS_POST_FILTER.has(type)) {
-            const messages = await ctx.client.getMessages(ent, {
+            const messages = await ctx.client.getMessages(chatId, {
                 ...baseQuery,
                 limit: fetchLimit,
                 filter: getSearchFilter(type),
@@ -311,7 +308,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         const batchSize = Math.max(fetchLimit * 4, 100);
 
         for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
-            const messages = await ctx.client.getMessages(ent, {
+            const messages = await ctx.client.getMessages(chatId, {
                 ...baseQuery,
                 limit: batchSize,
                 filter: getSearchFilter(type),
@@ -505,9 +502,8 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
         }),
     };
 
-    const ent = await safeGetEntityById(ctx, chatId);
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(ent, query);
+    const messages = await ctx.client.getMessages(chatId, query);
     ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
 
     const filteredMessages = messages.filter(message => {
@@ -627,7 +623,7 @@ export async function getFileUrl(ctx: TgContext, url: string, filename: string):
         }, TEMP_FILE_CLEANUP_DELAY);
 
         return filePath;
-    } catch (error) {
+    } catch (error:any) {
         try {
             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         } catch (_) { /* ignore cleanup errors */ }
