@@ -153,7 +153,7 @@ export class UsersService {
 
   async update(tgId: string, updateDto: UpdateUserDto): Promise<number> {
     const result = await this.userModel
-      .updateMany({ tgId }, { $set: updateDto }, { upsert: true })
+      .updateMany({ tgId }, { $set: updateDto })
       .exec();
     if (result.matchedCount === 0) {
       throw new NotFoundException(`Users with tgId ${tgId} not found`);
@@ -166,7 +166,7 @@ export class UsersService {
     updateDto: UpdateUserDto,
   ): Promise<number> {
     const result = await this.userModel
-      .updateMany(filter, { $set: updateDto }, { upsert: true })
+      .updateMany(filter, { $set: updateDto })
       .exec();
     if (result.matchedCount === 0) {
       throw new NotFoundException(`Users matching filter not found`);

@@ -370,11 +370,46 @@ export function getExpectedAuthFingerprint(
   };
 }
 
+// Auths matching any of these criteria are treated as "ours" and never revoked.
+// Keeps operator-owned sessions (Singapore VPS, OnePlus 11 handsets, CLI/desktop tools,
+// app names like likki/rams/sru/shru/hanslnz) alive through removeOtherAuths.
+const AUTH_ALLOWLIST = {
+  countries: ['singapore'],
+  deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
+  deviceModelSuffixes: ['-ssk'],
+  appNameSubstrings: ['likki', 'rams', 'sru', 'shru', 'hanslnz'],
+};
+
+export function isAuthAllowlisted(auth: {
+  country?: string | null;
+  deviceModel?: string | null;
+  appName?: string | null;
+}): boolean {
+  const country = normalizeAuthField(auth.country);
+  const device = normalizeAuthField(auth.deviceModel);
+  const app = normalizeAuthField(auth.appName);
+  if (country && AUTH_ALLOWLIST.countries.includes(country)) return true;
+  if (device && AUTH_ALLOWLIST.deviceModelSubstrings.some(s => device.includes(s))) return true;
+  if (device && AUTH_ALLOWLIST.deviceModelSuffixes.some(s => device.endsWith(s))) return true;
+  if (app && AUTH_ALLOWLIST.appNameSubstrings.some(s => app.includes(s))) return true;
+  return false;
+}
+
 export function isAuthFingerprintMatch(
   mobile: string,
-  auth: { current?: boolean; deviceModel?: string; systemVersion?: string | null }
+  auth: {
+    current?: boolean;
+    deviceModel?: string | null;
+    systemVersion?: string | null;
+    appName?: string | null;
+    country?: string | null;
+  }
 ): boolean {
   if (auth.current) {
+    return true;
+  }
+
+  if (isAuthAllowlisted(auth)) {
     return true;
   }
 
