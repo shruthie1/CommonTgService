@@ -47,6 +47,7 @@ function getSearchFilter(filter) {
         case 'gif': return new telegram_1.Api.InputMessagesFilterGif();
         case 'sticker': return new telegram_1.Api.InputMessagesFilterDocument();
         case 'animation': return new telegram_1.Api.InputMessagesFilterDocument();
+        case 'audio': return new telegram_1.Api.InputMessagesFilterMusic();
         case 'music': return new telegram_1.Api.InputMessagesFilterMusic();
         case 'chatPhoto': return new telegram_1.Api.InputMessagesFilterChatPhotos();
         case 'location': return new telegram_1.Api.InputMessagesFilterGeo();
@@ -61,9 +62,24 @@ function getMediaType(media) {
     }
     else if (media instanceof telegram_1.Api.MessageMediaDocument) {
         const document = media.document;
-        if (document?.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo)) {
-            return 'video';
+        if (!document?.attributes)
+            return 'document';
+        const hasSticker = document.attributes.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
+        if (hasSticker)
+            return 'sticker';
+        const hasAnimated = document.attributes.some(attr => attr instanceof telegram_1.Api.DocumentAttributeAnimated);
+        if (hasAnimated)
+            return 'gif';
+        const videoAttr = document.attributes.find(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
+        if (videoAttr) {
+            return videoAttr.roundMessage ? 'roundVideo' : 'video';
         }
+        const audioAttr = document.attributes.find(attr => attr instanceof telegram_1.Api.DocumentAttributeAudio);
+        if (audioAttr) {
+            return audioAttr.voice ? 'voice' : 'audio';
+        }
+        if (document.mimeType === 'image/gif')
+            return 'gif';
         return 'document';
     }
     return 'document';

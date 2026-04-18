@@ -6,7 +6,7 @@ export declare const TEMP_FILE_CLEANUP_DELAY = 3600000;
 export declare const THUMBNAIL_CONCURRENCY_LIMIT = 3;
 export declare const THUMBNAIL_BATCH_DELAY_MS = 100;
 export declare function getSearchFilter(filter: string): Api.TypeMessagesFilter;
-export declare function getMediaType(media: Api.TypeMessageMedia): 'photo' | 'video' | 'document';
+export declare function getMediaType(media: Api.TypeMessageMedia): string;
 export declare function getMessageDate(message: Api.Message): number;
 export declare function extractMediaMetaFromMessage(message: Api.Message, chatId: string, mediaType: string): MediaMetadataItem;
 export declare function getMediaDetails(media: Api.MessageMediaDocument): DocumentMediaDetails | null;

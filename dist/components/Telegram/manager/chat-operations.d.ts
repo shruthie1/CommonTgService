@@ -44,7 +44,7 @@ export declare function createChatFolder(ctx: TgContext, options: ChatFolderCrea
     options: Record<string, boolean>;
 }>;
 export declare function getChatFolders(ctx: TgContext): Promise<ChatFolder[]>;
-export declare function getTopPrivateChats(ctx: TgContext, limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<TopPrivateChatsResult>;
+export declare function getTopPrivateChats(ctx: TgContext, limit?: number, enrichMedia?: boolean, offsetDate?: number, excludedTgIds?: Set<string>): Promise<TopPrivateChatsResult>;
 export declare function createBot(ctx: TgContext, options: {
     name: string;
     username: string;

@@ -24,6 +24,7 @@ export declare class UsersService {
         excludeTwoFA?: boolean;
         excludeAudited?: boolean;
         gender?: string;
+        starred?: boolean;
     }): Promise<{
         users: User[];
         total: number;
@@ -36,6 +37,10 @@ export declare class UsersService {
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateDto: UpdateUserDto): Promise<number>;
     updateByFilter(filter: QueryFilter<UserDocument>, updateDto: UpdateUserDto): Promise<number>;
+    toggleStar(mobile: string): Promise<{
+        mobile: string;
+        starred: boolean;
+    }>;
     delete(tgId: string): Promise<void>;
     search(filter: SearchUserDto): Promise<User[]>;
     computeRelationshipScore(mobile: string): Promise<void>;

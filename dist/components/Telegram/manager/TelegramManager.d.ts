@@ -69,7 +69,7 @@ declare class TelegramManager {
         includePhotos?: boolean;
     }): Promise<ChatListResult>;
     updateChatSettings(settings: ChatSettingsUpdate): Promise<boolean>;
-    getTopPrivateChats(limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<TopPrivateChatsResult>;
+    getTopPrivateChats(limit?: number, enrichMedia?: boolean, offsetDate?: number, excludedTgIds?: Set<string>): Promise<TopPrivateChatsResult>;
     createChatFolder(options: ChatFolderCreateOptions): Promise<{
         id: number;
         name: string;

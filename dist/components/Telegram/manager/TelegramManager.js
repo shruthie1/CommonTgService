@@ -158,8 +158,8 @@ class TelegramManager {
     async updateChatSettings(settings) {
         return chatOps.updateChatSettings(this.ctx, settings);
     }
-    async getTopPrivateChats(limit, enrichMedia, offsetDate) {
-        return chatOps.getTopPrivateChats(this.ctx, limit, enrichMedia, offsetDate);
+    async getTopPrivateChats(limit, enrichMedia, offsetDate, excludedTgIds) {
+        return chatOps.getTopPrivateChats(this.ctx, limit, enrichMedia, offsetDate, excludedTgIds);
     }
     async createChatFolder(options) {
         return chatOps.createChatFolder(this.ctx, options);

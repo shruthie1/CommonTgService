@@ -44,7 +44,7 @@ export declare const EventSchema: MongooseSchema<Event, import("mongoose").Model
     }, "id"> & {
         id: string;
     }>;
-    type?: import("mongoose").SchemaDefinitionProperty<"call" | "message", Event, Document<unknown, {}, Event, {
+    type?: import("mongoose").SchemaDefinitionProperty<"message" | "call", Event, Document<unknown, {}, Event, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;

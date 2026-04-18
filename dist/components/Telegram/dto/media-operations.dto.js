@@ -20,6 +20,9 @@ var MediaType;
     MediaType["DOCUMENT"] = "document";
     MediaType["VOICE"] = "voice";
     MediaType["AUDIO"] = "audio";
+    MediaType["GIF"] = "gif";
+    MediaType["ROUND_VIDEO"] = "roundVideo";
+    MediaType["STICKER"] = "sticker";
     MediaType["ALL"] = "all";
 })(MediaType || (exports.MediaType = MediaType = {}));
 class BaseMediaOperationDto {
