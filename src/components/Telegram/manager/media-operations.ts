@@ -1,8 +1,8 @@
 import { Api } from 'telegram';
+import { strippedPhotoToJpg } from 'telegram/Utils';
 import * as fs from 'fs';
 import axios from 'axios';
 import bigInt from 'big-integer';
-import { CustomFile } from 'telegram/client/uploads';
 import { IterMessagesParams } from 'telegram/client/messages';
 import { TgContext, MediaMetadataItem, FilteredMediaItem, MediaFileInfo, ThumbnailResult, MediaFileDownloadInfo, MediaListResponse, FilteredMediaListResponse, MediaQueryParams } from './types';
 import {
@@ -13,6 +13,7 @@ import {
     THUMBNAIL_CONCURRENCY_LIMIT, THUMBNAIL_BATCH_DELAY_MS,
 } from './helpers';
 import { sleep } from 'telegram/Helpers';
+import { safeGetEntityById } from './chat-operations';
 
 // ---- Thumbnail ----
 
@@ -22,6 +23,18 @@ function findSize(sizes: Api.TypePhotoSize[], ...types: string[]): Api.TypePhoto
         if (found) return found;
     }
     return undefined;
+}
+
+function extractInlineThumbnail(sizes: Api.TypePhotoSize[]): Buffer | null {
+    for (const s of sizes) {
+        if (s instanceof Api.PhotoStrippedSize) {
+            return strippedPhotoToJpg(s.bytes) as Buffer;
+        }
+        if (s instanceof Api.PhotoCachedSize) {
+            return Buffer.from(s.bytes);
+        }
+    }
+    return null;
 }
 
 function isAnimatedGif(doc: Api.Document): boolean {
@@ -35,6 +48,10 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
         if (message.media instanceof Api.MessageMediaPhoto) {
             const sizes = (<Api.Photo>message.photo)?.sizes || [];
             if (sizes.length > 0) {
+                if (quality === 'low') {
+                    const inline = extractInlineThumbnail(sizes);
+                    if (inline) return inline;
+                }
                 const preferredSize = quality === 'high'
                     ? (findSize(sizes, 'x', 'y', 'm') || sizes[sizes.length - 1])
                     : (findSize(sizes, 'm', 'x') || sizes[sizes.length - 1]);
@@ -54,6 +71,10 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
 
             if (isSticker) {
                 if (thumbs.length > 0) {
+                    if (quality === 'low') {
+                        const inline = extractInlineThumbnail(thumbs);
+                        if (inline) return inline;
+                    }
                     const preferredThumb = quality === 'high'
                         ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
                         : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
@@ -80,6 +101,10 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
             }
 
             if (thumbs.length > 0) {
+                if (quality === 'low') {
+                    const inline = extractInlineThumbnail(thumbs);
+                    if (inline) return inline;
+                }
                 const preferredThumb = quality === 'high'
                     ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
                     : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
@@ -102,10 +127,20 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
     return null;
 }
 
+async function resolveEntity(ctx: TgContext, chatId: string) {
+    if (chatId === 'me') return 'me';
+    try {
+        return await safeGetEntityById(ctx, chatId) || chatId;
+    } catch {
+        return chatId;
+    }
+}
+
 // ---- Message with media ----
 
 async function getMessageWithMedia(ctx: TgContext, messageId: number, chatId: string): Promise<Api.Message> {
-    const messages = await ctx.client.getMessages(chatId, { ids: [messageId] });
+    const peer = await resolveEntity(ctx, chatId);
+    const messages = await ctx.client.getMessages(peer, { ids: [messageId] });
     const message = <Api.Message>messages[0];
 
     if (!message || message.media instanceof Api.MessageMediaEmpty) {
@@ -124,6 +159,7 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
     let fileLocation: Api.TypeInputFileLocation;
     let fileSize = 0;
     let inputLocation: Api.Photo | Api.Document;
+    let dcId: number | undefined;
 
     if (media instanceof Api.MessageMediaPhoto) {
         const photo = message.photo as Api.Photo;
@@ -131,6 +167,7 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
             throw new Error('Photo not found in message');
         }
         inputLocation = photo;
+        dcId = photo.dcId;
         contentType = 'image/jpeg';
         filename = 'photo.jpg';
 
@@ -152,6 +189,9 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
         const largestSize = sizes[sizes.length - 1];
         if (largestSize && 'size' in largestSize) {
             fileSize = (largestSize as Api.PhotoSize).size || 0;
+        } else if (largestSize && 'sizes' in largestSize) {
+            const progressiveSizes = (largestSize as Api.PhotoSizeProgressive).sizes;
+            if (progressiveSizes?.length > 0) fileSize = progressiveSizes[progressiveSizes.length - 1];
         }
     } else if (media instanceof Api.MessageMediaDocument) {
         const document = media.document;
@@ -163,6 +203,7 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
         }
 
         inputLocation = document;
+        dcId = document.dcId;
         const fileNameAttr = document.attributes?.find(
             attr => attr instanceof Api.DocumentAttributeFilename
         ) as Api.DocumentAttributeFilename;
@@ -181,7 +222,7 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
         throw new Error('Unsupported media type');
     }
 
-    return { contentType, filename, fileLocation, fileSize, inputLocation };
+    return { contentType, filename, fileLocation, fileSize, inputLocation, dcId };
 }
 
 // ---- Public media operations ----
@@ -283,13 +324,17 @@ export async function* streamMediaFile(
     fileLocation: Api.TypeInputFileLocation,
     offset: bigInt.BigInteger = bigInt(0),
     limit: number = 5 * 1024 * 1024,
-    requestSize: number = 1024 * 1024
+    requestSize: number = 512 * 1024,
+    fileSize?: number,
+    dcId?: number,
 ): AsyncGenerator<Buffer> {
     for await (const chunk of ctx.client.iterDownload({
         file: fileLocation,
         offset,
         limit,
         requestSize,
+        ...(fileSize ? { fileSize: bigInt(fileSize) } : {}),
+        ...(dcId ? { dcId } : {}),
     })) {
         yield chunk;
     }
@@ -299,6 +344,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
     if (!ctx.client) throw new Error('Client not initialized');
 
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const peer = await resolveEntity(ctx, chatId);
 
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
@@ -324,7 +370,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
 
     async function fetchWithPostFilter(type: string, fetchLimit: number): Promise<MediaMetadataItem[]> {
         if (!NEEDS_POST_FILTER.has(type)) {
-            const messages = await ctx.client.getMessages(chatId, {
+            const messages = await ctx.client.getMessages(peer, {
                 ...baseQuery,
                 limit: fetchLimit,
                 filter: getSearchFilter(type),
@@ -343,7 +389,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         const batchSize = Math.max(fetchLimit * 4, 100);
 
         for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
-            const messages = await ctx.client.getMessages(chatId, {
+            const messages = await ctx.client.getMessages(peer, {
                 ...baseQuery,
                 limit: batchSize,
                 filter: getSearchFilter(type),
@@ -516,6 +562,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
     if (!ctx.client) throw new Error('Client not initialized');
 
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const peer = await resolveEntity(ctx, chatId);
 
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
@@ -538,7 +585,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
     };
 
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(chatId, query);
+    const messages = await ctx.client.getMessages(peer, query);
     ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
 
     const filteredMessages = messages.filter(message => {
@@ -564,7 +611,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
                     if (isAnimatedGif(doc)) {
                         thumbMime = doc.mimeType || 'video/mp4';
                     } else if (doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker)) {
-                        thumbMime = doc.mimeType || 'image/webp';
+                        thumbMime = 'image/webp';
                     }
                 }
             }

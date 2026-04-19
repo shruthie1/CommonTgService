@@ -134,6 +134,7 @@ export interface MediaFileDownloadInfo {
     fileSize: number;
     etag: string;
     inputLocation: Api.Photo | Api.Document;
+    dcId?: number;
 }
 
 export interface MediaFileInfo {
@@ -142,6 +143,7 @@ export interface MediaFileInfo {
     fileLocation: Api.TypeInputFileLocation;
     fileSize: number;
     inputLocation: Api.Photo | Api.Document;
+    dcId?: number;
 }
 
 export interface SessionInfo {

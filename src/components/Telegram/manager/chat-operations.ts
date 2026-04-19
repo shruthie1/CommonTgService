@@ -11,7 +11,7 @@ import {
 import {
     downloadFileFromUrl, toISODate, toTimeString,
     extractMediaInfo, getUserOnlineStatus, bufferToBase64DataUrl,
-    getMediaType,
+    getMediaType, resolveEntityToSenderInfo,
 } from './helpers';
 import { getThumbnailBuffer } from './media-operations';
 import { CustomFile } from 'telegram/client/uploads';
@@ -95,6 +95,8 @@ export async function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike
 
     const messageList = await Promise.all(slicedMessages.map(async (message: Api.Message) => {
         const senderId = message.senderId?.toString() || '';
+        const senderEntity = entityCache.get(senderId) || null;
+        const sender = resolveEntityToSenderInfo(senderEntity as Api.User | Api.Chat | Api.Channel | null, senderId, !!message.out);
 
         let media: MediaInfo | null = null;
         if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
@@ -126,7 +128,9 @@ export async function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike
             date: toISODate(msgDate),
             time: toTimeString(msgDate),
             dateUnix: msgDate,
+            out: !!message.out,
             senderId,
+            sender,
             media,
             isEdited: !!message.editDate,
             editDate: message.editDate ? toISODate(message.editDate) : null,
@@ -205,6 +209,8 @@ export async function getMessagesNew(ctx: TgContext, chatId: string, offset: num
 
     const messageList = await Promise.all(slicedMessages.map(async (message: Api.Message) => {
         const senderId = message.senderId?.toString() || '';
+        const senderEntity = entityCache.get(senderId) || null;
+        const sender = resolveEntityToSenderInfo(senderEntity as Api.User | Api.Chat | Api.Channel | null, senderId, !!message.out);
 
         let media: MediaInfo | null = null;
         if (message.media && !(message.media instanceof Api.MessageMediaEmpty)) {
@@ -236,7 +242,9 @@ export async function getMessagesNew(ctx: TgContext, chatId: string, offset: num
             date: toISODate(msgDate),
             time: toTimeString(msgDate),
             dateUnix: msgDate,
+            out: !!message.out,
             senderId,
+            sender,
             media,
             isEdited: !!message.editDate,
             editDate: message.editDate ? toISODate(message.editDate) : null,
