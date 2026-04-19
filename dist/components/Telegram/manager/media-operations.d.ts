@@ -6,7 +6,7 @@ export declare function getMediaUrl(ctx: TgContext, message: Api.Message): Promi
 export declare function getMediaMessages(ctx: TgContext): Promise<Api.messages.Messages>;
 export declare function getThumbnail(ctx: TgContext, messageId: number, chatId?: string, quality?: 'low' | 'high'): Promise<ThumbnailResult>;
 export declare function getMediaFileDownloadInfo(ctx: TgContext, messageId: number, chatId?: string): Promise<MediaFileDownloadInfo>;
-export declare function streamMediaFile(ctx: TgContext, fileLocation: Api.TypeInputFileLocation, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer>;
+export declare function streamMediaFile(ctx: TgContext, fileLocation: Api.TypeInputFileLocation, offset?: bigInt.BigInteger, limit?: number, requestSize?: number, fileSize?: number, dcId?: number): AsyncGenerator<Buffer>;
 export declare function getMediaMetadata(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse>;
 export declare function getAllMediaMetaData(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse>;
 export declare function getFilteredMedia(ctx: TgContext, params: MediaQueryParams): Promise<FilteredMediaListResponse>;

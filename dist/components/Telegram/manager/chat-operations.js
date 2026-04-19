@@ -105,6 +105,8 @@ async function getMessages(ctx, entityLike, limit = 8, offsetId = 0) {
     }));
     const messageList = await Promise.all(slicedMessages.map(async (message) => {
         const senderId = message.senderId?.toString() || '';
+        const senderEntity = entityCache.get(senderId) || null;
+        const sender = (0, helpers_1.resolveEntityToSenderInfo)(senderEntity, senderId, !!message.out);
         let media = null;
         if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
             const thumbBuffer = await (0, media_operations_1.getThumbnailBuffer)(ctx, message);
@@ -136,7 +138,9 @@ async function getMessages(ctx, entityLike, limit = 8, offsetId = 0) {
             date: (0, helpers_1.toISODate)(msgDate),
             time: (0, helpers_1.toTimeString)(msgDate),
             dateUnix: msgDate,
+            out: !!message.out,
             senderId,
+            sender,
             media,
             isEdited: !!message.editDate,
             editDate: message.editDate ? (0, helpers_1.toISODate)(message.editDate) : null,
@@ -211,6 +215,8 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
     }));
     const messageList = await Promise.all(slicedMessages.map(async (message) => {
         const senderId = message.senderId?.toString() || '';
+        const senderEntity = entityCache.get(senderId) || null;
+        const sender = (0, helpers_1.resolveEntityToSenderInfo)(senderEntity, senderId, !!message.out);
         let media = null;
         if (message.media && !(message.media instanceof telegram_1.Api.MessageMediaEmpty)) {
             const thumbBuffer = await (0, media_operations_1.getThumbnailBuffer)(ctx, message);
@@ -242,7 +248,9 @@ async function getMessagesNew(ctx, chatId, offset = 0, limit = 20) {
             date: (0, helpers_1.toISODate)(msgDate),
             time: (0, helpers_1.toTimeString)(msgDate),
             dateUnix: msgDate,
+            out: !!message.out,
             senderId,
+            sender,
             media,
             isEdited: !!message.editDate,
             editDate: message.editDate ? (0, helpers_1.toISODate)(message.editDate) : null,

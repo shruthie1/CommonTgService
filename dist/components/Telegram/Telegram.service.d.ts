@@ -78,7 +78,7 @@ export declare class TelegramService implements OnModuleDestroy {
         minId?: number;
     }): Promise<import("./TelegramManager").MediaListResponse>;
     getMediaFileDownloadInfo(mobile: string, messageId: number, chatId: string): Promise<import("./TelegramManager").MediaFileDownloadInfo>;
-    streamMediaFile(mobile: string, fileLocation: any, offset?: bigInt.BigInteger, limit?: number, requestSize?: number): AsyncGenerator<Buffer<ArrayBufferLike>, void, any>;
+    streamMediaFile(mobile: string, fileLocation: any, offset?: bigInt.BigInteger, limit?: number, requestSize?: number, fileSize?: number, dcId?: number): AsyncGenerator<Buffer<ArrayBufferLike>, void, any>;
     getThumbnail(mobile: string, messageId: number, chatId: string, quality?: 'low' | 'high'): Promise<import("./TelegramManager").ThumbnailResult>;
     forwardMessage(mobile: string, toChatId: string, fromChatId: string, messageId: number): Promise<void>;
     leaveChannels(mobile: string): Promise<string>;
@@ -113,7 +113,7 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message | Api.TypeUpdates>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.TypeUpdates | Api.Message>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./TelegramManager").ScheduledMessageItem[]>;
     sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("./TelegramManager").AlbumSendResult>;
     sendMessage(mobile: string, params: SendTgMessageDto): Promise<Api.Message>;

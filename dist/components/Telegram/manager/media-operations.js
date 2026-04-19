@@ -47,11 +47,13 @@ exports.getAllMediaMetaData = getAllMediaMetaData;
 exports.getFilteredMedia = getFilteredMedia;
 exports.getFileUrl = getFileUrl;
 const telegram_1 = require("telegram");
+const Utils_1 = require("telegram/Utils");
 const fs = __importStar(require("fs"));
 const axios_1 = __importDefault(require("axios"));
 const big_integer_1 = __importDefault(require("big-integer"));
 const helpers_1 = require("./helpers");
 const Helpers_1 = require("telegram/Helpers");
+const chat_operations_1 = require("./chat-operations");
 function findSize(sizes, ...types) {
     for (const type of types) {
         const found = sizes.find((s) => s.type === type);
@@ -59,6 +61,17 @@ function findSize(sizes, ...types) {
             return found;
     }
     return undefined;
+}
+function extractInlineThumbnail(sizes) {
+    for (const s of sizes) {
+        if (s instanceof telegram_1.Api.PhotoStrippedSize) {
+            return (0, Utils_1.strippedPhotoToJpg)(s.bytes);
+        }
+        if (s instanceof telegram_1.Api.PhotoCachedSize) {
+            return Buffer.from(s.bytes);
+        }
+    }
+    return null;
 }
 function isAnimatedGif(doc) {
     return doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeAnimated) ||
@@ -70,6 +83,11 @@ async function getThumbnailBuffer(ctx, message, quality = 'low') {
         if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
             const sizes = message.photo?.sizes || [];
             if (sizes.length > 0) {
+                if (quality === 'low') {
+                    const inline = extractInlineThumbnail(sizes);
+                    if (inline)
+                        return inline;
+                }
                 const preferredSize = quality === 'high'
                     ? (findSize(sizes, 'x', 'y', 'm') || sizes[sizes.length - 1])
                     : (findSize(sizes, 'm', 'x') || sizes[sizes.length - 1]);
@@ -86,6 +104,11 @@ async function getThumbnailBuffer(ctx, message, quality = 'low') {
             const thumbs = doc.thumbs || [];
             if (isSticker) {
                 if (thumbs.length > 0) {
+                    if (quality === 'low') {
+                        const inline = extractInlineThumbnail(thumbs);
+                        if (inline)
+                            return inline;
+                    }
                     const preferredThumb = quality === 'high'
                         ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
                         : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
@@ -101,6 +124,11 @@ async function getThumbnailBuffer(ctx, message, quality = 'low') {
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
             }
             if (thumbs.length > 0) {
+                if (quality === 'low') {
+                    const inline = extractInlineThumbnail(thumbs);
+                    if (inline)
+                        return inline;
+                }
                 const preferredThumb = quality === 'high'
                     ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
                     : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
@@ -116,8 +144,19 @@ async function getThumbnailBuffer(ctx, message, quality = 'low') {
     }
     return null;
 }
+async function resolveEntity(ctx, chatId) {
+    if (chatId === 'me')
+        return 'me';
+    try {
+        return await (0, chat_operations_1.safeGetEntityById)(ctx, chatId) || chatId;
+    }
+    catch {
+        return chatId;
+    }
+}
 async function getMessageWithMedia(ctx, messageId, chatId) {
-    const messages = await ctx.client.getMessages(chatId, { ids: [messageId] });
+    const peer = await resolveEntity(ctx, chatId);
+    const messages = await ctx.client.getMessages(peer, { ids: [messageId] });
     const message = messages[0];
     if (!message || message.media instanceof telegram_1.Api.MessageMediaEmpty) {
         throw new Error('Media not found');
@@ -131,12 +170,14 @@ function getMediaFileInfoFromMessage(message) {
     let fileLocation;
     let fileSize = 0;
     let inputLocation;
+    let dcId;
     if (media instanceof telegram_1.Api.MessageMediaPhoto) {
         const photo = message.photo;
         if (!photo || photo instanceof telegram_1.Api.PhotoEmpty) {
             throw new Error('Photo not found in message');
         }
         inputLocation = photo;
+        dcId = photo.dcId;
         contentType = 'image/jpeg';
         filename = 'photo.jpg';
         const sizes = photo?.sizes || [];
@@ -155,6 +196,11 @@ function getMediaFileInfoFromMessage(message) {
         if (largestSize && 'size' in largestSize) {
             fileSize = largestSize.size || 0;
         }
+        else if (largestSize && 'sizes' in largestSize) {
+            const progressiveSizes = largestSize.sizes;
+            if (progressiveSizes?.length > 0)
+                fileSize = progressiveSizes[progressiveSizes.length - 1];
+        }
     }
     else if (media instanceof telegram_1.Api.MessageMediaDocument) {
         const document = media.document;
@@ -165,6 +211,7 @@ function getMediaFileInfoFromMessage(message) {
             throw new Error('Document format not supported');
         }
         inputLocation = document;
+        dcId = document.dcId;
         const fileNameAttr = document.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
         filename = fileNameAttr?.fileName || 'document.bin';
         contentType = document.mimeType || (0, helpers_1.detectContentType)(filename);
@@ -179,7 +226,7 @@ function getMediaFileInfoFromMessage(message) {
     else {
         throw new Error('Unsupported media type');
     }
-    return { contentType, filename, fileLocation, fileSize, inputLocation };
+    return { contentType, filename, fileLocation, fileSize, inputLocation, dcId };
 }
 async function getMediaUrl(ctx, message) {
     if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
@@ -260,12 +307,14 @@ async function getMediaFileDownloadInfo(ctx, messageId, chatId = 'me') {
     const etag = (0, helpers_1.generateETag)(messageId, chatId, fileId);
     return { ...fileInfo, etag };
 }
-async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 1024 * 1024) {
+async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 512 * 1024, fileSize, dcId) {
     for await (const chunk of ctx.client.iterDownload({
         file: fileLocation,
         offset,
         limit,
         requestSize,
+        ...(fileSize ? { fileSize: (0, big_integer_1.default)(fileSize) } : {}),
+        ...(dcId ? { dcId } : {}),
     })) {
         yield chunk;
     }
@@ -274,6 +323,7 @@ async function getMediaMetadata(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const peer = await resolveEntity(ctx, chatId);
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
@@ -294,7 +344,7 @@ async function getMediaMetadata(ctx, params) {
     const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
     async function fetchWithPostFilter(type, fetchLimit) {
         if (!NEEDS_POST_FILTER.has(type)) {
-            const messages = await ctx.client.getMessages(chatId, {
+            const messages = await ctx.client.getMessages(peer, {
                 ...baseQuery,
                 limit: fetchLimit,
                 filter: (0, helpers_1.getSearchFilter)(type),
@@ -311,7 +361,7 @@ async function getMediaMetadata(ctx, params) {
         const maxIterations = 5;
         const batchSize = Math.max(fetchLimit * 4, 100);
         for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
-            const messages = await ctx.client.getMessages(chatId, {
+            const messages = await ctx.client.getMessages(peer, {
                 ...baseQuery,
                 limit: batchSize,
                 filter: (0, helpers_1.getSearchFilter)(type),
@@ -478,6 +528,7 @@ async function getFilteredMedia(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const peer = await resolveEntity(ctx, chatId);
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
@@ -496,7 +547,7 @@ async function getFilteredMedia(ctx, params) {
         }),
     };
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(chatId, query);
+    const messages = await ctx.client.getMessages(peer, query);
     ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
     const filteredMessages = messages.filter(message => {
         if (!message.media)
@@ -518,7 +569,7 @@ async function getFilteredMedia(ctx, params) {
                     thumbMime = doc.mimeType || 'video/mp4';
                 }
                 else if (doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker)) {
-                    thumbMime = doc.mimeType || 'image/webp';
+                    thumbMime = 'image/webp';
                 }
             }
         }
