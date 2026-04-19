@@ -433,9 +433,9 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw error;
         }
     }
-    async *streamMediaFile(mobile, fileLocation, offset, limit, requestSize) {
+    async *streamMediaFile(mobile, fileLocation, offset, limit, requestSize, fileSize, dcId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        yield* telegramClient.streamMediaFile(fileLocation, offset, limit, requestSize);
+        yield* telegramClient.streamMediaFile(fileLocation, offset, limit, requestSize, fileSize, dcId);
     }
     async getThumbnail(mobile, messageId, chatId, quality = 'low') {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);

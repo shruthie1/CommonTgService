@@ -236,7 +236,7 @@ let TelegramController = class TelegramController {
             }
             const range = res.req.headers.range;
             const ifRange = res.req.headers['if-range'];
-            const chunkSize = 1024 * 1024;
+            const chunkSize = 512 * 1024;
             const rangeValid = range && fileInfo.fileSize > 0 && (!ifRange || ifRange === fileInfo.etag);
             if (rangeValid) {
                 const parts = range.replace(/bytes=/, "").split("-");
@@ -262,7 +262,7 @@ let TelegramController = class TelegramController {
                 const skipBytes = start - alignedStart;
                 const fetchLimit = chunksize + skipBytes;
                 let skipped = 0;
-                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(alignedStart), fetchLimit, chunkSize)) {
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(alignedStart), fetchLimit, chunkSize, fileInfo.fileSize || undefined, fileInfo.dcId)) {
                     if (res.destroyed)
                         break;
                     let data = chunk;
@@ -287,7 +287,7 @@ let TelegramController = class TelegramController {
                 if (fileInfo.fileSize > 0) {
                     res.setHeader('Content-Length', fileInfo.fileSize);
                 }
-                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), 5 * 1024 * 1024, chunkSize)) {
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), 5 * 1024 * 1024, chunkSize, fileInfo.fileSize || undefined, fileInfo.dcId)) {
                     if (res.destroyed)
                         break;
                     res.write(chunk);
