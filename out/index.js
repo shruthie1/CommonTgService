@@ -10107,40 +10107,49 @@ const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+function findSize(sizes, ...types) {
+    for (const type of types) {
+        const found = sizes.find((s) => s.type === type);
+        if (found)
+            return found;
+    }
+    return undefined;
+}
+function isAnimatedGif(doc) {
+    return doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeAnimated) ||
+        doc.mimeType === 'image/gif' ||
+        doc.mimeType === 'video/mp4' && doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeAnimated);
+}
 async function getThumbnailBuffer(ctx, message, quality = 'low') {
     try {
         if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
             const sizes = message.photo?.sizes || [];
             if (sizes.length > 0) {
                 const preferredSize = quality === 'high'
-                    ? (sizes.find((s) => s.type === 'x') ||
-                        sizes.find((s) => s.type === 'm') ||
-                        sizes[sizes.length - 1] || sizes[0])
-                    : (sizes.find((s) => s.type === 's') ||
-                        sizes.find((s) => s.type === 'm') ||
-                        sizes[0]);
+                    ? (findSize(sizes, 'x', 'y', 'm') || sizes[sizes.length - 1])
+                    : (findSize(sizes, 'm', 'x') || sizes[sizes.length - 1]);
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredSize }), 30000);
             }
         }
         else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
             const doc = message.document;
-            const thumbs = doc?.thumbs || [];
+            if (!(doc instanceof telegram_1.Api.Document))
+                return null;
+            const isGif = isAnimatedGif(doc);
+            const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
+            const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
+            if ((isGif || isSticker) && fileSize < 2 * 1024 * 1024) {
+                return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
+            }
+            const thumbs = doc.thumbs || [];
             if (thumbs.length > 0) {
                 const preferredThumb = quality === 'high'
-                    ? (thumbs.find((t) => t.type === 'm') ||
-                        thumbs.find((t) => t.type === 's') ||
-                        thumbs[thumbs.length - 1] || thumbs[0])
-                    : (thumbs.find((t) => t.type === 's') ||
-                        thumbs[0]);
+                    ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
+                    : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
             }
-            if (doc && doc instanceof telegram_1.Api.Document) {
-                const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
-                const isSmallGif = doc.mimeType === 'image/gif';
-                const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
-                if ((isSticker || isSmallGif) && fileSize < 512 * 1024) {
-                    return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
-                }
+            if ((isGif || isSticker) && fileSize < 5 * 1024 * 1024) {
+                return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
             }
         }
     }
@@ -10266,13 +10275,14 @@ async function getThumbnail(ctx, messageId, chatId = 'me', quality = 'low') {
         const doc = message.document;
         if (doc && doc instanceof telegram_1.Api.Document) {
             const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
+            const isGif = isAnimatedGif(doc);
             if (isSticker && doc.mimeType) {
                 contentType = doc.mimeType;
                 ext = doc.mimeType === 'image/webp' ? 'webp' : doc.mimeType === 'video/webm' ? 'webm' : 'webp';
             }
-            else if (doc.mimeType === 'image/gif') {
-                contentType = 'image/gif';
-                ext = 'gif';
+            else if (isGif) {
+                contentType = doc.mimeType || 'video/mp4';
+                ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';
             }
         }
     }
@@ -10541,10 +10551,23 @@ async function getFilteredMedia(ctx, params) {
         const thumbBuffer = await getThumbnailBuffer(ctx, message);
         const mediaDetails = (0, helpers_1.getMediaDetails)(message.media);
         const baseMeta = (0, helpers_1.extractMediaMetaFromMessage)(message, chatId, (0, helpers_1.getMediaType)(message.media));
+        const mediaType = (0, helpers_1.getMediaType)(message.media);
+        let thumbMime = 'image/jpeg';
+        if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+            const doc = message.document;
+            if (doc instanceof telegram_1.Api.Document) {
+                if (isAnimatedGif(doc)) {
+                    thumbMime = doc.mimeType || 'video/mp4';
+                }
+                else if (doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker)) {
+                    thumbMime = doc.mimeType || 'image/webp';
+                }
+            }
+        }
         return {
             ...baseMeta,
-            type: (0, helpers_1.getMediaType)(message.media),
-            thumbnail: thumbBuffer ? `data:image/jpeg;base64,${thumbBuffer.toString('base64')}` : undefined,
+            type: mediaType,
+            thumbnail: thumbBuffer ? `data:${thumbMime};base64,${thumbBuffer.toString('base64')}` : undefined,
             mediaDetails: mediaDetails || undefined,
         };
     }, helpers_1.THUMBNAIL_CONCURRENCY_LIMIT, helpers_1.THUMBNAIL_BATCH_DELAY_MS);
