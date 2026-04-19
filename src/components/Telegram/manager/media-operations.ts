@@ -50,16 +50,35 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
             const isGif = isAnimatedGif(doc);
             const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
             const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
+            const thumbs = doc.thumbs || [];
 
-            // For small GIFs/stickers (<2MB), download the full file for proper animated preview
-            if ((isGif || isSticker) && fileSize < 2 * 1024 * 1024) {
+            if (isSticker) {
+                if (thumbs.length > 0) {
+                    const preferredThumb = quality === 'high'
+                        ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
+                        : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
+                    return await downloadWithTimeout(
+                        ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
+                        30000
+                    );
+                }
+                const renderable = doc.mimeType === 'image/webp' || doc.mimeType === 'image/png';
+                if (renderable && fileSize < 2 * 1024 * 1024) {
+                    return await downloadWithTimeout(
+                        ctx.client.downloadMedia(message) as Promise<Buffer>,
+                        30000
+                    );
+                }
+                return null;
+            }
+
+            if (isGif && fileSize < 2 * 1024 * 1024) {
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message) as Promise<Buffer>,
                     30000
                 );
             }
 
-            const thumbs = doc.thumbs || [];
             if (thumbs.length > 0) {
                 const preferredThumb = quality === 'high'
                     ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
@@ -70,8 +89,7 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
                 );
             }
 
-            // Fallback: download full file for small documents without thumbs
-            if ((isGif || isSticker) && fileSize < 5 * 1024 * 1024) {
+            if (isGif && fileSize < 5 * 1024 * 1024) {
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message) as Promise<Buffer>,
                     30000
@@ -230,9 +248,9 @@ export async function getThumbnail(ctx: TgContext, messageId: number, chatId: st
             const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
             const isGif = isAnimatedGif(doc);
 
-            if (isSticker && doc.mimeType) {
-                contentType = doc.mimeType;
-                ext = doc.mimeType === 'image/webp' ? 'webp' : doc.mimeType === 'video/webm' ? 'webm' : 'webp';
+            if (isSticker) {
+                contentType = 'image/webp';
+                ext = 'webp';
             } else if (isGif) {
                 contentType = doc.mimeType || 'video/mp4';
                 ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';

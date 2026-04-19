@@ -531,6 +531,7 @@ export class TelegramController {
                     fetchLimit,
                     chunkSize
                 )) {
+                    if (res.destroyed) break;
                     let data = chunk as Buffer;
                     if (skipped < skipBytes) {
                         const toSkip = Math.min(skipBytes - skipped, data.length);
@@ -560,9 +561,10 @@ export class TelegramController {
                     mobile,
                     fileInfo.fileLocation,
                     bigInt(0),
-                    fileInfo.fileSize || 100 * 1024 * 1024,
+                    5 * 1024 * 1024,
                     chunkSize
                 )) {
+                    if (res.destroyed) break;
                     res.write(chunk);
                 }
             }
