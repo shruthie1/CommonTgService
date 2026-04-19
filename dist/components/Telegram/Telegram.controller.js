@@ -263,6 +263,8 @@ let TelegramController = class TelegramController {
                 const fetchLimit = chunksize + skipBytes;
                 let skipped = 0;
                 for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(alignedStart), fetchLimit, chunkSize)) {
+                    if (res.destroyed)
+                        break;
                     let data = chunk;
                     if (skipped < skipBytes) {
                         const toSkip = Math.min(skipBytes - skipped, data.length);
@@ -285,7 +287,9 @@ let TelegramController = class TelegramController {
                 if (fileInfo.fileSize > 0) {
                     res.setHeader('Content-Length', fileInfo.fileSize);
                 }
-                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), fileInfo.fileSize || 100 * 1024 * 1024, chunkSize)) {
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), 5 * 1024 * 1024, chunkSize)) {
+                    if (res.destroyed)
+                        break;
                     res.write(chunk);
                 }
             }
