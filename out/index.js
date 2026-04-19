@@ -1676,6 +1676,8 @@ let TelegramController = class TelegramController {
                 const fetchLimit = chunksize + skipBytes;
                 let skipped = 0;
                 for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(alignedStart), fetchLimit, chunkSize)) {
+                    if (res.destroyed)
+                        break;
                     let data = chunk;
                     if (skipped < skipBytes) {
                         const toSkip = Math.min(skipBytes - skipped, data.length);
@@ -1698,7 +1700,9 @@ let TelegramController = class TelegramController {
                 if (fileInfo.fileSize > 0) {
                     res.setHeader('Content-Length', fileInfo.fileSize);
                 }
-                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), fileInfo.fileSize || 100 * 1024 * 1024, chunkSize)) {
+                for await (const chunk of this.telegramService.streamMediaFile(mobile, fileInfo.fileLocation, (0, big_integer_1.default)(0), 5 * 1024 * 1024, chunkSize)) {
+                    if (res.destroyed)
+                        break;
                     res.write(chunk);
                 }
             }
@@ -10138,17 +10142,30 @@ async function getThumbnailBuffer(ctx, message, quality = 'low') {
             const isGif = isAnimatedGif(doc);
             const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
             const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
-            if ((isGif || isSticker) && fileSize < 2 * 1024 * 1024) {
+            const thumbs = doc.thumbs || [];
+            if (isSticker) {
+                if (thumbs.length > 0) {
+                    const preferredThumb = quality === 'high'
+                        ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
+                        : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
+                    return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
+                }
+                const renderable = doc.mimeType === 'image/webp' || doc.mimeType === 'image/png';
+                if (renderable && fileSize < 2 * 1024 * 1024) {
+                    return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
+                }
+                return null;
+            }
+            if (isGif && fileSize < 2 * 1024 * 1024) {
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
             }
-            const thumbs = doc.thumbs || [];
             if (thumbs.length > 0) {
                 const preferredThumb = quality === 'high'
                     ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
                     : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message, { thumb: preferredThumb }), 30000);
             }
-            if ((isGif || isSticker) && fileSize < 5 * 1024 * 1024) {
+            if (isGif && fileSize < 5 * 1024 * 1024) {
                 return await (0, helpers_1.downloadWithTimeout)(ctx.client.downloadMedia(message), 30000);
             }
         }
@@ -10276,9 +10293,9 @@ async function getThumbnail(ctx, messageId, chatId = 'me', quality = 'low') {
         if (doc && doc instanceof telegram_1.Api.Document) {
             const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
             const isGif = isAnimatedGif(doc);
-            if (isSticker && doc.mimeType) {
-                contentType = doc.mimeType;
-                ext = doc.mimeType === 'image/webp' ? 'webp' : doc.mimeType === 'video/webm' ? 'webm' : 'webp';
+            if (isSticker) {
+                contentType = 'image/webp';
+                ext = 'webp';
             }
             else if (isGif) {
                 contentType = doc.mimeType || 'video/mp4';
