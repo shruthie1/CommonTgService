@@ -247,7 +247,7 @@ async function getMediaFileDownloadInfo(ctx, messageId, chatId = 'me') {
     const etag = (0, helpers_1.generateETag)(messageId, chatId, fileId);
     return { ...fileInfo, etag };
 }
-async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 512 * 1024) {
+async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 1024 * 1024) {
     for await (const chunk of ctx.client.iterDownload({
         file: fileLocation,
         offset,
