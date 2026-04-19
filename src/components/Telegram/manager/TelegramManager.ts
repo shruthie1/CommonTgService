@@ -281,7 +281,7 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             fileLocation: Api.TypeInputFileLocation,
             offset: bigInt.BigInteger = bigInt(0),
             limit: number = 5 * 1024 * 1024,
-            requestSize: number = 512 * 1024
+            requestSize: number = 1024 * 1024
         ): AsyncGenerator<Buffer> {
             yield* mediaOps.streamMediaFile(this.ctx, fileLocation, offset, limit, requestSize);
         }

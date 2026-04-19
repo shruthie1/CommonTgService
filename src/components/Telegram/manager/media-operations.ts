@@ -265,7 +265,7 @@ export async function* streamMediaFile(
     fileLocation: Api.TypeInputFileLocation,
     offset: bigInt.BigInteger = bigInt(0),
     limit: number = 5 * 1024 * 1024,
-    requestSize: number = 512 * 1024
+    requestSize: number = 1024 * 1024
 ): AsyncGenerator<Buffer> {
     for await (const chunk of ctx.client.iterDownload({
         file: fileLocation,

@@ -488,7 +488,7 @@ export class TelegramController {
             // Support HTTP Range requests for video streaming
             const range = res.req.headers.range;
             const ifRange = res.req.headers['if-range'];
-            const chunkSize = 512 * 1024; // 512 KB chunks
+            const chunkSize = 1024 * 1024; // 1 MB chunks
             const rangeValid = range && fileInfo.fileSize > 0 && (!ifRange || ifRange === fileInfo.etag);
 
             if (rangeValid) {
@@ -557,10 +557,10 @@ export class TelegramController {
                 }
 
                 for await (const chunk of this.telegramService.streamMediaFile(
-                    mobile, 
-                    fileInfo.fileLocation, 
-                    bigInt(0), 
-                    5 * 1024 * 1024, 
+                    mobile,
+                    fileInfo.fileLocation,
+                    bigInt(0),
+                    fileInfo.fileSize || 100 * 1024 * 1024,
                     chunkSize
                 )) {
                     res.write(chunk);
