@@ -84,6 +84,7 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
             const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
             const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
             const thumbs = doc.thumbs || [];
+            const videoThumbs = doc.videoThumbs || [];
 
             if (isSticker) {
                 if (thumbs.length > 0) {
@@ -130,10 +131,23 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
                             30000
                         );
                         if (buf) return buf;
-                    } catch { /* fall through to inline */ }
+                    } catch { /* fall through */ }
                 }
                 const inline = extractInlineThumbnail(thumbs);
                 if (inline) return inline;
+            }
+
+            if (videoThumbs.length > 0) {
+                const vThumb = videoThumbs.find(v => v instanceof Api.VideoSize);
+                if (vThumb) {
+                    try {
+                        const buf = await downloadWithTimeout(
+                            ctx.client.downloadMedia(message, { thumb: vThumb as any }) as Promise<Buffer>,
+                            30000
+                        );
+                        if (buf) return buf;
+                    } catch { /* fall through */ }
+                }
             }
 
             if (isGif && fileSize < 5 * 1024 * 1024) {
