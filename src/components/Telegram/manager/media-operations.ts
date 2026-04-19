@@ -16,18 +16,28 @@ import { sleep } from 'telegram/Helpers';
 
 // ---- Thumbnail ----
 
+function findSize(sizes: Api.TypePhotoSize[], ...types: string[]): Api.TypePhotoSize | undefined {
+    for (const type of types) {
+        const found = sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === type);
+        if (found) return found;
+    }
+    return undefined;
+}
+
+function isAnimatedGif(doc: Api.Document): boolean {
+    return doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeAnimated) ||
+        doc.mimeType === 'image/gif' ||
+        doc.mimeType === 'video/mp4' && doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeAnimated);
+}
+
 export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, quality: 'low' | 'high' = 'low'): Promise<Buffer | null> {
     try {
         if (message.media instanceof Api.MessageMediaPhoto) {
             const sizes = (<Api.Photo>message.photo)?.sizes || [];
             if (sizes.length > 0) {
                 const preferredSize = quality === 'high'
-                    ? (sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
-                       sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
-                       sizes[sizes.length - 1] || sizes[0])
-                    : (sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 's') ||
-                       sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
-                       sizes[0]);
+                    ? (findSize(sizes, 'x', 'y', 'm') || sizes[sizes.length - 1])
+                    : (findSize(sizes, 'm', 'x') || sizes[sizes.length - 1]);
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message, { thumb: preferredSize }) as Promise<Buffer>,
                     30000
@@ -35,32 +45,37 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
             }
         } else if (message.media instanceof Api.MessageMediaDocument) {
             const doc = message.document;
-            const thumbs = doc?.thumbs || [];
+            if (!(doc instanceof Api.Document)) return null;
 
+            const isGif = isAnimatedGif(doc);
+            const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
+            const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
+
+            // For small GIFs/stickers (<2MB), download the full file for proper animated preview
+            if ((isGif || isSticker) && fileSize < 2 * 1024 * 1024) {
+                return await downloadWithTimeout(
+                    ctx.client.downloadMedia(message) as Promise<Buffer>,
+                    30000
+                );
+            }
+
+            const thumbs = doc.thumbs || [];
             if (thumbs.length > 0) {
                 const preferredThumb = quality === 'high'
-                    ? (thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 'm') ||
-                       thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 's') ||
-                       thumbs[thumbs.length - 1] || thumbs[0])
-                    : (thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 's') ||
-                       thumbs[0]);
+                    ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
+                    : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
                 return await downloadWithTimeout(
                     ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
                     30000
                 );
             }
 
-            // For stickers/small files without embedded thumbs, download the actual file
-            if (doc && doc instanceof Api.Document) {
-                const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
-                const isSmallGif = doc.mimeType === 'image/gif';
-                const fileSize = typeof doc.size === 'number' ? doc.size : Number(doc.size?.toString() || '0');
-                if ((isSticker || isSmallGif) && fileSize < 512 * 1024) {
-                    return await downloadWithTimeout(
-                        ctx.client.downloadMedia(message) as Promise<Buffer>,
-                        30000
-                    );
-                }
+            // Fallback: download full file for small documents without thumbs
+            if ((isGif || isSticker) && fileSize < 5 * 1024 * 1024) {
+                return await downloadWithTimeout(
+                    ctx.client.downloadMedia(message) as Promise<Buffer>,
+                    30000
+                );
             }
         }
     } catch (error) {
@@ -213,12 +228,14 @@ export async function getThumbnail(ctx: TgContext, messageId: number, chatId: st
         const doc = message.document;
         if (doc && doc instanceof Api.Document) {
             const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
+            const isGif = isAnimatedGif(doc);
+
             if (isSticker && doc.mimeType) {
                 contentType = doc.mimeType;
                 ext = doc.mimeType === 'image/webp' ? 'webp' : doc.mimeType === 'video/webm' ? 'webm' : 'webp';
-            } else if (doc.mimeType === 'image/gif') {
-                contentType = 'image/gif';
-                ext = 'gif';
+            } else if (isGif) {
+                contentType = doc.mimeType || 'video/mp4';
+                ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';
             }
         }
     }
@@ -520,11 +537,24 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
             const thumbBuffer = await getThumbnailBuffer(ctx, message);
             const mediaDetails = getMediaDetails(message.media as Api.MessageMediaDocument);
             const baseMeta = extractMediaMetaFromMessage(message, chatId, getMediaType(message.media));
+            const mediaType = getMediaType(message.media);
+
+            let thumbMime = 'image/jpeg';
+            if (message.media instanceof Api.MessageMediaDocument) {
+                const doc = message.document;
+                if (doc instanceof Api.Document) {
+                    if (isAnimatedGif(doc)) {
+                        thumbMime = doc.mimeType || 'video/mp4';
+                    } else if (doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker)) {
+                        thumbMime = doc.mimeType || 'image/webp';
+                    }
+                }
+            }
 
             return {
                 ...baseMeta,
-                type: getMediaType(message.media),
-                thumbnail: thumbBuffer ? `data:image/jpeg;base64,${thumbBuffer.toString('base64')}` : undefined,
+                type: mediaType,
+                thumbnail: thumbBuffer ? `data:${thumbMime};base64,${thumbBuffer.toString('base64')}` : undefined,
                 mediaDetails: mediaDetails || undefined,
             };
         },
