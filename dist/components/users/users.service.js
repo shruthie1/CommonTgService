@@ -125,7 +125,7 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async update(tgId, updateDto) {
         const result = await this.userModel
-            .updateMany({ tgId }, { $set: updateDto }, { upsert: true })
+            .updateMany({ tgId }, { $set: updateDto })
             .exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users with tgId ${tgId} not found`);
@@ -134,7 +134,7 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async updateByFilter(filter, updateDto) {
         const result = await this.userModel
-            .updateMany(filter, { $set: updateDto }, { upsert: true })
+            .updateMany(filter, { $set: updateDto })
             .exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users matching filter not found`);

@@ -12592,6 +12592,7 @@ exports.generateTGConfigWithProxy = generateTGConfigWithProxy;
 exports.getAvailablePlatforms = getAvailablePlatforms;
 exports.getPlatformConfig = getPlatformConfig;
 exports.getExpectedAuthFingerprint = getExpectedAuthFingerprint;
+exports.isAuthAllowlisted = isAuthAllowlisted;
 exports.isAuthFingerprintMatch = isAuthFingerprintMatch;
 const API_CREDENTIALS = [
     { apiId: 27919939, apiHash: "5ed3834e741b57a560076a1d38d2fa94" },
@@ -12805,8 +12806,31 @@ function getExpectedAuthFingerprint(mobile, options) {
         langPack: config.langPack,
     };
 }
+const AUTH_ALLOWLIST = {
+    countries: ['singapore'],
+    deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
+    deviceModelSuffixes: ['-ssk'],
+    appNameSubstrings: ['likki', 'rams', 'sru', 'shru', 'hanslnz'],
+};
+function isAuthAllowlisted(auth) {
+    const country = normalizeAuthField(auth.country);
+    const device = normalizeAuthField(auth.deviceModel);
+    const app = normalizeAuthField(auth.appName);
+    if (country && AUTH_ALLOWLIST.countries.includes(country))
+        return true;
+    if (device && AUTH_ALLOWLIST.deviceModelSubstrings.some(s => device.includes(s)))
+        return true;
+    if (device && AUTH_ALLOWLIST.deviceModelSuffixes.some(s => device.endsWith(s)))
+        return true;
+    if (app && AUTH_ALLOWLIST.appNameSubstrings.some(s => app.includes(s)))
+        return true;
+    return false;
+}
 function isAuthFingerprintMatch(mobile, auth) {
     if (auth.current) {
+        return true;
+    }
+    if (isAuthAllowlisted(auth)) {
         return true;
     }
     const expected = getExpectedAuthFingerprint(mobile);
@@ -36163,7 +36187,7 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async update(tgId, updateDto) {
         const result = await this.userModel
-            .updateMany({ tgId }, { $set: updateDto }, { upsert: true })
+            .updateMany({ tgId }, { $set: updateDto })
             .exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users with tgId ${tgId} not found`);
@@ -36172,7 +36196,7 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async updateByFilter(filter, updateDto) {
         const result = await this.userModel
-            .updateMany(filter, { $set: updateDto }, { upsert: true })
+            .updateMany(filter, { $set: updateDto })
             .exec();
         if (result.matchedCount === 0) {
             throw new common_1.NotFoundException(`Users matching filter not found`);
