@@ -17,10 +17,23 @@ import { safeGetEntityById } from './chat-operations';
 
 // ---- Thumbnail ----
 
+function isDownloadableSize(s: Api.TypePhotoSize): boolean {
+    return !(s instanceof Api.PhotoStrippedSize) &&
+           !(s instanceof Api.PhotoCachedSize) &&
+           !(s instanceof Api.PhotoSizeEmpty);
+}
+
 function findSize(sizes: Api.TypePhotoSize[], ...types: string[]): Api.TypePhotoSize | undefined {
     for (const type of types) {
-        const found = sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === type);
+        const found = sizes.find((s: Api.TypePhotoSize) => isDownloadableSize(s) && (s as Api.PhotoSize).type === type);
         if (found) return found;
+    }
+    return undefined;
+}
+
+function lastDownloadableSize(sizes: Api.TypePhotoSize[]): Api.TypePhotoSize | undefined {
+    for (let i = sizes.length - 1; i >= 0; i--) {
+        if (isDownloadableSize(sizes[i])) return sizes[i];
     }
     return undefined;
 }
@@ -48,17 +61,20 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
         if (message.media instanceof Api.MessageMediaPhoto) {
             const sizes = (<Api.Photo>message.photo)?.sizes || [];
             if (sizes.length > 0) {
-                if (quality === 'low') {
-                    const inline = extractInlineThumbnail(sizes);
-                    if (inline) return inline;
-                }
                 const preferredSize = quality === 'high'
-                    ? (findSize(sizes, 'x', 'y', 'm') || sizes[sizes.length - 1])
-                    : (findSize(sizes, 'm', 'x') || sizes[sizes.length - 1]);
-                return await downloadWithTimeout(
-                    ctx.client.downloadMedia(message, { thumb: preferredSize }) as Promise<Buffer>,
-                    30000
-                );
+                    ? (findSize(sizes, 'x', 'y', 'm') || lastDownloadableSize(sizes))
+                    : (findSize(sizes, 'm', 'x') || lastDownloadableSize(sizes));
+                if (preferredSize) {
+                    try {
+                        const buf = await downloadWithTimeout(
+                            ctx.client.downloadMedia(message, { thumb: preferredSize }) as Promise<Buffer>,
+                            30000
+                        );
+                        if (buf) return buf;
+                    } catch { /* fall through to inline */ }
+                }
+                const inline = extractInlineThumbnail(sizes);
+                if (inline) return inline;
             }
         } else if (message.media instanceof Api.MessageMediaDocument) {
             const doc = message.document;
@@ -71,17 +87,20 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
 
             if (isSticker) {
                 if (thumbs.length > 0) {
-                    if (quality === 'low') {
-                        const inline = extractInlineThumbnail(thumbs);
-                        if (inline) return inline;
-                    }
                     const preferredThumb = quality === 'high'
-                        ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
-                        : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
-                    return await downloadWithTimeout(
-                        ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
-                        30000
-                    );
+                        ? (findSize(thumbs, 'x', 'y', 'm') || lastDownloadableSize(thumbs))
+                        : (findSize(thumbs, 'm', 'x', 's') || lastDownloadableSize(thumbs));
+                    if (preferredThumb) {
+                        try {
+                            const buf = await downloadWithTimeout(
+                                ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
+                                30000
+                            );
+                            if (buf) return buf;
+                        } catch { /* fall through to inline */ }
+                    }
+                    const inline = extractInlineThumbnail(thumbs);
+                    if (inline) return inline;
                 }
                 const renderable = doc.mimeType === 'image/webp' || doc.mimeType === 'image/png';
                 if (renderable && fileSize < 2 * 1024 * 1024) {
@@ -101,17 +120,20 @@ export async function getThumbnailBuffer(ctx: TgContext, message: Api.Message, q
             }
 
             if (thumbs.length > 0) {
-                if (quality === 'low') {
-                    const inline = extractInlineThumbnail(thumbs);
-                    if (inline) return inline;
-                }
                 const preferredThumb = quality === 'high'
-                    ? (findSize(thumbs, 'x', 'y', 'm') || thumbs[thumbs.length - 1])
-                    : (findSize(thumbs, 'm', 'x', 's') || thumbs[thumbs.length - 1]);
-                return await downloadWithTimeout(
-                    ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
-                    30000
-                );
+                    ? (findSize(thumbs, 'x', 'y', 'm') || lastDownloadableSize(thumbs))
+                    : (findSize(thumbs, 'm', 'x', 's') || lastDownloadableSize(thumbs));
+                if (preferredThumb) {
+                    try {
+                        const buf = await downloadWithTimeout(
+                            ctx.client.downloadMedia(message, { thumb: preferredThumb }) as Promise<Buffer>,
+                            30000
+                        );
+                        if (buf) return buf;
+                    } catch { /* fall through to inline */ }
+                }
+                const inline = extractInlineThumbnail(thumbs);
+                if (inline) return inline;
             }
 
             if (isGif && fileSize < 5 * 1024 * 1024) {
@@ -172,11 +194,7 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
         filename = 'photo.jpg';
 
         const sizes = photo?.sizes || [];
-        const bestSize =
-            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'w') ||
-            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'y') ||
-            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
-            sizes[sizes.length - 1];
+        const bestSize = findSize(sizes, 'w', 'y', 'x') || lastDownloadableSize(sizes);
         const thumbSizeType = bestSize ? (bestSize as Api.PhotoSize).type || '' : '';
 
         const data = {
@@ -186,7 +204,7 @@ function getMediaFileInfoFromMessage(message: Api.Message): MediaFileInfo {
         };
         fileLocation = new Api.InputPhotoFileLocation({ ...data, thumbSize: thumbSizeType });
 
-        const largestSize = sizes[sizes.length - 1];
+        const largestSize = lastDownloadableSize(sizes);
         if (largestSize && 'size' in largestSize) {
             fileSize = (largestSize as Api.PhotoSize).size || 0;
         } else if (largestSize && 'sizes' in largestSize) {
@@ -232,10 +250,7 @@ export async function getMediaUrl(ctx: TgContext, message: Api.Message): Promise
         ctx.logger.info(ctx.phoneNumber, 'messageId image:', message.id);
         const photo = <Api.Photo>message.photo;
         const sizes = photo?.sizes || [];
-        const preferredSize = sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'm') ||
-            sizes.find((s: Api.TypePhotoSize) => (s as Api.PhotoSize).type === 'x') ||
-            sizes[sizes.length - 1] ||
-            sizes[0];
+        const preferredSize = findSize(sizes, 'm', 'x') || lastDownloadableSize(sizes);
 
         return await ctx.client.downloadMedia(message, { thumb: preferredSize || sizes[0] });
     } else if (message.media instanceof Api.MessageMediaDocument &&
@@ -243,9 +258,7 @@ export async function getMediaUrl(ctx: TgContext, message: Api.Message): Promise
             message.document?.mimeType?.startsWith('image'))) {
         ctx.logger.info(ctx.phoneNumber, 'messageId video:', message.id);
         const thumbs = message.document?.thumbs || [];
-        const preferredThumb = thumbs.find((t: Api.TypePhotoSize) => (t as Api.PhotoSize).type === 'm') ||
-            thumbs[thumbs.length - 1] ||
-            thumbs[0];
+        const preferredThumb = findSize(thumbs, 'm') || lastDownloadableSize(thumbs);
 
         return await ctx.client.downloadMedia(message, { thumb: preferredThumb || thumbs[0] });
     }
