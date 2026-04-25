@@ -133,7 +133,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected readonly MAX_FAILED_ATTEMPTS = 3;
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
-    protected readonly MAX_UPDATES_PER_CYCLE = 15;
+    protected readonly MAX_UPDATES_PER_CYCLE = 20;
     protected dailyJoinCounts: Map<string, number>;
     protected dailyJoinDate: string;
     protected joinFailureCounts: Map<string, number>;

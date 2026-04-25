@@ -221,7 +221,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 }
             }
             else {
-                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
+                this.logger.warn(`No persona assignment for ${doc.mobile} — marking name/bio step done with current profile`);
+                updateCount = 1;
             }
             await this.update(doc.mobile, {
                 ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
@@ -681,6 +682,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost = {
                 [base_client_service_1.WarmupPhase.READY]: 25000,
                 [base_client_service_1.WarmupPhase.MATURING]: 15000,
@@ -690,8 +693,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
                 [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            const subStepBonus = {
+                'remove_other_auths': 2000,
+                'set_2fa': 1000,
+                'update_username': 1500,
+                'update_name_bio': 1000,
+                'upload_photo': 1000,
+                'rotate_session': 2000,
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
         promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
@@ -769,7 +783,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const promoteClient = {
                 tgId: document.tgId,
-                lastActive: 'today',
+                lastActive: new Date().toISOString(),
                 mobile: document.mobile,
                 session: user?.session || '',
                 availableDate: targetAvailableDate,

@@ -151,8 +151,10 @@ class BaseClientService {
     }
     async repairWarmupMetadata(doc, now) {
         const updateData = {};
-        const progressDoc = { ...doc, warmupPhase: undefined };
-        const inferredPhase = this.inferWarmupPhaseFromProgress(progressDoc);
+        const savedPhase = doc.warmupPhase;
+        doc.warmupPhase = undefined;
+        const inferredPhase = this.inferWarmupPhaseFromProgress(doc);
+        doc.warmupPhase = savedPhase;
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
@@ -168,7 +170,7 @@ class BaseClientService {
         }
         const repairedDoc = await this.update(doc.mobile, updateData);
         this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
-        return { ...doc, ...updateData, ...(repairedDoc || {}) };
+        return (repairedDoc?.mobile ? repairedDoc : Object.assign(doc, updateData));
     }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
@@ -197,7 +199,7 @@ class BaseClientService {
         this.MAX_FAILED_ATTEMPTS = 3;
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
-        this.MAX_UPDATES_PER_CYCLE = 15;
+        this.MAX_UPDATES_PER_CYCLE = 20;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -733,56 +735,71 @@ class BaseClientService {
         const now = Date.now();
         let updateCount = 0;
         try {
-            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             doc = await this.repairWarmupMetadata(doc, now);
-            const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-                if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
-                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
-                    return { updateCount: 0 };
-                }
-                this.logger.log(`Resetting failure count for ${doc.mobile}`);
-                await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
-            }
-            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
-                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
-                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
-                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
-                }
-                else {
-                    this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                    return { updateCount: 0 };
-                }
-            }
-            if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
-                this.logger.debug(`Client ${doc.mobile} on cooldown`);
+        }
+        catch (err) {
+            this.logger.warn(`repairWarmupMetadata failed for ${doc.mobile}:`, err);
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+        if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+            const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+            const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+            if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
+                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
                 return { updateCount: 0 };
             }
-            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-            if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
-                await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
-                return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+            this.logger.log(`Resetting failure count for ${doc.mobile}`);
+            const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+            const resetDoc1 = await this.update(doc.mobile, resetFields);
+            doc = (resetDoc1?.mobile ? resetDoc1 : Object.assign(doc, resetFields));
+        }
+        else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+            if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                const resetFields2 = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+                const resetDoc2 = await this.update(doc.mobile, resetFields2);
+                doc = (resetDoc2?.mobile ? resetDoc2 : Object.assign(doc, resetFields2));
             }
-            const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
-            this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
-            if (warmupAction.phase !== doc.warmupPhase) {
-                await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
-            }
-            if (warmupAction.action === 'wait') {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            else {
+                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
                 return { updateCount: 0 };
             }
+        }
+        if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+            this.logger.debug(`Client ${doc.mobile} on cooldown`);
+            return { updateCount: 0 };
+        }
+        const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+        const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
+            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+        }
+        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+        if (warmupAction.phase !== doc.warmupPhase) {
+            await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
+        }
+        if (warmupAction.action === 'wait') {
+            await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            return { updateCount: 0 };
+        }
+        if (warmupAction.action === 'join_channels') {
+            return { updateCount: 0 };
+        }
+        if (warmupAction.action === 'advance_to_ready') {
+            await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
+            this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            return { updateCount: 0, updateSummary: 'advance_to_ready' };
+        }
+        try {
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             switch (warmupAction.action) {
                 case 'organic_only': {
                     const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -816,12 +833,6 @@ class BaseClientService {
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
-                case 'advance_to_ready':
-                    await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
-                    this.logger.log(`Client ${doc.mobile} advanced to READY`);
-                    return { updateCount: 0, updateSummary: 'advance_to_ready' };
-                case 'join_channels':
-                    return { updateCount: 0 };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount === 0) {
@@ -1025,8 +1036,8 @@ class BaseClientService {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     }
-                    catch {
-                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    catch (channelError) {
+                        if (channelError?.errorMessage === 'CHANNELS_TOO_MUCH') {
                             await this.update(mobile, { channels: 500 });
                         }
                     }
@@ -1339,7 +1350,7 @@ class BaseClientService {
         }
         if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
             return null;
-        const projectedReadyDate = this.getProjectedReadyDateString({ ...doc, warmupPhase: phase });
+        const projectedReadyDate = this.getProjectedReadyDateString(doc);
         if (!projectedReadyDate)
             return null;
         return this.maxDateString(projectedReadyDate, availableDate);

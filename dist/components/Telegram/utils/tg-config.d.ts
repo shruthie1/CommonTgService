@@ -1,3 +1,4 @@
+import { Api } from "telegram";
 export interface ITelegramCredentials {
     apiId: number;
     apiHash: string;
@@ -72,15 +73,5 @@ export declare function generateTGConfigWithProxy(mobile: string, proxyConfig: {
 export declare function getAvailablePlatforms(): string[];
 export declare function getPlatformConfig(platform: string): TGPlatformConfig | undefined;
 export declare function getExpectedAuthFingerprint(mobile: string, options?: Parameters<typeof generateTGConfig>[2]): TGAuthFingerprint;
-export declare function isAuthAllowlisted(auth: {
-    country?: string | null;
-    deviceModel?: string | null;
-    appName?: string | null;
-}): boolean;
-export declare function isAuthFingerprintMatch(mobile: string, auth: {
-    current?: boolean;
-    deviceModel?: string | null;
-    systemVersion?: string | null;
-    appName?: string | null;
-    country?: string | null;
-}): boolean;
+export declare function isAuthAllowlisted(auth: Api.Authorization): boolean;
+export declare function isAuthFingerprintMatch(mobile: string, auth: Api.Authorization): boolean;
