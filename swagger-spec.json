@@ -8327,6 +8327,52 @@
         ]
       }
     },
+    "/bufferclients/diagnoseWarmup": {
+      "get": {
+        "description": "Returns what would happen to each active buffer client without executing anything.",
+        "operationId": "BufferClientController_diagnoseWarmup",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Dry-run warmup diagnosis",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/diagnoseEnrollment": {
+      "get": {
+        "description": "Shows what enrollment decisions would be made without executing.",
+        "operationId": "BufferClientController_diagnoseEnrollment",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Dry-run enrollment diagnosis",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
     "/bufferclients/addNewUserstoBufferClients": {
       "post": {
         "description": "Starts background enrollment of candidate users into the buffer client pool.",

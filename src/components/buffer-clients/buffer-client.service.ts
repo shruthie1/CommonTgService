@@ -45,6 +45,7 @@ import {
     ClientConfig,
     performOrganicActivity,
     WarmupPhase,
+    getWarmupPhaseAction,
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 
@@ -726,6 +727,280 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return 'Client enrolled as buffer successfully';
     }
 
+    // ---- Diagnostic: dry-run enrollment decision ----
+
+    async diagnoseEnrollmentDecision(): Promise<any> {
+        const clients = await this.clientService.findAll();
+        const now = Date.now();
+
+        const assignedBufferClients = await this.bufferClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+
+        const healthyBufferClientsPerClient = new Map<string, number>();
+        for (const doc of assignedBufferClients) {
+            if (!doc.clientId) continue;
+            if (!this.isHealthyBufferClientForCap(doc, now)) continue;
+            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
+
+        const perClientDecisions: any[] = [];
+        const clientsNeedingBufferClients: any[] = [];
+
+        for (const client of clients) {
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
+            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
+
+            const decision: any = {
+                clientId: client.clientId,
+                healthyCount,
+                healthyCap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                remainingCapacity,
+                readyActive: availabilityNeeds.readyActive,
+                warmingPipeline: availabilityNeeds.warmingPipeline,
+                totalActive: availabilityNeeds.totalActive,
+                totalNeeded: availabilityNeeds.totalNeeded,
+                calculationReason: availabilityNeeds.calculationReason,
+                priority: availabilityNeeds.priority,
+                replenishmentWindows: availabilityNeeds.replenishmentWindowNeeds,
+                shortTermWindows: availabilityNeeds.windowNeeds,
+            };
+
+            if (availabilityNeeds.totalNeeded > 0 && remainingCapacity > 0) {
+                const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+                decision.wouldEnroll = cappedNeeded;
+                decision.cappedReason = cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `capped from ${availabilityNeeds.totalNeeded} to ${cappedNeeded} by healthy cap`
+                    : null;
+                clientsNeedingBufferClients.push({
+                    clientId: client.clientId,
+                    totalNeeded: cappedNeeded,
+                    priority: availabilityNeeds.priority,
+                });
+            } else if (availabilityNeeds.totalNeeded > 0) {
+                decision.wouldEnroll = 0;
+                decision.blockedReason = `healthy cap reached (${healthyCount}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT})`;
+            } else {
+                decision.wouldEnroll = 0;
+                decision.blockedReason = 'no deficit in replenishment windows';
+            }
+
+            perClientDecisions.push(decision);
+        }
+
+        // Simulate global cap
+        clientsNeedingBufferClients.sort((a, b) => a.priority - b.priority);
+        let totalSlotsNeeded = 0;
+        const allocations: any[] = [];
+        for (const clientNeed of clientsNeedingBufferClients) {
+            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
+            if (allocated > 0) {
+                totalSlotsNeeded += allocated;
+                allocations.push({ clientId: clientNeed.clientId, allocated, priority: clientNeed.priority });
+            }
+            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
+        }
+
+        // Check eligible user pool
+        const promoteClients = await this.promoteClientService.findAll();
+        const clientMainMobiles = clients.map((c) => c.mobile);
+        const assignedBufferMobiles = assignedBufferClients.map((doc) => doc.mobile);
+        const goodIds = [
+            ...clientMainMobiles,
+            ...promoteClients.map((c) => c.mobile),
+            ...assignedBufferMobiles,
+        ].filter(Boolean);
+
+        const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
+        const eligibleUserCount = await this.usersService.executeQuery(
+            {
+                mobile: { $nin: goodIds },
+                expired: false,
+                twoFA: false,
+                lastActive: { $lt: threeMonthsAgo },
+                totalChats: { $gt: 150 },
+            },
+            { _id: 1 },
+            totalSlotsNeeded + 5,
+        );
+
+        return {
+            maxNewClientsPerTrigger: this.config.maxNewClientsPerTrigger,
+            minTotalClients: this.config.minTotalClients,
+            healthyCapPerClient: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+            totalClientsNeedingEnrollment: clientsNeedingBufferClients.length,
+            totalSlotsRequested: clientsNeedingBufferClients.reduce((s, c) => s + c.totalNeeded, 0),
+            totalSlotsAllocated: totalSlotsNeeded,
+            eligibleUsersAvailable: eligibleUserCount.length,
+            wouldCreate: Math.min(totalSlotsNeeded, eligibleUserCount.length),
+            allocations,
+            perClientDecisions: perClientDecisions.sort((a, b) => b.totalNeeded - a.totalNeeded),
+        };
+    }
+
+    // ---- Diagnostic: dry-run warmup pipeline ----
+
+    async diagnoseWarmupPipeline(): Promise<any> {
+        const clients = await this.clientService.findAll();
+        const clientMap = new Map(clients.map((c) => [c.clientId, c]));
+        const now = Date.now();
+
+        const allActive = await this.bufferClientModel
+            .find({ status: 'active', clientId: { $exists: true, $ne: null } })
+            .exec();
+
+        const phaseCounts: Record<string, number> = {};
+        const actionCounts: Record<string, number> = {};
+        const skippedReasons: Record<string, number> = {};
+        const wouldProcess: any[] = [];
+        const settlingDetails: any[] = [];
+
+        for (const bc of allActive) {
+            const warmupPhase = bc.warmupPhase || WarmupPhase.ENROLLED;
+            phaseCounts[warmupPhase] = (phaseCounts[warmupPhase] || 0) + 1;
+
+            const client = clientMap.get(bc.clientId);
+            if (!client) { skippedReasons['no_client'] = (skippedReasons['no_client'] || 0) + 1; continue; }
+
+            const lastUsed = ClientHelperUtils.getTimestamp(bc.lastUsed);
+            if (lastUsed > 0 && warmupPhase === WarmupPhase.SESSION_ROTATED) {
+                skippedReasons['session_rotated_used'] = (skippedReasons['session_rotated_used'] || 0) + 1;
+                continue;
+            }
+            if (bc.mobile === client.mobile) {
+                skippedReasons['is_primary_mobile'] = (skippedReasons['is_primary_mobile'] || 0) + 1;
+                continue;
+            }
+            if (bc.inUse === true) {
+                skippedReasons['in_use'] = (skippedReasons['in_use'] || 0) + 1;
+                continue;
+            }
+
+            const failedAttempts = bc.failedUpdateAttempts || 0;
+            const lastFailureTime = ClientHelperUtils.getTimestamp(bc.lastUpdateFailure);
+            let processSkipReason: string | null = null;
+
+            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                const enrolledTs = ClientHelperUtils.getTimestamp(bc.enrolledAt) || ClientHelperUtils.getTimestamp(bc.createdAt);
+                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+                if (daysSinceEnrolled > 45 && warmupPhase !== WarmupPhase.SESSION_ROTATED && warmupPhase !== WarmupPhase.READY) {
+                    processSkipReason = `zombie_${Math.round(daysSinceEnrolled)}d`;
+                }
+            } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+                if (lastFailureTime > 0 && now - lastFailureTime < retryBackoffMs) {
+                    processSkipReason = `failed_${failedAttempts}_backoff`;
+                }
+            }
+
+            const warmupAction = getWarmupPhaseAction(bc, now);
+            const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
+
+            const lastUpdateAttempt = bc.lastUpdateAttempt ? new Date(bc.lastUpdateAttempt).getTime() : 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const computedPhase = warmupAction.phase;
+            const phaseBoost: Record<string, number> = {
+                [WarmupPhase.READY]: 25000, [WarmupPhase.MATURING]: 15000, [WarmupPhase.GROWING]: 10000,
+                [WarmupPhase.IDENTITY]: 7000, [WarmupPhase.SETTLING]: 5000, [WarmupPhase.ENROLLED]: 3000,
+                [WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const subStepBonus: Record<string, number> = {
+                'remove_other_auths': 2000, 'set_2fa': 1000, 'update_username': 1500,
+                'update_name_bio': 1000, 'upload_photo': 1000, 'rotate_session': 2000,
+            };
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = (phaseBoost[computedPhase] || 5000) + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+
+            actionCounts[warmupAction.action] = (actionCounts[warmupAction.action] || 0) + 1;
+
+            const entry = {
+                mobile: bc.mobile,
+                dbPhase: warmupPhase,
+                computedPhase,
+                action: warmupAction.action,
+                priority: Math.round(priority),
+                failedAttempts,
+                lastAttemptHoursAgo: lastAttemptAge,
+                processSkipReason,
+                privacyDone: !!bc.privacyUpdatedAt,
+                twoFADone: !!bc.twoFASetAt,
+                authsRemoved: !!bc.otherAuthsRemovedAt,
+                channels: bc.channels || 0,
+                onCooldown: this.isOnCooldown(bc.mobile, bc.lastUpdateAttempt, now),
+            };
+
+            if (warmupAction.phase === WarmupPhase.SETTLING) {
+                settlingDetails.push(entry);
+            }
+            wouldProcess.push(entry);
+        }
+
+        wouldProcess.sort((a, b) => b.priority - a.priority);
+
+        // Simulate processing loop with new MAX_UPDATES_PER_CYCLE
+        let simUpdates = 0;
+        const simProcessed: any[] = [];
+        const simSkipped: any[] = [];
+        for (const entry of wouldProcess) {
+            if (simUpdates >= this.MAX_UPDATES_PER_CYCLE) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
+                continue;
+            }
+            if (entry.onCooldown) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: 'cooldown' });
+                continue;
+            }
+            if (entry.processSkipReason) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: entry.processSkipReason });
+                continue;
+            }
+            const isMutation = !['wait', 'join_channels', 'advance_to_ready', 'organic_only'].includes(entry.action);
+            simProcessed.push({
+                mobile: entry.mobile,
+                dbPhase: entry.dbPhase,
+                computedPhase: entry.computedPhase,
+                action: entry.action,
+                priority: entry.priority,
+                isMutation,
+                wouldConsumeSlot: isMutation,
+            });
+            if (isMutation) simUpdates++;
+        }
+
+        return {
+            totalActive: allActive.length,
+            phaseCounts,
+            actionCounts,
+            skippedReasons,
+            maxUpdatesPerCycle: this.MAX_UPDATES_PER_CYCLE,
+            eligibleToProcess: wouldProcess.length,
+            simulation: {
+                totalMutationSlots: this.MAX_UPDATES_PER_CYCLE,
+                mutationsUsed: simUpdates,
+                totalProcessed: simProcessed.length,
+                totalSkippedAfterSlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').length,
+                totalSkippedCooldown: simSkipped.filter(s => s.reason === 'cooldown').length,
+                totalSkippedOther: simSkipped.filter(s => s.reason !== 'slot_limit_reached' && s.reason !== 'cooldown').length,
+            },
+            top30WouldProcess: simProcessed.slice(0, 30),
+            settlingAccounts: {
+                total: settlingDetails.length,
+                byAction: settlingDetails.reduce((acc, s) => {
+                    acc[s.action] = (acc[s.action] || 0) + 1;
+                    return acc;
+                }, {} as Record<string, number>),
+                sampleNeedingPrivacy: settlingDetails.filter(s => s.action === 'set_privacy').slice(0, 5),
+                sampleNeedingRemoveAuths: settlingDetails.filter(s => s.action === 'remove_other_auths').slice(0, 5),
+            },
+            skippedBySlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').slice(0, 10),
+        };
+    }
+
     // ---- Buffer-specific: Check & process buffer clients ----
 
     async checkBufferClients() {
@@ -797,8 +1072,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
-            // Hybrid priority: later phases score higher — finishing near-complete
-            // accounts first produces ready accounts faster than spreading effort.
+            // Use the COMPUTED warmup phase for priority so that enrolled accounts
+            // whose state machine already says "settling" get the same priority as
+            // DB-settling accounts — prevents permanent starvation of newer accounts.
+            const warmupAction = getWarmupPhaseAction(bufferClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost: Record<string, number> = {
                 [WarmupPhase.READY]: 25000,            // rush to complete
                 [WarmupPhase.MATURING]: 15000,         // almost done
@@ -808,8 +1086,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 [WarmupPhase.ENROLLED]: 3000,           // just started
                 [WarmupPhase.SESSION_ROTATED]: 0,      // done — health checks only
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            // Sub-step progression bonus: accounts further along within a phase
+            // get priority over those just starting. Prevents starvation where e.g.
+            // 98 set_privacy accounts perpetually block 47 remove_other_auths accounts
+            // because both share the same SETTLING phase boost.
+            const subStepBonus: Record<string, number> = {
+                'remove_other_auths': 2000,  // last settling step — almost graduates
+                'set_2fa': 1000,             // middle settling step
+                'update_username': 1500,     // last identity step
+                'update_name_bio': 1000,     // middle identity step
+                'upload_photo': 1000,        // maturing step
+                'rotate_session': 2000,      // final step — ready to use
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            // Cap penalties/bonuses to prevent extreme priority values
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100; // max -2000
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168); // max 7 days worth
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
 
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }

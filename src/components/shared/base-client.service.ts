@@ -209,7 +209,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly MAX_FAILED_ATTEMPTS = 3;
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
-    protected readonly MAX_UPDATES_PER_CYCLE = 15;
+    protected readonly MAX_UPDATES_PER_CYCLE = 20;
     protected dailyJoinCounts: Map<string, number> = new Map();
     protected dailyJoinDate: string = '';
     /** Tracks per-mobile transient join failures in the current loop. Reset on each refill. */
@@ -313,8 +313,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected async repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc> {
         const updateData: BaseClientUpdate = {};
-        const progressDoc = { ...doc, warmupPhase: undefined } as TDoc;
-        const inferredPhase = this.inferWarmupPhaseFromProgress(progressDoc);
+        // Temporarily clear warmupPhase to infer from progress timestamps.
+        // Save and restore to avoid mutating the original doc.
+        const savedPhase = doc.warmupPhase;
+        (doc as any).warmupPhase = undefined;
+        const inferredPhase = this.inferWarmupPhaseFromProgress(doc);
+        (doc as any).warmupPhase = savedPhase;
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
 
@@ -335,7 +339,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         const repairedDoc = await this.update(doc.mobile, updateData);
         this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
-        return { ...doc, ...updateData, ...(repairedDoc || {}) } as TDoc;
+        // Return the freshly-updated Mongoose doc to preserve getter-based schema properties.
+        // Fall back to original doc with fields applied if update returned partial/nothing.
+        return (repairedDoc?.mobile ? repairedDoc as TDoc : Object.assign(doc, updateData));
     }
 
     constructor(
@@ -998,75 +1004,87 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const now = Date.now();
         let updateCount = 0;
 
+        // ── Phase 1: DB-only checks & action resolution (no TG connection, no sleep) ──
         try {
-            await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000)); // 15-25s initial delay
             doc = await this.repairWarmupMetadata(doc, now);
+        } catch (err) {
+            this.logger.warn(`repairWarmupMetadata failed for ${doc.mobile}:`, err);
+        }
 
-            // Check failed attempts
-            const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        const lastFailureTime = ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
 
-            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-                // Zombie detection: if account has been warming for 45+ days and is still
-                // cycling through failures, it's never going to recover.
-                const enrolledTs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
-                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
-                if (daysSinceEnrolled > 45 && phase !== WarmupPhase.SESSION_ROTATED && phase !== WarmupPhase.READY) {
-                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                    this.botsService.sendMessageByCategory(
-                        ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                        `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`
-                    );
-                    return { updateCount: 0 };
-                }
-                this.logger.log(`Resetting failure count for ${doc.mobile}`);
-                await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null } as TDoc;
-            } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
-                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
-                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
-                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null } as TDoc;
-                } else {
+        if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+            const enrolledTs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
+            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+            const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
+            if (daysSinceEnrolled > 45 && phase !== WarmupPhase.SESSION_ROTATED && phase !== WarmupPhase.READY) {
+                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                this.botsService.sendMessageByCategory(
+                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                    `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`
+                );
+                return { updateCount: 0 };
+            }
+            this.logger.log(`Resetting failure count for ${doc.mobile}`);
+            const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+            const resetDoc1 = await this.update(doc.mobile, resetFields);
+            // Use fresh Mongoose doc if available (preserves getter properties); fall back to manual merge.
+            doc = (resetDoc1?.mobile ? resetDoc1 as TDoc : Object.assign(doc, resetFields));
+        } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+            if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                const resetFields2 = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+                const resetDoc2 = await this.update(doc.mobile, resetFields2);
+                doc = (resetDoc2?.mobile ? resetDoc2 as TDoc : Object.assign(doc, resetFields2));
+            } else {
                 this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
                 return { updateCount: 0 };
-                }
             }
+        }
 
-            // Check cooldown using the same stable jitter as outer schedulers.
-            if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
-                this.logger.debug(`Client ${doc.mobile} on cooldown`);
-                return { updateCount: 0 };
-            }
+        if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+            this.logger.debug(`Client ${doc.mobile} on cooldown`);
+            return { updateCount: 0 };
+        }
 
-            // Skip already-used clients ONLY if they've completed warmup.
-            // Non-terminal accounts with lastUsed set still need warmup processing.
-            const lastUsed = ClientHelperUtils.getTimestamp(doc.lastUsed);
-            const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
-            if (lastUsed > 0 && (warmupPhase === WarmupPhase.SESSION_ROTATED || warmupPhase === WarmupPhase.READY)) {
-                await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
-                return { updateCount: 0, updateSummary: 'backfill_timestamps' };
-            }
+        const lastUsed = ClientHelperUtils.getTimestamp(doc.lastUsed);
+        const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
+        if (lastUsed > 0 && (warmupPhase === WarmupPhase.SESSION_ROTATED || warmupPhase === WarmupPhase.READY)) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
+            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+        }
 
-            // Get warmup phase action
-            const warmupAction = getWarmupPhaseAction(doc, now);
-            this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+        const warmupAction = getWarmupPhaseAction(doc, now);
+        this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
 
-            // Update phase in DB if it changed
-            if (warmupAction.phase !== doc.warmupPhase) {
-                await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
-            }
+        if (warmupAction.phase !== doc.warmupPhase) {
+            await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
+        }
 
-            if (warmupAction.action === 'wait') {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
-                return { updateCount: 0 };
-            }
+        // ── Fast-path: actions that need no TG connection — skip all sleeps ──
+        if (warmupAction.action === 'wait') {
+            await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            return { updateCount: 0 };
+        }
 
-            // Execute action
+        if (warmupAction.action === 'join_channels') {
+            return { updateCount: 0 };
+        }
+
+        if (warmupAction.action === 'advance_to_ready') {
+            await this.update(doc.mobile, { warmupPhase: WarmupPhase.READY });
+            this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            return { updateCount: 0, updateSummary: 'advance_to_ready' };
+        }
+
+        // ── Phase 2: TG operations — sleep before and after to space out API calls ──
+        try {
+            await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
+
             switch (warmupAction.action) {
                 case 'organic_only': {
                     const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -1081,7 +1099,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 case 'set_privacy':
                     updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                    // Phase already updated to SETTLING by the phase-change check above (line 584)
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_privacy' : null };
 
                 case 'delete_photos':
@@ -1107,17 +1124,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
-
-                case 'advance_to_ready':
-                    await this.update(doc.mobile, { warmupPhase: WarmupPhase.READY });
-                    this.logger.log(`Client ${doc.mobile} advanced to READY`);
-                    return { updateCount: 0, updateSummary: 'advance_to_ready' };
-
-                case 'join_channels':
-                    // Channel joining handled separately by joinChannel* methods.
-                    // Do NOT stamp lastUpdateAttempt or count as processed — this avoids
-                    // wasting processing slots and cooldown cycles on a no-op.
-                    return { updateCount: 0 };
 
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
@@ -1367,8 +1373,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     try {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
-                    } catch {
-                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    } catch (channelError: any) {
+                        if (channelError?.errorMessage === 'CHANNELS_TOO_MUCH') {
                             await this.update(mobile, { channels: 500 });
                         }
                     }
@@ -1729,7 +1735,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         if (!isAccountWarmingUp(phase)) return null;
 
-        const projectedReadyDate = this.getProjectedReadyDateString({ ...doc, warmupPhase: phase });
+        // Pass the original Mongoose doc directly — spreading loses getter-based schema properties
+        // (enrolledAt, createdAt, warmupJitter become undefined on plain objects).
+        const projectedReadyDate = this.getProjectedReadyDateString(doc);
         if (!projectedReadyDate) return null;
 
         return this.maxDateString(projectedReadyDate, availableDate);

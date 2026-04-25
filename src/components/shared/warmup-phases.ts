@@ -225,7 +225,15 @@ export function getWarmupPhaseAction(
         if (identityCatchup) return identityCatchup;
 
         const channels = doc.channels || 0;
-        if (channels < MIN_CHANNELS_FOR_MATURING) {
+        // Relaxed channel requirement: if growing for 2x the expected duration,
+        // allow advancement with half the channel target rather than blocking forever.
+        const growingDuration = daysSinceEnrolled - (WARMUP_PHASE_THRESHOLDS.growing + jitter);
+        const expectedGrowingDays = WARMUP_PHASE_THRESHOLDS.maturing - WARMUP_PHASE_THRESHOLDS.growing;
+        const isGrowingStalled = growingDuration > expectedGrowingDays * 2;
+        const effectiveChannelTarget = isGrowingStalled
+            ? Math.floor(MIN_CHANNELS_FOR_MATURING / 2)
+            : MIN_CHANNELS_FOR_MATURING;
+        if (channels < effectiveChannelTarget) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         // Channels target met — check if ready for maturing

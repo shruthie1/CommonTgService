@@ -84,6 +84,20 @@ export class BufferClientController {
     return 'initiated Checking';
   }
 
+  @Get('diagnoseWarmup')
+  @ApiOperation({ summary: 'Dry-run warmup diagnosis', description: 'Returns what would happen to each active buffer client without executing anything.' })
+  @ApiOkResponse({ schema: { type: 'object' } })
+  async diagnoseWarmup(): Promise<any> {
+    return this.clientService.diagnoseWarmupPipeline();
+  }
+
+  @Get('diagnoseEnrollment')
+  @ApiOperation({ summary: 'Dry-run enrollment diagnosis', description: 'Shows what enrollment decisions would be made without executing.' })
+  @ApiOkResponse({ schema: { type: 'object' } })
+  async diagnoseEnrollment(): Promise<any> {
+    return this.clientService.diagnoseEnrollmentDecision();
+  }
+
   @Post('addNewUserstoBufferClients')
   @ApiOperation({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' })
   @ApiBody({ type: BulkEnrollBufferClientsRequestDto })

@@ -11,6 +11,8 @@
  * Optional overrides can still be passed explicitly via function options.
  */
 
+import { Api } from "telegram";
+
 // ════════════════════════════════════════════════════════════
 // Custom Telegram API credentials
 // ════════════════════════════════════════════════════════════
@@ -327,13 +329,13 @@ export function generateTGConfigWithProxy(
 ): TGClientConfig {
   const proxy: TGProxyConfig | undefined = proxyConfig
     ? {
-        ip: proxyConfig.host,
-        port: proxyConfig.port,
-        socksType: 5,
-        username: proxyConfig.username,
-        password: proxyConfig.password,
-        timeout: proxyConfig.timeout ? proxyConfig.timeout / 1000 : 10,
-      }
+      ip: proxyConfig.host,
+      port: proxyConfig.port,
+      socksType: 5,
+      username: proxyConfig.username,
+      password: proxyConfig.password,
+      timeout: proxyConfig.timeout ? proxyConfig.timeout / 1000 : 10,
+    }
     : undefined;
 
   return generateTGConfig(mobile, proxy, options);
@@ -373,18 +375,19 @@ export function getExpectedAuthFingerprint(
 // Auths matching any of these criteria are treated as "ours" and never revoked.
 // Keeps operator-owned sessions (Singapore VPS, OnePlus 11 handsets, CLI/desktop tools,
 // app names like likki/rams/sru/shru/hanslnz) alive through removeOtherAuths.
+// Derive our apiIds directly from the credentials array — always in sync.
+const OUR_API_IDS: ReadonlySet<number> = new Set(API_CREDENTIALS.map(c => c.apiId));
+
 const AUTH_ALLOWLIST = {
   countries: ['singapore'],
   deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
   deviceModelSuffixes: ['-ssk'],
-  appNameSubstrings: ['likki', 'rams', 'sru', 'shru', 'hanslnz'],
+  appNameSubstrings: ['lik', 'ram', 'sru', 'shru', 'han'],
 };
 
-export function isAuthAllowlisted(auth: {
-  country?: string | null;
-  deviceModel?: string | null;
-  appName?: string | null;
-}): boolean {
+export function isAuthAllowlisted(auth:Api.Authorization): boolean {
+  // Most reliable: exact apiId match against our registered credentials
+  if (auth.apiId && OUR_API_IDS.has(auth.apiId)) return true;
   const country = normalizeAuthField(auth.country);
   const device = normalizeAuthField(auth.deviceModel);
   const app = normalizeAuthField(auth.appName);
@@ -397,13 +400,7 @@ export function isAuthAllowlisted(auth: {
 
 export function isAuthFingerprintMatch(
   mobile: string,
-  auth: {
-    current?: boolean;
-    deviceModel?: string | null;
-    systemVersion?: string | null;
-    appName?: string | null;
-    country?: string | null;
-  }
+  auth: Api.Authorization
 ): boolean {
   if (auth.current) {
     return true;

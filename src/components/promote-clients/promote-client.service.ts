@@ -42,6 +42,7 @@ import {
     ClientConfig,
     performOrganicActivity,
     WarmupPhase,
+    getWarmupPhaseAction,
 } from '../shared/base-client.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
@@ -300,7 +301,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     }
                 }
             } else {
-                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
+                // No persona assignment — mark step as done so the account isn't stuck in IDENTITY phase.
+                // The account will proceed with its existing name/bio from registration.
+                this.logger.warn(`No persona assignment for ${doc.mobile} — marking name/bio step done with current profile`);
+                updateCount = 1; // Treat as completed so nameBioUpdatedAt gets set
             }
 
             await this.update(doc.mobile, {
@@ -815,6 +819,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
+            const warmupAction = getWarmupPhaseAction(promoteClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost: Record<string, number> = {
                 [WarmupPhase.READY]: 25000,
                 [WarmupPhase.MATURING]: 15000,
@@ -824,8 +830,21 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 [WarmupPhase.ENROLLED]: 3000,
                 [WarmupPhase.SESSION_ROTATED]: 0,
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            // Sub-step progression bonus: prioritize accounts further along within a phase
+            const subStepBonus: Record<string, number> = {
+                'remove_other_auths': 2000,
+                'set_2fa': 1000,
+                'update_username': 1500,
+                'update_name_bio': 1000,
+                'upload_photo': 1000,
+                'rotate_session': 2000,
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            // Cap penalties/bonuses to prevent extreme priority values
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100; // max -2000
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168); // max 7 days worth
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
 
             promoteClientsToProcess.push({ promoteClient: promoteClient as PromoteClientDocument, client, clientId: promoteClient.clientId, priority });
         }
@@ -938,7 +957,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             const promoteClient: CreatePromoteClientDto = {
                 tgId: document.tgId,
-                lastActive: 'today',
+                lastActive: new Date().toISOString(),
                 mobile: document.mobile,
                 session: user?.session || '', // Use old trusted session
                 availableDate: targetAvailableDate,
