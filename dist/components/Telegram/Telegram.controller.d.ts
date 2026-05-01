@@ -32,7 +32,7 @@ export declare class TelegramController {
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
-    getEntity(mobile: string, entity: string): Promise<import("telegram").Api.Channel | import("telegram").Api.Chat | import("telegram").Api.User>;
+    getEntity(mobile: string, entity: string): Promise<import("telegram").Api.User | import("telegram").Api.Chat | import("telegram").Api.Channel>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
