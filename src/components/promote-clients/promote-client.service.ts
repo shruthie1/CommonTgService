@@ -51,6 +51,7 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
+    private isCheckingPromoteClients = false;
 
     private bufferClientService: BufferClientService;
 
@@ -407,6 +408,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
         return user as PromoteClientDocument;
+    }
+
+    async existsByMobile(mobile: string): Promise<boolean> {
+        return !!(await this.promoteClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
     }
 
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument> {
@@ -775,10 +780,23 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     // ---- Promote-specific: Check & process promote clients ----
 
     async checkPromoteClients() {
+        if (this.isCheckingPromoteClients) {
+            this.logger.warn('checkPromoteClients already in progress, skipping concurrent call');
+            return;
+        }
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
             return;
         }
+        this.isCheckingPromoteClients = true;
+        try {
+            await this._checkPromoteClientsInternal();
+        } finally {
+            this.isCheckingPromoteClients = false;
+        }
+    }
+
+    private async _checkPromoteClientsInternal() {
 
         const clients = await this.clientService.findAll();
         const bufferClients = await this.bufferClientService.findAll();
@@ -792,9 +810,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const assignedPromoteClients = await this.promoteClientModel
             .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
             .exec();
-        const assignedPromoteMobiles = assignedPromoteClients.map((doc) => doc.mobile);
+        // Exclude ALL promote client mobiles (not just active) from candidate pool to prevent re-enrollment
+        const allPromoteClientMobiles = (await this.promoteClientModel.find({}, { mobile: 1 }).lean().exec()).map((doc) => doc.mobile);
 
-        const goodIds = [...clientMainMobiles, ...bufferClientIds, ...assignedPromoteMobiles].filter(Boolean);
+        const goodIds = [...clientMainMobiles, ...bufferClientIds, ...allPromoteClientMobiles].filter(Boolean);
 
         const healthyPromoteClientsPerClient = new Map<string, number>();
         for (const doc of assignedPromoteClients) {
@@ -949,11 +968,34 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     // ---- Promote-specific: Create promote client from user (redesigned) ----
 
+    /**
+     * Check if a mobile is already enrolled in any collection (promote, buffer, or active client).
+     * Returns the collection name if found, null otherwise.
+     */
+    private async isMobileEnrolledAnywhere(mobile: string): Promise<string | null> {
+        const [promoteExists, bufferExists, clientExists] = await Promise.all([
+            this.promoteClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.bufferClientService.existsByMobile(mobile),
+            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+        ]);
+        if (promoteExists) return 'promoteClients';
+        if (bufferExists) return 'bufferClients';
+        if (clientExists) return 'clients';
+        return null;
+    }
+
     private async createPromoteClientFromUser(
         document: { mobile: string; tgId: string },
         targetClientId: string,
         availableDate?: string
     ): Promise<boolean> {
+        // Cross-collection check: skip if already enrolled anywhere
+        const enrolledIn = await this.isMobileEnrolledAnywhere(document.mobile);
+        if (enrolledIn) {
+            this.logger.debug(`Skipping ${document.mobile}: already enrolled in ${enrolledIn}`);
+            return false;
+        }
+
         const telegramClient = await connectionManager.getClient(document.mobile, { autoDisconnect: false });
 
         try {
@@ -1113,10 +1155,18 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         let createdCount = 0;
         let assignmentIndex = 0;
         const createdEntries: string[] = [];
+        const enrolledThisRun = new Set<string>();
 
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId) continue;
+
+            // Skip if already processed in this batch (dynamic in-flight tracking)
+            if (enrolledThisRun.has(document.mobile)) {
+                this.logger.debug(`Skipping ${document.mobile}: already attempted in this enrollment run`);
+                continue;
+            }
+            enrolledThisRun.add(document.mobile);
 
             const assignment = assignmentQueue[assignmentIndex];
             if (!assignment) break;

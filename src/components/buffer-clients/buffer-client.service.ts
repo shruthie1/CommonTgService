@@ -52,6 +52,7 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
+    private isCheckingBufferClients = false;
 
     private promoteClientService: PromoteClientService;
 
@@ -438,6 +439,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
         return bufferClient;
+    }
+
+    async existsByMobile(mobile: string): Promise<boolean> {
+        return !!(await this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
     }
 
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument> {
@@ -1021,10 +1026,23 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Check & process buffer clients ----
 
     async checkBufferClients() {
+        if (this.isCheckingBufferClients) {
+            this.logger.warn('checkBufferClients already in progress, skipping concurrent call');
+            return;
+        }
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return;
         }
+        this.isCheckingBufferClients = true;
+        try {
+            await this._checkBufferClientsInternal();
+        } finally {
+            this.isCheckingBufferClients = false;
+        }
+    }
+
+    private async _checkBufferClientsInternal() {
         const clients = await this.clientService.findAll();
         const promoteClients = await this.promoteClientService.findAll();
         const clientMap = new Map(clients.map((client) => [client.clientId, client]));
@@ -1036,12 +1054,13 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const assignedBufferClients = await this.bufferClientModel
             .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
             .exec();
-        const assignedBufferMobiles = assignedBufferClients.map((doc) => doc.mobile);
+        // Exclude ALL buffer client mobiles (not just active) from candidate pool to prevent re-enrollment
+        const allBufferClientMobiles = (await this.bufferClientModel.find({}, { mobile: 1 }).lean().exec()).map((doc) => doc.mobile);
 
         const goodIds = [
             ...clientMainMobiles,
             ...promoteClients.map((c) => c.mobile),
-            ...assignedBufferMobiles,
+            ...allBufferClientMobiles,
         ].filter(Boolean);
 
         const healthyBufferClientsPerClient = new Map<string, number>();
@@ -1331,11 +1350,34 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     // ---- Buffer-specific: Create buffer client from user (redesigned — no removeOtherAuths, no 2FA, no new session) ----
 
+    /**
+     * Check if a mobile is already enrolled in any collection (buffer, promote, or active client).
+     * Returns the collection name if found, null otherwise.
+     */
+    private async isMobileEnrolledAnywhere(mobile: string): Promise<string | null> {
+        const [bufferExists, promoteExists, clientExists] = await Promise.all([
+            this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.promoteClientService.existsByMobile(mobile),
+            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+        ]);
+        if (bufferExists) return 'bufferClients';
+        if (promoteExists) return 'promoteClients';
+        if (clientExists) return 'clients';
+        return null;
+    }
+
     private async createBufferClientFromUser(
         document: { mobile: string; tgId: string },
         targetClientId: string,
         availableDate?: string
     ): Promise<boolean> {
+        // Cross-collection check: skip if already enrolled anywhere
+        const enrolledIn = await this.isMobileEnrolledAnywhere(document.mobile);
+        if (enrolledIn) {
+            this.logger.debug(`Skipping ${document.mobile}: already enrolled in ${enrolledIn}`);
+            return false;
+        }
+
         const telegramClient = await connectionManager.getClient(document.mobile, { autoDisconnect: false });
 
         try {
@@ -1496,10 +1538,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         let createdCount = 0;
         let assignmentIndex = 0;
         const createdEntries: string[] = [];
+        const enrolledThisRun = new Set<string>();
 
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
             const document = documents.shift();
             if (!document || !document.mobile || !document.tgId) continue;
+
+            // Skip if already processed in this batch (dynamic in-flight tracking)
+            if (enrolledThisRun.has(document.mobile)) {
+                this.logger.debug(`Skipping ${document.mobile}: already attempted in this enrollment run`);
+                continue;
+            }
+            enrolledThisRun.add(document.mobile);
 
             const assignment = assignmentQueue[assignmentIndex];
             if (!assignment) break;

@@ -108,12 +108,14 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
 }
 
 function createQueryChain(executor: () => any) {
-    return {
+    const chain: any = {
         sort: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
         exec: jest.fn(async () => executor()),
     };
+    return chain;
 }
 
 function makeBufferService(bufferModel: any, clientsList: any[] = [{ clientId: 'client-1', mobile: 'main-1' }]) {
