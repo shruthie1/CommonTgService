@@ -897,7 +897,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
                     this.botsService.sendMessageByCategory(
                         ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                        `FOREIGN 2FA:\n\nMobile: ${doc.mobile}\nPhase: ${doc.warmupPhase}\nAccount has unknown 2FA password — marked inactive`
+                        `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — marked inactive`,
+                        { parseMode: 'HTML' }
                     );
                     return 0;
                 }
@@ -968,7 +969,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 // Notify via bot
                 this.botsService.sendMessageByCategory(
                     ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                    `CRITICAL SESSION LOSS:\n\nMobile: ${doc.mobile}\nPhase: ${doc.warmupPhase}\nError: ${errorMsg}`
+                    `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — marked inactive`,
+                    { parseMode: 'HTML' }
                 );
                 return 0;
             }
@@ -1023,7 +1025,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
                 this.botsService.sendMessageByCategory(
                     ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                    `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`
+                    `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Marked inactive — manual review needed`,
+                    { parseMode: 'HTML' }
                 );
                 return { updateCount: 0 };
             }
@@ -1078,6 +1081,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>WARMUP READY</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase} → ready\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> All warmup steps complete — eligible for session rotation`,
+                { parseMode: 'HTML' }
+            );
             return { updateCount: 0, updateSummary: 'advance_to_ready' };
         }
 
@@ -1099,40 +1107,100 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 case 'set_privacy':
                     updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_privacy\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Privacy settings updated`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_privacy' : null };
 
                 case 'delete_photos':
                     updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> delete_photos\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photos deleted`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'delete_photos' : null };
 
                 case 'update_name_bio':
                     updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> update_name_bio\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Name and bio updated`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'update_name_bio' : null };
 
                 case 'update_username':
                     updateCount = await this.updateUsername(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> update_username\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Username updated`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'update_username' : null };
 
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo uploaded`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
 
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> 2FA password set successfully`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
 
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Other sessions revoked`,
+                            { parseMode: 'HTML' }
+                        );
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
 
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
-                    if (updateCount === 0) {
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP COMPLETE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> rotate_session\n<b>Phase:</b> ready → session_rotated\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Session rotated — account fully operational`,
+                            { parseMode: 'HTML' }
+                        );
+                    } else {
                         await this.update(doc.mobile, {
                             lastUpdateAttempt: new Date(),
                             failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
                             lastUpdateFailure: new Date(),
                         });
+                        this.botsService.sendMessageByCategory(
+                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                            `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> rotate_session\n<b>Phase:</b> ready\n<b>Fails:</b> ${(doc.failedUpdateAttempts || 0) + 1}\n<b>Status:</b> Session rotation failed`,
+                            { parseMode: 'HTML' }
+                        );
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
 
@@ -1142,10 +1210,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, `Error with ${this.clientType} client`, doc.mobile);
+            const failCount = (doc.failedUpdateAttempts || 0) + 1;
             try {
                 await this.update(doc.mobile, {
                     lastUpdateAttempt: new Date(),
-                    failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
+                    failedUpdateAttempts: failCount,
                     lastUpdateFailure: new Date(),
                 });
             } catch (updateError) {
@@ -1154,6 +1223,17 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 await this.markAsInactive(doc.mobile, reason);
+                this.botsService.sendMessageByCategory(
+                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                    `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> Marked inactive`,
+                    { parseMode: 'HTML' }
+                );
+            } else {
+                this.botsService.sendMessageByCategory(
+                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                    `<b>WARMUP ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failCount}/${this.MAX_FAILED_ATTEMPTS}\n<b>Error:</b> ${errorDetails?.message?.substring(0, 200) || 'unknown'}`,
+                    { parseMode: 'HTML' }
+                );
             }
             return { updateCount: 0 };
         } finally {

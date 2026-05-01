@@ -61,13 +61,14 @@ async function notifyInternal(
 
     console.error(`${prefix}\n${formattedMessage}`);
     if (errorDetails.status === 429) return;
-    const notificationText = `${prefix}\n\n${formattedMessage}`;
+    const notificationText = `<b>${prefix}</b>\n\n<b>Error:</b> ${formattedMessage}`;
 
     try {
       const botsService = getBotsServiceInstance();
       await botsService.sendMessageByCategory(
         ChannelCategory.HTTP_FAILURES,
-        notificationText
+        notificationText,
+        { parseMode: 'HTML' }
       );
     } catch (error) {
       console.error(

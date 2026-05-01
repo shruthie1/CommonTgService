@@ -86,7 +86,11 @@ export class ChannelsService {
   async remove(channelId: string): Promise<void> {
     const botsService = getBotsServiceInstance();
     if (botsService) {
-      botsService.sendMessageByCategory(ChannelCategory.PROM_LOGS2, `Removing Channel: ${channelId}`);
+      botsService.sendMessageByCategory(
+        ChannelCategory.PROM_LOGS2,
+        `<b>Removing Channel</b>\n\n<b>Channel ID:</b> ${channelId}`,
+        { parseMode: 'HTML' }
+      );
     }
     const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
   }

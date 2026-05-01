@@ -335,7 +335,7 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async createNewSession(mobile: string) {
-        const telegramClient = await connectionManager.getClient(mobile)
+        const telegramClient = await connectionManager.getClient(mobile);
         return await telegramClient.createNewSession();
     }
 

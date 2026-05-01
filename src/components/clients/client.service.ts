@@ -354,7 +354,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async notifyClientUpdate(clientId: string): Promise<void> {
-    await this.notify(`Updating the Existing client: ${clientId}`);
+    await this.notify(`Client Update\n\nClient: ${clientId}\nStatus: Updating existing client`);
   }
 
   private async notify(message: string): Promise<void> {
@@ -498,7 +498,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     );
     const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
     if (!newBufferClient) {
-      await this.notify(`Buffer Clients not safely available, Requested by ${clientId}`);
+      await this.notify(`Buffer Not Available\n\nClient: ${clientId}\nStatus: No safe buffer clients available for swap`);
       this.logger.log('Buffer Clients not safely available');
       return;
     }
@@ -508,7 +508,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile },
       );
       await this.notify(
-        `Received New Client Request for - ${clientId}\nOldNumber: ${existingClient.mobile}\nOldUsername: @${existingClient.username}`,
+        `Client Swap Started\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nOld Username: @${existingClient.username}\nNew Mobile: ${newBufferClient.mobile}`,
       );
       this.telegramService.setActiveClientSetup({
         ...setupClientQueryDto,
@@ -526,13 +526,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.updateClientSession(newBufferClient.session, newBufferClient.mobile);
     } catch (error: any) {
       await this.notify(
-        `Failed to setup new Client for - ${clientId}\nOldNumber: ${existingClient.mobile}\nError: ${error.message}`,
+        `Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${error.message?.substring(0, 200)}`,
       );
       const errorDetails = parseError(error, `setupClient failed for ${newBufferClient.mobile}`);
       if (isPermanentError(errorDetails)) {
         // Account is permanently dead — retire it, don't recycle
         await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
-        await this.notify(`Buffer ${newBufferClient.mobile} marked INACTIVE (permanent error during setup)`);
+        await this.notify(`Buffer Marked Inactive\n\nMobile: ${newBufferClient.mobile}\nClient: ${clientId}\nReason: Permanent error during setup`);
       } else {
         // Transient error — push availability out so it's not retried immediately
         const availableDate = ClientHelperUtils.toDateString(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -590,7 +590,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // Use the username already set during warmup — no Telegram API call needed
       const updatedUsername = bufferDoc?.username || me.username;
       this.logger.info(`[${clientId}] Using pre-set buffer username: @${updatedUsername} (current TG: @${me.username})`);
-      await this.notify(`Cutover username for NewNumber: ${newMobile}\nUsername: @${updatedUsername}`);
+      await this.notify(`Cutover Username\n\nClient: ${clientId}\nNew Mobile: ${newMobile}\nUsername: @${updatedUsername}`);
       if (!newSession?.trim()) {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
@@ -634,7 +634,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       } catch (deployError) {
         const deployMessage = deployError instanceof Error ? deployError.message : String(deployError);
         parseError(deployError, `[${clientId}] deployKey restart failed after cutover`);
-        await this.notify(`Client cutover completed for ${clientId}, but deploy restart failed\nMobile: ${newMobile}\nError: ${deployMessage}`);
+        await this.notify(`Deploy Restart Failed\n\nClient: ${clientId}\nNew Mobile: ${newMobile}\nStatus: Cutover completed but deploy restart failed\nError: ${deployMessage?.substring(0, 200)}`);
       }
       this.logger.info(`[${clientId}] Starting old-client archival handling`, {
         existingMobile,
@@ -644,7 +644,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       });
       await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days);
       this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
-      await this.notify('Update finished');
+      await this.notify(`Client Swap Complete\n\nClient: ${clientId}\nOld Mobile: ${existingMobile}\nNew Mobile: ${newMobile}\nStatus: Cutover finished successfully`);
     } catch (error) {
       const errorDetails = parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
       // Mark buffer inactive on permanent failure so setupClient's catch can distinguish
@@ -688,7 +688,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           status: 'inactive',
         });
         this.logger.log('Client Archive Skipped');
-        await this.notify('Skipped Old Client Archival');
+        await this.notify(`Archival Skipped\n\nOld Mobile: ${existingMobile}\nStatus: Old client marked inactive without archival`);
       }
     } catch (e) {
       const errorDetails = parseError(e, `Error in Archiving Old Client: ${existingMobile}`, false);
@@ -696,7 +696,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (isPermanentError(errorDetails)) {
         await this.bufferClientService.markAsInactive(existingMobile, errorMessage);
       }
-      await this.notify(`Failed to Archive old Client: ${existingMobile}\nError: ${errorMessage}`);
+      await this.notify(`Archival Failed\n\nOld Mobile: ${existingMobile}\nError: ${errorMessage?.substring(0, 200)}`);
     }
   }
 
@@ -704,7 +704,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     try {
       await this.telegramService.updatePrivacyforDeletedAccount(mobile);
       this.logger.log('Formalities finished');
-      await this.notify('Formalities finished');
+      await this.notify(`Formalities Complete\n\nMobile: ${mobile}\nStatus: Privacy updated for old account`);
     } finally {
       await connectionManager.unregisterClient(mobile);
     }
@@ -736,10 +736,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         bufferClientDto,
       );
       this.logger.log('client Archived:', updatedBufferClient);
-      await this.notify('old Client Archived');
+      await this.notify(`Client Archived\n\nOld Mobile: ${existingMobile}\nNew Available Date: ${availableDate}\nStatus: Returned to buffer pool`);
     } catch (error) {
       const errorDetails = parseError(error, `Error in Archiving Old Client: ${existingMobile}`, true);
-      await this.notify(errorDetails.message);
+      await this.notify(`Archival Error\n\nOld Mobile: ${existingMobile}\nError: ${errorDetails.message?.substring(0, 200)}`);
       if (isPermanentError(errorDetails)) {
         this.logger.log('Marking archived user inactive:', existingClientUser.mobile);
         await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
@@ -836,14 +836,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         ...(privacyReady ? { privacyUpdatedAt: new Date() } : {}),
         ...(photosReady ? { profilePicsUpdatedAt: new Date() } : {}),
       });
-      await this.notify(`Updated Client: ${clientId} - ${message}`);
+      await this.notify(`Client Updated\n\nClient: ${clientId}\nMobile: ${client.mobile}\nTrigger: ${message}`);
       if (!skipDeploy && client.deployKey) await fetchWithTimeout(client.deployKey);
       return true;
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
       const errorDetails = parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.notify(`Failed to update Client: ${clientId} - ${message}\nMobile: ${client.mobile}\nError: ${errorMessage}`);
+      await this.notify(`Client Update Failed\n\nClient: ${clientId}\nMobile: ${client.mobile}\nTrigger: ${message}\nError: ${errorMessage?.substring(0, 200)}`);
       if (isPermanentError(errorDetails)) {
         this.logger.warn(`Permanent error while updating active client ${clientId}; manual review required for ${client.mobile}`);
       }

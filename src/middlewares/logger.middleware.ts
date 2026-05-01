@@ -35,14 +35,19 @@ export class LoggerMiddleware implements NestMiddleware {
         }
 
         if (statusCode >= 500) {
-          botsService.sendMessageByCategory(ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+          botsService.sendMessageByCategory(
+            ChannelCategory.HTTP_FAILURES,
+            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
+            { parseMode: 'HTML' }
+          );
           this.logger.error(
             `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else if (statusCode >= 400) {
           botsService.sendMessageByCategory(
             ChannelCategory.HTTP_FAILURES,
-            `Threw Status ${statusCode} for ${originalUrl}`
+            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
+            { parseMode: 'HTML' }
           );
           this.logger.warn(
             `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
@@ -67,7 +72,8 @@ export class LoggerMiddleware implements NestMiddleware {
         }
         botsService.sendMessageByCategory(
           ChannelCategory.HTTP_FAILURES,
-          `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`,
+          `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`,
+          { parseMode: 'HTML' }
         );
       });
     } else {

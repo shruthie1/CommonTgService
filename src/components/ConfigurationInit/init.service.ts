@@ -46,7 +46,7 @@ export class ConfigurationService implements OnModuleInit {
                 return;
             }
             await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Started :: ${clientId}`)}`
+                `${notifbot()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`
             );
         } catch (error) {
             this.logger.warn('Failed to send start notification', error);

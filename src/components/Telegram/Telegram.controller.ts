@@ -33,6 +33,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import * as multer from 'multer';
 import axios from 'axios';
 import { connectionManager } from './utils/connection-manager';
+import { RedisClient } from '../../utils/redisClient';
+import { getTelegramCredentialPool } from './utils/tg-config';
 import { SearchMessagesDto, SearchMessagesResponseDto } from './dto/message-search.dto';
 import { DeleteHistoryDto } from './dto/delete-chat.dto';
 import { UpdateUsernameDto } from './dto/update-username.dto';
@@ -1692,5 +1694,107 @@ export class TelegramController {
     @ApiResponse({ type: Object, schema: { properties: { botToken: { type: 'string', description: 'The token to access HTTP Bot API' }, username: { type: 'string', description: 'The username of the created bot' } } } })
     async createBot(@Param('mobile') mobile: string, @Body() createBotDto: CreateTgBotDto) {
         return this.telegramService.createBot(mobile, createBotDto);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // Redis Config Audit & Cleanup
+    // ════════════════════════════════════════════════════════════
+
+    @Get('config/audit-stale')
+    @ApiOperation({
+        summary: 'Audit stale TG configs in Redis',
+        description: 'Scans tg:config:* keys for stale apiIds not in the custom credentials pool. ' +
+            'Dry-run by default — pass ?execute=true to actually delete stale configs.'
+    })
+    @ApiQuery({ name: 'execute', required: false, type: Boolean, description: 'Set to true to delete stale configs' })
+    @ApiQuery({ name: 'mobile', required: false, type: String, description: 'Audit a single mobile instead of all' })
+    @ApiResponse({ status: 200 })
+    async auditStaleConfigs(
+        @Query('execute') execute?: string,
+        @Query('mobile') mobile?: string,
+    ) {
+        const shouldExecute = execute === 'true';
+        const validApiIds = new Set(getTelegramCredentialPool().map(c => c.apiId));
+        const redis = RedisClient.getClient();
+
+        const result: {
+            totalScanned: number;
+            staleConfigs: Array<{ mobile: string; apiId: number; deviceModel: string; deleted: boolean }>;
+            validConfigs: number;
+            noConfigKeys: number;
+            errors: string[];
+        } = {
+            totalScanned: 0,
+            staleConfigs: [],
+            validConfigs: 0,
+            noConfigKeys: 0,
+            errors: [],
+        };
+
+        try {
+            let keys: string[] = [];
+
+            if (mobile) {
+                // Single mobile audit
+                keys = [`tg:config:${mobile}`];
+            } else {
+                // Scan all tg:config:* keys (SCAN is safe for production, unlike KEYS)
+                let cursor = '0';
+                do {
+                    const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', 'tg:config:*', 'COUNT', 200);
+                    cursor = nextCursor;
+                    keys.push(...batch);
+                } while (cursor !== '0');
+            }
+
+            result.totalScanned = keys.length;
+
+            for (const key of keys) {
+                try {
+                    const raw = await redis.get(key);
+                    if (!raw) {
+                        result.noConfigKeys++;
+                        continue;
+                    }
+
+                    const config = JSON.parse(raw);
+                    const apiId = config._apiId;
+                    const mobileFromKey = key.replace('tg:config:', '');
+
+                    if (!apiId || !validApiIds.has(apiId)) {
+                        const entry = {
+                            mobile: mobileFromKey,
+                            apiId: apiId || 0,
+                            deviceModel: config.deviceModel || 'unknown',
+                            deleted: false,
+                        };
+
+                        if (shouldExecute) {
+                            await redis.del(key);
+                            // Also clear proxy mapping so fresh config gets fresh proxy
+                            await redis.del(`tg:proxy_map:${mobileFromKey}`);
+                            entry.deleted = true;
+                        }
+
+                        result.staleConfigs.push(entry);
+                    } else {
+                        result.validConfigs++;
+                    }
+                } catch (err: any) {
+                    result.errors.push(`${key}: ${err.message}`);
+                }
+            }
+        } catch (err: any) {
+            result.errors.push(`Scan error: ${err.message}`);
+        }
+
+        return {
+            mode: shouldExecute ? 'EXECUTE' : 'DRY_RUN',
+            validApiIds: [...validApiIds],
+            ...result,
+            summary: shouldExecute
+                ? `Deleted ${result.staleConfigs.filter(s => s.deleted).length} stale configs out of ${result.totalScanned} total`
+                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`,
+        };
     }
 }

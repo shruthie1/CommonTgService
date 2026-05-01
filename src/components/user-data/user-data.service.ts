@@ -83,7 +83,11 @@ export class UserDataService {
     async remove(profile: string, chatId: string): Promise<UserDataDocument> {
         const botsService = getBotsServiceInstance();
         if (botsService) {
-            botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
+            botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>Deleting UserData</b>\n\n<b>Profile:</b> ${profile}\n<b>Chat ID:</b> ${chatId}`,
+                { parseMode: 'HTML' }
+            );
         }
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {

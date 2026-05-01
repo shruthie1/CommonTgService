@@ -382,15 +382,16 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
             [
-                'Promote Client Created',
+                '<b>Promote Client Created</b>',
                 '',
-                `Mobile: ${promoteClient.mobile}`,
-                `ClientId: ${promoteClient.clientId || '-'}`,
-                `Status: ${result.status}`,
-                `AvailableDate: ${promoteClient.availableDate || '-'}`,
-                `Channels: ${promoteClient.channels ?? '-'}`,
-                `Message: ${promoteClient.message || '-'}`,
+                `<b>Mobile:</b> ${promoteClient.mobile}`,
+                `<b>Client ID:</b> ${promoteClient.clientId || '-'}`,
+                `<b>Status:</b> ${result.status}`,
+                `<b>Available Date:</b> ${promoteClient.availableDate || '-'}`,
+                `<b>Channels:</b> ${promoteClient.channels ?? '-'}`,
+                `<b>Message:</b> ${promoteClient.message || '-'}`,
             ].join('\n'),
+            { parseMode: 'HTML' }
         );
         return result;
     }
@@ -421,7 +422,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument> {
         const updateData: UpdatePromoteClientDto = { status };
         if (message) updateData.message = message;
-        await this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
+        await this.botsService.sendMessageByCategory(
+            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
+            { parseMode: 'HTML' }
+        );
         return this.update(mobile, updateData);
     }
 
@@ -531,7 +536,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             if (deleteResult.deletedCount === 0) {
                 throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
-            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`${process.env.serviceName || process.env.clientId} Deleting Promote Client : ${mobile}\n${message}`)}`);
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client\n\nService: ${process.env.serviceName || process.env.clientId || 'unknown'}\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
         } catch (error) {
             if (error instanceof NotFoundException) throw error;
             const errorDetails = parseError(error);
@@ -986,15 +991,16 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             await this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 [
-                    'Promote Client Enrolled',
+                    '<b>Promote Client Enrolled</b>',
                     '',
-                    `ClientId: ${targetClientId}`,
-                    `Mobile: ${document.mobile}`,
-                    `AvailableDate: ${targetAvailableDate}`,
-                    `Channels: ${channels.ids.length}`,
-                    `WarmupPhase: ${WarmupPhase.ENROLLED}`,
-                    `SourceTgId: ${document.tgId}`,
+                    `<b>Client ID:</b> ${targetClientId}`,
+                    `<b>Mobile:</b> ${document.mobile}`,
+                    `<b>Available Date:</b> ${targetAvailableDate}`,
+                    `<b>Channels:</b> ${channels.ids.length}`,
+                    `<b>Warmup Phase:</b> ${WarmupPhase.ENROLLED}`,
+                    `<b>Source TG ID:</b> ${document.tgId}`,
                 ].join('\n'),
+                { parseMode: 'HTML' }
             );
             return true;
         } catch (error: unknown) {
@@ -1254,22 +1260,23 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
             [
-                'Promote Client Check Summary',
+                '<b>Promote Client Check Summary</b>',
                 '',
-                `Active: ${distribution.activePromoteClients}`,
-                `Inactive: ${distribution.inactivePromoteClients}`,
-                `Unassigned: ${distribution.unassignedPromoteClients}`,
-                `UpdatesApplied: ${totalUpdates}`,
-                `CreatedThisRun: ${createdCount}`,
-                `AttemptedCreates: ${attemptedCount}`,
-                `TotalNeeded: ${distribution.summary.totalPromoteClientsNeeded}`,
-                `ClientsNeedingMore: ${distribution.summary.clientsNeedingPromoteClients}`,
+                `<b>Active:</b> ${distribution.activePromoteClients}`,
+                `<b>Inactive:</b> ${distribution.inactivePromoteClients}`,
+                `<b>Unassigned:</b> ${distribution.unassignedPromoteClients}`,
+                `<b>Updates Applied:</b> ${totalUpdates}`,
+                `<b>Created This Run:</b> ${createdCount}`,
+                `<b>Attempted Creates:</b> ${attemptedCount}`,
+                `<b>Total Needed:</b> ${distribution.summary.totalPromoteClientsNeeded}`,
+                `<b>Clients Needing More:</b> ${distribution.summary.clientsNeedingPromoteClients}`,
                 '',
                 ...updatedLines,
                 ...createdLines,
-                'PerClientSummary:',
+                '<b>Per Client Summary:</b>',
                 ...lines,
             ].join('\n'),
+            { parseMode: 'HTML' }
         );
     }
 

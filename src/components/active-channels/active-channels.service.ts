@@ -322,7 +322,7 @@ export class ActiveChannelsService {
 
   async resetWordRestrictions(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=Request Received for Reset Word Restrictions`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Word Restrictions\nStatus: Processing`)}`);
       await this.activeChannelModel.updateMany(
         { banned: false },
         { $set: { wordRestriction: 0, dMRestriction: 0, updatedAt: new Date() } }
@@ -334,7 +334,7 @@ export class ActiveChannelsService {
 
   async resetAvailableMsgs(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=Request Received for Reset Available Messages`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Available Messages\nStatus: Processing`)}`);
       const availableMsgs = await this.getAvailableMessages();
 
       await this.activeChannelModel.updateMany(
@@ -360,7 +360,7 @@ export class ActiveChannelsService {
 
   async updateBannedChannels(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=Request Received for Update Banned Channels`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Update Banned Channels\nStatus: Processing`)}`);
       await this.activeChannelModel.updateMany(
         { $or: [{ banned: true }, { private: true }] },
         {

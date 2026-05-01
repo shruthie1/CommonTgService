@@ -4448,6 +4448,41 @@
         ]
       }
     },
+    "/telegram/config/audit-stale": {
+      "get": {
+        "description": "Scans tg:config:* keys for stale apiIds not in the custom credentials pool. Dry-run by default — pass ?execute=true to actually delete stale configs.",
+        "operationId": "TelegramController_auditStaleConfigs",
+        "parameters": [
+          {
+            "name": "execute",
+            "required": false,
+            "in": "query",
+            "description": "Set to true to delete stale configs",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "description": "Audit a single mobile instead of all",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Audit stale TG configs in Redis",
+        "tags": [
+          "Telegram"
+        ]
+      }
+    },
     "/bots": {
       "post": {
         "description": "Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.",

