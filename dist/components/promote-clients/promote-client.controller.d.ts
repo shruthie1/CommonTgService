@@ -16,7 +16,7 @@ export declare class PromoteClientController {
     checkpromoteClients(): Promise<string>;
     addNewUserstoPromoteClients(body: BulkEnrollPromoteClientsRequestDto): Promise<string>;
     findAll(status?: ClientStatusType): Promise<PromoteClient[]>;
-    setAsPromoteClient(mobile: string): Promise<string>;
+    setAsPromoteClient(mobile: string, clientId?: string): Promise<string>;
     findOne(mobile: string): Promise<PromoteClient>;
     update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
     createdOrupdate(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;

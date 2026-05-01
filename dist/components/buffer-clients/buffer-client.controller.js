@@ -91,7 +91,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.updateStatus(mobile, body.status, body.message);
     }
     async markAsActive(mobile, body = {}) {
-        return this.clientService.updateStatus(mobile, 'active', body.message);
+        return this.clientService.updateStatus(mobile, 'active', body.message || 'Account is functioning properly');
     }
     async markAsInactive(mobile, body) {
         return this.clientService.markAsInactive(mobile, body.reason);

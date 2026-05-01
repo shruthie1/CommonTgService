@@ -262,7 +262,7 @@ let ClientService = ClientService_1 = class ClientService {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
             await this.notifyClientUpdate(clientId);
             const updatedClient = await this.executeWithRetry(() => this.clientModel
-                .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, upsert: true, runValidators: true })
+                .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, runValidators: true })
                 .lean()
                 .exec());
             if (!updatedClient) {
@@ -547,12 +547,7 @@ let ClientService = ClientService_1 = class ClientService {
                 (0, parseError_1.parseError)(bufferUpdateError, `[${clientId}] Failed to mark ${newMobile} as in-use after cutover`);
                 this.logger.error(`[${clientId}] Failed to stamp replacement buffer usage after cutover`, { newMobile }, bufferUpdateError instanceof Error ? bufferUpdateError.stack : undefined);
             }
-            this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
-            setTimeout(() => {
-                void this.updateClient(clientId, 'Delayed update after buffer removal', true, false, true).catch((delayedError) => {
-                    (0, parseError_1.parseError)(delayedError, `[${clientId}] delayed updateClient failed`);
-                });
-            }, 15000);
+            this.logger.debug(`[${clientId}] Skipping delayed profile refresh — tg-aut handles on startup`);
             try {
                 if (existingClient.deployKey) {
                     this.logger.info(`[${clientId}] Triggering deploy restart after cutover`, { deployKeyPresent: true });

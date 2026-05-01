@@ -329,6 +329,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const updateData = { status };
         if (message)
             updateData.message = message;
+        if (status === 'inactive') {
+            updateData.inUse = false;
+        }
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
         return this.update(mobile, updateData);
     }

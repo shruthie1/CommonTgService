@@ -81,13 +81,13 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Paytm QR ID' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Paytm QR ID', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Client.prototype, "qrId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Google Pay ID' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Google Pay ID', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
 __decorate([

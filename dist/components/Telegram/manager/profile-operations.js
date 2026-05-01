@@ -45,39 +45,81 @@ const telegram_1 = require("telegram");
 const fs = __importStar(require("fs"));
 const uploads_1 = require("telegram/client/uploads");
 const Helpers_1 = require("telegram/Helpers");
-async function setPrivacyRules(ctx, rules) {
-    await Promise.all(rules.map(({ key, rules: privacyRules }) => ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({ key, rules: privacyRules }))));
+async function ensurePrivacy(ctx, expectations) {
+    let readFailures = 0;
+    let writeFailures = 0;
+    const mismatches = [];
+    for (const expectation of expectations) {
+        const { key, label, desired } = expectation;
+        try {
+            const current = await ctx.client.invoke(new telegram_1.Api.account.GetPrivacy({ key }));
+            const hasAllowAll = current.rules.some((r) => r.className === 'PrivacyValueAllowAll');
+            const hasDisallowAll = current.rules.some((r) => r.className === 'PrivacyValueDisallowAll');
+            const isCorrect = desired === 'allow' ? hasAllowAll : hasDisallowAll;
+            if (isCorrect) {
+                ctx.logger.debug(ctx.phoneNumber, `Privacy ${label}: OK (${desired})`);
+            }
+            else {
+                ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: mismatch → need ${desired} (was ${hasAllowAll ? 'allow' : hasDisallowAll ? 'disallow' : 'other'})`);
+                mismatches.push(expectation);
+            }
+        }
+        catch (err) {
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${err.message}`);
+            readFailures++;
+        }
+        await (0, Helpers_1.sleep)(1000 + Math.random() * 2000);
+    }
+    if (mismatches.length === 0) {
+        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0 };
+    }
+    let updated = 0;
+    for (const { key, label, desired } of mismatches) {
+        try {
+            const rules = desired === 'allow'
+                ? [new telegram_1.Api.InputPrivacyValueAllowAll()]
+                : [new telegram_1.Api.InputPrivacyValueDisallowAll()];
+            await ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({ key, rules }));
+            ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: fixed → ${desired}`);
+            updated++;
+        }
+        catch (err) {
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${err.message}`);
+            writeFailures++;
+        }
+        await (0, Helpers_1.sleep)(3000 + Math.random() * 7000);
+    }
+    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0 };
 }
+const ACTIVE_PRIVACY = [
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), label: 'ProfilePhoto', desired: 'allow' },
+    { key: new telegram_1.Api.InputPrivacyKeyForwards(), label: 'Forwards', desired: 'allow' },
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), label: 'PhoneNumber', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), label: 'LastSeen', desired: 'allow' },
+];
 async function updatePrivacy(ctx) {
-    try {
-        await setPrivacyRules(ctx, [
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyForwards(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyAbout(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-        ]);
-        ctx.logger.info(ctx.phoneNumber, 'Privacy Updated (all settings)');
+    const result = await ensurePrivacy(ctx, ACTIVE_PRIVACY);
+    if (!result.allConfirmed) {
+        ctx.logger.warn(ctx.phoneNumber, `Privacy activate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`);
     }
-    catch (e) {
-        throw e;
-    }
+    ctx.logger.info(ctx.phoneNumber, `Privacy check complete: ${result.updated} rule(s) corrected`);
 }
+const DEACTIVATE_PRIVACY = [
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), label: 'ProfilePhoto', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyForwards(), label: 'Forwards', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), label: 'PhoneNumber', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), label: 'LastSeen', desired: 'disallow' },
+];
 async function updatePrivacyforDeletedAccount(ctx) {
-    try {
-        await setPrivacyRules(ctx, [
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyAbout(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-        ]);
-        ctx.logger.info(ctx.phoneNumber, 'Privacy Updated for Deleted Account (all settings)');
+    const result = await ensurePrivacy(ctx, DEACTIVATE_PRIVACY);
+    if (!result.allConfirmed) {
+        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`;
+        ctx.logger.warn(ctx.phoneNumber, msg);
+        throw new Error(msg);
     }
-    catch (e) {
-        throw e;
-    }
+    ctx.logger.info(ctx.phoneNumber, `Privacy deactivated: ${result.updated} rule(s) hidden`);
 }
 async function updatePrivacyBatch(ctx, settings) {
     if (!ctx.client)
@@ -95,16 +137,16 @@ async function updatePrivacyBatch(ctx, settings) {
         calls: telegram_1.Api.InputPrivacyKeyPhoneCall,
         groups: telegram_1.Api.InputPrivacyKeyChatInvite,
     };
-    const updates = [];
     for (const [key, value] of Object.entries(settings)) {
         if (value && key in privacyMap) {
-            updates.push(ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({
+            await ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new privacyMap[key](),
                 rules: privacyRules[value],
-            })));
+            }));
+            ctx.logger.debug(ctx.phoneNumber, `Privacy batch: ${key} → ${value}`);
+            await (0, Helpers_1.sleep)(2000 + Math.random() * 3000);
         }
     }
-    await Promise.all(updates);
     return true;
 }
 async function updateProfile(ctx, firstName, about) {

@@ -71,6 +71,7 @@ __decorate([
 ], UpdatePromoteClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "warmupPhase", void 0);

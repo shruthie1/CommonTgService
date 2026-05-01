@@ -60,8 +60,8 @@ let PromoteClientController = class PromoteClientController {
     async findAll(status) {
         return this.clientService.findAll(status);
     }
-    async setAsPromoteClient(mobile) {
-        return this.clientService.setAsPromoteClient(mobile);
+    async setAsPromoteClient(mobile, clientId) {
+        return this.clientService.setAsPromoteClient(mobile, clientId);
     }
     async findOne(mobile) {
         return this.clientService.findOne(mobile);
@@ -206,12 +206,14 @@ __decorate([
     (0, common_1.Get)('SetAsPromoteClient/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a promote client', description: 'Converts an existing user account into a warmup-managed promote client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID to assign promote client to (auto-assigned if omitted)', type: String }),
     (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as promote successfully' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
     (0, swagger_1.ApiConflictResponse)({ description: 'A promote client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "setAsPromoteClient", null);
 __decorate([

@@ -8827,33 +8827,37 @@ async function updateChatSettings(ctx, settings) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const chat = await ctx.client.getEntity(settings.chatId);
-    const updates = [];
+    const delayBetween = () => new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2500));
     if (settings.title) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.EditTitle({ channel: chat, title: settings.title })));
+        await ctx.client.invoke(new telegram_1.Api.channels.EditTitle({ channel: chat, title: settings.title }));
+        await delayBetween();
     }
     if (settings.about) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.messages.EditChatAbout({ peer: chat, about: settings.about })));
+        await ctx.client.invoke(new telegram_1.Api.messages.EditChatAbout({ peer: chat, about: settings.about }));
+        await delayBetween();
     }
     if (settings.photo) {
         const buffer = await (0, helpers_1.downloadFileFromUrl)(settings.photo);
         const file = await ctx.client.uploadFile({
             file: new uploads_1.CustomFile('photo.jpg', buffer.length, 'photo.jpg', buffer), workers: 1,
         });
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.EditPhoto({
+        await ctx.client.invoke(new telegram_1.Api.channels.EditPhoto({
             channel: chat, photo: new telegram_1.Api.InputChatUploadedPhoto({ file }),
-        })));
+        }));
+        await delayBetween();
     }
     if (settings.slowMode !== undefined) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.ToggleSlowMode({ channel: chat, seconds: settings.slowMode })));
+        await ctx.client.invoke(new telegram_1.Api.channels.ToggleSlowMode({ channel: chat, seconds: settings.slowMode }));
+        await delayBetween();
     }
     if (settings.linkedChat) {
         const linkedChannel = await ctx.client.getEntity(settings.linkedChat);
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.SetDiscussionGroup({ broadcast: chat, group: linkedChannel })));
+        await ctx.client.invoke(new telegram_1.Api.channels.SetDiscussionGroup({ broadcast: chat, group: linkedChannel }));
+        await delayBetween();
     }
     if (settings.username) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.UpdateUsername({ channel: chat, username: settings.username })));
+        await ctx.client.invoke(new telegram_1.Api.channels.UpdateUsername({ channel: chat, username: settings.username }));
     }
-    await Promise.all(updates);
     return true;
 }
 async function createChatFolder(ctx, options) {
@@ -9446,20 +9450,35 @@ const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const uploads_1 = __webpack_require__(/*! telegram/client/uploads */ "telegram/client/uploads");
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
+function getFloodWaitSeconds(error) {
+    if (error?.seconds != null)
+        return error.seconds;
+    const match = error?.errorMessage?.match?.(/FLOOD_WAIT_(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+}
 async function addContact(ctx, data, namePrefix) {
     try {
-        const results = await Promise.allSettled(data.map(async (user, i) => {
+        for (let i = 0; i < data.length; i++) {
+            const user = data[i];
             const firstName = `${namePrefix}${i + 1}`;
-            await ctx.client.invoke(new telegram_1.Api.contacts.AddContact({
-                firstName,
-                lastName: '',
-                phone: user.mobile,
-                id: user.tgId,
-            }));
-        }));
-        for (const result of results) {
-            if (result.status === 'rejected') {
-                ctx.logger.info(ctx.phoneNumber, result.reason);
+            try {
+                await ctx.client.invoke(new telegram_1.Api.contacts.AddContact({
+                    firstName,
+                    lastName: '',
+                    phone: user.mobile,
+                    id: user.tgId,
+                }));
+            }
+            catch (err) {
+                const floodWait = getFloodWaitSeconds(err);
+                if (floodWait != null) {
+                    ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during addContact, stopping batch`);
+                    break;
+                }
+                ctx.logger.info(ctx.phoneNumber, err);
+            }
+            if (i < data.length - 1) {
+                await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
             }
         }
     }
@@ -9536,7 +9555,9 @@ async function exportContacts(ctx, format, includeBlocked = false) {
 async function importContacts(ctx, data) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const results = await Promise.all(data.map(async (contact) => {
+    const results = [];
+    for (let i = 0; i < data.length; i++) {
+        const contact = data[i];
         try {
             await ctx.client.invoke(new telegram_1.Api.contacts.ImportContacts({
                 contacts: [new telegram_1.Api.InputPhoneContact({
@@ -9546,18 +9567,29 @@ async function importContacts(ctx, data) {
                         lastName: contact.lastName || '',
                     })],
             }));
-            return { success: true, phone: contact.phone };
+            results.push({ success: true, phone: contact.phone });
         }
         catch (error) {
-            return { success: false, phone: contact.phone, error: error.message };
+            const floodWait = getFloodWaitSeconds(error);
+            if (floodWait != null) {
+                ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during importContacts, stopping batch`);
+                results.push({ success: false, phone: contact.phone, error: `FLOOD_WAIT_${floodWait}` });
+                break;
+            }
+            results.push({ success: false, phone: contact.phone, error: error.message });
         }
-    }));
+        if (i < data.length - 1) {
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+        }
+    }
     return results;
 }
 async function manageBlockList(ctx, userIds, block) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const results = await Promise.all(userIds.map(async (userId) => {
+    const results = [];
+    for (let i = 0; i < userIds.length; i++) {
+        const userId = userIds[i];
         try {
             if (block) {
                 await ctx.client.invoke(new telegram_1.Api.contacts.Block({ id: await ctx.client.getInputEntity(userId) }));
@@ -9565,12 +9597,21 @@ async function manageBlockList(ctx, userIds, block) {
             else {
                 await ctx.client.invoke(new telegram_1.Api.contacts.Unblock({ id: await ctx.client.getInputEntity(userId) }));
             }
-            return { success: true, userId };
+            results.push({ success: true, userId });
         }
         catch (error) {
-            return { success: false, userId, error: error.message };
+            const floodWait = getFloodWaitSeconds(error);
+            if (floodWait != null) {
+                ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during ${block ? 'block' : 'unblock'}, stopping batch`);
+                results.push({ success: false, userId, error: `FLOOD_WAIT_${floodWait}` });
+                break;
+            }
+            results.push({ success: false, userId, error: error.message });
         }
-    }));
+        if (i < userIds.length - 1) {
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
+        }
+    }
     return results;
 }
 async function getContactStatistics(ctx) {
@@ -11466,39 +11507,81 @@ const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const uploads_1 = __webpack_require__(/*! telegram/client/uploads */ "telegram/client/uploads");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
-async function setPrivacyRules(ctx, rules) {
-    await Promise.all(rules.map(({ key, rules: privacyRules }) => ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({ key, rules: privacyRules }))));
+async function ensurePrivacy(ctx, expectations) {
+    let readFailures = 0;
+    let writeFailures = 0;
+    const mismatches = [];
+    for (const expectation of expectations) {
+        const { key, label, desired } = expectation;
+        try {
+            const current = await ctx.client.invoke(new telegram_1.Api.account.GetPrivacy({ key }));
+            const hasAllowAll = current.rules.some((r) => r.className === 'PrivacyValueAllowAll');
+            const hasDisallowAll = current.rules.some((r) => r.className === 'PrivacyValueDisallowAll');
+            const isCorrect = desired === 'allow' ? hasAllowAll : hasDisallowAll;
+            if (isCorrect) {
+                ctx.logger.debug(ctx.phoneNumber, `Privacy ${label}: OK (${desired})`);
+            }
+            else {
+                ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: mismatch → need ${desired} (was ${hasAllowAll ? 'allow' : hasDisallowAll ? 'disallow' : 'other'})`);
+                mismatches.push(expectation);
+            }
+        }
+        catch (err) {
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${err.message}`);
+            readFailures++;
+        }
+        await (0, Helpers_1.sleep)(1000 + Math.random() * 2000);
+    }
+    if (mismatches.length === 0) {
+        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0 };
+    }
+    let updated = 0;
+    for (const { key, label, desired } of mismatches) {
+        try {
+            const rules = desired === 'allow'
+                ? [new telegram_1.Api.InputPrivacyValueAllowAll()]
+                : [new telegram_1.Api.InputPrivacyValueDisallowAll()];
+            await ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({ key, rules }));
+            ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: fixed → ${desired}`);
+            updated++;
+        }
+        catch (err) {
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${err.message}`);
+            writeFailures++;
+        }
+        await (0, Helpers_1.sleep)(3000 + Math.random() * 7000);
+    }
+    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0 };
 }
+const ACTIVE_PRIVACY = [
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), label: 'ProfilePhoto', desired: 'allow' },
+    { key: new telegram_1.Api.InputPrivacyKeyForwards(), label: 'Forwards', desired: 'allow' },
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), label: 'PhoneNumber', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), label: 'LastSeen', desired: 'allow' },
+];
 async function updatePrivacy(ctx) {
-    try {
-        await setPrivacyRules(ctx, [
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyForwards(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyAbout(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-        ]);
-        ctx.logger.info(ctx.phoneNumber, 'Privacy Updated (all settings)');
+    const result = await ensurePrivacy(ctx, ACTIVE_PRIVACY);
+    if (!result.allConfirmed) {
+        ctx.logger.warn(ctx.phoneNumber, `Privacy activate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`);
     }
-    catch (e) {
-        throw e;
-    }
+    ctx.logger.info(ctx.phoneNumber, `Privacy check complete: ${result.updated} rule(s) corrected`);
 }
+const DEACTIVATE_PRIVACY = [
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), label: 'ProfilePhoto', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyForwards(), label: 'Forwards', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), label: 'PhoneNumber', desired: 'disallow' },
+    { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), label: 'LastSeen', desired: 'disallow' },
+];
 async function updatePrivacyforDeletedAccount(ctx) {
-    try {
-        await setPrivacyRules(ctx, [
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyProfilePhoto(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyPhoneNumber(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyStatusTimestamp(), rules: [new telegram_1.Api.InputPrivacyValueAllowAll()] },
-            { key: new telegram_1.Api.InputPrivacyKeyAbout(), rules: [new telegram_1.Api.InputPrivacyValueDisallowAll()] },
-        ]);
-        ctx.logger.info(ctx.phoneNumber, 'Privacy Updated for Deleted Account (all settings)');
+    const result = await ensurePrivacy(ctx, DEACTIVATE_PRIVACY);
+    if (!result.allConfirmed) {
+        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`;
+        ctx.logger.warn(ctx.phoneNumber, msg);
+        throw new Error(msg);
     }
-    catch (e) {
-        throw e;
-    }
+    ctx.logger.info(ctx.phoneNumber, `Privacy deactivated: ${result.updated} rule(s) hidden`);
 }
 async function updatePrivacyBatch(ctx, settings) {
     if (!ctx.client)
@@ -11516,16 +11599,16 @@ async function updatePrivacyBatch(ctx, settings) {
         calls: telegram_1.Api.InputPrivacyKeyPhoneCall,
         groups: telegram_1.Api.InputPrivacyKeyChatInvite,
     };
-    const updates = [];
     for (const [key, value] of Object.entries(settings)) {
         if (value && key in privacyMap) {
-            updates.push(ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({
+            await ctx.client.invoke(new telegram_1.Api.account.SetPrivacy({
                 key: new privacyMap[key](),
                 rules: privacyRules[value],
-            })));
+            }));
+            ctx.logger.debug(ctx.phoneNumber, `Privacy batch: ${key} → ${value}`);
+            await (0, Helpers_1.sleep)(2000 + Math.random() * 3000);
         }
     }
-    await Promise.all(updates);
     return true;
 }
 async function updateProfile(ctx, firstName, about) {
@@ -16961,7 +17044,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.updateStatus(mobile, body.status, body.message);
     }
     async markAsActive(mobile, body = {}) {
-        return this.clientService.updateStatus(mobile, 'active', body.message);
+        return this.clientService.updateStatus(mobile, 'active', body.message || 'Account is functioning properly');
     }
     async markAsInactive(mobile, body) {
         return this.clientService.markAsInactive(mobile, body.reason);
@@ -19081,6 +19164,7 @@ __decorate([
 ], UpdateBufferClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "warmupPhase", void 0);
@@ -21053,7 +21137,7 @@ let ClientService = ClientService_1 = class ClientService {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
             await this.notifyClientUpdate(clientId);
             const updatedClient = await this.executeWithRetry(() => this.clientModel
-                .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, upsert: true, runValidators: true })
+                .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, runValidators: true })
                 .lean()
                 .exec());
             if (!updatedClient) {
@@ -21339,12 +21423,7 @@ let ClientService = ClientService_1 = class ClientService {
                 (0, parseError_1.parseError)(bufferUpdateError, `[${clientId}] Failed to mark ${newMobile} as in-use after cutover`);
                 this.logger.error(`[${clientId}] Failed to stamp replacement buffer usage after cutover`, { newMobile }, bufferUpdateError instanceof Error ? bufferUpdateError.stack : undefined);
             }
-            this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
-            setTimeout(() => {
-                void this.updateClient(clientId, 'Delayed update after buffer removal', true, false, true).catch((delayedError) => {
-                    (0, parseError_1.parseError)(delayedError, `[${clientId}] delayed updateClient failed`);
-                });
-            }, 15000);
+            this.logger.debug(`[${clientId}] Skipping delayed profile refresh — tg-aut handles on startup`);
             try {
                 if (existingClient.deployKey) {
                     this.logger.info(`[${clientId}] Triggering deploy restart after cutover`, { deployKeyPresent: true });
@@ -22464,13 +22543,13 @@ __decorate([
     __metadata("design:type", String)
 ], Client.prototype, "product", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Paytm QR ID' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Paytm QR ID', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Client.prototype, "qrId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Google Pay ID' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Google Pay ID', required: false }),
+    (0, mongoose_1.Prop)({ required: false, default: null }),
     __metadata("design:type", String)
 ], Client.prototype, "gpayId", void 0);
 __decorate([
@@ -25352,6 +25431,7 @@ __decorate([
 ], UpdatePromoteClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "warmupPhase", void 0);
@@ -25499,8 +25579,8 @@ let PromoteClientController = class PromoteClientController {
     async findAll(status) {
         return this.clientService.findAll(status);
     }
-    async setAsPromoteClient(mobile) {
-        return this.clientService.setAsPromoteClient(mobile);
+    async setAsPromoteClient(mobile, clientId) {
+        return this.clientService.setAsPromoteClient(mobile, clientId);
     }
     async findOne(mobile) {
         return this.clientService.findOne(mobile);
@@ -25645,12 +25725,14 @@ __decorate([
     (0, common_1.Get)('SetAsPromoteClient/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a promote client', description: 'Converts an existing user account into a warmup-managed promote client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID to assign promote client to (auto-assigned if omitted)', type: String }),
     (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as promote successfully' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
     (0, swagger_1.ApiConflictResponse)({ description: 'A promote client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
+    __param(1, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "setAsPromoteClient", null);
 __decorate([
@@ -26259,6 +26341,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const updateData = { status };
         if (message)
             updateData.message = message;
+        if (status === 'inactive') {
+            updateData.inUse = false;
+        }
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
         return this.update(mobile, updateData);
     }
