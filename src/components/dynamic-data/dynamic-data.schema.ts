@@ -12,9 +12,7 @@ export type DynamicDataDocument = DynamicData & Document;
     transform: (_, ret) => {
       delete ret._id;
       return ret;
-    },
-  },
-})
+    } } })
 export class DynamicData {
   @Prop({ required: true, unique: true, type: String })
   configKey: string;

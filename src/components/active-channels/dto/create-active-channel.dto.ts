@@ -48,9 +48,7 @@ export class CreateActiveChannelDto {
 
   @ApiProperty({
     description: 'Whether the channel is private',
-    example: false,
-    required: false,
-  })
+    required: false })
   private: boolean = false;
 
   @ApiProperty({ description: 'Starred status', default: false, required: false })

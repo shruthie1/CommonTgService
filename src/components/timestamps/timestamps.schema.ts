@@ -12,9 +12,7 @@ export type TimestampDocument = Timestamp & Document;
     virtuals: true,
     transform: (doc, ret) => {
       delete ret._id;
-    },
-  },
-})
+    } } })
 export class Timestamp {}
 
 export const TimestampSchema = SchemaFactory.createForClass(Timestamp);

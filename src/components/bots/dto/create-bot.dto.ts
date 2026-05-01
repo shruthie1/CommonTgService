@@ -4,32 +4,24 @@ import { ChannelCategory } from '../bots.service';
 
 export class CreateBotDto {
     @ApiProperty({
-        description: 'Telegram bot token',
-        example: '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz'
-    })
+        description: 'Telegram bot token'})
     @IsString()
     token: string;
 
     @ApiProperty({
         description: 'Channel category the bot belongs to',
-        enum: ChannelCategory,
-        example: ChannelCategory.CLIENT_UPDATES
-    })
+        enum: ChannelCategory })
     @IsEnum(ChannelCategory)
     category: ChannelCategory;
 
     @ApiProperty({
-        description: 'Channel ID where bot will post messages',
-        example: '-1001234567890'
-    })
+        description: 'Channel ID where bot will post messages'})
     @IsString()
     channelId: string;
 
     @ApiProperty({
         description: 'Optional description of the bot',
-        required: false,
-        example: 'Bot for sending client updates'
-    })
+        required: false})
     @IsString()
     @IsOptional()
     description?: string;

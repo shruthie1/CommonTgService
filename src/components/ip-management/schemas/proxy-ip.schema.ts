@@ -13,57 +13,55 @@ export type ProxyIpDocument = ProxyIp & Document;
         virtuals: true,
         transform: (doc, ret) => {
             delete ret._id;
-        },
-    },
-})
+        } } })
 export class ProxyIp {
-    @ApiProperty({ example: '192.168.1.100', description: 'IP address of the proxy' })
+    @ApiProperty({ description: 'IP address of the proxy' })
     @Prop({ required: true, unique: true })
     ipAddress: string;
 
-    @ApiProperty({ example: 8080, description: 'Port number of the proxy' })
+    @ApiProperty({ description: 'Port number of the proxy' })
     @Prop({ required: true })
     port: number;
 
-    @ApiProperty({ example: 'http', description: 'Protocol type (http, https, socks5)', enum: ['http', 'https', 'socks5'] })
+    @ApiProperty({ description: 'Protocol type (http, https, socks5)', enum: ['http', 'https', 'socks5'] })
     @Prop({ required: true, enum: ['http', 'https', 'socks5'] })
     protocol: string;
 
-    @ApiProperty({ example: 'username', description: 'Username for proxy authentication' })
+    @ApiProperty({ description: 'Username for proxy authentication' })
     @Prop({ required: false })
     username?: string;
 
-    @ApiProperty({ example: 'password', description: 'Password for proxy authentication' })
+    @ApiProperty({ description: 'Password for proxy authentication' })
     @Prop({ required: false })
     password?: string;
 
-    @ApiProperty({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'] })
+    @ApiProperty({ description: 'Status of the proxy IP', enum: ['active', 'inactive'] })
     @Prop({ required: true, default: 'active', enum: ['active', 'inactive'] })
     status: string;
 
-    @ApiProperty({ example: false, description: 'Whether this IP is currently assigned to a mobile number' })
+    @ApiProperty({ description: 'Whether this IP is currently assigned to a mobile number' })
     @Prop({ required: false, default: false })
     isAssigned: boolean;
 
-    @ApiProperty({ example: 'client1', description: 'Client ID that owns this IP' })
+    @ApiProperty({ description: 'Client ID that owns this IP' })
     @Prop({ required: false })
     assignedToClient?: string;
 
     // ==================== NEW FIELDS ====================
 
-    @ApiProperty({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'] })
+    @ApiProperty({ description: 'Source of the proxy', enum: ['manual', 'webshare'] })
     @Prop({ required: false, default: 'manual', enum: ['manual', 'webshare'] })
     source: string;
 
-    @ApiProperty({ example: 'abc123', description: 'Webshare proxy ID for replacement API' })
+    @ApiProperty({ description: 'Webshare proxy ID for replacement API' })
     @Prop({ required: false })
     webshareId?: string;
 
-    @ApiProperty({ example: 'US', description: 'ISO 3166-1 two-letter country code' })
+    @ApiProperty({ description: 'ISO 3166-1 two-letter country code' })
     @Prop({ required: false })
     countryCode?: string;
 
-    @ApiProperty({ example: 'New York', description: 'City name of the proxy location' })
+    @ApiProperty({ description: 'City name of the proxy location' })
     @Prop({ required: false })
     cityName?: string;
 
@@ -75,11 +73,11 @@ export class ProxyIp {
     @Prop({ required: false })
     lastUsed?: Date;
 
-    @ApiProperty({ example: 0, description: 'Number of consecutive health check failures' })
+    @ApiProperty({ description: 'Number of consecutive health check failures' })
     @Prop({ required: false, default: 0 })
     consecutiveFails: number;
 
-    @ApiProperty({ example: 0, description: 'Index used for round-robin ordering' })
+    @ApiProperty({ description: 'Index used for round-robin ordering' })
     @Prop({ required: false, default: 0 })
     roundRobinIndex: number;
 }

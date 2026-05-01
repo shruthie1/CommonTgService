@@ -108,9 +108,7 @@ export class SendMessageOptionsDto {
 
 export class SendMessageDto {
     @ApiProperty({
-        description: 'Message text to send',
-        example: 'Hello, this is a test message!'
-    })
+        description: 'Message text to send'})
     @IsString()
     message: string;
 

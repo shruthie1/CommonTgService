@@ -138,9 +138,7 @@ export class DocumentOptionsDto extends MediaOptionsDto {
 // DTO for sending photos
 export class SendPhotoDto {
     @ApiProperty({
-        description: 'Photo URL or file ID',
-        example: 'https://example.com/photo.jpg'
-    })
+        description: 'Photo URL or file ID'})
     @IsString()
     photo: string;
 
@@ -158,9 +156,7 @@ export class SendPhotoDto {
 // DTO for sending videos
 export class SendVideoDto {
     @ApiProperty({
-        description: 'Video URL or file ID',
-        example: 'https://example.com/video.mp4'
-    })
+        description: 'Video URL or file ID'})
     @IsString()
     video: string;
 
@@ -178,9 +174,7 @@ export class SendVideoDto {
 // DTO for sending audio
 export class SendAudioDto {
     @ApiProperty({
-        description: 'Audio URL or file ID',
-        example: 'https://example.com/audio.mp3'
-    })
+        description: 'Audio URL or file ID'})
     @IsString()
     audio: string;
 
@@ -198,9 +192,7 @@ export class SendAudioDto {
 // DTO for sending documents
 export class SendDocumentDto {
     @ApiProperty({
-        description: 'Document URL or file ID',
-        example: 'https://example.com/document.pdf'
-    })
+        description: 'Document URL or file ID'})
     @IsString()
     document: string;
 

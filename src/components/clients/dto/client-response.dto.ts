@@ -2,10 +2,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Client } from '../schemas/client.schema';
 
 export class PromoteMobileMatchDto {
-  @ApiProperty({ example: 'client-a' })
+  @ApiProperty({})
   clientId: string;
 
-  @ApiProperty({ example: '916265240911' })
+  @ApiProperty({})
   mobile: string;
 }
 
@@ -16,7 +16,7 @@ export class PromoteMobileSearchResponseDto {
   @ApiProperty({ type: [PromoteMobileMatchDto] })
   matches: PromoteMobileMatchDto[];
 
-  @ApiProperty({ example: '916265240911' })
+  @ApiProperty({})
   searchedMobile: string;
 }
 
@@ -24,12 +24,12 @@ export class EnhancedClientSearchResponseDto {
   @ApiProperty({ type: [Client] })
   clients: Client[];
 
-  @ApiProperty({ enum: ['direct', 'promoteMobile', 'mixed'], example: 'promoteMobile' })
+  @ApiProperty({ enum: ['direct', 'promoteMobile', 'mixed']})
   searchType: 'direct' | 'promoteMobile' | 'mixed';
 
   @ApiPropertyOptional({ type: [PromoteMobileMatchDto] })
   promoteMobileMatches?: PromoteMobileMatchDto[];
 
-  @ApiProperty({ example: 4 })
+  @ApiProperty({})
   totalResults: number;
 }

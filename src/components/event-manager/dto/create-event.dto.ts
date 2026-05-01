@@ -1,18 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateEventDto {
-  @ApiProperty({ example: '123456789' })
+  @ApiProperty({})
   chatId: string;
 
-  @ApiProperty({ example: 1700000000000 })
+  @ApiProperty({})
   time: number;
 
   @ApiProperty({ enum: ['call', 'message'] })
   type: 'call' | 'message';
 
-  @ApiProperty({ example: 'shruthi1' })
+  @ApiProperty({})
   profile: string;
 
-  @ApiProperty({ example: { message: 'Hello' }, required: false })
+  @ApiProperty({ required: false })
   payload?: any;
 }

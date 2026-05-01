@@ -10,9 +10,7 @@ export type ChannelDocument = Channel & Document;
     virtuals: true,
     transform: (_doc, ret) => {
       delete ret._id;
-    },
-  },
-})
+    } } })
 export class Channel {
   @ApiProperty({ required: true })
   @Prop({ required: true, unique: true })

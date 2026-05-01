@@ -69,8 +69,8 @@ export class TransactionController {
   @ApiQuery({ name: 'chatId', required: false, description: 'Filter by chat ID' })
   @ApiQuery({ name: 'ip', required: false, description: 'Filter by IP address' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by transaction status' })
-  @ApiQuery({ name: 'limit', required: false, type: 'number', description: 'Number of records to return', example: 10 })
-  @ApiQuery({ name: 'offset', required: false, type: 'number', description: 'Number of records to skip', example: 0 })
+  @ApiQuery({ name: 'limit', required: false, type: 'number', description: 'Number of records to return'})
+  @ApiQuery({ name: 'offset', required: false, type: 'number', description: 'Number of records to skip'})
   async findAll(
     @Query('transactionId') transactionId?: string,
     @Query('amount') amount?: number,

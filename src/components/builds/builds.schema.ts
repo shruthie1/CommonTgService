@@ -8,8 +8,7 @@ export type BuildDocument = Build & Document;
       virtuals: true,
       transform: (doc, ret) => {
         delete ret._id;
-      },
-    },})
+      } } })
 export class Build {}
 
 export const BuildSchema = SchemaFactory.createForClass(Build);

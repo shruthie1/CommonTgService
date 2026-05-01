@@ -8,8 +8,7 @@ import {
   Delete,
   Query,
   HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+  HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { DynamicDataService } from './dynamic-data.service';
 import { CreateDynamicDataDto } from './dto/create-dynamic-data.dto';
@@ -25,8 +24,7 @@ export class DynamicDataController {
   @ApiOperation({ summary: 'Create a new dynamic data document' })
   @ApiResponse({
     status: 201,
-    description: 'The dynamic data document has been successfully created.',
-  })
+    description: 'The dynamic data document has been successfully created.' })
   @ApiResponse({ status: 400, description: 'Bad Request' })
   @ApiResponse({ status: 409, description: 'Conflict - Document already exists' })
   async create(@Body() createDynamicDataDto: CreateDynamicDataDto) {
@@ -37,8 +35,7 @@ export class DynamicDataController {
   @ApiOperation({ summary: 'Get all dynamic data documents' })
   @ApiResponse({
     status: 200,
-    description: 'Returns all dynamic data documents as a key-value object',
-  })
+    description: 'Returns all dynamic data documents as a key-value object' })
   async findAll() {
     return this.dynamicDataService.findAll();
   }
@@ -49,8 +46,7 @@ export class DynamicDataController {
   @ApiQuery({
     name: 'path',
     required: false,
-    description: 'Optional path to retrieve specific nested data',
-  })
+    description: 'Optional path to retrieve specific nested data' })
   @ApiResponse({ status: 200, description: 'Returns the requested dynamic data' })
   @ApiResponse({ status: 404, description: 'Document or path not found' })
   async findOne(
@@ -80,8 +76,7 @@ export class DynamicDataController {
   @ApiQuery({
     name: 'path',
     required: false,
-    description: 'Optional path to delete specific nested data',
-  })
+    description: 'Optional path to delete specific nested data' })
   @ApiResponse({ status: 204, description: 'The dynamic data has been successfully deleted' })
   @ApiResponse({ status: 404, description: 'Document or path not found' })
   async remove(

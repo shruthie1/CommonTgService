@@ -12,9 +12,7 @@ export type TransactionDocument = Transaction & Document;
     virtuals: true,
     transform: (doc, ret) => {
       delete ret._id;
-    },
-  },
-})
+    } } })
 export class Transaction {
   @Prop({ required: true })
   clientId: string;

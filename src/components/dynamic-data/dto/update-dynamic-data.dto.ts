@@ -6,21 +6,18 @@ export enum ArrayOperationType {
     POP = 'POP',
     INSERT = 'INSERT',
     REMOVE = 'REMOVE',
-    UPDATE = 'UPDATE',
-}
+    UPDATE = 'UPDATE' }
 
 export class ArrayOperation {
     @ApiProperty({
         enum: ArrayOperationType,
-        description: 'Type of array operation to perform',
-    })
+        description: 'Type of array operation to perform' })
     @IsEnum(ArrayOperationType)
     type: ArrayOperationType;
 
     @ApiProperty({
         description: 'Index for array operations (required for INSERT and UPDATE)',
-        required: false,
-    })
+        required: false })
     @IsOptional()
     index?: number;
 }
@@ -28,28 +25,22 @@ export class ArrayOperation {
 export class UpdateDynamicDataDto {
     @ApiProperty({
         description: 'Path to the field to update using dot notation. If not provided, updates entire data object.',
-        example: 'profile.age',
-        required: false,
-    })
+        required: false })
     @IsOptional()
     @IsString()
     @Matches(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
-        message: 'Invalid path format. Use dot notation (e.g., profile.age)',
-    })
+        message: 'Invalid path format. Use dot notation (e.g., profile.age)' })
     readonly path?: string;
 
     @ApiProperty({
-        description: 'New value for the field or entire data object if path is not provided',
-        example: { profile: { age: 31 } },
-    })
+        description: 'New value for the field or entire data object if path is not provided' })
     @IsNotEmpty()
     readonly value: any;
 
     @ApiProperty({
         description: 'Array operation configuration',
         required: false,
-        type: ArrayOperation,
-    })
+        type: ArrayOperation })
     @IsOptional()
     readonly arrayOperation?: ArrayOperation;
 }

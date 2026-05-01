@@ -3,18 +3,14 @@ import { IsNotEmpty, IsString, IsOptional, MaxLength } from 'class-validator';
 
 export class CreateTgBotDto {
     @ApiProperty({
-        description: 'Name of the bot (required)',
-        example: 'MyAwesomeBot'
-    })
+        description: 'Name of the bot (required)'})
     @IsNotEmpty()
     @IsString()
     @MaxLength(64)
     name: string;
 
     @ApiProperty({
-        description: 'Username for the bot (required)',
-        example: 'my_awesome_bot'
-    })
+        description: 'Username for the bot (required)'})
     @IsNotEmpty()
     @IsString()
     @MaxLength(32)
@@ -22,7 +18,6 @@ export class CreateTgBotDto {
 
     @ApiProperty({
         description: 'Description of what your bot can do',
-        example: 'This bot helps you manage your tasks',
         required: false
     })
     @IsOptional()
@@ -32,7 +27,6 @@ export class CreateTgBotDto {
 
     @ApiProperty({
         description: 'What the bot can be used for',
-        example: 'Task Management, Reminders, Notes',
         required: false
     })
     @IsOptional()
@@ -42,7 +36,6 @@ export class CreateTgBotDto {
 
     @ApiProperty({
         description: 'URL to the bot\'s profile photo',
-        example: 'https://example.com/bot-photo.jpg',
         required: false
     })
     @IsOptional()

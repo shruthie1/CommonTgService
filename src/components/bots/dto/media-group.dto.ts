@@ -6,16 +6,12 @@ import { MediaOptionsDto } from './media.dto';
 export class MediaGroupItemDto {
     @ApiProperty({
         description: 'Type of media',
-        enum: ['photo', 'video', 'audio', 'document'],
-        example: 'photo'
-    })
+        enum: ['photo', 'video', 'audio', 'document']})
     @IsEnum(['photo', 'video', 'audio', 'document'])
     type: 'photo' | 'video' | 'audio' | 'document';
 
     @ApiProperty({
-        description: 'Media URL or file ID',
-        example: 'https://example.com/media.jpg'
-    })
+        description: 'Media URL or file ID'})
     @IsString()
     media: string;
 

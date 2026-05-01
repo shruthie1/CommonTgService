@@ -8,8 +8,7 @@ export type PromoteMsgDocument = PromoteMsg & Document;
       virtuals: true,
       transform: (doc, ret) => {
         delete ret._id;
-      },
-    },})
+      } } })
 export class PromoteMsg {}
 
 export const PromoteMsgSchema = SchemaFactory.createForClass(PromoteMsg);

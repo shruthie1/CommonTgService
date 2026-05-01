@@ -28,8 +28,7 @@ export enum DialogsPeerType {
     ALL = 'all',
     USER = 'user',
     GROUP = 'group',
-    CHANNEL = 'channel',
-}
+    CHANNEL = 'channel' }
 
 export class BulkMessageOperationDto {
     @ApiProperty({ description: 'Source chat ID', type: String, minLength: 1, maxLength: 255 })

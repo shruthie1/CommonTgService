@@ -1,63 +1,63 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateUserDataDto {
-    @ApiProperty({ example: '5787751360', description: 'Chat ID' })
+    @ApiProperty({ description: 'Chat ID' })
     chatId: string;
 
-    @ApiProperty({ example: 1, description: 'Total count' })
+    @ApiProperty({ description: 'Total count' })
     totalCount: number;
 
-    @ApiProperty({ example: 0, description: 'Picture count' })
+    @ApiProperty({ description: 'Picture count' })
     picCount: number;
 
-    @ApiProperty({ example: 1718802722566, description: 'Last message timestamp' })
+    @ApiProperty({ description: 'Last message timestamp' })
     lastMsgTimeStamp: number;
 
-    @ApiProperty({ example: 1718802742567, description: 'Limit time' })
+    @ApiProperty({ description: 'Limit time' })
     limitTime: number;
 
-    @ApiProperty({ example: 0, description: 'Paid count' })
+    @ApiProperty({ description: 'Paid count' })
     paidCount: number;
 
-    @ApiProperty({ example: 0, description: 'Profile count' })
+    @ApiProperty({ description: 'Profile count' })
     prfCount: number;
 
-    @ApiProperty({ example: 1, description: 'Can reply' })
+    @ApiProperty({ description: 'Can reply' })
     canReply: number;
 
-    @ApiProperty({ example: 0, description: 'Pay amount' })
+    @ApiProperty({ description: 'Pay amount' })
     payAmount: number;
 
-    @ApiProperty({ example: 0, description: 'highestPayAmount' })
+    @ApiProperty({ description: 'highestPayAmount' })
     highestPayAmount: number;
 
-    @ApiProperty({ example: 0, description: 'cheatCount', default: 0 })
+    @ApiProperty({ description: 'cheatCount', default: 0 })
     cheatCount: number;
 
-    @ApiProperty({ example: 0, description: 'callTime', default: 0 })
+    @ApiProperty({ description: 'callTime', default: 0 })
     callTime: number;
 
-    @ApiProperty({ example: 'بـِـعٰ۬ێډ الۿٰٕقاوٰ۬ێ ٴ🦅', description: 'Username' })
+    @ApiProperty({ description: 'Username' })
     username: string;
 
-    @ApiProperty({ example: '-7250939091939055173', description: 'Access hash' })
+    @ApiProperty({ description: 'Access hash' })
     accessHash: string;
 
-    @ApiProperty({ example: true, description: 'Paid reply status' })
+    @ApiProperty({ description: 'Paid reply status' })
     paidReply: boolean;
 
-    @ApiProperty({ example: false, description: 'Demo given status' })
+    @ApiProperty({ description: 'Demo given status' })
     demoGiven: boolean;
 
-    @ApiProperty({ example: false, description: 'Second show status' })
+    @ApiProperty({ description: 'Second show status' })
     secondShow: boolean;
 
-    @ApiProperty({ example: 'sneha', description: 'Profile name' })
+    @ApiProperty({ description: 'Profile name' })
     profile: string;
 
-    @ApiProperty({ example: false, description: 'Pics Sent status' })
+    @ApiProperty({ description: 'Pics Sent status' })
     picsSent: boolean;
 
-    @ApiProperty({ example: [], description: 'videos' })
+    @ApiProperty({ description: 'videos' })
     videos: number[];
 }

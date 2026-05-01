@@ -156,14 +156,14 @@ export class UsersService {
     return doc.toJSON();
   }
 
-  async update(tgId: string, updateDto: UpdateUserDto): Promise<number> {
-    const result = await this.userModel
-      .updateMany({ tgId }, { $set: updateDto })
+  async update(tgId: string, updateDto: UpdateUserDto): Promise<User> {
+    const updated = await this.userModel
+      .findOneAndUpdate({ tgId }, { $set: updateDto }, { new: true })
       .exec();
-    if (result.matchedCount === 0) {
-      throw new NotFoundException(`Users with tgId ${tgId} not found`);
+    if (!updated) {
+      throw new NotFoundException(`User with tgId ${tgId} not found`);
     }
-    return result.modifiedCount;
+    return updated;
   }
 
   async updateByFilter(
@@ -197,8 +197,12 @@ export class UsersService {
   async search(filter: SearchUserDto): Promise<User[]> {
     const query: QueryFilter<UserDocument> = { ...filter };
 
-    if (query.firstName) {
-      query.firstName = { $regex: new RegExp(query.firstName as string, 'i') };
+    const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regexFields = ['firstName', 'lastName', 'username', 'mobile'];
+    for (const field of regexFields) {
+      if (typeof query[field] === 'string' && query[field]) {
+        query[field] = { $regex: new RegExp(escapeRegex(query[field] as string), 'i') };
+      }
     }
 
     if (!filter.mobile) {

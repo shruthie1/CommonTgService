@@ -3,24 +3,18 @@ import { IsString, IsOptional } from 'class-validator';
 
 export class SendTgMessageDto {
   @ApiProperty({
-    description: 'Target username or peer ID',
-    example: 'someusername',
-  })
+    description: 'Target username or peer ID' })
   @IsString()
   peer: string;
 
   @ApiProperty({
-    description: 'Message text to send',
-    example: 'Hello from NestJS and GramJS!',
-  })
+    description: 'Message text to send' })
   @IsString()
   message: string;
 
   @ApiProperty({
     description: 'Optional message parse mode (Markdown, HTML)',
-    required: false,
-    example: 'Markdown',
-  })
+    required: false })
   @IsOptional()
   @IsString()
   parseMode?: 'Markdown' | 'HTML';

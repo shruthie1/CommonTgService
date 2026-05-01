@@ -1,16 +1,13 @@
 module.exports = {
   apps: [{
     name: 'common-tg-service',
-    script: 'dist/main.js',
+    script: 'npm',
+    args: 'run start',
     instances: 1,
     exec_mode: 'fork',
     watch: false,
     max_memory_restart: '1G',
     env: {
-      NODE_ENV: 'production',
-      PORT: 9002
-    },
-    env_development: {
       NODE_ENV: 'development',
       PORT: 9002
     },

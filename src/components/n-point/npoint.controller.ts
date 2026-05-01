@@ -6,16 +6,14 @@ import {
     Param,
     Body,
     HttpException,
-    HttpStatus,
-  } from '@nestjs/common';
+    HttpStatus } from '@nestjs/common';
   import { NpointService } from './npoint.service';
   import {
     ApiTags,
     ApiOperation,
     ApiParam,
     ApiBody,
-    ApiResponse,
-  } from '@nestjs/swagger';
+    ApiResponse } from '@nestjs/swagger';
   
   @ApiTags('NPoint API') // Group endpoints under "NPoint API" in Swagger UI
   @Controller('npoint')
@@ -27,8 +25,7 @@ import {
     @ApiParam({ name: 'id', description: 'The ID of the document to fetch' }) // Document the parameter
     @ApiResponse({
       status: 200,
-      description: 'Document fetched successfully',
-    })
+      description: 'Document fetched successfully' })
     @ApiResponse({ status: 404, description: 'Document not found' })
     async fetchDocument(@Param('id') id: string) {
       try {
@@ -43,16 +40,10 @@ import {
     @ApiBody({
       description: 'The document to post',
       schema: {
-        example: {
-          title: 'My Document',
-          content: 'This is the content of the document.',
-        },
-      },
-    })
+      } })
     @ApiResponse({
       status: 201,
-      description: 'Document posted successfully',
-    })
+      description: 'Document posted successfully' })
     @ApiResponse({ status: 400, description: 'Invalid input' })
     async postDocument(@Body() document: any) {
       try {
@@ -66,8 +57,7 @@ import {
     @ApiOperation({ summary: 'Fetch all documents' })
     @ApiResponse({
       status: 200,
-      description: 'List of all documents fetched successfully',
-    })
+      description: 'List of all documents fetched successfully' })
     @ApiResponse({ status: 500, description: 'Internal server error' })
     async fetchAllDocuments() {
       try {
@@ -83,16 +73,10 @@ import {
     @ApiBody({
       description: 'The updated document',
       schema: {
-        example: {
-          title: 'Updated Document',
-          content: 'This is the updated content of the document.',
-        },
-      },
-    })
+      } })
     @ApiResponse({
       status: 200,
-      description: 'Document updated successfully',
-    })
+      description: 'Document updated successfully' })
     @ApiResponse({ status: 404, description: 'Document not found' })
     async updateDocument(@Param('id') id: string, @Body() updatedDocument: any) {
       try {

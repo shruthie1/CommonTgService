@@ -24,10 +24,10 @@ export class UserDataController {
 
   @Get('search')
   @ApiOperation({ summary: 'Search user data', description: 'Searches user data based on provided query parameters.' })
-  @ApiQuery({ name: 'profile', required: false, description: 'User profile identifier', type: String, example: 'user123' })
-  @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String, example: 'chat456' })
-  @ApiQuery({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean, example: true })
-  @ApiQuery({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean, example: false })
+  @ApiQuery({ name: 'profile', required: false, description: 'User profile identifier', type: String})
+  @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String})
+  @ApiQuery({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean})
+  @ApiQuery({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean})
   @ApiResponse({ status: 200, description: 'List of matching user data.', type: [UserData] })
   @ApiResponse({ status: 400, description: 'Invalid query parameters.' })
   async search(@Query() query: SearchDto): Promise<UserData[]> {
@@ -43,7 +43,7 @@ export class UserDataController {
 
   @Patch('updateAll/:chatId')
   @ApiOperation({ summary: 'Update all user data by chat ID', description: 'Updates all user data entries associated with a specific chat ID.' })
-  @ApiParam({ name: 'chatId', description: 'Chat ID to update user data for', type: String, example: 'chat456' })
+  @ApiParam({ name: 'chatId', description: 'Chat ID to update user data for', type: String})
   @ApiBody({ type: UpdateUserDataDto, description: 'User data fields to update' })
   @ApiResponse({ status: 200, description: 'User data successfully updated.', type: Object })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -54,8 +54,8 @@ export class UserDataController {
 
   @Get(':profile/:chatId')
   @ApiOperation({ summary: 'Get user data by profile and chat ID', description: 'Retrieves a specific user data entry by profile and chat ID.' })
-  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' })
-  @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' })
+  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String})
+  @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String})
   @ApiResponse({ status: 200, description: 'User data found.', type: UserData })
   @ApiResponse({ status: 404, description: 'User data not found.' })
   async findOne(@Param('profile') profile: string, @Param('chatId') chatId: string): Promise<UserData> {
@@ -64,8 +64,8 @@ export class UserDataController {
 
   @Patch(':profile/:chatId')
   @ApiOperation({ summary: 'Update user data by profile and chat ID', description: 'Updates a specific user data entry identified by profile and chat ID.' })
-  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' })
-  @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' })
+  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String})
+  @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String})
   @ApiBody({ type: UpdateUserDataDto, description: 'User data fields to update' })
   @ApiResponse({ status: 200, description: 'User data successfully updated.', type: UserData })
   @ApiResponse({ status: 400, description: 'Invalid input data.' })
@@ -76,8 +76,8 @@ export class UserDataController {
 
   @Delete(':profile/:chatId')
   @ApiOperation({ summary: 'Delete user data by profile and chat ID', description: 'Deletes a specific user data entry identified by profile and chat ID.' })
-  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' })
-  @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' })
+  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String})
+  @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String})
   @ApiResponse({ status: 200, description: 'User data successfully deleted.', type: UserData })
   @ApiResponse({ status: 404, description: 'User data not found.' })
   async remove(@Param('profile') profile: string, @Param('chatId') chatId: string): Promise<UserData> {
@@ -88,7 +88,7 @@ export class UserDataController {
   @UseInterceptors(CloudflareCacheInterceptor)
   @NoCache()
   @ApiOperation({ summary: 'Clear count for user data', description: 'Clears the count for user data, optionally filtered by chat ID.' })
-  @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String, example: 'chat456' })
+  @ApiQuery({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String})
   @ApiResponse({ status: 200, description: 'Count cleared successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid chat ID.' })
   clearCount(@Query('chatId') chatId?: string) {
@@ -102,10 +102,10 @@ export class UserDataController {
     schema: {
       type: 'object',
       properties: {
-        query: { type: 'object', description: 'MongoDB query object', example: { profile: 'user123' } },
-        sort: { type: 'object', description: 'Sort criteria', example: { createdAt: -1 } },
-        limit: { type: 'number', description: 'Maximum number of results', example: 10 },
-        skip: { type: 'number', description: 'Number of results to skip', example: 0 }
+        query: { type: 'object', description: 'MongoDB query object'},
+        sort: { type: 'object', description: 'Sort criteria'},
+        limit: { type: 'number', description: 'Maximum number of results'},
+        skip: { type: 'number', description: 'Number of results to skip'}
       }
     }
   })

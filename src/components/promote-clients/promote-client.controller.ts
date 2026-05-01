@@ -10,8 +10,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+  ApiTags } from '@nestjs/swagger';
 import { PromoteClientService } from './promote-client.service';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import { SearchPromoteClientDto } from './dto/search-promote-client.dto';
@@ -23,8 +22,7 @@ import {
   DeactivationRequestDto,
   MarkUsedRequestDto,
   StatusUpdateRequestDto,
-  UsageStatisticsDto,
-} from '../shared/dto/client-swagger.dto';
+  UsageStatisticsDto } from '../shared/dto/client-swagger.dto';
 import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 
 @ApiTags('Promote Clients')
@@ -49,9 +47,11 @@ export class PromoteClientController {
   @Get('search')
   @ApiOperation({ summary: 'Search promote clients', description: 'Searches promote client records by supported fields.' })
   @ApiQuery({ name: 'mobile', required: false, description: 'Mobile number' })
-  @ApiQuery({ name: 'firstName', required: false, description: 'First name' })
-  @ApiQuery({ name: 'lastName', required: false, description: 'Last name' })
-  @ApiQuery({ name: 'username', required: false, description: 'Username' })
+  @ApiQuery({ name: 'tgId', required: false, description: 'Telegram account ID' })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Owning client ID' })
+  @ApiQuery({ name: 'status', required: false, description: 'Operational status (active/inactive)' })
+  @ApiQuery({ name: 'availableDate', required: false, description: 'Availability date' })
+  @ApiQuery({ name: 'channels', required: false, description: 'Channel count', type: Number })
   @ApiOkResponse({ type: [PromoteClient] })
   async search(@Query() query: SearchPromoteClientDto): Promise<PromoteClient[]> {
     return this.clientService.search(this.sanitizeQuery(query));
@@ -59,14 +59,14 @@ export class PromoteClientController {
 
   @Get('joinChannelsForPromoteClients')
   @ApiOperation({ summary: 'Prepare channel joins for promote clients', description: 'Builds the next join queue for eligible promote clients.' })
-  @ApiOkResponse({ schema: { type: 'string', example: 'Join channels initiated successfully' } })
+  @ApiOkResponse({ schema: { type: 'string'} })
   async joinChannelsforPromoteClients(): Promise<string> {
     return this.clientService.joinchannelForPromoteClients();
   }
 
   @Get('updateInfo')
   @ApiOperation({ summary: 'Refresh promote client metadata', description: 'Starts a background refresh of promote client metadata and channel counts.' })
-  @ApiAcceptedResponse({ schema: { type: 'string', example: 'initiated Checking' } })
+  @ApiAcceptedResponse({ schema: { type: 'string'} })
   async updateInfo(): Promise<string> {
     this.clientService.updateInfo();
     return 'initiated Checking';
@@ -74,7 +74,7 @@ export class PromoteClientController {
 
   @Get('checkPromoteClients')
   @ApiOperation({ summary: 'Run promote warmup processing', description: 'Starts the background warmup processor for eligible promote clients.' })
-  @ApiAcceptedResponse({ schema: { type: 'string', example: 'initiated Checking' } })
+  @ApiAcceptedResponse({ schema: { type: 'string'} })
   async checkpromoteClients(): Promise<string> {
     this.clientService.checkPromoteClients();
     return 'initiated Checking';
@@ -83,7 +83,7 @@ export class PromoteClientController {
   @Post('addNewUserstoPromoteClients')
   @ApiOperation({ summary: 'Bulk enroll users into promote warmup', description: 'Starts background enrollment of candidate users into the promote client pool.' })
   @ApiBody({ type: BulkEnrollPromoteClientsRequestDto })
-  @ApiAcceptedResponse({ schema: { type: 'string', example: 'initiated Checking' } })
+  @ApiAcceptedResponse({ schema: { type: 'string'} })
   @ApiBadRequestResponse({ description: 'goodIds, badIds, or clientsNeedingPromoteClients were not valid arrays.' })
   async addNewUserstoPromoteClients(@Body() body: BulkEnrollPromoteClientsRequestDto): Promise<string> {
     if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
@@ -117,7 +117,7 @@ export class PromoteClientController {
   @ApiOperation({ summary: 'Enroll a user as a promote client', description: 'Converts an existing user account into a warmup-managed promote client.' })
   @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
   @ApiQuery({ name: 'clientId', required: false, description: 'Client ID to assign promote client to (auto-assigned if omitted)', type: String })
-  @ApiOkResponse({ schema: { type: 'string', example: 'Client enrolled as promote successfully' } })
+  @ApiOkResponse({ schema: { type: 'string'} })
   @ApiBadRequestResponse({ description: 'The user was not found or is already an active main client.' })
   @ApiConflictResponse({ description: 'A promote client record already exists for this mobile.' })
   async setAsPromoteClient(@Param('mobile') mobile: string, @Query('clientId') clientId?: string) {
@@ -125,8 +125,8 @@ export class PromoteClientController {
   }
 
   @Get('mobile/:mobile')
-  @ApiOperation({ summary: 'Get user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Get promote client by mobile' })
+  @ApiParam({ name: 'mobile', description: 'Promote client mobile number', type: String })
   @ApiOkResponse({ type: PromoteClient })
   @ApiNotFoundResponse({ description: 'Promote client not found.' })
   async findOne(@Param('mobile') mobile: string): Promise<PromoteClient> {
@@ -134,8 +134,8 @@ export class PromoteClientController {
   }
 
   @Patch('mobile/:mobile')
-  @ApiOperation({ summary: 'Update user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Update promote client by mobile' })
+  @ApiParam({ name: 'mobile', description: 'Promote client mobile number', type: String })
   @ApiBody({ type: UpdatePromoteClientDto })
   @ApiOkResponse({ type: PromoteClient })
   @ApiNotFoundResponse({ description: 'Promote client not found.' })
@@ -144,17 +144,17 @@ export class PromoteClientController {
   }
 
   @Put('mobile/:mobile')
-  @ApiOperation({ summary: 'Update user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Create or update promote client by mobile', description: 'Creates the promote client if it does not exist, otherwise updates it. Full payload required for creation.' })
+  @ApiParam({ name: 'mobile', description: 'Promote client mobile number', type: String })
   @ApiBody({ type: UpdatePromoteClientDto })
   @ApiOkResponse({ type: PromoteClient })
-  async createdOrupdate(@Param('mobile') mobile: string, @Body() updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient> {
+  async createOrUpdate(@Param('mobile') mobile: string, @Body() updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient> {
     return this.clientService.createOrUpdate(mobile, updateClientDto);
   }
 
   @Delete('mobile/:mobile')
-  @ApiOperation({ summary: 'Delete user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Delete promote client by mobile' })
+  @ApiParam({ name: 'mobile', description: 'Promote client mobile number', type: String })
   @ApiOkResponse({ schema: { type: 'null' } })
   @ApiNotFoundResponse({ description: 'Promote client not found.' })
   async remove(@Param('mobile') mobile: string): Promise<void> {
@@ -163,7 +163,7 @@ export class PromoteClientController {
 
   @Post('query')
   @ApiOperation({ summary: 'Execute a raw promote client query', description: 'Executes a direct MongoDB-style filter against the promote client collection.' })
-  @ApiBody({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } })
+  @ApiBody({ schema: { type: 'object', additionalProperties: true} })
   @ApiOkResponse({ type: [PromoteClient] })
   async executeQuery(@Body() query: object): Promise<any> {
     return this.clientService.executeQuery(query);
@@ -250,8 +250,7 @@ export class PromoteClientController {
   async resetFailedAttempts(@Param('mobile') mobile: string): Promise<{ message: string }> {
     await this.clientService.update(mobile, {
       failedUpdateAttempts: 0,
-      lastUpdateFailure: null,
-    });
+      lastUpdateFailure: null });
     return { message: `Reset failed attempts for ${mobile}` };
   }
 

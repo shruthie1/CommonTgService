@@ -4,40 +4,40 @@ import { Transform, Type } from 'class-transformer';
 import { MediaType } from './media-operations.dto';
 
 export class MediaItemDto {
-    @ApiProperty({ description: 'Message ID', example: 12345 })
+    @ApiProperty({ description: 'Message ID'})
     messageId: number;
 
-    @ApiProperty({ description: 'Chat ID', example: 'me' })
+    @ApiProperty({ description: 'Chat ID'})
     chatId: string;
 
-    @ApiProperty({ description: 'Media type', enum: MediaType, example: 'photo' })
+    @ApiProperty({ description: 'Media type', enum: MediaType})
     type: MediaType;
 
-    @ApiProperty({ description: 'Message date (Unix timestamp)', example: 1704067200 })
+    @ApiProperty({ description: 'Message date (Unix timestamp)'})
     date: number;
 
-    @ApiPropertyOptional({ description: 'Caption text', example: 'Beautiful sunset' })
+    @ApiPropertyOptional({ description: 'Caption text'})
     caption?: string;
 
-    @ApiPropertyOptional({ description: 'File size in bytes', example: 1024000 })
+    @ApiPropertyOptional({ description: 'File size in bytes'})
     fileSize?: number;
 
-    @ApiPropertyOptional({ description: 'MIME type', example: 'image/jpeg' })
+    @ApiPropertyOptional({ description: 'MIME type'})
     mimeType?: string;
 
-    @ApiPropertyOptional({ description: 'Filename', example: 'photo.jpg' })
+    @ApiPropertyOptional({ description: 'Filename'})
     filename?: string;
 
-    @ApiPropertyOptional({ description: 'Thumbnail (base64 encoded)', example: 'data:image/jpeg;base64,...' })
+    @ApiPropertyOptional({ description: 'Thumbnail (base64 encoded)'})
     thumbnail?: string;
 
-    @ApiPropertyOptional({ description: 'Width in pixels (for images/videos)', example: 1920 })
+    @ApiPropertyOptional({ description: 'Width in pixels (for images/videos)'})
     width?: number;
 
-    @ApiPropertyOptional({ description: 'Height in pixels (for images/videos)', example: 1080 })
+    @ApiPropertyOptional({ description: 'Height in pixels (for images/videos)'})
     height?: number;
 
-    @ApiPropertyOptional({ description: 'Duration in seconds (for video/voice)', example: 120 })
+    @ApiPropertyOptional({ description: 'Duration in seconds (for video/voice)'})
     duration?: number;
 
     @ApiPropertyOptional({ description: 'Additional media details' })
@@ -45,53 +45,53 @@ export class MediaItemDto {
 }
 
 export class PaginationDto {
-    @ApiProperty({ description: 'Current page number (1-indexed)', example: 1 })
+    @ApiProperty({ description: 'Current page number (1-indexed)'})
     page: number;
 
-    @ApiProperty({ description: 'Items per page', example: 50 })
+    @ApiProperty({ description: 'Items per page'})
     limit: number;
 
-    @ApiProperty({ description: 'Total number of items in current page', example: 50 })
+    @ApiProperty({ description: 'Total number of items in current page'})
     total: number;
 
-    @ApiProperty({ description: 'Total number of pages (if known, -1 for unknown)', example: 5 })
+    @ApiProperty({ description: 'Total number of pages (if known, -1 for unknown)'})
     totalPages: number;
 
-    @ApiProperty({ description: 'Whether there are more items available', example: true })
+    @ApiProperty({ description: 'Whether there are more items available'})
     hasMore: boolean;
 
-    @ApiPropertyOptional({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)', example: 12345 })
+    @ApiPropertyOptional({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)'})
     nextMaxId?: number;
 
-    @ApiPropertyOptional({ description: 'Message ID to use as maxId for previous page', example: 12000 })
+    @ApiPropertyOptional({ description: 'Message ID to use as maxId for previous page'})
     prevMaxId?: number;
 
-    @ApiPropertyOptional({ description: 'First message ID in current page', example: 12345 })
+    @ApiPropertyOptional({ description: 'First message ID in current page'})
     firstMessageId?: number;
 
-    @ApiPropertyOptional({ description: 'Last message ID in current page', example: 12300 })
+    @ApiPropertyOptional({ description: 'Last message ID in current page'})
     lastMessageId?: number;
 }
 
 export class MediaFiltersDto {
-    @ApiProperty({ description: 'Chat ID', example: 'me' })
+    @ApiProperty({ description: 'Chat ID'})
     chatId: string;
 
-    @ApiPropertyOptional({ description: 'Media types filter', type: [String], enum: MediaType, example: ['photo', 'video'] })
+    @ApiPropertyOptional({ description: 'Media types filter', type: [String], enum: MediaType})
     types?: MediaType[];
 
-    @ApiPropertyOptional({ description: 'Start date filter (ISO 8601)', example: '2024-01-01' })
+    @ApiPropertyOptional({ description: 'Start date filter (ISO 8601)'})
     startDate?: string;
 
-    @ApiPropertyOptional({ description: 'End date filter (ISO 8601)', example: '2024-12-31' })
+    @ApiPropertyOptional({ description: 'End date filter (ISO 8601)'})
     endDate?: string;
 }
 
 export class MediaGroupDto {
-    @ApiProperty({ description: 'Media type', enum: MediaType, example: 'photo' })
+    @ApiProperty({ description: 'Media type', enum: MediaType})
     type: MediaType;
 
-    @ApiProperty({ description: 'Number of items of this type', example: 25 })
+    @ApiProperty({ description: 'Number of items of this type'})
     count: number;
 
     @ApiProperty({ description: 'Media items of this type', type: [MediaItemDto] })
@@ -116,11 +116,11 @@ export class PaginatedMediaResponseDto {
 }
 
 export class MediaMetadataQueryDto {
-    @ApiProperty({ description: 'Chat ID or username', example: 'me' })
+    @ApiProperty({ description: 'Chat ID or username'})
     @IsString()
     chatId: string;
 
-    @ApiPropertyOptional({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: MediaType, isArray: true, example: ['photo', 'video'] })
+    @ApiPropertyOptional({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: MediaType, isArray: true})
     @IsOptional()
     @IsArray()
     @IsEnum(MediaType, { each: true })
@@ -132,17 +132,17 @@ export class MediaMetadataQueryDto {
     })
     types?: MediaType[];
 
-    @ApiPropertyOptional({ description: 'Start date (ISO 8601)', example: '2024-01-01' })
+    @ApiPropertyOptional({ description: 'Start date (ISO 8601)'})
     @IsOptional()
     @IsString()
     startDate?: string;
 
-    @ApiPropertyOptional({ description: 'End date (ISO 8601)', example: '2024-12-31' })
+    @ApiPropertyOptional({ description: 'End date (ISO 8601)'})
     @IsOptional()
     @IsString()
     endDate?: string;
 
-    @ApiPropertyOptional({ description: 'Maximum number of items (1-1000)', example: 50, minimum: 1, maximum: 1000 })
+    @ApiPropertyOptional({ description: 'Maximum number of items (1-1000)', minimum: 1, maximum: 1000 })
     @IsOptional()
     @Type(() => Number)
     @IsNumber()
@@ -150,13 +150,13 @@ export class MediaMetadataQueryDto {
     @Max(1000)
     limit?: number;
 
-    @ApiPropertyOptional({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)', example: 12345 })
+    @ApiPropertyOptional({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)'})
     @IsOptional()
     @Type(() => Number)
     @IsNumber()
     maxId?: number;
 
-    @ApiPropertyOptional({ description: 'Minimum message ID to include', example: 1000 })
+    @ApiPropertyOptional({ description: 'Minimum message ID to include'})
     @IsOptional()
     @Type(() => Number)
     @IsNumber()

@@ -1,10 +1,20 @@
 import { Controller, Get, Post, Body, Param, Patch, Query, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './schemas/user.schema';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiBadRequestResponse } from '@nestjs/swagger';
 import { SearchUserDto } from './dto/search-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ExecuteUserQueryDto } from './dto/execute-user-query.dto';
 
 @ApiTags('Telegram Users')
 @Controller('user')
@@ -13,12 +23,26 @@ export class UsersController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new user' })
+  @ApiBody({ type: CreateUserDto })
+  @ApiCreatedResponse({ type: User })
   async create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 
   @Get('/search')
   @ApiOperation({ summary: 'Search users' })
+  @ApiQuery({ name: 'tgId', required: false, description: 'Telegram ID' })
+  @ApiQuery({ name: 'mobile', required: false, description: 'Mobile number' })
+  @ApiQuery({ name: 'twoFA', required: false, description: '2FA status', type: Boolean })
+  @ApiQuery({ name: 'expired', required: false, description: 'Expiration status', type: Boolean })
+  @ApiQuery({ name: 'session', required: false, description: 'Session string' })
+  @ApiQuery({ name: 'firstName', required: false, description: 'First name (partial match)' })
+  @ApiQuery({ name: 'lastName', required: false, description: 'Last name' })
+  @ApiQuery({ name: 'username', required: false, description: 'Telegram username' })
+  @ApiQuery({ name: 'gender', required: false, description: 'Gender' })
+  @ApiQuery({ name: 'demoGiven', required: false, description: 'Demo given status', type: Boolean })
+  @ApiQuery({ name: 'starred', required: false, description: 'Starred status', type: Boolean })
+  @ApiOkResponse({ type: [User] })
   async search(@Query() queryParams: SearchUserDto): Promise<User[]> {
     return this.usersService.search(queryParams);
   }
@@ -30,6 +54,7 @@ export class UsersController {
   @ApiQuery({ name: 'minScore', required: false, type: Number })
   @ApiQuery({ name: 'gender', required: false, type: String })
   @ApiQuery({ name: 'excludeTwoFA', required: false, type: Boolean })
+  @ApiOkResponse({ schema: { type: 'object', properties: { users: { type: 'array' }, total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' }, totalPages: { type: 'number' } } } })
   async topRelationships(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -42,8 +67,7 @@ export class UsersController {
       limit: limit ? parseInt(limit, 10) : undefined,
       minScore: minScore ? parseFloat(minScore) : undefined,
       gender,
-      excludeTwoFA: excludeTwoFA === 'true',
-    });
+      excludeTwoFA: excludeTwoFA === 'true' });
   }
 
   @Get('top-interacted')
@@ -58,6 +82,7 @@ export class UsersController {
   @ApiQuery({ name: 'excludeAudited', required: false, type: Boolean })
   @ApiQuery({ name: 'gender', required: false, type: String })
   @ApiQuery({ name: 'starred', required: false, type: Boolean })
+  @ApiOkResponse({ schema: { type: 'object', properties: { users: { type: 'array' }, total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' }, totalPages: { type: 'number' } } } })
   async getTopInteractionUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -109,8 +134,7 @@ export class UsersController {
       excludeTwoFA: excludeTwoFABool,
       excludeAudited: excludeAuditedBool,
       gender,
-      starred: starred === 'true' ? true : undefined,
-    });
+      starred: starred === 'true' ? true : undefined });
   }
 
   @Get()
@@ -119,6 +143,7 @@ export class UsersController {
   @ApiQuery({ name: 'skip', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Field to sort by (e.g. msgs, totalChats, contacts, calls.totalCalls, score, lastActive, otherPhotoCount, otherVideoCount, relationships.score)' })
   @ApiQuery({ name: 'sortOrder', required: false, type: String, description: 'Sort order: asc or desc (default: desc)' })
+  @ApiOkResponse({ type: [User] })
   async findAll(
     @Query('limit') limit?: string,
     @Query('skip') skip?: string,
@@ -141,7 +166,9 @@ export class UsersController {
 
   @Get(':mobile/relationships')
   @ApiOperation({ summary: 'Get relationship details for a specific user' })
-  @ApiParam({ name: 'mobile' })
+  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOkResponse({ type: User })
+  @ApiNotFoundResponse({ description: 'User not found.' })
   async getUserRelationships(@Param('mobile') mobile: string) {
     return this.usersService.getUserRelationships(mobile);
   }
@@ -152,6 +179,8 @@ export class UsersController {
   @ApiQuery({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'skip', required: false, type: Number })
+  @ApiOkResponse({ type: [User] })
+  @ApiBadRequestResponse({ description: 'Unknown computed field.' })
   async aggregateSort(
     @Query('field') field: string,
     @Query('sortOrder') sortOrder?: string,
@@ -167,7 +196,9 @@ export class UsersController {
 
   @Post('recompute-score/:mobile')
   @ApiOperation({ summary: 'Recompute relationship score (live Telegram connection)' })
-  @ApiParam({ name: 'mobile' })
+  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOkResponse({ type: User })
+  @ApiNotFoundResponse({ description: 'User not found.' })
   async recomputeScore(@Param('mobile') mobile: string) {
     await this.usersService.computeRelationshipScore(mobile);
     return this.usersService.getUserRelationships(mobile);
@@ -175,35 +206,46 @@ export class UsersController {
 
   @Get(':tgId')
   @ApiOperation({ summary: 'Get user by tgId' })
-  @ApiParam({ name: 'tgId' })
+  @ApiParam({ name: 'tgId', description: 'Telegram user ID', type: String })
+  @ApiOkResponse({ type: User })
+  @ApiNotFoundResponse({ description: 'User not found.' })
   async findOne(@Param('tgId') tgId: string) {
     return this.usersService.findOne(tgId);
   }
 
   @Patch(':tgId')
   @ApiOperation({ summary: 'Update user by tgId' })
-  @ApiParam({ name: 'tgId' })
+  @ApiParam({ name: 'tgId', description: 'Telegram user ID', type: String })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiOkResponse({ schema: { type: 'number', description: 'Number of modified documents' } })
+  @ApiNotFoundResponse({ description: 'User not found.' })
   async update(@Param('tgId') tgId: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(tgId, updateUserDto);
   }
 
   @Patch(':mobile/star')
   @ApiOperation({ summary: 'Toggle starred status for a user' })
-  @ApiParam({ name: 'mobile' })
+  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOkResponse({ schema: { type: 'object', properties: { mobile: { type: 'string' }, starred: { type: 'boolean' } } } })
+  @ApiNotFoundResponse({ description: 'User not found.' })
   async toggleStar(@Param('mobile') mobile: string) {
     return this.usersService.toggleStar(mobile);
   }
 
   @Patch(':tgId/expire')
   @ApiOperation({ summary: 'Mark user as expired (soft delete)' })
-  @ApiParam({ name: 'tgId' })
+  @ApiParam({ name: 'tgId', description: 'Telegram user ID', type: String })
+  @ApiOkResponse({ description: 'User marked as expired.' })
+  @ApiNotFoundResponse({ description: 'User not found.' })
   async expire(@Param('tgId') tgId: string) {
     return this.usersService.delete(tgId);
   }
 
   @Post('query')
   @ApiOperation({ summary: 'Execute custom MongoDB query' })
-  async executeQuery(@Body() requestBody: any): Promise<any> {
+  @ApiBody({ type: ExecuteUserQueryDto })
+  @ApiOkResponse({ type: [User] })
+  async executeQuery(@Body() requestBody: ExecuteUserQueryDto): Promise<any> {
     const { query, sort, limit, skip } = requestBody;
     return this.usersService.executeQuery(query, sort, limit, skip);
   }

@@ -387,7 +387,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   private processTextSearchFields(filter: ClientSearchFilter | ClientMongoQuery): ClientMongoQuery {
     const nextFilter: ClientMongoQuery = { ...(filter as ClientMongoQuery) };
-    const textFields = ['name'];
+    const textFields = ['name', 'mobile', 'clientId', 'username'];
     textFields.forEach((field) => {
       const value = nextFilter[field];
       if (typeof value === 'string' && value) {

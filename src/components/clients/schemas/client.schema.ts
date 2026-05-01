@@ -10,9 +10,7 @@ export type ClientDocument = Client & Document;
         virtuals: true,
         transform: (doc, ret) => {
             delete ret._id;
-        },
-    },
-})
+        } } })
 export class Client {
     @ApiProperty({ description: 'Channel link' })
     @Prop({ required: true })

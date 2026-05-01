@@ -28,9 +28,9 @@ export class TgSignupController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
-                message: { type: 'string', example: 'Invalid phone number format' },
-                error: { type: 'string', example: 'Bad Request' }
+                statusCode: { type: 'number'},
+                message: { type: 'string'},
+                error: { type: 'string'}
             }
         }
     })

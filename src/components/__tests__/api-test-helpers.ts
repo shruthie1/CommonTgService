@@ -10,6 +10,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BufferClient, BufferClientSchema } from '../buffer-clients/schemas/buffer-client.schema';
 import { PromoteClient, PromoteClientSchema } from '../promote-clients/schemas/promote-client.schema';
 import { Client, ClientSchema } from '../clients/schemas/client.schema';
+import { User, UserDocument, UserSchema } from '../users/schemas/user.schema';
 
 // ─── MongoDB memory server lifecycle ────────────────────────────────────────
 
@@ -46,6 +47,11 @@ export function createPromoteClientModel(connection: Connection): Model<PromoteC
 
 export function createClientModel(connection: Connection): Model<Client> {
     const model = connection.model<Client>('ClientApiTest', ClientSchema);
+    return model;
+}
+
+export function createUserModel(connection: Connection): Model<UserDocument> {
+    const model = connection.model<UserDocument>('UserApiTest', UserSchema);
     return model;
 }
 
@@ -145,6 +151,36 @@ export function makeClientData(overrides: Partial<Client> = {}): any {
         product: 'test-product',
         qrId: `qr-${counter}`,
         gpayId: `gpay-${counter}`,
+        ...overrides,
+    };
+}
+
+export function makeUserData(overrides: Partial<User> = {}): any {
+    counter++;
+    return {
+        mobile: `+155530${String(counter).padStart(5, '0')}`,
+        session: `session-user-${counter}`,
+        tgId: `tg-user-${counter}`,
+        firstName: `User${counter}`,
+        lastName: `Last${counter}`,
+        username: `user_${counter}`,
+        gender: null,
+        twoFA: false,
+        expired: false,
+        password: null,
+        channels: 10,
+        personalChats: 5,
+        totalChats: 15,
+        contacts: 3,
+        msgs: 50,
+        photoCount: 2,
+        videoCount: 1,
+        movieCount: 0,
+        ownPhotoCount: 1,
+        otherPhotoCount: 1,
+        ownVideoCount: 0,
+        otherVideoCount: 1,
+        lastActive: '2026-04-01',
         ...overrides,
     };
 }

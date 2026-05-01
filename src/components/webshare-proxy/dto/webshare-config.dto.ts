@@ -1,21 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class WebshareStatusDto {
-    @ApiProperty({ example: true })
+    @ApiProperty({})
     configured: boolean;
 
-    @ApiProperty({ example: true })
+    @ApiProperty({})
     apiKeyValid: boolean;
 
-    @ApiProperty({ example: 100 })
+    @ApiProperty({})
     totalProxiesInWebshare: number;
 
-    @ApiProperty({ example: 95 })
+    @ApiProperty({})
     totalProxiesInDb: number;
 
-    @ApiProperty({ example: '2026-03-29T10:00:00Z', required: false })
+    @ApiProperty({ required: false })
     lastSyncAt?: string;
 
-    @ApiProperty({ example: null, required: false })
+    @ApiProperty({ required: false })
     lastSyncError?: string;
 }

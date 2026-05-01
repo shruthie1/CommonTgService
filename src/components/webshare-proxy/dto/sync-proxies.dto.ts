@@ -4,31 +4,29 @@ import { IsOptional, IsBoolean } from 'class-validator';
 export class SyncProxiesDto {
     @ApiProperty({
         description: 'Whether to remove proxies from DB that are no longer in the Webshare list',
-        example: true,
         required: false,
-        default: true,
-    })
+        default: true })
     @IsOptional()
     @IsBoolean()
     removeStale?: boolean;
 }
 
 export class SyncResultDto {
-    @ApiProperty({ example: 100 })
+    @ApiProperty({})
     totalFetched: number;
 
-    @ApiProperty({ example: 80 })
+    @ApiProperty({})
     created: number;
 
-    @ApiProperty({ example: 15 })
+    @ApiProperty({})
     updated: number;
 
-    @ApiProperty({ example: 5 })
+    @ApiProperty({})
     removed: number;
 
-    @ApiProperty({ example: [] })
+    @ApiProperty({})
     errors: string[];
 
-    @ApiProperty({ example: 2345 })
+    @ApiProperty({})
     durationMs: number;
 }

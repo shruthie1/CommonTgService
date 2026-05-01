@@ -14,9 +14,7 @@ export type ActiveChannelDocument = ActiveChannel & Document;
     virtuals: true,
     transform: (doc, ret) => {
       delete ret._id;
-    },
-  },
-})
+    } } })
 export class ActiveChannel {
   @ApiProperty({ required: true })
   @Prop({ required: true, unique: true })

@@ -12,7 +12,6 @@ export enum TransactionStatus {
 export class CreateTransactionDto {
   @ApiProperty({ 
     description: 'Unique transaction ID (UTR)',
-    example: 'TXN123456789',
     minLength: 8 
   })
   @IsString()
@@ -23,7 +22,6 @@ export class CreateTransactionDto {
 
   @ApiProperty({ 
     description: 'Amount involved in the transaction',
-    example: 100.50,
     minimum: 0 
   })
   @IsNumber()
@@ -32,24 +30,19 @@ export class CreateTransactionDto {
   amount: number;
 
   @ApiProperty({ 
-    description: 'Issue type reported by the user',
-    example: 'payment_failed'
-  })
+    description: 'Issue type reported by the user'})
   @IsString()
   @IsNotEmpty()
   issue: string;
 
   @ApiProperty({ 
-    description: 'Description of issue reported by the user',
-    example: 'Payment failed due to network error'
-  })
+    description: 'Description of issue reported by the user'})
   @IsString()
   @IsNotEmpty()
   description: string;
 
   @ApiPropertyOptional({
     description: 'Refund method selected by the user',
-    example: 'bank_transfer',
     required: false
   })
   @IsString()
@@ -58,7 +51,6 @@ export class CreateTransactionDto {
 
   @ApiPropertyOptional({ 
     description: 'User profile ID',
-    example: 'user123',
     required: false 
   })
   @IsString()
@@ -67,7 +59,6 @@ export class CreateTransactionDto {
 
   @ApiPropertyOptional({ 
     description: 'User chat ID',
-    example: 'chat123',
     required: false
   })
   @IsString()
@@ -76,7 +67,6 @@ export class CreateTransactionDto {
 
   @ApiPropertyOptional({ 
     description: 'IP address of the user',
-    example: '192.168.1.1',
     required: false
   })
   @IsString()

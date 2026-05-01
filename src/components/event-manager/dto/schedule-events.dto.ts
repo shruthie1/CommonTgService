@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ScheduleEventsDto {
-  @ApiProperty({ example: '123456789' })
+  @ApiProperty({})
   chatId: string;
 
-  @ApiProperty({ example: 'shruthi1' })
+  @ApiProperty({})
   profile: string;
 
-  @ApiProperty({ example: '1', enum: ['1', '2', '3'], required: false })
+  @ApiProperty({ enum: ['1', '2', '3'], required: false })
   type?: string;
 }

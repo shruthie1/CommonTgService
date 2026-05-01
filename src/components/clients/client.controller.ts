@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Delete, Query, Patch, UseInterceptors } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiParam, ApiQuery, ApiCreatedResponse, ApiOkResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { Client } from './schemas/client.schema';
@@ -22,14 +22,14 @@ export class ClientController {
   @Post()
   @ApiOperation({ summary: 'Create a client' })
   @ApiBody({ type: CreateClientDto })
-  @ApiResponse({ type: Client })
+  @ApiCreatedResponse({ type: Client })
   async create(@Body() createClientDto: CreateClientDto): Promise<Client> {
     return await this.clientService.create(createClientDto);
   }
 
   @Get('search')
   @ApiOperation({ summary: 'Search clients' })
-  @ApiResponse({ type: [Client] })
+  @ApiOkResponse({ type: [Client] })
   async search(@Query() query: SearchClientDto): Promise<Client[]> {
     return await this.clientService.search(this.sanitizeQuery(query));
   }
@@ -46,7 +46,7 @@ export class ClientController {
   @UseInterceptors(CloudflareCacheInterceptor)
   @CloudflareCache(3600, 60)
   @ApiOperation({ summary: 'Get all clients (sensitive fields masked)' })
-  @ApiResponse({ type: [Client] })
+  @ApiOkResponse({ type: [Client] })
   async findAllMasked() {
     return await this.clientService.findAllMasked();
   }
@@ -56,7 +56,8 @@ export class ClientController {
   @CloudflareCache(3600, 60)
   @ApiOperation({ summary: 'Get client by ID (sensitive fields masked)' })
   @ApiParam({ name: 'clientId' })
-  @ApiResponse({ type: Client })
+  @ApiOkResponse({ type: Client })
+  @ApiNotFoundResponse({ description: 'Client not found.' })
   async findOneMasked(@Param('clientId') clientId: string) {
     return await this.clientService.findOneMasked(clientId);
   }
@@ -65,7 +66,7 @@ export class ClientController {
   @UseInterceptors(CloudflareCacheInterceptor)
   @CloudflareCache(3600, 60)
   @ApiOperation({ summary: 'Get all clients' })
-  @ApiResponse({ type: [Client] })
+  @ApiOkResponse({ type: [Client] })
   async findAll() {
     return await this.clientService.findAll();
   }
@@ -91,7 +92,8 @@ export class ClientController {
   @Get(':clientId')
   @ApiOperation({ summary: 'Get client by ID' })
   @ApiParam({ name: 'clientId' })
-  @ApiResponse({ type: Client })
+  @ApiOkResponse({ type: Client })
+  @ApiNotFoundResponse({ description: 'Client not found.' })
   async findOne(@Param('clientId') clientId: string): Promise<Client> {
     return await this.clientService.findOne(clientId);
   }
@@ -100,7 +102,8 @@ export class ClientController {
   @ApiOperation({ summary: 'Update client' })
   @ApiParam({ name: 'clientId' })
   @ApiBody({ type: UpdateClientDto })
-  @ApiResponse({ type: Client })
+  @ApiOkResponse({ type: Client })
+  @ApiNotFoundResponse({ description: 'Client not found.' })
   async update(@Param('clientId') clientId: string, @Body() updateClientDto: UpdateClientDto): Promise<Client> {
     return await this.clientService.update(clientId, updateClientDto);
   }
@@ -108,7 +111,8 @@ export class ClientController {
   @Delete(':clientId')
   @ApiOperation({ summary: 'Delete client' })
   @ApiParam({ name: 'clientId' })
-  @ApiResponse({ type: Client })
+  @ApiOkResponse({ type: Client })
+  @ApiNotFoundResponse({ description: 'Client not found.' })
   async remove(@Param('clientId') clientId: string): Promise<Client> {
     return await this.clientService.remove(clientId);
   }
@@ -116,7 +120,7 @@ export class ClientController {
   @Post('query')
   @ApiOperation({ summary: 'Execute custom MongoDB query' })
   @ApiBody({ type: ExecuteClientQueryDto })
-  @ApiResponse({ type: [Client] })
+  @ApiOkResponse({ type: [Client] })
   async executeQuery(@Body() requestBody: ExecuteClientQueryDto): Promise<Client[]> {
     const { query, sort, limit, skip } = requestBody;
     return await this.clientService.executeQuery(query, sort, limit, skip);

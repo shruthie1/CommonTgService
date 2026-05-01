@@ -6,8 +6,7 @@ export type EventDocument = Event & Document;
 @Schema({
   collection: 'events',
   versionKey: false,
-  timestamps: false,
-})
+  timestamps: false })
 export class Event {
   @Prop({ required: true })
   chatId: string;

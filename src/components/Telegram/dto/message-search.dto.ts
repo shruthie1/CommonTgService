@@ -31,8 +31,7 @@ export enum MessageMediaType {
   ANIMATION = 'animation',
   CONTACT = 'contact',
   MUSIC = 'music',
-  CHAT_PHOTO = 'chatPhoto',
-}
+  CHAT_PHOTO = 'chatPhoto' }
 
 /**
  * Enum for search scope
@@ -47,15 +46,13 @@ export enum SearchScope {
  */
 export class SearchMessagesDto {
   @ApiPropertyOptional({
-    description: 'Chat ID to search in (required for chat-specific search)',
-  })
+    description: 'Chat ID to search in (required for chat-specific search)' })
   @IsString()
   @IsOptional()
   chatId?: string;
 
   @ApiPropertyOptional({
-    description: 'Search query string',
-  })
+    description: 'Search query string' })
   @IsString()
   @IsOptional()
   query?: string;
@@ -64,9 +61,7 @@ export class SearchMessagesDto {
     description: 'Filter by multiple types options',
     isArray: true,
     enum: MessageMediaType,
-    example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
-    default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
-  })
+    default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO] })
   @IsOptional()
   @IsArray()
   @IsEnum(MessageMediaType, { each: true })
@@ -74,16 +69,14 @@ export class SearchMessagesDto {
   types?: MessageMediaType[];
 
   @ApiPropertyOptional({
-    description: 'Minimum message ID for filtering',
-  })
+    description: 'Minimum message ID for filtering' })
   @IsInt()
   @Min(0)
   @IsOptional()
   minId?: number;
 
   @ApiPropertyOptional({
-    description: 'Maximum message ID for filtering',
-  })
+    description: 'Maximum message ID for filtering' })
   @IsInt()
   @Min(0)
   @IsOptional()
@@ -92,8 +85,7 @@ export class SearchMessagesDto {
   @ApiPropertyOptional({
     description: 'Maximum number of messages to retrieve',
     minimum: 1,
-    maximum: 500,
-  })
+    maximum: 500 })
   @IsInt()
   @Min(1)
   @Max(500)
@@ -101,32 +93,28 @@ export class SearchMessagesDto {
   limit?: number;
 
   @ApiPropertyOptional({
-    description: 'Offset ID for pagination',
-  })
+    description: 'Offset ID for pagination' })
   @IsInt()
   @Min(0)
   @IsOptional()
   offsetId?: number;
 
   @ApiPropertyOptional({
-    description: 'Offset date as Unix timestamp',
-  })
+    description: 'Offset date as Unix timestamp' })
   @IsInt()
   @Min(0)
   @IsOptional()
   offsetDate?: number;
 
   @ApiPropertyOptional({
-    description: 'Start date for filtering messages by date range',
-  })
+    description: 'Start date for filtering messages by date range' })
   @Type(() => Date)
   @IsDate()
   @IsOptional()
   startDate?: Date;
 
   @ApiPropertyOptional({
-    description: 'End date for filtering messages by date range',
-  })
+    description: 'End date for filtering messages by date range' })
   @Type(() => Date)
   @IsDate()
   @IsOptional()
@@ -139,17 +127,13 @@ export class SearchMessagesDto {
 export class MessageTypeResult {
   @ApiProperty({
     description: 'Array of message IDs matching the search criteria',
-    type: [Number],
-    example: [1001, 1005, 1010]
-  })
+    type: [Number]})
   @IsArray()
   @IsInt({ each: true })
   messages: number[];
 
   @ApiProperty({
-    description: 'Total count of messages matching the search criteria',
-    example: 3
-  })
+    description: 'Total count of messages matching the search criteria'})
   @IsInt()
   @Min(0)
   total: number;
@@ -165,10 +149,7 @@ export class MessageTypeResult {
         date: { type: 'string', description: 'ISO 8601 date' },
         chatId: { type: 'string' },
         senderName: { type: 'string', nullable: true },
-        mediaType: { type: 'string', nullable: true },
-      },
-    },
-  })
+        mediaType: { type: 'string', nullable: true } } } })
   @IsOptional()
   data?: Array<{ id: number; text: string; date: string; chatId: string; senderName: string | null; mediaType: string | null }>
 }

@@ -10,8 +10,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+  ApiTags } from '@nestjs/swagger';
 import { BufferClientService } from './buffer-client.service';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { SearchBufferClientDto } from './dto/search-buffer-client.dto';
@@ -22,8 +21,7 @@ import {
   BulkEnrollBufferClientsRequestDto,
   DeactivationRequestDto,
   MarkUsedRequestDto,
-  StatusUpdateRequestDto,
-} from '../shared/dto/client-swagger.dto';
+  StatusUpdateRequestDto } from '../shared/dto/client-swagger.dto';
 import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 
 @ApiTags('Buffer Clients')
@@ -48,12 +46,10 @@ export class BufferClientController {
   @Get('search')
   @ApiOperation({ summary: 'Search buffer clients', description: 'Searches buffer client records by indexed and operational fields.' })
   @ApiQuery({ name: 'mobile', required: false, description: 'Mobile number' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Client ID' })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Owning client ID' })
+  @ApiQuery({ name: 'tgId', required: false, description: 'Telegram account ID' })
+  @ApiQuery({ name: 'status', required: false, description: 'Operational status (active/inactive)' })
   @ApiQuery({ name: 'username', required: false, description: 'Username' })
-  @ApiQuery({ name: 'name', required: false, description: 'Name' })
-  @ApiQuery({ name: 'channelLink', required: false, description: 'Channel link' })
-  @ApiQuery({ name: 'repl', required: false, description: 'Repl link' })
-  @ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status' })
   @ApiOkResponse({ type: [BufferClient] })
   async search(@Query() query: SearchBufferClientDto): Promise<BufferClient[]> {
     return this.clientService.search(this.sanitizeQuery(query));
@@ -61,7 +57,7 @@ export class BufferClientController {
 
   @Get('updateInfo')
   @ApiOperation({ summary: 'Refresh buffer client metadata', description: 'Starts a background refresh of buffer client metadata and channel counts.' })
-  @ApiAcceptedResponse({ schema: { type: 'string', example: 'initiated Checking' } })
+  @ApiAcceptedResponse({ schema: { type: 'string'} })
   async updateInfo(): Promise<string> {
     // Fire-and-forget pattern for long-running operations
     this.clientService.updateInfo();
@@ -71,14 +67,14 @@ export class BufferClientController {
   @Get('joinChannelsForBufferClients')
   @ApiOperation({ summary: 'Prepare channel joins for buffer clients', description: 'Builds the next join queue for eligible buffer clients.' })
   @ApiQuery({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String })
-  @ApiOkResponse({ schema: { type: 'string', example: 'Join channels initiated successfully' } })
+  @ApiOkResponse({ schema: { type: 'string'} })
   async joinChannelsforBufferClients(@Query('clientId') clientId?: string): Promise<string> {
     return this.clientService.joinchannelForBufferClients(true, clientId);
   }
 
   @Get('checkBufferClients')
   @ApiOperation({ summary: 'Run buffer warmup processing', description: 'Starts the background warmup processor for eligible buffer clients.' })
-  @ApiAcceptedResponse({ schema: { type: 'string', example: 'initiated Checking' } })
+  @ApiAcceptedResponse({ schema: { type: 'string'} })
   async checkbufferClients(): Promise<string> {
     this.clientService.checkBufferClients();
     return 'initiated Checking';
@@ -101,7 +97,7 @@ export class BufferClientController {
   @Post('addNewUserstoBufferClients')
   @ApiOperation({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' })
   @ApiBody({ type: BulkEnrollBufferClientsRequestDto })
-  @ApiAcceptedResponse({ schema: { type: 'string', example: 'initiated Checking' } })
+  @ApiAcceptedResponse({ schema: { type: 'string'} })
   @ApiBadRequestResponse({ description: 'goodIds, badIds, or clientsNeedingBufferClients were not valid arrays.' })
   async addNewUserstoBufferClients(@Body() body: BulkEnrollBufferClientsRequestDto): Promise<string> {
     if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
@@ -135,7 +131,7 @@ export class BufferClientController {
   @ApiOperation({ summary: 'Enroll a user as a buffer client', description: 'Converts an existing user account into a warmup-managed buffer client.' })
   @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
   @ApiParam({ name: 'clientId', description: 'Client ID to assign buffer client to', type: String })
-  @ApiOkResponse({ schema: { type: 'string', example: 'Client enrolled as buffer successfully' } })
+  @ApiOkResponse({ schema: { type: 'string'} })
   @ApiBadRequestResponse({ description: 'The user was not found or is already an active main client.' })
   @ApiConflictResponse({ description: 'A buffer client record already exists for this mobile.' })
   async setAsBufferClient(@Param('mobile') mobile: string, @Param('clientId') clientId: string) {
@@ -144,7 +140,7 @@ export class BufferClientController {
 
   @Post('query')
   @ApiOperation({ summary: 'Execute a raw buffer client query', description: 'Executes a direct MongoDB-style filter against the buffer client collection.' })
-  @ApiBody({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } })
+  @ApiBody({ schema: { type: 'object', additionalProperties: true} })
   @ApiOkResponse({ type: [BufferClient] })
   async executeQuery(@Body() query: object): Promise<any> {
     return this.clientService.executeQuery(query);
@@ -207,7 +203,7 @@ export class BufferClientController {
   @ApiBody({ type: ActivationRequestDto })
   @ApiOkResponse({ type: BufferClient })
   async markAsActive(@Param('mobile') mobile: string, @Body() body: ActivationRequestDto = {}): Promise<BufferClient> {
-    return this.clientService.updateStatus(mobile, 'active', body.message || 'Account is functioning properly');
+    return this.clientService.markAsActive(mobile, body.message);
   }
 
   @Patch('deactivate/:mobile')
@@ -238,8 +234,7 @@ export class BufferClientController {
   async resetFailedAttempts(@Param('mobile') mobile: string): Promise<{ message: string }> {
     await this.clientService.update(mobile, {
       failedUpdateAttempts: 0,
-      lastUpdateFailure: null,
-    });
+      lastUpdateFailure: null });
     return { message: `Reset failed attempts for ${mobile}` };
   }
 
@@ -266,8 +261,8 @@ export class BufferClientController {
 
 
   @Get(':mobile')
-  @ApiOperation({ summary: 'Get user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Get buffer client by mobile' })
+  @ApiParam({ name: 'mobile', description: 'Buffer client mobile number', type: String })
   @ApiOkResponse({ type: BufferClient })
   @ApiNotFoundResponse({ description: 'Buffer client not found.' })
   async findOne(@Param('mobile') mobile: string): Promise<BufferClient> {
@@ -275,8 +270,8 @@ export class BufferClientController {
   }
 
   @Patch(':mobile')
-  @ApiOperation({ summary: 'Update user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Update buffer client by mobile' })
+  @ApiParam({ name: 'mobile', description: 'Buffer client mobile number', type: String })
   @ApiBody({ type: UpdateBufferClientDto })
   @ApiOkResponse({ type: BufferClient })
   @ApiNotFoundResponse({ description: 'Buffer client not found.' })
@@ -285,17 +280,17 @@ export class BufferClientController {
   }
 
   @Put(':mobile')
-  @ApiOperation({ summary: 'Update user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Create or update buffer client by mobile', description: 'Creates the buffer client if it does not exist, otherwise updates it. Full payload required for creation.' })
+  @ApiParam({ name: 'mobile', description: 'Buffer client mobile number', type: String })
   @ApiBody({ type: UpdateBufferClientDto })
   @ApiOkResponse({ type: BufferClient })
-  async createdOrupdate(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateBufferClientDto): Promise<BufferClient> {
+  async createOrUpdate(@Param('mobile') mobile: string, @Body() updateClientDto: UpdateBufferClientDto): Promise<BufferClient> {
     return this.clientService.createOrUpdate(mobile, updateClientDto);
   }
 
   @Delete(':mobile')
-  @ApiOperation({ summary: 'Delete user data by ID' })
-  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiOperation({ summary: 'Delete buffer client by mobile' })
+  @ApiParam({ name: 'mobile', description: 'Buffer client mobile number', type: String })
   @ApiOkResponse({ schema: { type: 'null' } })
   @ApiNotFoundResponse({ description: 'Buffer client not found.' })
   async remove(@Param('mobile') mobile: string): Promise<void> {

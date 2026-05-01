@@ -4,8 +4,7 @@ import {
     ApiOperation,
     ApiOkResponse,
     ApiBadRequestResponse,
-    ApiBody,
-} from '@nestjs/swagger';
+    ApiBody } from '@nestjs/swagger';
 import { WebshareProxyService } from './webshare-proxy.service';
 import { SyncProxiesDto, SyncResultDto } from './dto/sync-proxies.dto';
 import { ReplaceProxyDto, ReplaceResultDto } from './dto/replace-proxy.dto';

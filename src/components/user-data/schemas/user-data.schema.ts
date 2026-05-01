@@ -9,9 +9,7 @@ export type UserDataDocument = UserData & Document;
         virtuals: true,
         transform: (doc, ret) => {
             delete ret._id;
-        },
-    },
-})
+        } } })
 export class UserData {
     @Prop({ required: true })
     chatId: string;

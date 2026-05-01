@@ -364,7 +364,7 @@ export class TelegramController {
         summary: 'Send media message',
         description: 'Send a photo or file to a chat. Maximum file size is 100MB. Supports images, videos, and documents.'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiBody({ type: SendMediaDto })
     @ApiResponse({ 
         status: 200, 
@@ -424,20 +424,16 @@ export class TelegramController {
         summary: 'Preview or download media from a message',
         description: 'Download or preview media from a Telegram message. Images and videos preview in browser, other files download. Supports HTTP Range requests for video streaming.'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiQuery({ 
         name: 'chatId', 
         required: true, 
-        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
-        example: 'me'
-    })
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID'})
     @ApiQuery({ 
         name: 'messageId', 
         required: true, 
         description: 'Message ID containing the media (must be a positive number)',
-        type: Number,
-        example: 12345
-    })
+        type: Number})
     @ApiResponse({ 
         status: 200,
         description: 'Media file (preview in browser for images/videos, download for other types)',
@@ -591,26 +587,21 @@ export class TelegramController {
         summary: 'Get thumbnail for a media message',
         description: 'Get thumbnail image for a Telegram message containing media (photo or video). Returns JPEG image. Supports caching with ETag headers.'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiQuery({ 
         name: 'chatId', 
         required: true, 
-        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
-        example: 'me'
-    })
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID'})
     @ApiQuery({
         name: 'messageId',
         required: true,
         description: 'Message ID containing the media (must be a positive number)',
-        type: Number,
-        example: 12345
-    })
+        type: Number})
     @ApiQuery({
         name: 'quality',
         required: false,
         description: 'Thumbnail quality: low (smallest, fast) or high (medium size)',
-        enum: ['low', 'high'],
-    })
+        enum: ['low', 'high'] })
     @ApiResponse({
         status: 200,
         description: 'Thumbnail image (JPEG format)',
@@ -680,7 +671,7 @@ export class TelegramController {
         summary: 'Send media album (multiple photos/videos)',
         description: 'Send multiple media files as an album. If some items fail, the operation continues and returns a summary of successful and failed items.'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiBody({ type: SendMediaAlbumDto })
     @ApiResponse({ 
         status: 200,
@@ -731,54 +722,40 @@ export class TelegramController {
         summary: 'Get media metadata from a chat',
         description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range. Use maxId for pagination (get messages with ID less than maxId).'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiQuery({ 
         name: 'chatId', 
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
-        example: 'me'
-    })
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID'})
     @ApiQuery({ 
         name: 'types', 
         enum: ['photo', 'video', 'document', 'voice', 'all'], 
         required: false, 
         isArray: true,
-        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
-        example: ['photo', 'video']
-    })
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.'})
     @ApiQuery({ 
         name: 'startDate', 
         required: false,
-        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-01-01'
-    })
+        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'})
     @ApiQuery({ 
         name: 'endDate', 
         required: false,
-        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-12-31'
-    })
+        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'})
     @ApiQuery({ 
         name: 'limit', 
         description: 'Maximum number of messages to fetch (default: 50, max: 1000)', 
         required: false, 
-        type: Number,
-        example: 50
-    })
+        type: Number})
     @ApiQuery({ 
         name: 'maxId', 
         required: false, 
         type: Number,
-        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
-        example: 12345
-    })
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)'})
     @ApiQuery({ 
         name: 'minId', 
         required: false, 
         type: Number,
-        description: 'Minimum message ID to include',
-        example: 1000
-    })
+        description: 'Minimum message ID to include'})
     @ApiResponse({ 
         status: 200,
         description: 'Media metadata retrieved successfully',
@@ -861,54 +838,40 @@ export class TelegramController {
         summary: 'Get filtered media messages from a chat',
         description: 'Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiQuery({ 
         name: 'chatId', 
         required: true, 
-        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
-        example: 'me'
-    })
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID'})
     @ApiQuery({ 
         name: 'types', 
         required: false, 
         enum: ['photo', 'video', 'document', 'voice', 'all'], 
         isArray: true,
-        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
-        example: ['photo', 'video']
-    })
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.'})
     @ApiQuery({ 
         name: 'startDate', 
         required: false, 
-        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-01-01'
-    })
+        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'})
     @ApiQuery({ 
         name: 'endDate', 
         required: false, 
-        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-12-31'
-    })
+        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'})
     @ApiQuery({ 
         name: 'limit', 
         required: false, 
         type: Number, 
-        description: 'Maximum number of media items to fetch (default: 50, max: 1000)',
-        example: 50
-    })
+        description: 'Maximum number of media items to fetch (default: 50, max: 1000)'})
     @ApiQuery({ 
         name: 'maxId', 
         required: false, 
         type: Number, 
-        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
-        example: 12345
-    })
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)'})
     @ApiQuery({ 
         name: 'minId', 
         required: false, 
         type: Number, 
-        description: 'Minimum message ID to include',
-        example: 1000
-    })
+        description: 'Minimum message ID to include'})
     @ApiResponse({ 
         status: 200,
         description: 'Paginated media response with standardized format',
@@ -1035,8 +998,7 @@ export class TelegramController {
     @Get('dialogs/:mobile')
     @ApiOperation({
         summary: 'Get dialogs (paginated dialog list)',
-        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.',
-    })
+        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default 100)' })
     @ApiQuery({ name: 'offsetDate', required: false, type: Number, description: 'Cursor: Unix seconds from previous nextOffsetDate' })
@@ -1052,10 +1014,7 @@ export class TelegramController {
             properties: {
                 items: { type: 'array', description: 'Chat list (id, title, username, type, unreadCount, lastMessage, etc.)' },
                 hasMore: { type: 'boolean' },
-                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' },
-            },
-        },
-    })
+                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' } } } })
     async getDialogs(
         @Param('mobile') mobile: string,
         @Query('limit') limit?: number,
@@ -1073,8 +1032,7 @@ export class TelegramController {
             archived: archived === true,
             peerType: peerType as 'all' | 'user' | 'group' | 'channel' | undefined,
             ignorePinned: ignorePinned === true,
-            includePhotos,
-        });
+            includePhotos });
     }
 
     @Get('last-active/:mobile')
@@ -1167,8 +1125,7 @@ export class TelegramController {
                 gif: { type: 'number' },
                 audio: { type: 'number', description: 'Music files' },
                 link: { type: 'number', description: 'Shared URLs' },
-                totalMedia: { type: 'number', description: 'Total media count (excludes links)' },
-            }
+                totalMedia: { type: 'number', description: 'Total media count (excludes links)' } }
         }
     })
     async getChatMediaCounts(
@@ -1214,8 +1171,7 @@ export class TelegramController {
                             durationSeconds: { type: 'number' },
                             video: { type: 'boolean' },
                             outgoing: { type: 'boolean' },
-                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] },
-                        }
+                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] } }
                     }
                 }
             }
@@ -1275,14 +1231,14 @@ export class TelegramController {
         summary: 'Send voice message',
         description: 'Send a voice message (audio file) to a chat. Maximum file size is 100MB. Duration is optional but recommended for better playback.'
     })
-    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' })
+    @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiBody({ 
         schema: { 
             type: 'object', 
             properties: { 
-                chatId: { type: 'string', description: 'Chat ID or username', example: 'me' },
-                url: { type: 'string', description: 'URL of the voice file (must be accessible)', example: 'https://example.com/voice.ogg' },
-                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)', example: 30 },
+                chatId: { type: 'string', description: 'Chat ID or username'},
+                url: { type: 'string', description: 'URL of the voice file (must be accessible)'},
+                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)'},
                 caption: { type: 'string', description: 'Optional caption for the voice message' }
             },
             required: ['chatId', 'url']
@@ -1541,22 +1497,17 @@ export class TelegramController {
         name: 'limit',
         required: false,
         type: Number,
-        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)',
-        example: 45
-    })
+        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)'})
     @ApiQuery({
         name: 'enrichMedia',
         required: false,
         type: Boolean,
-        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.',
-        example: false
-    })
+        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.'})
     @ApiQuery({
         name: 'offsetDate',
         required: false,
         type: Number,
-        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.',
-    })
+        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.' })
     @ApiResponse({
         status: 200,
         description: 'Top private chats retrieved successfully',
@@ -1582,8 +1533,7 @@ export class TelegramController {
                                 properties: {
                                     photo: { type: 'number' }, video: { type: 'number' }, roundVideo: { type: 'number' },
                                     document: { type: 'number' }, voice: { type: 'number' }, gif: { type: 'number' },
-                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' },
-                                }
+                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' } }
                             },
                             calls: {
                                 type: 'object',
@@ -1595,10 +1545,8 @@ export class TelegramController {
                                     totalDuration: { type: 'number', description: 'Seconds' },
                                     averageDuration: { type: 'number', description: 'Seconds' },
                                     longestCall: { type: 'number', description: 'Seconds' },
-                                    lastCallDate: { type: 'string', nullable: true },
-                                }
-                            },
-                        }
+                                    lastCallDate: { type: 'string', nullable: true } }
+                            } }
                     }
                 },
                 pagination: {
@@ -1607,8 +1555,7 @@ export class TelegramController {
                         count: { type: 'number', description: 'Number of items returned' },
                         hasMore: { type: 'boolean' },
                         previousOffsetDate: { type: 'number', description: 'The offsetDate that was passed in (for prev button)' },
-                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' },
-                    }
+                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' } }
                 }
             }
         }
@@ -1638,7 +1585,6 @@ export class TelegramController {
         required: false, 
         type: Number,
         description: 'Maximum number of messages to analyze (default: 500, max: 10000)',
-        example: 500,
         minimum: 1,
         maximum: 10000
     })
@@ -1728,8 +1674,7 @@ export class TelegramController {
             staleConfigs: [],
             validConfigs: 0,
             noConfigKeys: 0,
-            errors: [],
-        };
+            errors: [] };
 
         try {
             let keys: string[] = [];
@@ -1766,8 +1711,7 @@ export class TelegramController {
                             mobile: mobileFromKey,
                             apiId: apiId || 0,
                             deviceModel: config.deviceModel || 'unknown',
-                            deleted: false,
-                        };
+                            deleted: false };
 
                         if (shouldExecute) {
                             await redis.del(key);
@@ -1794,7 +1738,6 @@ export class TelegramController {
             ...result,
             summary: shouldExecute
                 ? `Deleted ${result.staleConfigs.filter(s => s.deleted).length} stale configs out of ${result.totalScanned} total`
-                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`,
-        };
+                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)` };
     }
 }

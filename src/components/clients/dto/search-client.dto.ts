@@ -38,7 +38,7 @@ export class SearchClientDto {
     @Transform(({ value }: TransformFnParams) => value?.trim())
     @IsOptional()
     @Matches(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' })
-    number?: string;
+    mobile?: string;
 
     @ApiPropertyOptional({ description: 'Password' })
     @IsOptional()
@@ -56,12 +56,6 @@ export class SearchClientDto {
     @IsOptional()
     @IsUrl({}, { message: 'Invalid URL format' })
     promoteRepl?: string;
-
-    @ApiPropertyOptional({ description: 'Client name' })
-    @Transform(({ value }: TransformFnParams) => value?.trim())
-    @IsOptional()
-    @IsString()
-    clientName?: string;
 
     @ApiPropertyOptional({ description: 'Deploy restart URL' })
     @Transform(({ value }: TransformFnParams) => value?.trim())

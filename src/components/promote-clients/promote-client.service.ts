@@ -548,7 +548,14 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     async search(filter: Partial<PromoteClient>): Promise<PromoteClient[]> {
-        return this.promoteClientModel.find(filter).exec();
+        const query: Record<string, any> = { ...filter };
+        const regexFields = ['mobile', 'clientId'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+            }
+        }
+        return this.promoteClientModel.find(query).exec();
     }
 
     async executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<PromoteClientDocument[]> {

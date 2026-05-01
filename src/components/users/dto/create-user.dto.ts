@@ -1,92 +1,149 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UserCallsDto {
-  @ApiProperty({ description: 'Total calls' })
+  @ApiPropertyOptional({ description: 'Total calls', default: 0 })
+  @IsOptional()
+  @IsNumber()
   totalCalls: number = 0;
 
-  @ApiProperty({ description: 'Outgoing calls' })
+  @ApiPropertyOptional({ description: 'Outgoing calls', default: 0 })
+  @IsOptional()
+  @IsNumber()
   outgoing: number = 0;
 
-  @ApiProperty({ description: 'Incoming calls' })
+  @ApiPropertyOptional({ description: 'Incoming calls', default: 0 })
+  @IsOptional()
+  @IsNumber()
   incoming: number = 0;
 
-  @ApiProperty({ description: 'Video calls' })
+  @ApiPropertyOptional({ description: 'Video calls', default: 0 })
+  @IsOptional()
+  @IsNumber()
   video: number = 0;
 
-  @ApiProperty({ description: 'Audio calls' })
+  @ApiPropertyOptional({ description: 'Audio calls', default: 0 })
+  @IsOptional()
+  @IsNumber()
   audio: number = 0;
 }
 
 export class CreateUserDto {
   @ApiProperty({ description: 'Mobile number' })
+  @IsString()
   mobile: string;
 
   @ApiProperty({ description: 'Telegram session string' })
+  @IsString()
   session: string;
 
   @ApiProperty({ description: 'First name' })
+  @IsString()
   firstName: string;
 
   @ApiPropertyOptional({ description: 'Last name' })
+  @IsOptional()
+  @IsString()
   lastName?: string | null;
 
   @ApiPropertyOptional({ description: 'Telegram username' })
+  @IsOptional()
+  @IsString()
   username?: string | null;
 
   @ApiProperty({ description: 'Telegram user ID' })
+  @IsString()
   tgId: string;
 
   @ApiPropertyOptional({ description: 'Gender' })
+  @IsOptional()
+  @IsString()
   gender?: string | null;
 
-  @ApiProperty({ description: '2FA enabled' })
+  @ApiPropertyOptional({ description: '2FA enabled', default: false })
+  @IsOptional()
+  @IsBoolean()
   twoFA: boolean = false;
 
-  @ApiProperty({ description: 'Account expired' })
+  @ApiPropertyOptional({ description: 'Account expired', default: false })
+  @IsOptional()
+  @IsBoolean()
   expired: boolean = false;
 
-  @ApiProperty({ description: '2FA password' })
+  @ApiPropertyOptional({ description: '2FA password' })
+  @IsOptional()
+  @IsString()
   password: string = null;
 
-  @ApiProperty({ description: 'Channel count' })
+  @ApiPropertyOptional({ description: 'Channel count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   channels: number = 0;
 
-  @ApiProperty({ description: 'Personal chat count' })
+  @ApiPropertyOptional({ description: 'Personal chat count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   personalChats: number = 0;
 
-  @ApiProperty({ description: 'Total chat count' })
+  @ApiPropertyOptional({ description: 'Total chat count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   totalChats: number = 0;
 
-  @ApiProperty({ description: 'Contact count' })
+  @ApiPropertyOptional({ description: 'Contact count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   contacts: number = 0;
 
-  @ApiProperty({ description: 'Message count' })
+  @ApiPropertyOptional({ description: 'Message count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   msgs: number = 0;
 
-  @ApiProperty({ description: 'Total photo count' })
+  @ApiPropertyOptional({ description: 'Total photo count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   photoCount: number = 0;
 
-  @ApiProperty({ description: 'Total video count' })
+  @ApiPropertyOptional({ description: 'Total video count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   videoCount: number = 0;
 
-  @ApiProperty({ description: 'Movie file count' })
+  @ApiPropertyOptional({ description: 'Movie file count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   movieCount: number = 0;
 
-  @ApiProperty({ description: 'Sent photo count' })
+  @ApiPropertyOptional({ description: 'Sent photo count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   ownPhotoCount: number = 0;
 
-  @ApiProperty({ description: 'Received photo count' })
+  @ApiPropertyOptional({ description: 'Received photo count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   otherPhotoCount: number = 0;
 
-  @ApiProperty({ description: 'Sent video count' })
+  @ApiPropertyOptional({ description: 'Sent video count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   ownVideoCount: number = 0;
 
-  @ApiProperty({ description: 'Received video count' })
+  @ApiPropertyOptional({ description: 'Received video count', default: 0 })
+  @IsOptional()
+  @IsNumber()
   otherVideoCount: number = 0;
 
   @ApiPropertyOptional({ description: 'Last active timestamp' })
+  @IsOptional()
+  @IsString()
   lastActive: string | null = null;
 
   @ApiPropertyOptional({ description: 'Call statistics' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => UserCallsDto)
   calls?: UserCallsDto = new UserCallsDto();
 }

@@ -14,11 +14,13 @@ export class SearchUserDto {
   mobile?: string;
 
   @ApiPropertyOptional({ description: '2FA status' })
+  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
   @IsOptional()
   @IsBoolean()
   twoFA?: boolean;
 
   @ApiPropertyOptional({ description: 'Expiration status' })
+  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
   @IsOptional()
   @IsBoolean()
   expired?: boolean;

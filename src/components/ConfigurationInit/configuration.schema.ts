@@ -9,9 +9,7 @@ export type ConfigurationDocument = Configuration & Document;
         virtuals: true,
         transform: (doc, ret) => {
             delete ret._id;
-        },
-    },
-})
+        } } })
 export class Configuration { }
 
 export const ConfigurationSchema = SchemaFactory.createForClass(Configuration);

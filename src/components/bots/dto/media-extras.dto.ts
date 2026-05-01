@@ -6,8 +6,7 @@ import { MediaOptionsDto } from './media.dto';
 export class VoiceOptionsDto extends MediaOptionsDto {
   @ApiProperty({
     description: 'Duration of the voice message in seconds',
-    required: false,
-  })
+    required: false })
   @IsNumber()
   @IsOptional()
   duration?: number;
@@ -15,17 +14,14 @@ export class VoiceOptionsDto extends MediaOptionsDto {
 
 export class SendVoiceDto {
   @ApiProperty({
-    description: 'Voice message URL or file ID',
-    example: 'https://example.com/voice.ogg',
-  })
+    description: 'Voice message URL or file ID' })
   @IsString()
   voice: string;
 
   @ApiProperty({
     description: 'Voice sending options',
     required: false,
-    type: () => VoiceOptionsDto,
-  })
+    type: () => VoiceOptionsDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => VoiceOptionsDto)
@@ -51,17 +47,14 @@ export class AnimationOptionsDto extends MediaOptionsDto {
 
 export class SendAnimationDto {
   @ApiProperty({
-    description: 'Animation (GIF/MP4) URL or file ID',
-    example: 'https://example.com/animation.gif',
-  })
+    description: 'Animation (GIF/MP4) URL or file ID' })
   @IsString()
   animation: string;
 
   @ApiProperty({
     description: 'Animation sending options',
     required: false,
-    type: () => AnimationOptionsDto,
-  })
+    type: () => AnimationOptionsDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => AnimationOptionsDto)
@@ -71,9 +64,7 @@ export class SendAnimationDto {
 export class StickerOptionsDto extends MediaOptionsDto {
   @ApiProperty({
     description: 'Emoji associated with the sticker',
-    required: false,
-    example: '😊',
-  })
+    required: false })
   @IsString()
   @IsOptional()
   emoji?: string;
@@ -81,17 +72,14 @@ export class StickerOptionsDto extends MediaOptionsDto {
 
 export class SendStickerDto {
   @ApiProperty({
-    description: 'Sticker URL or file ID',
-    example: 'https://example.com/sticker.webp',
-  })
+    description: 'Sticker URL or file ID' })
   @IsString()
   sticker: string;
 
   @ApiProperty({
     description: 'Sticker sending options',
     required: false,
-    type: () => StickerOptionsDto,
-  })
+    type: () => StickerOptionsDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => StickerOptionsDto)

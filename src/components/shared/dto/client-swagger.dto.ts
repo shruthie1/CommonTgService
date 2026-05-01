@@ -2,101 +2,79 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AcceptedStringResponseDto {
     @ApiProperty({
-        description: 'Acknowledgement returned when a long-running background operation is started.',
-        example: 'initiated Checking',
-    })
+        description: 'Acknowledgement returned when a long-running background operation is started.' })
     message: string;
 }
 
 export class StatusUpdateRequestDto {
     @ApiProperty({
         description: 'Lifecycle status to assign to the client record.',
-        enum: ['active', 'inactive'],
-        example: 'active',
-    })
+        enum: ['active', 'inactive'] })
     status: 'active' | 'inactive';
 
     @ApiPropertyOptional({
-        description: 'Optional operator note explaining why the status changed.',
-        example: 'Re-enabled after manual review',
-    })
+        description: 'Optional operator note explaining why the status changed.' })
     message?: string;
 }
 
 export class ActivationRequestDto {
     @ApiPropertyOptional({
-        description: 'Optional operator note recorded when activating the client.',
-        example: 'Returned to active pool',
-    })
+        description: 'Optional operator note recorded when activating the client.' })
     message?: string;
 }
 
 export class DeactivationRequestDto {
     @ApiProperty({
-        description: 'Reason for deactivating the client.',
-        example: 'Health check failed repeatedly',
-    })
+        description: 'Reason for deactivating the client.' })
     reason: string;
 }
 
 export class MarkUsedRequestDto {
     @ApiPropertyOptional({
-        description: 'Optional note describing where or why the client was consumed.',
-        example: 'Assigned to live campaign rotation',
-    })
+        description: 'Optional note describing where or why the client was consumed.' })
     message?: string;
 }
 
 export class BulkEnrollClientsRequestDto {
     @ApiProperty({
         description: 'Candidate user identifiers that passed upstream validation.',
-        type: [String],
-        example: ['10001', '10002'],
-    })
+        type: [String] })
     goodIds: string[];
 
     @ApiProperty({
         description: 'Candidate user identifiers that failed upstream validation and should be excluded.',
-        type: [String],
-        example: ['99999'],
-    })
+        type: [String] })
     badIds: string[];
 }
 
 export class BulkEnrollBufferClientsRequestDto extends BulkEnrollClientsRequestDto {
     @ApiPropertyOptional({
         description: 'Specific client IDs that currently need more buffer accounts.',
-        type: [String],
-        example: ['client-a', 'client-b'],
-    })
+        type: [String] })
     clientsNeedingBufferClients?: string[];
 }
 
 export class BulkEnrollPromoteClientsRequestDto extends BulkEnrollClientsRequestDto {
     @ApiPropertyOptional({
         description: 'Specific client IDs that currently need more promote accounts.',
-        type: [String],
-        example: ['client-a', 'client-b'],
-    })
+        type: [String] })
     clientsNeedingPromoteClients?: string[];
 }
 
 export class UsageStatisticsDto {
-    @ApiProperty({ description: 'Total number of matching client records.', example: 48 })
+    @ApiProperty({ description: 'Total number of matching client records.'})
     totalClients: number;
 
-    @ApiProperty({ description: 'Matching clients that have never been used.', example: 12 })
+    @ApiProperty({ description: 'Matching clients that have never been used.'})
     neverUsed: number;
 
-    @ApiProperty({ description: 'Matching clients used within the last 24 hours.', example: 6 })
+    @ApiProperty({ description: 'Matching clients used within the last 24 hours.'})
     usedInLast24Hours: number;
 
-    @ApiProperty({ description: 'Matching clients used within the last 7 days.', example: 21 })
+    @ApiProperty({ description: 'Matching clients used within the last 7 days.'})
     usedInLastWeek: number;
 
     @ApiProperty({
-        description: 'Average time gap between usages, in hours.',
-        example: 37.5,
-    })
+        description: 'Average time gap between usages, in hours.' })
     averageUsageGap: number;
 }

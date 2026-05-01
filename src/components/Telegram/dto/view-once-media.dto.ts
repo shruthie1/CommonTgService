@@ -9,27 +9,21 @@ export enum MediaSourceType {
 
 export class ViewOnceMediaDto {
     @ApiProperty({
-        description: 'Chat ID to send the view once media to',
-        example: '123456789'
-    })
+        description: 'Chat ID to send the view once media to'})
     @IsString()
     @IsNotEmpty()
     chatId: string;
 
     @ApiProperty({
         description: 'Source type of the media: url, base64, or binary',
-        enum: MediaSourceType,
-        example: 'url'
-    })
+        enum: MediaSourceType})
     @IsEnum(MediaSourceType)
     @IsNotEmpty()
     sourceType: MediaSourceType;
 
     @ApiProperty({
         description: 'URL of the media file (when sourceType is url)',
-        required: false,
-        example: 'https://example.com/image.jpg'
-    })
+        required: false})
     @ValidateIf(o => o.sourceType === MediaSourceType.PATH)
     @IsString()
     @IsNotEmpty()
@@ -37,9 +31,7 @@ export class ViewOnceMediaDto {
 
     @ApiProperty({
         description: 'Base64 encoded media data (when sourceType is base64)',
-        required: false,
-        example: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...'
-    })
+        required: false})
     @ValidateIf(o => o.sourceType === MediaSourceType.BASE64)
     @IsString()
     @IsNotEmpty()
@@ -56,18 +48,14 @@ export class ViewOnceMediaDto {
 
     @ApiProperty({
         description: 'Optional caption for the media',
-        required: false,
-        example: 'Check this out! It will disappear after viewing'
-    })
+        required: false})
     @IsString()
     @IsOptional()
     caption?: string;
 
     @ApiProperty({
         description: 'Optional filename for the media',
-        required: false,
-        example: 'secret_image.jpg'
-    })
+        required: false})
     @IsString()
     @IsOptional()
     filename?: string;

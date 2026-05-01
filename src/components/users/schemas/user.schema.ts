@@ -11,9 +11,7 @@ export type UserDocument = User & Document;
     transform: (doc, ret) => {
       delete ret._id;
       return ret;
-    },
-  },
-})
+    } } })
 export class User {
   // --- Identity ---
   @ApiProperty({ description: 'Mobile number' })
@@ -120,8 +118,7 @@ export class User {
   @ApiProperty({ description: 'Call statistics', required: false })
   @Prop({
     type: mongoose.Schema.Types.Mixed,
-    default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
-  })
+    default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 } })
   calls: {
     totalCalls: number;
     outgoing: number;
@@ -134,8 +131,7 @@ export class User {
   @ApiProperty({ description: 'Relationship analysis', required: false })
   @Prop({
     type: mongoose.Schema.Types.Mixed,
-    default: { score: 0, bestScore: 0, computedAt: null, top: [] },
-  })
+    default: { score: 0, bestScore: 0, computedAt: null, top: [] } })
   relationships: {
     score: number;
     bestScore: number;

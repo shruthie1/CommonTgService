@@ -16,8 +16,7 @@ export type TransactionDocument = Transaction & Document;
       ret['id'] = ret._id;
       delete ret._id;
       return ret;
-    },
-  }
+    } }
 })
 export class Transaction {
   @ApiProperty({ description: 'Unique transaction ID (UTR)' })

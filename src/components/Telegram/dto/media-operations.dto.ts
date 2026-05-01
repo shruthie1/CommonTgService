@@ -11,8 +11,7 @@ export enum MediaType {
   GIF = 'gif',
   ROUND_VIDEO = 'roundVideo',
   STICKER = 'sticker',
-  ALL = 'all',
-}
+  ALL = 'all' }
 
 // Base class for media operations
 export class BaseMediaOperationDto {

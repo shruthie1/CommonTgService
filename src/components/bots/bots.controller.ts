@@ -29,8 +29,7 @@ export class BotsController {
   @Post()
   @ApiOperation({
     summary: 'Create a new bot',
-    description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.',
-  })
+    description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.' })
   @ApiResponse({ status: 201, description: 'Bot has been successfully created' })
   @ApiResponse({ status: 400, description: 'Invalid bot configuration provided' })
   @ApiResponse({ status: 409, description: 'Bot with the same token already exists' })
@@ -42,8 +41,7 @@ export class BotsController {
   @Get()
   @ApiOperation({
     summary: 'Get all bots or filter by category',
-    description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.',
-  })
+    description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.' })
   @ApiQuery({
     name: 'category',
     required: false,
@@ -59,8 +57,7 @@ export class BotsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Get a bot by ID',
-    description: 'Retrieves detailed information about a specific bot using its unique identifier.',
-  })
+    description: 'Retrieves detailed information about a specific bot using its unique identifier.' })
   @ApiResponse({ status: 200, description: 'Bot details retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Bot not found' })
   async getBotById(@Param('id') id: string) {
@@ -70,8 +67,7 @@ export class BotsController {
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a bot',
-    description: 'Updates the configuration of an existing bot. Only provided fields will be modified.',
-  })
+    description: 'Updates the configuration of an existing bot. Only provided fields will be modified.' })
   @ApiResponse({ status: 200, description: 'Bot updated successfully' })
   @ApiResponse({ status: 404, description: 'Bot not found' })
   @ApiResponse({ status: 400, description: 'Invalid update parameters' })
@@ -82,8 +78,7 @@ export class BotsController {
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a bot',
-    description: 'Removes a bot from the system. This action cannot be undone.',
-  })
+    description: 'Removes a bot from the system. This action cannot be undone.' })
   @ApiResponse({ status: 200, description: 'Bot successfully deleted' })
   @ApiResponse({ status: 404, description: 'Bot not found' })
   async deleteBot(@Param('id') id: string) {
@@ -94,8 +89,7 @@ export class BotsController {
   @Post('category/:category/message')
   @ApiOperation({
     summary: 'Send a message using bots in a category',
-    description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the message',
@@ -131,8 +125,7 @@ export class BotsController {
   @Post('category/:category/photo')
   @ApiOperation({
     summary: 'Send a photo using bots in a category',
-    description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the photo',
@@ -167,8 +160,7 @@ export class BotsController {
   @Post('category/:category/video')
   @ApiOperation({
     summary: 'Send a video using bots in a category',
-    description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the video',
@@ -203,8 +195,7 @@ export class BotsController {
   @Post('category/:category/audio')
   @ApiOperation({
     summary: 'Send audio using bots in a category',
-    description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the audio',
@@ -239,8 +230,7 @@ export class BotsController {
   @Post('category/:category/document')
   @ApiOperation({
     summary: 'Send a document using bots in a category',
-    description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the document',
@@ -275,8 +265,7 @@ export class BotsController {
   @Post('category/:category/voice')
   @ApiOperation({
     summary: 'Send a voice message using bots in a category',
-    description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the voice message',
@@ -311,8 +300,7 @@ export class BotsController {
   @Post('category/:category/animation')
   @ApiOperation({
     summary: 'Send an animation using bots in a category',
-    description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the animation',
@@ -347,8 +335,7 @@ export class BotsController {
   @Post('category/:category/sticker')
   @ApiOperation({
     summary: 'Send a sticker using bots in a category',
-    description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the sticker',
@@ -383,8 +370,7 @@ export class BotsController {
   @Post('category/:category/media-group')
   @ApiOperation({
     summary: 'Send a media group using bots in a category',
-    description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.',
-  })
+    description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to use for sending the media group',
@@ -421,8 +407,7 @@ export class BotsController {
   @Get('category/:category/stats')
   @ApiOperation({
     summary: 'Get bot statistics by category',
-    description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.',
-  })
+    description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.' })
   @ApiParam({
     name: 'category',
     description: 'Category of bots to get statistics for',
