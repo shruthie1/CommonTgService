@@ -221,7 +221,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 }
             }
             else {
-                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
+                this.logger.warn(`No persona assignment for ${doc.mobile} — marking name/bio step done with current profile`);
+                updateCount = 1;
             }
             await this.update(doc.mobile, {
                 ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
@@ -293,15 +294,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const newUser = new this.promoteClientModel(promoteClientData);
         const result = await newUser.save();
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-            'Promote Client Created',
+            '<b>Promote Client Created</b>',
             '',
-            `Mobile: ${promoteClient.mobile}`,
-            `ClientId: ${promoteClient.clientId || '-'}`,
-            `Status: ${result.status}`,
-            `AvailableDate: ${promoteClient.availableDate || '-'}`,
-            `Channels: ${promoteClient.channels ?? '-'}`,
-            `Message: ${promoteClient.message || '-'}`,
-        ].join('\n'));
+            `<b>Mobile:</b> ${promoteClient.mobile}`,
+            `<b>Client ID:</b> ${promoteClient.clientId || '-'}`,
+            `<b>Status:</b> ${result.status}`,
+            `<b>Available Date:</b> ${promoteClient.availableDate || '-'}`,
+            `<b>Channels:</b> ${promoteClient.channels ?? '-'}`,
+            `<b>Message:</b> ${promoteClient.message || '-'}`,
+        ].join('\n'), { parseMode: 'HTML' });
         return result;
     }
     async findAll(statusFilter) {
@@ -328,7 +329,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const updateData = { status };
         if (message)
             updateData.message = message;
-        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Promote Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
         return this.update(mobile, updateData);
     }
     async refillJoinQueue(clientId) {
@@ -432,7 +433,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             if (deleteResult.deletedCount === 0) {
                 throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.serviceName || process.env.clientId} Deleting Promote Client : ${mobile}\n${message}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Promote Client\n\nService: ${process.env.serviceName || process.env.clientId || 'unknown'}\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
         }
         catch (error) {
             if (error instanceof common_1.NotFoundException)
@@ -681,6 +682,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost = {
                 [base_client_service_1.WarmupPhase.READY]: 25000,
                 [base_client_service_1.WarmupPhase.MATURING]: 15000,
@@ -690,8 +693,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
                 [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            const subStepBonus = {
+                'remove_other_auths': 2000,
+                'set_2fa': 1000,
+                'update_username': 1500,
+                'update_name_bio': 1000,
+                'upload_photo': 1000,
+                'rotate_session': 2000,
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
         promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
@@ -769,7 +783,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const promoteClient = {
                 tgId: document.tgId,
-                lastActive: 'today',
+                lastActive: new Date().toISOString(),
                 mobile: document.mobile,
                 session: user?.session || '',
                 availableDate: targetAvailableDate,
@@ -789,15 +803,15 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }, { new: true, upsert: true }).exec();
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-                'Promote Client Enrolled',
+                '<b>Promote Client Enrolled</b>',
                 '',
-                `ClientId: ${targetClientId}`,
-                `Mobile: ${document.mobile}`,
-                `AvailableDate: ${targetAvailableDate}`,
-                `Channels: ${channels.ids.length}`,
-                `WarmupPhase: ${base_client_service_1.WarmupPhase.ENROLLED}`,
-                `SourceTgId: ${document.tgId}`,
-            ].join('\n'));
+                `<b>Client ID:</b> ${targetClientId}`,
+                `<b>Mobile:</b> ${document.mobile}`,
+                `<b>Available Date:</b> ${targetAvailableDate}`,
+                `<b>Channels:</b> ${channels.ids.length}`,
+                `<b>Warmup Phase:</b> ${base_client_service_1.WarmupPhase.ENROLLED}`,
+                `<b>Source TG ID:</b> ${document.tgId}`,
+            ].join('\n'), { parseMode: 'HTML' });
             return true;
         }
         catch (error) {
@@ -972,22 +986,22 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
             : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-            'Promote Client Check Summary',
+            '<b>Promote Client Check Summary</b>',
             '',
-            `Active: ${distribution.activePromoteClients}`,
-            `Inactive: ${distribution.inactivePromoteClients}`,
-            `Unassigned: ${distribution.unassignedPromoteClients}`,
-            `UpdatesApplied: ${totalUpdates}`,
-            `CreatedThisRun: ${createdCount}`,
-            `AttemptedCreates: ${attemptedCount}`,
-            `TotalNeeded: ${distribution.summary.totalPromoteClientsNeeded}`,
-            `ClientsNeedingMore: ${distribution.summary.clientsNeedingPromoteClients}`,
+            `<b>Active:</b> ${distribution.activePromoteClients}`,
+            `<b>Inactive:</b> ${distribution.inactivePromoteClients}`,
+            `<b>Unassigned:</b> ${distribution.unassignedPromoteClients}`,
+            `<b>Updates Applied:</b> ${totalUpdates}`,
+            `<b>Created This Run:</b> ${createdCount}`,
+            `<b>Attempted Creates:</b> ${attemptedCount}`,
+            `<b>Total Needed:</b> ${distribution.summary.totalPromoteClientsNeeded}`,
+            `<b>Clients Needing More:</b> ${distribution.summary.clientsNeedingPromoteClients}`,
             '',
             ...updatedLines,
             ...createdLines,
-            'PerClientSummary:',
+            '<b>Per Client Summary:</b>',
             ...lines,
-        ].join('\n'));
+        ].join('\n'), { parseMode: 'HTML' });
     }
     removeFromPromoteMap(key) { this.removeFromJoinMap(key); }
     clearPromoteMap() { this.clearJoinMap(); }

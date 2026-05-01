@@ -36,10 +36,10 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
         console.error(`${prefix}\n${formattedMessage}`);
         if (errorDetails.status === 429)
             return;
-        const notificationText = `${prefix}\n\n${formattedMessage}`;
+        const notificationText = `<b>${prefix}</b>\n\n<b>Error:</b> ${formattedMessage}`;
         try {
             const botsService = (0, bot_service_instance_1.getBotsServiceInstance)();
-            await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText);
+            await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
         }
         catch (error) {
             console.error('Failed to send notification:', error.response?.data || error.message || error.code);

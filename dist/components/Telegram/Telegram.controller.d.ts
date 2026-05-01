@@ -32,7 +32,7 @@ export declare class TelegramController {
     getClientState(mobile: string): ConnectionStatusDto | undefined;
     getActiveConnectionCount(): number;
     getMe(mobile: string): Promise<import("telegram").Api.User>;
-    getEntity(mobile: string, entity: string): Promise<import("telegram").Api.User | import("telegram").Api.Chat | import("telegram").Api.Channel>;
+    getEntity(mobile: string, entity: string): Promise<import("telegram").Api.Channel | import("telegram").Api.Chat | import("telegram").Api.User>;
     updateProfile(mobile: string, updateProfileDto: UpdateProfileDto): Promise<void>;
     setProfilePhoto(mobile: string, photoDto: ProfilePhotoDto): Promise<string>;
     deleteProfilePhotos(mobile: string): Promise<void>;
@@ -93,7 +93,7 @@ export declare class TelegramController {
     getChatMediaCounts(mobile: string, chatId: string): Promise<import("./dto").ChatMediaCounts>;
     getChatCallHistory(mobile: string, chatId: string, limit?: number, includeCalls?: string): Promise<import("./dto").ChatCallHistory>;
     getChatStatistics(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
-    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.TypeUpdates | import("telegram").Api.Message>;
+    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.Message | import("telegram").Api.TypeUpdates>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./dto").ScheduledMessageItem[]>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
@@ -212,4 +212,19 @@ export declare class TelegramController {
         channelIds?: string[];
     }): Promise<void>;
     createBot(mobile: string, createBotDto: CreateTgBotDto): Promise<import("./dto").BotCreationResult>;
+    auditStaleConfigs(execute?: string, mobile?: string): Promise<{
+        summary: string;
+        totalScanned: number;
+        staleConfigs: Array<{
+            mobile: string;
+            apiId: number;
+            deviceModel: string;
+            deleted: boolean;
+        }>;
+        validConfigs: number;
+        noConfigKeys: number;
+        errors: string[];
+        mode: string;
+        validApiIds: number[];
+    }>;
 }

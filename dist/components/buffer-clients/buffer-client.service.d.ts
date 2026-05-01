@@ -40,6 +40,8 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     private fetchJoinableChannels;
     markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null>;
     setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
+    diagnoseEnrollmentDecision(): Promise<any>;
+    diagnoseWarmupPipeline(): Promise<any>;
     checkBufferClients(): Promise<void>;
     updateInfo(): Promise<void>;
     joinchannelForBufferClients(skipExisting?: boolean, clientId?: string): Promise<string>;

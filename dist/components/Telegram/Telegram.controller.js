@@ -59,6 +59,8 @@ const platform_express_1 = require("@nestjs/platform-express");
 const multer = __importStar(require("multer"));
 const axios_1 = __importDefault(require("axios"));
 const connection_manager_1 = require("./utils/connection-manager");
+const redisClient_1 = require("../../utils/redisClient");
+const tg_config_1 = require("./utils/tg-config");
 const message_search_dto_1 = require("./dto/message-search.dto");
 const delete_chat_dto_1 = require("./dto/delete-chat.dto");
 const update_username_dto_1 = require("./dto/update-username.dto");
@@ -629,6 +631,76 @@ let TelegramController = class TelegramController {
     }
     async createBot(mobile, createBotDto) {
         return this.telegramService.createBot(mobile, createBotDto);
+    }
+    async auditStaleConfigs(execute, mobile) {
+        const shouldExecute = execute === 'true';
+        const validApiIds = new Set((0, tg_config_1.getTelegramCredentialPool)().map(c => c.apiId));
+        const redis = redisClient_1.RedisClient.getClient();
+        const result = {
+            totalScanned: 0,
+            staleConfigs: [],
+            validConfigs: 0,
+            noConfigKeys: 0,
+            errors: [],
+        };
+        try {
+            let keys = [];
+            if (mobile) {
+                keys = [`tg:config:${mobile}`];
+            }
+            else {
+                let cursor = '0';
+                do {
+                    const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', 'tg:config:*', 'COUNT', 200);
+                    cursor = nextCursor;
+                    keys.push(...batch);
+                } while (cursor !== '0');
+            }
+            result.totalScanned = keys.length;
+            for (const key of keys) {
+                try {
+                    const raw = await redis.get(key);
+                    if (!raw) {
+                        result.noConfigKeys++;
+                        continue;
+                    }
+                    const config = JSON.parse(raw);
+                    const apiId = config._apiId;
+                    const mobileFromKey = key.replace('tg:config:', '');
+                    if (!apiId || !validApiIds.has(apiId)) {
+                        const entry = {
+                            mobile: mobileFromKey,
+                            apiId: apiId || 0,
+                            deviceModel: config.deviceModel || 'unknown',
+                            deleted: false,
+                        };
+                        if (shouldExecute) {
+                            await redis.del(key);
+                            await redis.del(`tg:proxy_map:${mobileFromKey}`);
+                            entry.deleted = true;
+                        }
+                        result.staleConfigs.push(entry);
+                    }
+                    else {
+                        result.validConfigs++;
+                    }
+                }
+                catch (err) {
+                    result.errors.push(`${key}: ${err.message}`);
+                }
+            }
+        }
+        catch (err) {
+            result.errors.push(`Scan error: ${err.message}`);
+        }
+        return {
+            mode: shouldExecute ? 'EXECUTE' : 'DRY_RUN',
+            validApiIds: [...validApiIds],
+            ...result,
+            summary: shouldExecute
+                ? `Deleted ${result.staleConfigs.filter(s => s.deleted).length} stale configs out of ${result.totalScanned} total`
+                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`,
+        };
     }
 };
 exports.TelegramController = TelegramController;
@@ -2060,6 +2132,22 @@ __decorate([
     __metadata("design:paramtypes", [String, dto_1.CreateTgBotDto]),
     __metadata("design:returntype", Promise)
 ], TelegramController.prototype, "createBot", null);
+__decorate([
+    (0, common_1.Get)('config/audit-stale'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Audit stale TG configs in Redis',
+        description: 'Scans tg:config:* keys for stale apiIds not in the custom credentials pool. ' +
+            'Dry-run by default — pass ?execute=true to actually delete stale configs.'
+    }),
+    (0, swagger_1.ApiQuery)({ name: 'execute', required: false, type: Boolean, description: 'Set to true to delete stale configs' }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, type: String, description: 'Audit a single mobile instead of all' }),
+    (0, swagger_1.ApiResponse)({ status: 200 }),
+    __param(0, (0, common_1.Query)('execute')),
+    __param(1, (0, common_1.Query)('mobile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], TelegramController.prototype, "auditStaleConfigs", null);
 exports.TelegramController = TelegramController = __decorate([
     (0, common_1.Controller)('telegram'),
     (0, swagger_1.ApiTags)('Telegram'),

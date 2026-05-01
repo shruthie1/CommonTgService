@@ -160,7 +160,7 @@ let TransactionService = TransactionService_1 = class TransactionService {
     }
     async sendNotification(filters, total) {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)(process.env.accountsChannel)}&text=${encodeURIComponent(`Found ${total} transactions matching ip: ${filters.ip || 'N/A'}\nchatId: ${filters.chatId || 'N/A'}\ntransactionId: ${filters.transactionId || 'N/A'}\nprofile: ${filters.profile || 'N/A'}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)(process.env.accountsChannel)}&text=${encodeURIComponent(`Transaction Search\n\nResults: ${total}\nIP: ${filters.ip || 'N/A'}\nChat ID: ${filters.chatId || 'N/A'}\nTransaction ID: ${filters.transactionId || 'N/A'}\nProfile: ${filters.profile || 'N/A'}`)}`);
         }
         catch (error) {
             this.logger.error(`Failed to send notification: ${error.message}`);

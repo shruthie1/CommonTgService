@@ -131,7 +131,13 @@ function getWarmupPhaseAction(doc, now) {
         if (identityCatchup)
             return identityCatchup;
         const channels = doc.channels || 0;
-        if (channels < exports.MIN_CHANNELS_FOR_MATURING) {
+        const growingDuration = daysSinceEnrolled - (exports.WARMUP_PHASE_THRESHOLDS.growing + jitter);
+        const expectedGrowingDays = exports.WARMUP_PHASE_THRESHOLDS.maturing - exports.WARMUP_PHASE_THRESHOLDS.growing;
+        const isGrowingStalled = growingDuration > expectedGrowingDays * 2;
+        const effectiveChannelTarget = isGrowingStalled
+            ? Math.floor(exports.MIN_CHANNELS_FOR_MATURING / 2)
+            : exports.MIN_CHANNELS_FOR_MATURING;
+        if (channels < effectiveChannelTarget) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.maturing + jitter) {

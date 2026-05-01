@@ -159,8 +159,8 @@ class ConnectionManager {
         try {
             const botsService = (0, utils_1.getBotsServiceInstance)();
             if (botsService) {
-                const botMessage = `Client connection error for ${mobile}\n\n${errorDetails.message}\n\nMarkedAsExpired: ${markedAsExpired}`;
-                await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage);
+                const botMessage = `<b>Client Connection Error</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Marked Expired:</b> ${markedAsExpired}`;
+                await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage, { parseMode: 'HTML' });
             }
         }
         catch (notificationError) {

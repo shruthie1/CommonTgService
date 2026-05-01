@@ -318,15 +318,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-            'Buffer Client Created',
+            '<b>Buffer Client Created</b>',
             '',
-            `Mobile: ${bufferClient.mobile}`,
-            `ClientId: ${bufferClient.clientId || '-'}`,
-            `Status: ${result.status}`,
-            `AvailableDate: ${bufferClient.availableDate || '-'}`,
-            `Channels: ${bufferClient.channels ?? '-'}`,
-            `Message: ${bufferClient.message || '-'}`,
-        ].join('\n'));
+            `<b>Mobile:</b> ${bufferClient.mobile}`,
+            `<b>Client ID:</b> ${bufferClient.clientId || '-'}`,
+            `<b>Status:</b> ${result.status}`,
+            `<b>Available Date:</b> ${bufferClient.availableDate || '-'}`,
+            `<b>Channels:</b> ${bufferClient.channels ?? '-'}`,
+            `<b>Message:</b> ${bufferClient.message || '-'}`,
+        ].join('\n'), { parseMode: 'HTML' });
         return result;
     }
     async findAll(status) {
@@ -369,7 +369,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
             this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client : ${mobile}\n${message}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
             await this.bufferClientModel.deleteOne({ mobile }).exec();
         }
         catch (error) {
@@ -416,7 +416,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         if (status === 'inactive') {
             updateData.inUse = false;
         }
-        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Buffer Client:\n\nStatus Updated to ${status}\nMobile: ${mobile}\nReason: ${message || ''}`);
+        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
         return await this.update(mobile, updateData);
     }
     async setPrimaryInUse(clientId, mobile) {
@@ -437,12 +437,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 revokedCount: revoked.modifiedCount,
             });
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-                'Buffer Primary Reassigned',
+                '<b>Buffer Primary Reassigned</b>',
                 '',
-                `ClientId: ${clientId}`,
-                `PrimaryMobile: ${mobile}`,
-                `RevokedInUseCount: ${revoked.modifiedCount}`,
-            ].join('\n'));
+                `<b>Client ID:</b> ${clientId}`,
+                `<b>Primary Mobile:</b> ${mobile}`,
+                `<b>Revoked In-Use:</b> ${revoked.modifiedCount}`,
+            ].join('\n'), { parseMode: 'HTML' });
         }
         const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate({ mobile, clientId }, {
@@ -606,6 +606,251 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         return 'Client enrolled as buffer successfully';
     }
+    async diagnoseEnrollmentDecision() {
+        const clients = await this.clientService.findAll();
+        const now = Date.now();
+        const assignedBufferClients = await this.bufferClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        const healthyBufferClientsPerClient = new Map();
+        for (const doc of assignedBufferClients) {
+            if (!doc.clientId)
+                continue;
+            if (!this.isHealthyBufferClientForCap(doc, now))
+                continue;
+            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
+        const perClientDecisions = [];
+        const clientsNeedingBufferClients = [];
+        for (const client of clients) {
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
+            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
+            const decision = {
+                clientId: client.clientId,
+                healthyCount,
+                healthyCap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                remainingCapacity,
+                readyActive: availabilityNeeds.readyActive,
+                warmingPipeline: availabilityNeeds.warmingPipeline,
+                totalActive: availabilityNeeds.totalActive,
+                totalNeeded: availabilityNeeds.totalNeeded,
+                calculationReason: availabilityNeeds.calculationReason,
+                priority: availabilityNeeds.priority,
+                replenishmentWindows: availabilityNeeds.replenishmentWindowNeeds,
+                shortTermWindows: availabilityNeeds.windowNeeds,
+            };
+            if (availabilityNeeds.totalNeeded > 0 && remainingCapacity > 0) {
+                const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+                decision.wouldEnroll = cappedNeeded;
+                decision.cappedReason = cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `capped from ${availabilityNeeds.totalNeeded} to ${cappedNeeded} by healthy cap`
+                    : null;
+                clientsNeedingBufferClients.push({
+                    clientId: client.clientId,
+                    totalNeeded: cappedNeeded,
+                    priority: availabilityNeeds.priority,
+                });
+            }
+            else if (availabilityNeeds.totalNeeded > 0) {
+                decision.wouldEnroll = 0;
+                decision.blockedReason = `healthy cap reached (${healthyCount}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT})`;
+            }
+            else {
+                decision.wouldEnroll = 0;
+                decision.blockedReason = 'no deficit in replenishment windows';
+            }
+            perClientDecisions.push(decision);
+        }
+        clientsNeedingBufferClients.sort((a, b) => a.priority - b.priority);
+        let totalSlotsNeeded = 0;
+        const allocations = [];
+        for (const clientNeed of clientsNeedingBufferClients) {
+            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
+            if (allocated > 0) {
+                totalSlotsNeeded += allocated;
+                allocations.push({ clientId: clientNeed.clientId, allocated, priority: clientNeed.priority });
+            }
+            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
+                break;
+        }
+        const promoteClients = await this.promoteClientService.findAll();
+        const clientMainMobiles = clients.map((c) => c.mobile);
+        const assignedBufferMobiles = assignedBufferClients.map((doc) => doc.mobile);
+        const goodIds = [
+            ...clientMainMobiles,
+            ...promoteClients.map((c) => c.mobile),
+            ...assignedBufferMobiles,
+        ].filter(Boolean);
+        const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
+        const eligibleUserCount = await this.usersService.executeQuery({
+            mobile: { $nin: goodIds },
+            expired: false,
+            twoFA: false,
+            lastActive: { $lt: threeMonthsAgo },
+            totalChats: { $gt: 150 },
+        }, { _id: 1 }, totalSlotsNeeded + 5);
+        return {
+            maxNewClientsPerTrigger: this.config.maxNewClientsPerTrigger,
+            minTotalClients: this.config.minTotalClients,
+            healthyCapPerClient: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+            totalClientsNeedingEnrollment: clientsNeedingBufferClients.length,
+            totalSlotsRequested: clientsNeedingBufferClients.reduce((s, c) => s + c.totalNeeded, 0),
+            totalSlotsAllocated: totalSlotsNeeded,
+            eligibleUsersAvailable: eligibleUserCount.length,
+            wouldCreate: Math.min(totalSlotsNeeded, eligibleUserCount.length),
+            allocations,
+            perClientDecisions: perClientDecisions.sort((a, b) => b.totalNeeded - a.totalNeeded),
+        };
+    }
+    async diagnoseWarmupPipeline() {
+        const clients = await this.clientService.findAll();
+        const clientMap = new Map(clients.map((c) => [c.clientId, c]));
+        const now = Date.now();
+        const allActive = await this.bufferClientModel
+            .find({ status: 'active', clientId: { $exists: true, $ne: null } })
+            .exec();
+        const phaseCounts = {};
+        const actionCounts = {};
+        const skippedReasons = {};
+        const wouldProcess = [];
+        const settlingDetails = [];
+        for (const bc of allActive) {
+            const warmupPhase = bc.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            phaseCounts[warmupPhase] = (phaseCounts[warmupPhase] || 0) + 1;
+            const client = clientMap.get(bc.clientId);
+            if (!client) {
+                skippedReasons['no_client'] = (skippedReasons['no_client'] || 0) + 1;
+                continue;
+            }
+            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.lastUsed);
+            if (lastUsed > 0 && warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+                skippedReasons['session_rotated_used'] = (skippedReasons['session_rotated_used'] || 0) + 1;
+                continue;
+            }
+            if (bc.mobile === client.mobile) {
+                skippedReasons['is_primary_mobile'] = (skippedReasons['is_primary_mobile'] || 0) + 1;
+                continue;
+            }
+            if (bc.inUse === true) {
+                skippedReasons['in_use'] = (skippedReasons['in_use'] || 0) + 1;
+                continue;
+            }
+            const failedAttempts = bc.failedUpdateAttempts || 0;
+            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.lastUpdateFailure);
+            let processSkipReason = null;
+            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.createdAt);
+                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+                if (daysSinceEnrolled > 45 && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
+                    processSkipReason = `zombie_${Math.round(daysSinceEnrolled)}d`;
+                }
+            }
+            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+                if (lastFailureTime > 0 && now - lastFailureTime < retryBackoffMs) {
+                    processSkipReason = `failed_${failedAttempts}_backoff`;
+                }
+            }
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bc, now);
+            const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
+            const lastUpdateAttempt = bc.lastUpdateAttempt ? new Date(bc.lastUpdateAttempt).getTime() : 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const computedPhase = warmupAction.phase;
+            const phaseBoost = {
+                [base_client_service_1.WarmupPhase.READY]: 25000, [base_client_service_1.WarmupPhase.MATURING]: 15000, [base_client_service_1.WarmupPhase.GROWING]: 10000,
+                [base_client_service_1.WarmupPhase.IDENTITY]: 7000, [base_client_service_1.WarmupPhase.SETTLING]: 5000, [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
+                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const subStepBonus = {
+                'remove_other_auths': 2000, 'set_2fa': 1000, 'update_username': 1500,
+                'update_name_bio': 1000, 'upload_photo': 1000, 'rotate_session': 2000,
+            };
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = (phaseBoost[computedPhase] || 5000) + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+            actionCounts[warmupAction.action] = (actionCounts[warmupAction.action] || 0) + 1;
+            const entry = {
+                mobile: bc.mobile,
+                dbPhase: warmupPhase,
+                computedPhase,
+                action: warmupAction.action,
+                priority: Math.round(priority),
+                failedAttempts,
+                lastAttemptHoursAgo: lastAttemptAge,
+                processSkipReason,
+                privacyDone: !!bc.privacyUpdatedAt,
+                twoFADone: !!bc.twoFASetAt,
+                authsRemoved: !!bc.otherAuthsRemovedAt,
+                channels: bc.channels || 0,
+                onCooldown: this.isOnCooldown(bc.mobile, bc.lastUpdateAttempt, now),
+            };
+            if (warmupAction.phase === base_client_service_1.WarmupPhase.SETTLING) {
+                settlingDetails.push(entry);
+            }
+            wouldProcess.push(entry);
+        }
+        wouldProcess.sort((a, b) => b.priority - a.priority);
+        let simUpdates = 0;
+        const simProcessed = [];
+        const simSkipped = [];
+        for (const entry of wouldProcess) {
+            if (simUpdates >= this.MAX_UPDATES_PER_CYCLE) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
+                continue;
+            }
+            if (entry.onCooldown) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: 'cooldown' });
+                continue;
+            }
+            if (entry.processSkipReason) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: entry.processSkipReason });
+                continue;
+            }
+            const isMutation = !['wait', 'join_channels', 'advance_to_ready', 'organic_only'].includes(entry.action);
+            simProcessed.push({
+                mobile: entry.mobile,
+                dbPhase: entry.dbPhase,
+                computedPhase: entry.computedPhase,
+                action: entry.action,
+                priority: entry.priority,
+                isMutation,
+                wouldConsumeSlot: isMutation,
+            });
+            if (isMutation)
+                simUpdates++;
+        }
+        return {
+            totalActive: allActive.length,
+            phaseCounts,
+            actionCounts,
+            skippedReasons,
+            maxUpdatesPerCycle: this.MAX_UPDATES_PER_CYCLE,
+            eligibleToProcess: wouldProcess.length,
+            simulation: {
+                totalMutationSlots: this.MAX_UPDATES_PER_CYCLE,
+                mutationsUsed: simUpdates,
+                totalProcessed: simProcessed.length,
+                totalSkippedAfterSlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').length,
+                totalSkippedCooldown: simSkipped.filter(s => s.reason === 'cooldown').length,
+                totalSkippedOther: simSkipped.filter(s => s.reason !== 'slot_limit_reached' && s.reason !== 'cooldown').length,
+            },
+            top30WouldProcess: simProcessed.slice(0, 30),
+            settlingAccounts: {
+                total: settlingDetails.length,
+                byAction: settlingDetails.reduce((acc, s) => {
+                    acc[s.action] = (acc[s.action] || 0) + 1;
+                    return acc;
+                }, {}),
+                sampleNeedingPrivacy: settlingDetails.filter(s => s.action === 'set_privacy').slice(0, 5),
+                sampleNeedingRemoveAuths: settlingDetails.filter(s => s.action === 'remove_other_auths').slice(0, 5),
+            },
+            skippedBySlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').slice(0, 10),
+        };
+    }
     async checkBufferClients() {
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
@@ -663,6 +908,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bufferClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost = {
                 [base_client_service_1.WarmupPhase.READY]: 25000,
                 [base_client_service_1.WarmupPhase.MATURING]: 15000,
@@ -672,8 +919,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
                 [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            const subStepBonus = {
+                'remove_other_auths': 2000,
+                'set_2fa': 1000,
+                'update_username': 1500,
+                'update_name_bio': 1000,
+                'upload_photo': 1000,
+                'rotate_session': 2000,
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }
         bufferClientsToProcess.sort((a, b) => b.priority - a.priority);
@@ -871,15 +1129,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }, { new: true, upsert: true }).exec();
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-                'Buffer Client Enrolled',
+                '<b>Buffer Client Enrolled</b>',
                 '',
-                `ClientId: ${targetClientId}`,
-                `Mobile: ${document.mobile}`,
-                `AvailableDate: ${targetAvailableDate}`,
-                `Channels: ${channels.ids.length}`,
-                `WarmupPhase: ${base_client_service_1.WarmupPhase.ENROLLED}`,
-                `SourceTgId: ${document.tgId}`,
-            ].join('\n'));
+                `<b>Client ID:</b> ${targetClientId}`,
+                `<b>Mobile:</b> ${document.mobile}`,
+                `<b>Available Date:</b> ${targetAvailableDate}`,
+                `<b>Channels:</b> ${channels.ids.length}`,
+                `<b>Warmup Phase:</b> ${base_client_service_1.WarmupPhase.ENROLLED}`,
+                `<b>Source TG ID:</b> ${document.tgId}`,
+            ].join('\n'), { parseMode: 'HTML' });
             return true;
         }
         catch (error) {
@@ -1126,22 +1384,22 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
             : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
-            'Buffer Client Check Summary',
+            '<b>Buffer Client Check Summary</b>',
             '',
-            `Active: ${distribution.activeBufferClients}`,
-            `Inactive: ${distribution.inactiveBufferClients}`,
-            `Unassigned: ${distribution.unassignedBufferClients}`,
-            `UpdatesApplied: ${totalUpdates}`,
-            `CreatedThisRun: ${createdCount}`,
-            `AttemptedCreates: ${attemptedCount}`,
-            `TotalNeeded: ${distribution.summary.totalBufferClientsNeeded}`,
-            `ClientsNeedingMore: ${distribution.summary.clientsNeedingBufferClients}`,
+            `<b>Active:</b> ${distribution.activeBufferClients}`,
+            `<b>Inactive:</b> ${distribution.inactiveBufferClients}`,
+            `<b>Unassigned:</b> ${distribution.unassignedBufferClients}`,
+            `<b>Updates Applied:</b> ${totalUpdates}`,
+            `<b>Created This Run:</b> ${createdCount}`,
+            `<b>Attempted Creates:</b> ${attemptedCount}`,
+            `<b>Total Needed:</b> ${distribution.summary.totalBufferClientsNeeded}`,
+            `<b>Clients Needing More:</b> ${distribution.summary.clientsNeedingBufferClients}`,
             '',
             ...updatedLines,
             ...createdLines,
-            'PerClientSummary:',
+            '<b>Per Client Summary:</b>',
             ...lines,
-        ].join('\n'));
+        ].join('\n'), { parseMode: 'HTML' });
     }
 };
 exports.BufferClientService = BufferClientService;

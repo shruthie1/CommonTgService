@@ -151,8 +151,10 @@ class BaseClientService {
     }
     async repairWarmupMetadata(doc, now) {
         const updateData = {};
-        const progressDoc = { ...doc, warmupPhase: undefined };
-        const inferredPhase = this.inferWarmupPhaseFromProgress(progressDoc);
+        const savedPhase = doc.warmupPhase;
+        doc.warmupPhase = undefined;
+        const inferredPhase = this.inferWarmupPhaseFromProgress(doc);
+        doc.warmupPhase = savedPhase;
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
@@ -168,7 +170,7 @@ class BaseClientService {
         }
         const repairedDoc = await this.update(doc.mobile, updateData);
         this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
-        return { ...doc, ...updateData, ...(repairedDoc || {}) };
+        return (repairedDoc?.mobile ? repairedDoc : Object.assign(doc, updateData));
     }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
@@ -197,7 +199,7 @@ class BaseClientService {
         this.MAX_FAILED_ATTEMPTS = 3;
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
-        this.MAX_UPDATES_PER_CYCLE = 15;
+        this.MAX_UPDATES_PER_CYCLE = 20;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -647,7 +649,7 @@ class BaseClientService {
                 else {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `FOREIGN 2FA:\n\nMobile: ${doc.mobile}\nPhase: ${doc.warmupPhase}\nAccount has unknown 2FA password — marked inactive`);
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — marked inactive`, { parseMode: 'HTML' });
                     return 0;
                 }
             }
@@ -703,7 +705,7 @@ class BaseClientService {
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 await this.markAsInactive(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `CRITICAL SESSION LOSS:\n\nMobile: ${doc.mobile}\nPhase: ${doc.warmupPhase}\nError: ${errorMsg}`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — marked inactive`, { parseMode: 'HTML' });
                 return 0;
             }
             await this.update(doc.mobile, {
@@ -733,56 +735,72 @@ class BaseClientService {
         const now = Date.now();
         let updateCount = 0;
         try {
-            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             doc = await this.repairWarmupMetadata(doc, now);
-            const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-                if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
-                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
-                    return { updateCount: 0 };
-                }
-                this.logger.log(`Resetting failure count for ${doc.mobile}`);
-                await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
-            }
-            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
-                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
-                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
-                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
-                }
-                else {
-                    this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                    return { updateCount: 0 };
-                }
-            }
-            if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
-                this.logger.debug(`Client ${doc.mobile} on cooldown`);
+        }
+        catch (err) {
+            this.logger.warn(`repairWarmupMetadata failed for ${doc.mobile}:`, err);
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+        if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+            const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+            const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+            if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
+                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Marked inactive — manual review needed`, { parseMode: 'HTML' });
                 return { updateCount: 0 };
             }
-            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-            if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
-                await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
-                return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+            this.logger.log(`Resetting failure count for ${doc.mobile}`);
+            const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+            const resetDoc1 = await this.update(doc.mobile, resetFields);
+            doc = (resetDoc1?.mobile ? resetDoc1 : Object.assign(doc, resetFields));
+        }
+        else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+            if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                const resetFields2 = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+                const resetDoc2 = await this.update(doc.mobile, resetFields2);
+                doc = (resetDoc2?.mobile ? resetDoc2 : Object.assign(doc, resetFields2));
             }
-            const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
-            this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
-            if (warmupAction.phase !== doc.warmupPhase) {
-                await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
-            }
-            if (warmupAction.action === 'wait') {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            else {
+                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
                 return { updateCount: 0 };
             }
+        }
+        if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+            this.logger.debug(`Client ${doc.mobile} on cooldown`);
+            return { updateCount: 0 };
+        }
+        const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+        const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
+            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+        }
+        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+        if (warmupAction.phase !== doc.warmupPhase) {
+            await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
+        }
+        if (warmupAction.action === 'wait') {
+            await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            return { updateCount: 0 };
+        }
+        if (warmupAction.action === 'join_channels') {
+            return { updateCount: 0 };
+        }
+        if (warmupAction.action === 'advance_to_ready') {
+            await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
+            this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase} → ready\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> All warmup steps complete — eligible for session rotation`, { parseMode: 'HTML' });
+            return { updateCount: 0, updateSummary: 'advance_to_ready' };
+        }
+        try {
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             switch (warmupAction.action) {
                 case 'organic_only': {
                     const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -797,39 +815,58 @@ class BaseClientService {
                 }
                 case 'set_privacy':
                     updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_privacy\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Privacy settings updated`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_privacy' : null };
                 case 'delete_photos':
                     updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> delete_photos\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photos deleted`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'delete_photos' : null };
                 case 'update_name_bio':
                     updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> update_name_bio\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Name and bio updated`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'update_name_bio' : null };
                 case 'update_username':
                     updateCount = await this.updateUsername(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> update_username\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Username updated`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'update_username' : null };
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo uploaded`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> 2FA password set successfully`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Other sessions revoked`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
-                case 'advance_to_ready':
-                    await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
-                    this.logger.log(`Client ${doc.mobile} advanced to READY`);
-                    return { updateCount: 0, updateSummary: 'advance_to_ready' };
-                case 'join_channels':
-                    return { updateCount: 0 };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
-                    if (updateCount === 0) {
+                    if (updateCount > 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> rotate_session\n<b>Phase:</b> ready → session_rotated\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Session rotated — account fully operational`, { parseMode: 'HTML' });
+                    }
+                    else {
                         await this.update(doc.mobile, {
                             lastUpdateAttempt: new Date(),
                             failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
                             lastUpdateFailure: new Date(),
                         });
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> rotate_session\n<b>Phase:</b> ready\n<b>Fails:</b> ${(doc.failedUpdateAttempts || 0) + 1}\n<b>Status:</b> Session rotation failed`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
                 default:
@@ -839,10 +876,11 @@ class BaseClientService {
         }
         catch (error) {
             const errorDetails = this.handleError(error, `Error with ${this.clientType} client`, doc.mobile);
+            const failCount = (doc.failedUpdateAttempts || 0) + 1;
             try {
                 await this.update(doc.mobile, {
                     lastUpdateAttempt: new Date(),
-                    failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
+                    failedUpdateAttempts: failCount,
                     lastUpdateFailure: new Date(),
                 });
             }
@@ -852,6 +890,10 @@ class BaseClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 await this.markAsInactive(doc.mobile, reason);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> Marked inactive`, { parseMode: 'HTML' });
+            }
+            else {
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failCount}/${this.MAX_FAILED_ATTEMPTS}\n<b>Error:</b> ${errorDetails?.message?.substring(0, 200) || 'unknown'}`, { parseMode: 'HTML' });
             }
             return { updateCount: 0 };
         }
@@ -1025,8 +1067,8 @@ class BaseClientService {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     }
-                    catch {
-                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    catch (channelError) {
+                        if (channelError?.errorMessage === 'CHANNELS_TOO_MUCH') {
                             await this.update(mobile, { channels: 500 });
                         }
                     }
@@ -1339,7 +1381,7 @@ class BaseClientService {
         }
         if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
             return null;
-        const projectedReadyDate = this.getProjectedReadyDateString({ ...doc, warmupPhase: phase });
+        const projectedReadyDate = this.getProjectedReadyDateString(doc);
         if (!projectedReadyDate)
             return null;
         return this.maxDateString(projectedReadyDate, availableDate);

@@ -290,7 +290,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async resetWordRestrictions() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Request Received for Reset Word Restrictions`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Word Restrictions\nStatus: Processing`)}`);
             await this.activeChannelModel.updateMany({ banned: false }, { $set: { wordRestriction: 0, dMRestriction: 0, updatedAt: new Date() } });
         }
         catch (error) {
@@ -299,7 +299,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async resetAvailableMsgs() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Request Received for Reset Available Messages`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Available Messages\nStatus: Processing`)}`);
             const availableMsgs = await this.getAvailableMessages();
             await this.activeChannelModel.updateMany({
                 $expr: {
@@ -321,7 +321,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async updateBannedChannels() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=Request Received for Update Banned Channels`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Update Banned Channels\nStatus: Processing`)}`);
             await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
                 $set: {
                     wordRestriction: 0,

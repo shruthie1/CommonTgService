@@ -77,7 +77,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     async remove(profile, chatId) {
         const botsService = (0, utils_1.getBotsServiceInstance)();
         if (botsService) {
-            botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `Deleting UserData with profile ${profile} and chatId ${chatId}`);
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Deleting UserData</b>\n\n<b>Profile:</b> ${profile}\n<b>Chat ID:</b> ${chatId}`, { parseMode: 'HTML' });
         }
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {

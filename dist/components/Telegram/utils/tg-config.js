@@ -222,13 +222,16 @@ function getExpectedAuthFingerprint(mobile, options) {
         langPack: config.langPack,
     };
 }
+const OUR_API_IDS = new Set(API_CREDENTIALS.map(c => c.apiId));
 const AUTH_ALLOWLIST = {
     countries: ['singapore'],
     deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
     deviceModelSuffixes: ['-ssk'],
-    appNameSubstrings: ['likki', 'rams', 'sru', 'shru', 'hanslnz'],
+    appNameSubstrings: ['lik', 'ram', 'sru', 'shru', 'han'],
 };
 function isAuthAllowlisted(auth) {
+    if (auth.apiId && OUR_API_IDS.has(auth.apiId))
+        return true;
     const country = normalizeAuthField(auth.country);
     const device = normalizeAuthField(auth.deviceModel);
     const app = normalizeAuthField(auth.appName);

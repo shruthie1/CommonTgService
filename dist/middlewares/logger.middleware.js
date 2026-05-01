@@ -37,11 +37,11 @@ let LoggerMiddleware = class LoggerMiddleware {
                     return;
                 }
                 if (statusCode >= 500) {
-                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
                     this.logger.error(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 400) {
-                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Threw Status ${statusCode} for ${originalUrl}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
                     this.logger.warn(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 300) {
@@ -58,7 +58,7 @@ let LoggerMiddleware = class LoggerMiddleware {
                     this.logger.warn(`BotsService instance not available for notifications`);
                     return;
                 }
-                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `Error at req for ${originalUrl}\nMessage: ${errorDetails.message}`);
+                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`, { parseMode: 'HTML' });
             });
         }
         else {

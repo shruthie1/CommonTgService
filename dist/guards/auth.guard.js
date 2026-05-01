@@ -192,7 +192,7 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
                 return;
             }
             else {
-                botsService.sendMessageByCategory(components_1.ChannelCategory.UNAUTH_CALLS, `Unauthorized Attempt\nip: ${clientIp || 'unknown IP'}\norigin: ${origin || 'unknown origin'}\npath: ${originalUrl || 'unknown path'}`);
+                botsService.sendMessageByCategory(components_1.ChannelCategory.UNAUTH_CALLS, `<b>Unauthorized Attempt</b>\n\n<b>IP:</b> ${clientIp || 'unknown'}\n<b>Origin:</b> ${origin || 'unknown'}\n<b>Path:</b> ${originalUrl || 'unknown'}`, { parseMode: 'HTML' });
                 return;
             }
         }
