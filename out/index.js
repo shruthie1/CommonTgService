@@ -21215,7 +21215,7 @@ let ClientService = ClientService_1 = class ClientService {
             const scope = setupMobile ? ` for ${setupMobile}` : '';
             throw new common_1.BadRequestException(`No active client setup found${scope}`);
         }
-        const { archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+        const { archiveOld, clientId, existingMobile, formalities, newMobile, reason } = setup;
         const days = setup.days ?? 0;
         this.logger.info(`[${clientId}] Starting client session cutover`, {
             existingMobile,
@@ -21301,7 +21301,7 @@ let ClientService = ClientService_1 = class ClientService {
                 formalities,
                 days,
             });
-            await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days);
+            await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason);
             this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
             await this.notify(`Client Swap Complete\n\nClient: ${clientId}\nOld Mobile: ${existingMobile}\nNew Mobile: ${newMobile}\nStatus: Cutover finished successfully`);
         }
@@ -21322,7 +21322,7 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.debug(`[${clientId}] Cleared active setup state`, { newMobile });
         }
     }
-    async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days) {
+    async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason) {
         try {
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             if (!existingClientUser)
@@ -21341,6 +21341,7 @@ let ClientService = ClientService_1 = class ClientService {
                     inUse: false,
                     lastUsed: new Date(),
                     status: 'inactive',
+                    message: reason || 'Deactivated during client swap (archival skipped)',
                 });
                 this.logger.log('Client Archive Skipped');
                 await this.notify(`Archival Skipped\n\nOld Mobile: ${existingMobile}\nStatus: Old client marked inactive without archival`);
@@ -22202,6 +22203,12 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "formalities", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Reason for triggering the swap (e.g. permanent error from tg-aut)' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SetupClientQueryDto.prototype, "reason", void 0);
 
 
 /***/ },
