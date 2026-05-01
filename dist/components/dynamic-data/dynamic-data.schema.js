@@ -33,8 +33,8 @@ exports.DynamicData = DynamicData = __decorate([
             transform: (_, ret) => {
                 delete ret._id;
                 return ret;
-            },
-        },
+            }
+        }
     })
 ], DynamicData);
 exports.DynamicDataSchema = mongoose_1.SchemaFactory.createForClass(DynamicData);

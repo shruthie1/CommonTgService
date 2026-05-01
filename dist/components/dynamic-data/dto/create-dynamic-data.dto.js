@@ -17,8 +17,7 @@ class CreateDynamicDataDto {
 exports.CreateDynamicDataDto = CreateDynamicDataDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Unique identifier for the dynamic data',
-        example: 'user123',
+        description: 'Unique identifier for the dynamic data'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -26,17 +25,7 @@ __decorate([
 ], CreateDynamicDataDto.prototype, "configKey", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Dynamic JSON data',
-        example: {
-            profile: {
-                name: 'John Doe',
-                age: 30,
-            },
-            preferences: {
-                theme: 'dark',
-                notifications: true,
-            },
-        },
+        description: 'Dynamic JSON data'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", Object)

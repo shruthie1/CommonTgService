@@ -124,13 +124,13 @@ let UsersService = UsersService_1 = class UsersService {
         return doc.toJSON();
     }
     async update(tgId, updateDto) {
-        const result = await this.userModel
-            .updateMany({ tgId }, { $set: updateDto })
+        const updated = await this.userModel
+            .findOneAndUpdate({ tgId }, { $set: updateDto }, { new: true })
             .exec();
-        if (result.matchedCount === 0) {
-            throw new common_1.NotFoundException(`Users with tgId ${tgId} not found`);
+        if (!updated) {
+            throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
-        return result.modifiedCount;
+        return updated;
     }
     async updateByFilter(filter, updateDto) {
         const result = await this.userModel
@@ -157,8 +157,12 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async search(filter) {
         const query = { ...filter };
-        if (query.firstName) {
-            query.firstName = { $regex: new RegExp(query.firstName, 'i') };
+        const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regexFields = ['firstName', 'lastName', 'username', 'mobile'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(escapeRegex(query[field]), 'i') };
+            }
         }
         if (!filter.mobile) {
             let excludedMobiles = [];

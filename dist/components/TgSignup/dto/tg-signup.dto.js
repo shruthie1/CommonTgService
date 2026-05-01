@@ -18,8 +18,7 @@ class SendCodeDto {
 exports.SendCodeDto = SendCodeDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Phone number to send the verification code to (international format)',
-        example: '+919876543210'
+        description: 'Phone number to send the verification code to (international format)'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -31,8 +30,7 @@ class VerifyCodeDto {
 exports.VerifyCodeDto = VerifyCodeDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Phone number used for verification (international format)',
-        example: '919876543210'
+        description: 'Phone number used for verification (international format)'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -41,8 +39,7 @@ __decorate([
 ], VerifyCodeDto.prototype, "phone", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Verification code received',
-        example: '12345'
+        description: 'Verification code received'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -52,7 +49,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Two-factor authentication password if required',
-        example: 'yourSecurePassword123',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -65,22 +61,19 @@ class TgSignupResponse {
 exports.TgSignupResponse = TgSignupResponse;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Operation status code',
-        example: 200
+        description: 'Operation status code'
     }),
     __metadata("design:type", Number)
 ], TgSignupResponse.prototype, "status", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Response message',
-        example: 'Login successful'
+        description: 'Response message'
     }),
     __metadata("design:type", String)
 ], TgSignupResponse.prototype, "message", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Phone code hash for verification',
-        example: 'abc123xyz',
         required: false
     }),
     __metadata("design:type", String)
@@ -88,7 +81,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the code was sent via app',
-        example: true,
         required: false
     }),
     __metadata("design:type", Boolean)
@@ -103,7 +95,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether 2FA is required',
-        example: false,
         required: false
     }),
     __metadata("design:type", Boolean)

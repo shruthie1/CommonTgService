@@ -17,7 +17,7 @@ class PromoteMobileSearchQueryDto {
 }
 exports.PromoteMobileSearchQueryDto = PromoteMobileSearchQueryDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Promote mobile number to search for.', example: '916265240911' }),
+    (0, swagger_1.ApiProperty)({ description: 'Promote mobile number to search for.' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),

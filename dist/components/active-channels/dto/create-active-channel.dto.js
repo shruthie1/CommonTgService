@@ -86,8 +86,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel is private',
-        example: false,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "private", void 0);

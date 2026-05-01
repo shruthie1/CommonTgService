@@ -960,8 +960,8 @@ exports.Configuration = Configuration = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Configuration);
 exports.ConfigurationSchema = mongoose_1.SchemaFactory.createForClass(Configuration);
@@ -1868,7 +1868,7 @@ let TelegramController = class TelegramController {
             archived: archived === true,
             peerType: peerType,
             ignorePinned: ignorePinned === true,
-            includePhotos,
+            includePhotos
         });
     }
     async getLastActiveTime(mobile) {
@@ -2054,7 +2054,7 @@ let TelegramController = class TelegramController {
             staleConfigs: [],
             validConfigs: 0,
             noConfigKeys: 0,
-            errors: [],
+            errors: []
         };
         try {
             let keys = [];
@@ -2085,7 +2085,7 @@ let TelegramController = class TelegramController {
                             mobile: mobileFromKey,
                             apiId: apiId || 0,
                             deviceModel: config.deviceModel || 'unknown',
-                            deleted: false,
+                            deleted: false
                         };
                         if (shouldExecute) {
                             await redis.del(key);
@@ -2112,7 +2112,7 @@ let TelegramController = class TelegramController {
             ...result,
             summary: shouldExecute
                 ? `Deleted ${result.staleConfigs.filter(s => s.deleted).length} stale configs out of ${result.totalScanned} total`
-                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`,
+                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`
         };
     }
 };
@@ -2479,7 +2479,7 @@ __decorate([
         summary: 'Send media message',
         description: 'Send a photo or file to a chat. Maximum file size is 100MB. Supports images, videos, and documents.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaDto }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2506,19 +2506,17 @@ __decorate([
         summary: 'Preview or download media from a message',
         description: 'Download or preview media from a Telegram message. Images and videos preview in browser, other files download. Supports HTTP Range requests for video streaming.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'messageId',
         required: true,
         description: 'Message ID containing the media (must be a positive number)',
-        type: Number,
-        example: 12345
+        type: Number
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2559,25 +2557,23 @@ __decorate([
         summary: 'Get thumbnail for a media message',
         description: 'Get thumbnail image for a Telegram message containing media (photo or video). Returns JPEG image. Supports caching with ETag headers.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'messageId',
         required: true,
         description: 'Message ID containing the media (must be a positive number)',
-        type: Number,
-        example: 12345
+        type: Number
     }),
     (0, swagger_1.ApiQuery)({
         name: 'quality',
         required: false,
         description: 'Thumbnail quality: low (smallest, fast) or high (medium size)',
-        enum: ['low', 'high'],
+        enum: ['low', 'high']
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2613,7 +2609,7 @@ __decorate([
         summary: 'Send media album (multiple photos/videos)',
         description: 'Send multiple media files as an album. If some items fail, the operation continues and returns a summary of successful and failed items.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaAlbumDto }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2657,53 +2653,46 @@ __decorate([
         summary: 'Get media metadata from a chat',
         description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range. Use maxId for pagination (get messages with ID less than maxId).'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'types',
         enum: ['photo', 'video', 'document', 'voice', 'all'],
         required: false,
         isArray: true,
-        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
-        example: ['photo', 'video']
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'startDate',
         required: false,
-        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-01-01'
+        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'endDate',
         required: false,
-        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-12-31'
+        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'limit',
         description: 'Maximum number of messages to fetch (default: 50, max: 1000)',
         required: false,
-        type: Number,
-        example: 50
+        type: Number
     }),
     (0, swagger_1.ApiQuery)({
         name: 'maxId',
         required: false,
         type: Number,
-        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
-        example: 12345
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'minId',
         required: false,
         type: Number,
-        description: 'Minimum message ID to include',
-        example: 1000
+        description: 'Minimum message ID to include'
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2732,53 +2721,46 @@ __decorate([
         summary: 'Get filtered media messages from a chat',
         description: 'Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'types',
         required: false,
         enum: ['photo', 'video', 'document', 'voice', 'all'],
         isArray: true,
-        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
-        example: ['photo', 'video']
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'startDate',
         required: false,
-        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-01-01'
+        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'endDate',
         required: false,
-        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-12-31'
+        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'limit',
         required: false,
         type: Number,
-        description: 'Maximum number of media items to fetch (default: 50, max: 1000)',
-        example: 50
+        description: 'Maximum number of media items to fetch (default: 50, max: 1000)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'maxId',
         required: false,
         type: Number,
-        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
-        example: 12345
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'minId',
         required: false,
         type: Number,
-        description: 'Minimum message ID to include',
-        example: 1000
+        description: 'Minimum message ID to include'
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2866,7 +2848,7 @@ __decorate([
     (0, common_1.Get)('dialogs/:mobile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get dialogs (paginated dialog list)',
-        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.',
+        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.'
     }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Items per page (default 100)' }),
@@ -2883,9 +2865,9 @@ __decorate([
             properties: {
                 items: { type: 'array', description: 'Chat list (id, title, username, type, unreadCount, lastMessage, etc.)' },
                 hasMore: { type: 'boolean' },
-                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' },
-            },
-        },
+                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' }
+            }
+        }
     }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
@@ -3001,7 +2983,7 @@ __decorate([
                 gif: { type: 'number' },
                 audio: { type: 'number', description: 'Music files' },
                 link: { type: 'number', description: 'Shared URLs' },
-                totalMedia: { type: 'number', description: 'Total media count (excludes links)' },
+                totalMedia: { type: 'number', description: 'Total media count (excludes links)' }
             }
         }
     }),
@@ -3045,7 +3027,7 @@ __decorate([
                             durationSeconds: { type: 'number' },
                             video: { type: 'boolean' },
                             outgoing: { type: 'boolean' },
-                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] },
+                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] }
                         }
                     }
                 }
@@ -3103,14 +3085,14 @@ __decorate([
         summary: 'Send voice message',
         description: 'Send a voice message (audio file) to a chat. Maximum file size is 100MB. Duration is optional but recommended for better playback.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
             properties: {
-                chatId: { type: 'string', description: 'Chat ID or username', example: 'me' },
-                url: { type: 'string', description: 'URL of the voice file (must be accessible)', example: 'https://example.com/voice.ogg' },
-                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)', example: 30 },
+                chatId: { type: 'string', description: 'Chat ID or username' },
+                url: { type: 'string', description: 'URL of the voice file (must be accessible)' },
+                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)' },
                 caption: { type: 'string', description: 'Optional caption for the voice message' }
             },
             required: ['chatId', 'url']
@@ -3390,21 +3372,19 @@ __decorate([
         name: 'limit',
         required: false,
         type: Number,
-        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)',
-        example: 45
+        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'enrichMedia',
         required: false,
         type: Boolean,
-        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.',
-        example: false
+        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'offsetDate',
         required: false,
         type: Number,
-        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.',
+        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.'
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -3431,7 +3411,7 @@ __decorate([
                                 properties: {
                                     photo: { type: 'number' }, video: { type: 'number' }, roundVideo: { type: 'number' },
                                     document: { type: 'number' }, voice: { type: 'number' }, gif: { type: 'number' },
-                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' },
+                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' }
                                 }
                             },
                             calls: {
@@ -3444,9 +3424,9 @@ __decorate([
                                     totalDuration: { type: 'number', description: 'Seconds' },
                                     averageDuration: { type: 'number', description: 'Seconds' },
                                     longestCall: { type: 'number', description: 'Seconds' },
-                                    lastCallDate: { type: 'string', nullable: true },
+                                    lastCallDate: { type: 'string', nullable: true }
                                 }
-                            },
+                            }
                         }
                     }
                 },
@@ -3456,7 +3436,7 @@ __decorate([
                         count: { type: 'number', description: 'Number of items returned' },
                         hasMore: { type: 'boolean' },
                         previousOffsetDate: { type: 'number', description: 'The offsetDate that was passed in (for prev button)' },
-                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' },
+                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' }
                     }
                 }
             }
@@ -3485,7 +3465,6 @@ __decorate([
         required: false,
         type: Number,
         description: 'Maximum number of messages to analyze (default: 500, max: 10000)',
-        example: 500,
         minimum: 1,
         maximum: 10000
     }),
@@ -5034,8 +5013,7 @@ class CreateTgBotDto {
 exports.CreateTgBotDto = CreateTgBotDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Name of the bot (required)',
-        example: 'MyAwesomeBot'
+        description: 'Name of the bot (required)'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.IsString)(),
@@ -5044,8 +5022,7 @@ __decorate([
 ], CreateTgBotDto.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Username for the bot (required)',
-        example: 'my_awesome_bot'
+        description: 'Username for the bot (required)'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.IsString)(),
@@ -5055,7 +5032,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Description of what your bot can do',
-        example: 'This bot helps you manage your tasks',
         required: false
     }),
     (0, class_validator_1.IsOptional)(),
@@ -5066,7 +5042,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'What the bot can be used for',
-        example: 'Task Management, Reminders, Notes',
         required: false
     }),
     (0, class_validator_1.IsOptional)(),
@@ -5077,7 +5052,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'URL to the bot\'s profile photo',
-        example: 'https://example.com/bot-photo.jpg',
         required: false
     }),
     (0, class_validator_1.IsOptional)(),
@@ -5210,14 +5184,14 @@ class DeleteHistoryDto {
 exports.DeleteHistoryDto = DeleteHistoryDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Username or peer ID of the chat whose history you want to delete',
+        description: 'Username or peer ID of the chat whose history you want to delete'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], DeleteHistoryDto.prototype, "peer", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Deletes all messages with IDs less than or equal to this value',
+        description: 'Deletes all messages with IDs less than or equal to this value'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
@@ -5226,7 +5200,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'If true, clears the history only for the current user without deleting for others',
-        default: true,
+        default: true
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -5235,7 +5209,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'If true, deletes the message history for all participants (if permitted)',
-        default: false,
+        default: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -5243,7 +5217,7 @@ __decorate([
 ], DeleteHistoryDto.prototype, "revoke", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Minimum date (UNIX timestamp) for messages to be deleted',
+        description: 'Minimum date (UNIX timestamp) for messages to be deleted'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
@@ -5251,7 +5225,7 @@ __decorate([
 ], DeleteHistoryDto.prototype, "minDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Maximum date (UNIX timestamp) for messages to be deleted',
+        description: 'Maximum date (UNIX timestamp) for messages to be deleted'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
@@ -5797,51 +5771,51 @@ class MediaItemDto {
 }
 exports.MediaItemDto = MediaItemDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message ID', example: 12345 }),
+    (0, swagger_1.ApiProperty)({ description: 'Message ID' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "messageId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID', example: 'me' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message date (Unix timestamp)', example: 1704067200 }),
+    (0, swagger_1.ApiProperty)({ description: 'Message date (Unix timestamp)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "date", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Caption text', example: 'Beautiful sunset' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Caption text' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "caption", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'File size in bytes', example: 1024000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'File size in bytes' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "fileSize", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'MIME type', example: 'image/jpeg' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'MIME type' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "mimeType", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filename', example: 'photo.jpg' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filename' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "filename", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Thumbnail (base64 encoded)', example: 'data:image/jpeg;base64,...' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Thumbnail (base64 encoded)' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "thumbnail", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Width in pixels (for images/videos)', example: 1920 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Width in pixels (for images/videos)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "width", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Height in pixels (for images/videos)', example: 1080 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Height in pixels (for images/videos)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "height", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Duration in seconds (for video/voice)', example: 120 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Duration in seconds (for video/voice)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "duration", void 0);
 __decorate([
@@ -5852,69 +5826,69 @@ class PaginationDto {
 }
 exports.PaginationDto = PaginationDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Current page number (1-indexed)', example: 1 }),
+    (0, swagger_1.ApiProperty)({ description: 'Current page number (1-indexed)' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "page", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Items per page', example: 50 }),
+    (0, swagger_1.ApiProperty)({ description: 'Items per page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "limit", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of items in current page', example: 50 }),
+    (0, swagger_1.ApiProperty)({ description: 'Total number of items in current page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "total", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of pages (if known, -1 for unknown)', example: 5 }),
+    (0, swagger_1.ApiProperty)({ description: 'Total number of pages (if known, -1 for unknown)' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "totalPages", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether there are more items available', example: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether there are more items available' }),
     __metadata("design:type", Boolean)
 ], PaginationDto.prototype, "hasMore", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)', example: 12345 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "nextMaxId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for previous page', example: 12000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for previous page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "prevMaxId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'First message ID in current page', example: 12345 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First message ID in current page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "firstMessageId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Last message ID in current page', example: 12300 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last message ID in current page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "lastMessageId", void 0);
 class MediaFiltersDto {
 }
 exports.MediaFiltersDto = MediaFiltersDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID', example: 'me' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: media_operations_dto_1.MediaType, example: ['photo', 'video'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: media_operations_dto_1.MediaType }),
     __metadata("design:type", Array)
 ], MediaFiltersDto.prototype, "types", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date filter (ISO 8601)', example: '2024-01-01' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date filter (ISO 8601)' }),
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "startDate", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'End date filter (ISO 8601)', example: '2024-12-31' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'End date filter (ISO 8601)' }),
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "endDate", void 0);
 class MediaGroupDto {
 }
 exports.MediaGroupDto = MediaGroupDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType }),
     __metadata("design:type", String)
 ], MediaGroupDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of items of this type', example: 25 }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of items of this type' }),
     __metadata("design:type", Number)
 ], MediaGroupDto.prototype, "count", void 0);
 __decorate([
@@ -5948,12 +5922,12 @@ class MediaMetadataQueryDto {
 }
 exports.MediaMetadataQueryDto = MediaMetadataQueryDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID or username', example: 'me' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID or username' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: media_operations_dto_1.MediaType, isArray: true, example: ['photo', 'video'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: media_operations_dto_1.MediaType, isArray: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsEnum)(media_operations_dto_1.MediaType, { each: true }),
@@ -5966,19 +5940,19 @@ __decorate([
     __metadata("design:type", Array)
 ], MediaMetadataQueryDto.prototype, "types", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date (ISO 8601)', example: '2024-01-01' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date (ISO 8601)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "startDate", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'End date (ISO 8601)', example: '2024-12-31' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'End date (ISO 8601)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "endDate", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum number of items (1-1000)', example: 50, minimum: 1, maximum: 1000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum number of items (1-1000)', minimum: 1, maximum: 1000 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
@@ -5987,14 +5961,14 @@ __decorate([
     __metadata("design:type", Number)
 ], MediaMetadataQueryDto.prototype, "limit", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)', example: 12345 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], MediaMetadataQueryDto.prototype, "maxId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Minimum message ID to include', example: 1000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Minimum message ID to include' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
@@ -6051,7 +6025,7 @@ class SearchMessagesDto {
 exports.SearchMessagesDto = SearchMessagesDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Chat ID to search in (required for chat-specific search)',
+        description: 'Chat ID to search in (required for chat-specific search)'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -6059,7 +6033,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Search query string',
+        description: 'Search query string'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -6070,8 +6044,7 @@ __decorate([
         description: 'Filter by multiple types options',
         isArray: true,
         enum: MessageMediaType,
-        example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
-        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
+        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO]
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
@@ -6081,7 +6054,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "types", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Minimum message ID for filtering',
+        description: 'Minimum message ID for filtering'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -6090,7 +6063,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "minId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Maximum message ID for filtering',
+        description: 'Maximum message ID for filtering'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -6101,7 +6074,7 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Maximum number of messages to retrieve',
         minimum: 1,
-        maximum: 500,
+        maximum: 500
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
@@ -6111,7 +6084,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "limit", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Offset ID for pagination',
+        description: 'Offset ID for pagination'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -6120,7 +6093,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "offsetId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Offset date as Unix timestamp',
+        description: 'Offset date as Unix timestamp'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -6129,7 +6102,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "offsetDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Start date for filtering messages by date range',
+        description: 'Start date for filtering messages by date range'
     }),
     (0, class_transformer_1.Type)(() => Date),
     (0, class_validator_1.IsDate)(),
@@ -6138,7 +6111,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "startDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'End date for filtering messages by date range',
+        description: 'End date for filtering messages by date range'
     }),
     (0, class_transformer_1.Type)(() => Date),
     (0, class_validator_1.IsDate)(),
@@ -6151,8 +6124,7 @@ exports.MessageTypeResult = MessageTypeResult;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Array of message IDs matching the search criteria',
-        type: [Number],
-        example: [1001, 1005, 1010]
+        type: [Number]
     }),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsInt)({ each: true }),
@@ -6160,8 +6132,7 @@ __decorate([
 ], MessageTypeResult.prototype, "messages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Total count of messages matching the search criteria',
-        example: 3
+        description: 'Total count of messages matching the search criteria'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -6179,9 +6150,9 @@ __decorate([
                 date: { type: 'string', description: 'ISO 8601 date' },
                 chatId: { type: 'string' },
                 senderName: { type: 'string', nullable: true },
-                mediaType: { type: 'string', nullable: true },
-            },
-        },
+                mediaType: { type: 'string', nullable: true }
+            }
+        }
     }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Array)
@@ -6684,16 +6655,14 @@ class SendTgMessageDto {
 exports.SendTgMessageDto = SendTgMessageDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Target username or peer ID',
-        example: 'someusername',
+        description: 'Target username or peer ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SendTgMessageDto.prototype, "peer", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Message text to send',
-        example: 'Hello from NestJS and GramJS!',
+        description: 'Message text to send'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -6701,8 +6670,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional message parse mode (Markdown, HTML)',
-        required: false,
-        example: 'Markdown',
+        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -6776,8 +6744,7 @@ class UpdateUsernameDto {
 exports.UpdateUsernameDto = UpdateUsernameDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'New username to set for the Telegram user',
-        example: 'new_username123',
+        description: 'New username to set for the Telegram user'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -6817,8 +6784,7 @@ class ViewOnceMediaDto {
 exports.ViewOnceMediaDto = ViewOnceMediaDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Chat ID to send the view once media to',
-        example: '123456789'
+        description: 'Chat ID to send the view once media to'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -6827,8 +6793,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Source type of the media: url, base64, or binary',
-        enum: MediaSourceType,
-        example: 'url'
+        enum: MediaSourceType
     }),
     (0, class_validator_1.IsEnum)(MediaSourceType),
     (0, class_validator_1.IsNotEmpty)(),
@@ -6837,8 +6802,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'URL of the media file (when sourceType is url)',
-        required: false,
-        example: 'https://example.com/image.jpg'
+        required: false
     }),
     (0, class_validator_1.ValidateIf)(o => o.sourceType === MediaSourceType.PATH),
     (0, class_validator_1.IsString)(),
@@ -6848,8 +6812,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Base64 encoded media data (when sourceType is base64)',
-        required: false,
-        example: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...'
+        required: false
     }),
     (0, class_validator_1.ValidateIf)(o => o.sourceType === MediaSourceType.BASE64),
     (0, class_validator_1.IsString)(),
@@ -6869,8 +6832,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional caption for the media',
-        required: false,
-        example: 'Check this out! It will disappear after viewing'
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -6879,8 +6841,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional filename for the media',
-        required: false,
-        example: 'secret_image.jpg'
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -13194,8 +13155,7 @@ class SendCodeDto {
 exports.SendCodeDto = SendCodeDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Phone number to send the verification code to (international format)',
-        example: '+919876543210'
+        description: 'Phone number to send the verification code to (international format)'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -13207,8 +13167,7 @@ class VerifyCodeDto {
 exports.VerifyCodeDto = VerifyCodeDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Phone number used for verification (international format)',
-        example: '919876543210'
+        description: 'Phone number used for verification (international format)'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -13217,8 +13176,7 @@ __decorate([
 ], VerifyCodeDto.prototype, "phone", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Verification code received',
-        example: '12345'
+        description: 'Verification code received'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -13228,7 +13186,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Two-factor authentication password if required',
-        example: 'yourSecurePassword123',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -13241,22 +13198,19 @@ class TgSignupResponse {
 exports.TgSignupResponse = TgSignupResponse;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Operation status code',
-        example: 200
+        description: 'Operation status code'
     }),
     __metadata("design:type", Number)
 ], TgSignupResponse.prototype, "status", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Response message',
-        example: 'Login successful'
+        description: 'Response message'
     }),
     __metadata("design:type", String)
 ], TgSignupResponse.prototype, "message", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Phone code hash for verification',
-        example: 'abc123xyz',
         required: false
     }),
     __metadata("design:type", String)
@@ -13264,7 +13218,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the code was sent via app',
-        example: true,
         required: false
     }),
     __metadata("design:type", Boolean)
@@ -13279,7 +13232,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether 2FA is required',
-        example: false,
         required: false
     }),
     __metadata("design:type", Boolean)
@@ -13407,9 +13359,9 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
-                message: { type: 'string', example: 'Invalid phone number format' },
-                error: { type: 'string', example: 'Bad Request' }
+                statusCode: { type: 'number' },
+                message: { type: 'string' },
+                error: { type: 'string' }
             }
         }
     }),
@@ -14539,8 +14491,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel is private',
-        example: false,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "private", void 0);
@@ -14786,8 +14737,8 @@ exports.ActiveChannel = ActiveChannel = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], ActiveChannel);
 exports.ActiveChannelSchema = mongoose_1.SchemaFactory.createForClass(ActiveChannel);
@@ -14962,7 +14913,7 @@ __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Create a new bot',
-        description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.',
+        description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.'
     }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Bot has been successfully created' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid bot configuration provided' }),
@@ -14977,7 +14928,7 @@ __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Get all bots or filter by category',
-        description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.',
+        description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'category',
@@ -14996,7 +14947,7 @@ __decorate([
     (0, common_1.Get)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get a bot by ID',
-        description: 'Retrieves detailed information about a specific bot using its unique identifier.',
+        description: 'Retrieves detailed information about a specific bot using its unique identifier.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot details retrieved successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
@@ -15009,7 +14960,7 @@ __decorate([
     (0, common_1.Patch)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Update a bot',
-        description: 'Updates the configuration of an existing bot. Only provided fields will be modified.',
+        description: 'Updates the configuration of an existing bot. Only provided fields will be modified.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot updated successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
@@ -15024,7 +14975,7 @@ __decorate([
     (0, common_1.Delete)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Delete a bot',
-        description: 'Removes a bot from the system. This action cannot be undone.',
+        description: 'Removes a bot from the system. This action cannot be undone.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot successfully deleted' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
@@ -15037,7 +14988,7 @@ __decorate([
     (0, common_1.Post)('category/:category/message'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a message using bots in a category',
-        description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15067,7 +15018,7 @@ __decorate([
     (0, common_1.Post)('category/:category/photo'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a photo using bots in a category',
-        description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15097,7 +15048,7 @@ __decorate([
     (0, common_1.Post)('category/:category/video'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a video using bots in a category',
-        description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15127,7 +15078,7 @@ __decorate([
     (0, common_1.Post)('category/:category/audio'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send audio using bots in a category',
-        description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15157,7 +15108,7 @@ __decorate([
     (0, common_1.Post)('category/:category/document'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a document using bots in a category',
-        description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15187,7 +15138,7 @@ __decorate([
     (0, common_1.Post)('category/:category/voice'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a voice message using bots in a category',
-        description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15217,7 +15168,7 @@ __decorate([
     (0, common_1.Post)('category/:category/animation'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send an animation using bots in a category',
-        description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15247,7 +15198,7 @@ __decorate([
     (0, common_1.Post)('category/:category/sticker'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a sticker using bots in a category',
-        description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15277,7 +15228,7 @@ __decorate([
     (0, common_1.Post)('category/:category/media-group'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a media group using bots in a category',
-        description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -15307,7 +15258,7 @@ __decorate([
     (0, common_1.Get)('category/:category/stats'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get bot statistics by category',
-        description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.',
+        description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -16033,8 +15984,7 @@ class CreateBotDto {
 exports.CreateBotDto = CreateBotDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Telegram bot token',
-        example: '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz'
+        description: 'Telegram bot token'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16042,16 +15992,14 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Channel category the bot belongs to',
-        enum: bots_service_1.ChannelCategory,
-        example: bots_service_1.ChannelCategory.CLIENT_UPDATES
+        enum: bots_service_1.ChannelCategory
     }),
     (0, class_validator_1.IsEnum)(bots_service_1.ChannelCategory),
     __metadata("design:type", String)
 ], CreateBotDto.prototype, "category", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Channel ID where bot will post messages',
-        example: '-1001234567890'
+        description: 'Channel ID where bot will post messages'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16059,8 +16007,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional description of the bot',
-        required: false,
-        example: 'Bot for sending client updates'
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -16129,7 +16076,7 @@ exports.VoiceOptionsDto = VoiceOptionsDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Duration of the voice message in seconds',
-        required: false,
+        required: false
     }),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.IsOptional)(),
@@ -16140,8 +16087,7 @@ class SendVoiceDto {
 exports.SendVoiceDto = SendVoiceDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Voice message URL or file ID',
-        example: 'https://example.com/voice.ogg',
+        description: 'Voice message URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16150,7 +16096,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Voice sending options',
         required: false,
-        type: () => VoiceOptionsDto,
+        type: () => VoiceOptionsDto
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
@@ -16183,8 +16129,7 @@ class SendAnimationDto {
 exports.SendAnimationDto = SendAnimationDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Animation (GIF/MP4) URL or file ID',
-        example: 'https://example.com/animation.gif',
+        description: 'Animation (GIF/MP4) URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16193,7 +16138,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Animation sending options',
         required: false,
-        type: () => AnimationOptionsDto,
+        type: () => AnimationOptionsDto
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
@@ -16206,8 +16151,7 @@ exports.StickerOptionsDto = StickerOptionsDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Emoji associated with the sticker',
-        required: false,
-        example: '😊',
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -16218,8 +16162,7 @@ class SendStickerDto {
 exports.SendStickerDto = SendStickerDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Sticker URL or file ID',
-        example: 'https://example.com/sticker.webp',
+        description: 'Sticker URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16228,7 +16171,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Sticker sending options',
         required: false,
-        type: () => StickerOptionsDto,
+        type: () => StickerOptionsDto
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
@@ -16267,16 +16210,14 @@ exports.MediaGroupItemDto = MediaGroupItemDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Type of media',
-        enum: ['photo', 'video', 'audio', 'document'],
-        example: 'photo'
+        enum: ['photo', 'video', 'audio', 'document']
     }),
     (0, class_validator_1.IsEnum)(['photo', 'video', 'audio', 'document']),
     __metadata("design:type", String)
 ], MediaGroupItemDto.prototype, "type", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Media URL or file ID',
-        example: 'https://example.com/media.jpg'
+        description: 'Media URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16569,8 +16510,7 @@ class SendPhotoDto {
 exports.SendPhotoDto = SendPhotoDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Photo URL or file ID',
-        example: 'https://example.com/photo.jpg'
+        description: 'Photo URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16591,8 +16531,7 @@ class SendVideoDto {
 exports.SendVideoDto = SendVideoDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Video URL or file ID',
-        example: 'https://example.com/video.mp4'
+        description: 'Video URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16613,8 +16552,7 @@ class SendAudioDto {
 exports.SendAudioDto = SendAudioDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Audio URL or file ID',
-        example: 'https://example.com/audio.mp3'
+        description: 'Audio URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16635,8 +16573,7 @@ class SendDocumentDto {
 exports.SendDocumentDto = SendDocumentDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Document URL or file ID',
-        example: 'https://example.com/document.pdf'
+        description: 'Document URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -16799,8 +16736,7 @@ class SendMessageDto {
 exports.SendMessageDto = SendMessageDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Message text to send',
-        example: 'Hello, this is a test message!'
+        description: 'Message text to send'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -17044,7 +16980,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.updateStatus(mobile, body.status, body.message);
     }
     async markAsActive(mobile, body = {}) {
-        return this.clientService.updateStatus(mobile, 'active', body.message || 'Account is functioning properly');
+        return this.clientService.markAsActive(mobile, body.message);
     }
     async markAsInactive(mobile, body) {
         return this.clientService.markAsInactive(mobile, body.reason);
@@ -17055,7 +16991,7 @@ let BufferClientController = class BufferClientController {
     async resetFailedAttempts(mobile) {
         await this.clientService.update(mobile, {
             failedUpdateAttempts: 0,
-            lastUpdateFailure: null,
+            lastUpdateFailure: null
         });
         return { message: `Reset failed attempts for ${mobile}` };
     }
@@ -17075,7 +17011,7 @@ let BufferClientController = class BufferClientController {
     async update(mobile, updateClientDto) {
         return this.clientService.update(mobile, updateClientDto);
     }
-    async createdOrupdate(mobile, updateClientDto) {
+    async createOrUpdate(mobile, updateClientDto) {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async remove(mobile) {
@@ -17098,12 +17034,10 @@ __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search buffer clients', description: 'Searches buffer client records by indexed and operational fields.' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
-    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Owning client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'tgId', required: false, description: 'Telegram account ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Operational status (active/inactive)' }),
     (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
-    (0, swagger_1.ApiQuery)({ name: 'name', required: false, description: 'Name' }),
-    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
-    (0, swagger_1.ApiQuery)({ name: 'repl', required: false, description: 'Repl link' }),
-    (0, swagger_1.ApiQuery)({ name: 'isActive', required: false, description: 'Filter by active status' }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -17113,7 +17047,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateInfo'),
     (0, swagger_1.ApiOperation)({ summary: 'Refresh buffer client metadata', description: 'Starts a background refresh of buffer client metadata and channel counts.' }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -17122,7 +17056,7 @@ __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Prepare channel joins for buffer clients', description: 'Builds the next join queue for eligible buffer clients.' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
-    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Join channels initiated successfully' } }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string' } }),
     __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -17131,7 +17065,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('checkBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Run buffer warmup processing', description: 'Starts the background warmup processor for eligible buffer clients.' }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -17156,7 +17090,7 @@ __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' }),
     (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.BulkEnrollBufferClientsRequestDto }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'goodIds, badIds, or clientsNeedingBufferClients were not valid arrays.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -17178,7 +17112,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a buffer client', description: 'Converts an existing user account into a warmup-managed buffer client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to assign buffer client to', type: String }),
-    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as buffer successfully' } }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
     (0, swagger_1.ApiConflictResponse)({ description: 'A buffer client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -17190,7 +17124,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a raw buffer client query', description: 'Executes a direct MongoDB-style filter against the buffer client collection.' }),
-    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true } }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -17321,8 +17255,8 @@ __decorate([
 ], BufferClientController.prototype, "getUnusedBufferClients", null);
 __decorate([
     (0, common_1.Get)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get buffer client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -17332,8 +17266,8 @@ __decorate([
 ], BufferClientController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update buffer client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
     (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
@@ -17345,8 +17279,8 @@ __decorate([
 ], BufferClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Put)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create or update buffer client by mobile', description: 'Creates the buffer client if it does not exist, otherwise updates it. Full payload required for creation.' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
     (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -17354,11 +17288,11 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_buffer_client_dto_1.UpdateBufferClientDto]),
     __metadata("design:returntype", Promise)
-], BufferClientController.prototype, "createdOrupdate", null);
+], BufferClientController.prototype, "createOrUpdate", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete buffer client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiOkResponse)({ schema: { type: 'null' } }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -17824,7 +17758,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             return [];
         }
-        return await this.bufferClientModel.find(filter).exec();
+        const query = { ...filter };
+        const regexFields = ['mobile', 'username', 'clientId'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+            }
+        }
+        return await this.bufferClientModel.find(query).exec();
     }
     async executeQuery(query, sort, limit, skip) {
         if (!query) {
@@ -17980,6 +17921,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return currentChannels < 220
             ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
             : this.channelsService.getActiveChannels(capped, 0, excludedIds);
+    }
+    async markAsActive(mobile, message = 'Account is functioning properly') {
+        return this.updateStatus(mobile, 'active', message);
     }
     async markAsInactive(mobile, reason) {
         try {
@@ -18891,24 +18835,21 @@ class CreateBufferClientDto {
 exports.CreateBufferClientDto = CreateBufferClientDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Telegram ID of the client',
-        example: '123456789',
+        description: 'Telegram ID of the client'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Mobile number of the client',
-        example: '+1234567890',
+        description: 'Mobile number of the client'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date when the client becomes available for assignment.',
-        example: '2026-04-03',
+        description: 'Date when the client becomes available for assignment.'
     }),
     (0, class_validator_1.IsDateString)(),
     (0, class_validator_1.IsString)(),
@@ -18916,8 +18857,7 @@ __decorate([
 ], CreateBufferClientDto.prototype, "availableDate", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Session identifier',
-        example: 'session123',
+        description: 'Session identifier'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -18925,7 +18865,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Current joined channel count.',
-        example: 23,
         type: Number
     }),
     (0, class_validator_1.IsNumber)(),
@@ -18933,8 +18872,7 @@ __decorate([
 ], CreateBufferClientDto.prototype, "channels", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Client ID that this buffer client belongs to',
-        example: 'client123',
+        description: 'Client ID that this buffer client belongs to'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -18942,9 +18880,8 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Operational status of the buffer client.',
-        example: 'active',
         enum: ['active', 'inactive'],
-        default: 'active',
+        default: 'active'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(base_client_service_1.ClientStatus),
@@ -18953,8 +18890,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Optional operator note attached to the buffer client.',
-        example: 'Account is functioning properly',
-        default: 'Account is functioning properly',
+        default: 'Account is functioning properly'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -18962,8 +18898,7 @@ __decorate([
 ], CreateBufferClientDto.prototype, "message", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Timestamp when the client was last used in a live workflow.',
-        example: '2026-04-01T10:30:00.000Z',
+        description: 'Timestamp when the client was last used in a live workflow.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
@@ -19021,60 +18956,40 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SearchBufferClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 class SearchBufferClientDto {
 }
 exports.SearchBufferClientDto = SearchBufferClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.', example: '+15551234567' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning client ID to filter by.', example: 'client-a' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning client ID to filter by.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for.', example: 'sample_user' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "username", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Display name to search for.', example: 'Jane Doe' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "name", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for.', example: 'https://t.me/example' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "channelLink", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for.', example: 'https://replit.com/@team/demo' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "repl", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status.', example: true }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsBoolean)(),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
-    __metadata("design:type", Boolean)
-], SearchBufferClientDto.prototype, "isActive", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Telegram account ID.', example: '123456789' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Telegram account ID.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "tgId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational status filter.', enum: ['active', 'inactive'] }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for.' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "username", void 0);
 
 
 /***/ },
@@ -19105,105 +19020,105 @@ class UpdateBufferClientDto extends (0, swagger_1.PartialType)(create_buffer_cli
 }
 exports.UpdateBufferClientDto = UpdateBufferClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the client is currently reserved by an active workflow.', example: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the client is currently reserved by an active workflow.' }),
     __metadata("design:type", Boolean)
 ], UpdateBufferClientDto.prototype, "inUse", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the client was last used.', example: '2026-04-01T10:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the client was last used.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "lastUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated.', example: '2026-03-10T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "privacyUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "profilePicsUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "nameBioUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were deleted.', example: '2026-03-14T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were deleted.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup.', example: 'SaraKum42' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "usernameUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent health check.', example: '2026-04-02T09:15:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent health check.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "lastChecked", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "lastUpdateAttempt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Current consecutive warmup failure count.', example: 1 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Current consecutive warmup failure count.' }),
     __metadata("design:type", Number)
 ], UpdateBufferClientDto.prototype, "failedUpdateAttempts", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "lastUpdateFailure", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "twoFASetAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other sessions were revoked.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'] }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "warmupPhase", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Per-account warmup jitter in days.', example: 2 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Per-account warmup jitter in days.' }),
     __metadata("design:type", Number)
 ], UpdateBufferClientDto.prototype, "warmupJitter", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "enrolledAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "organicActivityAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.', example: '2026-04-02T07:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.' }),
     __metadata("design:type", Date)
 ], UpdateBufferClientDto.prototype, "sessionRotatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned first name (set during setupClient)', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned first name (set during setupClient)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "assignedFirstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned last name', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned last name' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "assignedLastName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned bio', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned bio' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateBufferClientDto.prototype, "assignedBio", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned profile pic URLs', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned profile pic URLs' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
@@ -19268,162 +19183,161 @@ let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Telegram account identifier.', example: '123456789' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram account identifier.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.', example: '+15551234567' }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Session string currently stored for this buffer client.', example: '1AQAOMT...' }),
+    (0, swagger_1.ApiProperty)({ description: 'Session string currently stored for this buffer client.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.', example: '2026-04-03' }),
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "availableDate", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Current joined channel count.', example: 187 }),
+    (0, swagger_1.ApiProperty)({ description: 'Current joined channel count.' }),
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "channels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Owning main client identifier.', example: 'client-a' }),
+    (0, swagger_1.ApiProperty)({ description: 'Owning main client identifier.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational note attached to the client.', example: 'Enrolled for warmup' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational note attached to the client.' }),
     (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "message", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when this account was last consumed by live usage.', example: '2026-04-01T12:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when this account was last consumed by live usage.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent periodic health check.', example: '2026-04-02T09:15:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent periodic health check.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastChecked", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Operational status for the record.', enum: ['active', 'inactive'], example: 'active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Operational status for the record.', enum: ['active', 'inactive'] }),
     (0, mongoose_1.Prop)({
         required: true,
         enum: ['active', 'inactive'],
         default: 'active',
         type: String,
-        description: 'Status of the buffer client',
+        description: 'Status of the buffer client'
     }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether the account is currently reserved by an active workflow.', example: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether the account is currently reserved by an active workflow.' }),
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], BufferClient.prototype, "inUse", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated during warmup.', example: '2026-03-10T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated during warmup.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "privacyUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "profilePicsUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "nameBioUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were removed.', example: '2026-03-14T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were removed.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup identity phase.', example: 'SaraKum42' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username set during warmup identity phase.' }),
     (0, mongoose_1.Prop)({ required: false, type: String, default: null }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.', example: '2026-03-20T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "usernameUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Record creation timestamp.', example: '2026-03-01T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record creation timestamp.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "createdAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Record last update timestamp.', example: '2026-04-03T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record last update timestamp.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "updatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUpdateAttempt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Current consecutive warmup failure count.', example: 0, default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'Current consecutive warmup failure count.', default: 0 }),
     (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "failedUpdateAttempts", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "lastUpdateFailure", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "twoFASetAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other Telegram sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other Telegram sessions were revoked.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Current warmup lifecycle phase.',
-        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
-        example: 'growing',
+        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated']
     }),
     (0, mongoose_1.Prop)({
         required: false,
         type: String,
         enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
-        default: null,
+        default: null
     }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "warmupPhase", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Per-account warmup jitter in days.', example: 2, default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'Per-account warmup jitter in days.', default: 0 }),
     (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], BufferClient.prototype, "warmupJitter", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "enrolledAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "organicActivityAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created and recorded.', example: '2026-04-02T07:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created and recorded.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], BufferClient.prototype, "sessionRotatedAt", void 0);
@@ -19455,8 +19369,8 @@ exports.BufferClient = BufferClient = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], BufferClient);
 exports.BufferClientSchema = mongoose_1.SchemaFactory.createForClass(BufferClient);
@@ -19464,8 +19378,8 @@ exports.BufferClientSchema.index({ clientId: 1 }, {
     unique: true,
     partialFilterExpression: {
         clientId: { $type: 'string' },
-        inUse: true,
-    },
+        inUse: true
+    }
 });
 
 
@@ -19689,8 +19603,8 @@ exports.Build = Build = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        }, })
+            }
+        } })
 ], Build);
 exports.BuildSchema = mongoose_1.SchemaFactory.createForClass(Build);
 exports.BuildSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
@@ -20148,76 +20062,67 @@ class CreateChannelDto {
 exports.CreateChannelDto = CreateChannelDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Unique identifier for the channel',
-        example: '803387987',
+        description: 'Unique identifier for the channel'
     }),
     __metadata("design:type", String)
 ], CreateChannelDto.prototype, "channelId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel is a broadcast channel',
-        example: null,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "broadcast", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Indicates if the channel can send messages',
-        example: true,
+        description: 'Indicates if the channel can send messages'
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Number of participants in the channel',
-        example: 0,
+        description: 'Number of participants in the channel'
     }),
     __metadata("design:type", Number)
 ], CreateChannelDto.prototype, "participantsCount", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel is restricted',
-        example: null,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "restricted", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel can send messages',
-        example: null,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "sendMessages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Title of the channel',
-        example: 'Earn money with Ayesha',
+        description: 'Title of the channel'
     }),
     __metadata("design:type", String)
 ], CreateChannelDto.prototype, "title", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Username of the channel',
-        example: null,
-        required: false,
+        required: false
     }),
     __metadata("design:type", String)
 ], CreateChannelDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel is private',
-        example: false,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "private", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        default: false, example: false,
-        required: false,
+        default: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "forbidden", void 0);
@@ -20225,7 +20130,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether the channel is a megagroup',
         default: true,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "megagroup", void 0);
@@ -20233,7 +20138,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether react is restricted',
         default: false,
-        required: false,
+        required: false
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "reactRestricted", void 0);
@@ -20318,50 +20223,43 @@ class SearchChannelDto {
 exports.SearchChannelDto = SearchChannelDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Unique identifier for the channel',
-        example: '803387987',
+        description: 'Unique identifier for the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "channelId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Title of the channel',
-        example: 'Earn money with Ayesha',
+        description: 'Title of the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "title", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'privacy of the channel',
-        example: false,
+        description: 'privacy of the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "private", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Username of the channel',
-        example: 'ayesha_channel',
+        description: 'Username of the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Indicates if the channel can send messages',
-        example: true,
+        description: 'Indicates if the channel can send messages'
     }),
     __metadata("design:type", Boolean)
 ], SearchChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Minimum number of participants in the channel',
-        example: 10,
+        description: 'Minimum number of participants in the channel'
     }),
     __metadata("design:type", Number)
 ], SearchChannelDto.prototype, "minParticipantsCount", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Maximum number of participants in the channel',
-        example: 100,
+        description: 'Maximum number of participants in the channel'
     }),
     __metadata("design:type", Number)
 ], SearchChannelDto.prototype, "maxParticipantsCount", void 0);
@@ -20572,8 +20470,8 @@ exports.Channel = Channel = __decorate([
             virtuals: true,
             transform: (_doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Channel);
 exports.ChannelSchema = mongoose_1.SchemaFactory.createForClass(Channel);
@@ -20691,7 +20589,7 @@ __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create a client' }),
     (0, swagger_1.ApiBody)({ type: create_client_dto_1.CreateClientDto }),
-    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiCreatedResponse)({ type: client_schema_1.Client }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_client_dto_1.CreateClientDto]),
@@ -20700,7 +20598,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search clients' }),
-    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOkResponse)({ type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_client_dto_1.SearchClientDto]),
@@ -20720,7 +20618,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all clients (sensitive fields masked)' }),
-    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOkResponse)({ type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -20731,7 +20629,8 @@ __decorate([
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get client by ID (sensitive fields masked)' }),
     (0, swagger_1.ApiParam)({ name: 'clientId' }),
-    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiOkResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -20742,7 +20641,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.CloudflareCache)(3600, 60),
     (0, swagger_1.ApiOperation)({ summary: 'Get all clients' }),
-    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOkResponse)({ type: [client_schema_1.Client] }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -20771,7 +20670,8 @@ __decorate([
     (0, common_1.Get)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get client by ID' }),
     (0, swagger_1.ApiParam)({ name: 'clientId' }),
-    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiOkResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -20782,7 +20682,8 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Update client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId' }),
     (0, swagger_1.ApiBody)({ type: update_client_dto_1.UpdateClientDto }),
-    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiOkResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -20793,7 +20694,8 @@ __decorate([
     (0, common_1.Delete)(':clientId'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete client' }),
     (0, swagger_1.ApiParam)({ name: 'clientId' }),
-    (0, swagger_1.ApiResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiOkResponse)({ type: client_schema_1.Client }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'Client not found.' }),
     __param(0, (0, common_1.Param)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -20803,7 +20705,7 @@ __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),
     (0, swagger_1.ApiBody)({ type: execute_client_query_dto_1.ExecuteClientQueryDto }),
-    (0, swagger_1.ApiResponse)({ type: [client_schema_1.Client] }),
+    (0, swagger_1.ApiOkResponse)({ type: [client_schema_1.Client] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [execute_client_query_dto_1.ExecuteClientQueryDto]),
@@ -21223,7 +21125,7 @@ let ClientService = ClientService_1 = class ClientService {
     }
     processTextSearchFields(filter) {
         const nextFilter = { ...filter };
-        const textFields = ['name'];
+        const textFields = ['name', 'mobile', 'clientId', 'username'];
         textFields.forEach((field) => {
             const value = nextFilter[field];
             if (typeof value === 'string' && value) {
@@ -22233,7 +22135,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
     __metadata("design:type", String)
-], SearchClientDto.prototype, "number", void 0);
+], SearchClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Password' }),
     (0, class_validator_1.IsOptional)(),
@@ -22254,13 +22156,6 @@ __decorate([
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid URL format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "promoteRepl", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Client name' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchClientDto.prototype, "clientName", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Deploy restart URL' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
@@ -22361,60 +22256,13 @@ __decorate([
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
-const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const create_client_dto_1 = __webpack_require__(/*! ./create-client.dto */ "./src/components/clients/dto/create-client.dto.ts");
 class UpdateClientDto extends (0, swagger_1.PartialType)(create_client_dto_1.CreateClientDto) {
 }
 exports.UpdateClientDto = UpdateClientDto;
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned first name (set during setupClient)', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateClientDto.prototype, "assignedFirstName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned last name', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateClientDto.prototype, "assignedLastName", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned bio', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateClientDto.prototype, "assignedBio", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned photo filenames', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsArray)(),
-    (0, class_validator_1.IsString)({ each: true }),
-    __metadata("design:type", Array)
-], UpdateClientDto.prototype, "assignedPhotoFilenames", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Pool version at assignment time', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateClientDto.prototype, "assignedPersonaPoolVersion", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Computed version hash of the persona pool', required: false }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], UpdateClientDto.prototype, "personaPoolVersion", void 0);
 
 
 /***/ },
@@ -22599,8 +22447,8 @@ exports.Client = Client = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Client);
 exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);
@@ -22660,8 +22508,7 @@ class CreateDynamicDataDto {
 exports.CreateDynamicDataDto = CreateDynamicDataDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Unique identifier for the dynamic data',
-        example: 'user123',
+        description: 'Unique identifier for the dynamic data'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -22669,17 +22516,7 @@ __decorate([
 ], CreateDynamicDataDto.prototype, "configKey", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Dynamic JSON data',
-        example: {
-            profile: {
-                name: 'John Doe',
-                age: 30,
-            },
-            preferences: {
-                theme: 'dark',
-                notifications: true,
-            },
-        },
+        description: 'Dynamic JSON data'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", Object)
@@ -22714,13 +22551,12 @@ exports.GetDynamicDataDto = GetDynamicDataDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Path to retrieve specific data using dot notation',
-        example: 'profile.name',
-        required: false,
+        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
-        message: 'Invalid path format. Use dot notation (e.g., profile.name)',
+        message: 'Invalid path format. Use dot notation (e.g., profile.name)'
     }),
     __metadata("design:type", String)
 ], GetDynamicDataDto.prototype, "path", void 0);
@@ -22762,7 +22598,7 @@ exports.ArrayOperation = ArrayOperation;
 __decorate([
     (0, swagger_1.ApiProperty)({
         enum: ArrayOperationType,
-        description: 'Type of array operation to perform',
+        description: 'Type of array operation to perform'
     }),
     (0, class_validator_1.IsEnum)(ArrayOperationType),
     __metadata("design:type", String)
@@ -22770,7 +22606,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Index for array operations (required for INSERT and UPDATE)',
-        required: false,
+        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Number)
@@ -22781,20 +22617,18 @@ exports.UpdateDynamicDataDto = UpdateDynamicDataDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Path to the field to update using dot notation. If not provided, updates entire data object.',
-        example: 'profile.age',
-        required: false,
+        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
-        message: 'Invalid path format. Use dot notation (e.g., profile.age)',
+        message: 'Invalid path format. Use dot notation (e.g., profile.age)'
     }),
     __metadata("design:type", String)
 ], UpdateDynamicDataDto.prototype, "path", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'New value for the field or entire data object if path is not provided',
-        example: { profile: { age: 31 } },
+        description: 'New value for the field or entire data object if path is not provided'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", Object)
@@ -22803,7 +22637,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Array operation configuration',
         required: false,
-        type: ArrayOperation,
+        type: ArrayOperation
     }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", ArrayOperation)
@@ -22865,7 +22699,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Create a new dynamic data document' }),
     (0, swagger_1.ApiResponse)({
         status: 201,
-        description: 'The dynamic data document has been successfully created.',
+        description: 'The dynamic data document has been successfully created.'
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Bad Request' }),
     (0, swagger_1.ApiResponse)({ status: 409, description: 'Conflict - Document already exists' }),
@@ -22879,7 +22713,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Get all dynamic data documents' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Returns all dynamic data documents as a key-value object',
+        description: 'Returns all dynamic data documents as a key-value object'
     }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
@@ -22892,7 +22726,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({
         name: 'path',
         required: false,
-        description: 'Optional path to retrieve specific nested data',
+        description: 'Optional path to retrieve specific nested data'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Returns the requested dynamic data' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Document or path not found' }),
@@ -22923,7 +22757,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({
         name: 'path',
         required: false,
-        description: 'Optional path to delete specific nested data',
+        description: 'Optional path to delete specific nested data'
     }),
     (0, swagger_1.ApiResponse)({ status: 204, description: 'The dynamic data has been successfully deleted' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Document or path not found' }),
@@ -23022,8 +22856,8 @@ exports.DynamicData = DynamicData = __decorate([
             transform: (_, ret) => {
                 delete ret._id;
                 return ret;
-            },
-        },
+            }
+        }
     })
 ], DynamicData);
 exports.DynamicDataSchema = mongoose_1.SchemaFactory.createForClass(DynamicData);
@@ -23385,11 +23219,11 @@ class CreateEventDto {
 }
 exports.CreateEventDto = CreateEventDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '123456789' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], CreateEventDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1700000000000 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], CreateEventDto.prototype, "time", void 0);
 __decorate([
@@ -23397,11 +23231,11 @@ __decorate([
     __metadata("design:type", String)
 ], CreateEventDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], CreateEventDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: { message: 'Hello' }, required: false }),
+    (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", Object)
 ], CreateEventDto.prototype, "payload", void 0);
 
@@ -23431,15 +23265,15 @@ class ScheduleEventsDto {
 }
 exports.ScheduleEventsDto = ScheduleEventsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '123456789' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], ScheduleEventsDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], ScheduleEventsDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1', enum: ['1', '2', '3'], required: false }),
+    (0, swagger_1.ApiProperty)({ enum: ['1', '2', '3'], required: false }),
     __metadata("design:type", String)
 ], ScheduleEventsDto.prototype, "type", void 0);
 
@@ -23959,7 +23793,7 @@ exports.Event = Event = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'events',
         versionKey: false,
-        timestamps: false,
+        timestamps: false
     })
 ], Event);
 exports.EventSchema = mongoose_1.SchemaFactory.createForClass(Event);
@@ -24042,72 +23876,72 @@ class CreateProxyIpDto {
 }
 exports.CreateProxyIpDto = CreateProxyIpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, swagger_1.ApiProperty)({ description: 'Port number of the proxy' }),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(1),
     (0, class_validator_1.Max)(65535),
     __metadata("design:type", Number)
 ], CreateProxyIpDto.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type', enum: ['http', 'https', 'socks5'] }),
+    (0, swagger_1.ApiProperty)({ description: 'Protocol type', enum: ['http', 'https', 'socks5'] }),
     (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "protocol", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Username for proxy authentication', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Password for proxy authentication', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Status of the proxy IP', enum: ['active', 'inactive'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['active', 'inactive']),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether this IP is currently assigned', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateProxyIpDto.prototype, "isAssigned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID that owns this IP', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "assignedToClient", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Source of the proxy', enum: ['manual', 'webshare'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['manual', 'webshare']),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "source", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'abc123', description: 'Webshare proxy ID', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Webshare proxy ID', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "webshareId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Country code', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Country code', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "countryCode", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'New York', description: 'City name', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'City name', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -24140,19 +23974,19 @@ class GetNextIpDto {
 }
 exports.GetNextIpDto = GetNextIpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Optional client ID to filter IPs by assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional client ID to filter IPs by assignment', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GetNextIpDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Optional country code filter', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional country code filter', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GetNextIpDto.prototype, "countryCode", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'socks5', description: 'Optional protocol filter', enum: ['http', 'https', 'socks5'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional protocol filter', enum: ['http', 'https', 'socks5'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
     __metadata("design:type", String)
@@ -24185,49 +24019,49 @@ class SearchProxyIpDto {
 }
 exports.SearchProxyIpDto = SearchProxyIpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Port number to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchProxyIpDto.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type to search for', enum: ['http', 'https', 'socks5'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Protocol type to search for', enum: ['http', 'https', 'socks5'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "protocol", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Country code to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Country code to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "country", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status to search for', enum: ['active', 'inactive', 'blocked', 'maintenance'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Status to search for', enum: ['active', 'inactive', 'blocked', 'maintenance'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['active', 'inactive', 'blocked', 'maintenance']),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to search for assigned or unassigned IPs', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether to search for assigned or unassigned IPs', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchProxyIpDto.prototype, "isAssigned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "assignedToClient", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'DataCenter', description: 'Provider to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Provider to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -24236,25 +24070,25 @@ class SearchIpMobileMappingDto {
 }
 exports.SearchIpMobileMappingDto = SearchIpMobileMappingDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchIpMobileMappingDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'IP address to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchIpMobileMappingDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchIpMobileMappingDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status to search for', enum: ['active', 'inactive'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Status to search for', enum: ['active', 'inactive'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['active', 'inactive']),
     __metadata("design:type", String)
@@ -25035,62 +24869,62 @@ let ProxyIp = class ProxyIp {
 };
 exports.ProxyIp = ProxyIp;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, swagger_1.ApiProperty)({ description: 'Port number of the proxy' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], ProxyIp.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type (http, https, socks5)', enum: ['http', 'https', 'socks5'] }),
+    (0, swagger_1.ApiProperty)({ description: 'Protocol type (http, https, socks5)', enum: ['http', 'https', 'socks5'] }),
     (0, mongoose_1.Prop)({ required: true, enum: ['http', 'https', 'socks5'] }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "protocol", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication' }),
+    (0, swagger_1.ApiProperty)({ description: 'Username for proxy authentication' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication' }),
+    (0, swagger_1.ApiProperty)({ description: 'Password for proxy authentication' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'] }),
+    (0, swagger_1.ApiProperty)({ description: 'Status of the proxy IP', enum: ['active', 'inactive'] }),
     (0, mongoose_1.Prop)({ required: true, default: 'active', enum: ['active', 'inactive'] }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned to a mobile number' }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether this IP is currently assigned to a mobile number' }),
     (0, mongoose_1.Prop)({ required: false, default: false }),
     __metadata("design:type", Boolean)
 ], ProxyIp.prototype, "isAssigned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID that owns this IP' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "assignedToClient", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'] }),
+    (0, swagger_1.ApiProperty)({ description: 'Source of the proxy', enum: ['manual', 'webshare'] }),
     (0, mongoose_1.Prop)({ required: false, default: 'manual', enum: ['manual', 'webshare'] }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "source", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'abc123', description: 'Webshare proxy ID for replacement API' }),
+    (0, swagger_1.ApiProperty)({ description: 'Webshare proxy ID for replacement API' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "webshareId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'ISO 3166-1 two-letter country code' }),
+    (0, swagger_1.ApiProperty)({ description: 'ISO 3166-1 two-letter country code' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "countryCode", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'New York', description: 'City name of the proxy location' }),
+    (0, swagger_1.ApiProperty)({ description: 'City name of the proxy location' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], ProxyIp.prototype, "cityName", void 0);
@@ -25105,12 +24939,12 @@ __decorate([
     __metadata("design:type", Date)
 ], ProxyIp.prototype, "lastUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Number of consecutive health check failures' }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of consecutive health check failures' }),
     (0, mongoose_1.Prop)({ required: false, default: 0 }),
     __metadata("design:type", Number)
 ], ProxyIp.prototype, "consecutiveFails", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Index used for round-robin ordering' }),
+    (0, swagger_1.ApiProperty)({ description: 'Index used for round-robin ordering' }),
     (0, mongoose_1.Prop)({ required: false, default: 0 }),
     __metadata("design:type", Number)
 ], ProxyIp.prototype, "roundRobinIndex", void 0);
@@ -25124,8 +24958,8 @@ exports.ProxyIp = ProxyIp = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], ProxyIp);
 exports.ProxyIpSchema = mongoose_1.SchemaFactory.createForClass(ProxyIp);
@@ -25165,24 +24999,21 @@ class CreatePromoteClientDto {
 exports.CreatePromoteClientDto = CreatePromoteClientDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Telegram ID of the client',
-        example: '123456789',
+        description: 'Telegram ID of the client'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Mobile number of the client',
-        example: '+1234567890',
+        description: 'Mobile number of the client'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Date when the client becomes available for assignment.',
-        example: '2026-04-03',
+        description: 'Date when the client becomes available for assignment.'
     }),
     (0, class_validator_1.IsDateString)(),
     (0, class_validator_1.IsString)(),
@@ -25190,8 +25021,7 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "availableDate", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'lastActive identifier',
-        example: '2023-06-22',
+        description: 'lastActive identifier'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -25199,7 +25029,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Channel Count',
-        example: 23,
         type: Number
     }),
     (0, class_validator_1.IsNumber)(),
@@ -25207,8 +25036,7 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "channels", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Owning client ID for this promote mobile.',
-        example: 'client123',
+        description: 'Owning client ID for this promote mobile.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -25217,9 +25045,8 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Operational status of the promote client.',
-        example: 'active',
         default: 'active',
-        enum: ['active', 'inactive'],
+        enum: ['active', 'inactive']
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(base_client_service_1.ClientStatus),
@@ -25228,8 +25055,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Optional operator note attached to the promote client.',
-        example: 'Account is functioning properly',
-        default: 'Account is functioning properly',
+        default: 'Account is functioning properly'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -25237,8 +25063,7 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "message", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Timestamp when the client was last used in a live workflow.',
-        example: '2026-04-01T10:30:00.000Z',
+        description: 'Timestamp when the client was last used in a live workflow.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsDateString)(),
@@ -25246,8 +25071,7 @@ __decorate([
 ], CreatePromoteClientDto.prototype, "lastUsed", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Session string for Telegram connection.',
-        example: 'session123',
+        description: 'Session string for Telegram connection.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -25307,13 +25131,13 @@ exports.SearchPromoteClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const base_client_service_1 = __webpack_require__(/*! ../../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
 class SearchPromoteClientDto {
 }
 exports.SearchPromoteClientDto = SearchPromoteClientDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Telegram account identifier.',
-        example: '123456789',
+        description: 'Telegram account identifier.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -25321,8 +25145,7 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Mobile number of the promote client.',
-        example: '+1234567890',
+        description: 'Mobile number of the promote client.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -25330,8 +25153,24 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Availability date filter.',
-        example: '2026-04-03',
+        description: 'Owning client ID to filter by.'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchPromoteClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Operational status filter.',
+        enum: ['active', 'inactive']
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(base_client_service_1.ClientStatus),
+    __metadata("design:type", String)
+], SearchPromoteClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Availability date filter.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -25340,7 +25179,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Exact channel count filter.',
-        example: 23,
         type: Number
     }),
     (0, class_validator_1.IsOptional)(),
@@ -25378,99 +25216,99 @@ class UpdatePromoteClientDto extends (0, swagger_1.PartialType)(create_promote_c
 }
 exports.UpdatePromoteClientDto = UpdatePromoteClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the client is currently reserved by an active workflow.', example: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Whether the client is currently reserved by an active workflow.' }),
     __metadata("design:type", Boolean)
 ], UpdatePromoteClientDto.prototype, "inUse", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the client was last used.', example: '2026-04-01T10:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the client was last used.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "lastUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated.', example: '2026-03-10T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "privacyUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "profilePicsUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "nameBioUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were deleted.', example: '2026-03-14T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were deleted.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated or cleared.', example: '2026-03-20T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated or cleared.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "usernameUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent health check.', example: '2026-04-02T09:15:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent health check.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "lastChecked", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "lastUpdateAttempt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Current consecutive warmup failure count.', example: 1 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Current consecutive warmup failure count.' }),
     __metadata("design:type", Number)
 ], UpdatePromoteClientDto.prototype, "failedUpdateAttempts", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "lastUpdateFailure", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "twoFASetAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other sessions were revoked.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' }),
+    (0, swagger_1.ApiPropertyOptional)({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'] }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(warmup_phases_1.WarmupPhase),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "warmupPhase", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Per-account warmup jitter in days.', example: 2 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Per-account warmup jitter in days.' }),
     __metadata("design:type", Number)
 ], UpdatePromoteClientDto.prototype, "warmupJitter", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "enrolledAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "organicActivityAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.', example: '2026-04-02T07:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created.' }),
     __metadata("design:type", Date)
 ], UpdatePromoteClientDto.prototype, "sessionRotatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned first name (set during setupClient)', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned first name (set during setupClient)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "assignedFirstName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned last name', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned last name' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "assignedLastName", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned bio', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned bio' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdatePromoteClientDto.prototype, "assignedBio", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Assigned profile pic URLs', required: false }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Assigned profile pic URLs' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsString)({ each: true }),
@@ -25588,7 +25426,7 @@ let PromoteClientController = class PromoteClientController {
     async update(mobile, updateClientDto) {
         return this.clientService.update(mobile, updateClientDto);
     }
-    async createdOrupdate(mobile, updateClientDto) {
+    async createOrUpdate(mobile, updateClientDto) {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async remove(mobile) {
@@ -25627,7 +25465,7 @@ let PromoteClientController = class PromoteClientController {
     async resetFailedAttempts(mobile) {
         await this.clientService.update(mobile, {
             failedUpdateAttempts: 0,
-            lastUpdateFailure: null,
+            lastUpdateFailure: null
         });
         return { message: `Reset failed attempts for ${mobile}` };
     }
@@ -25667,9 +25505,11 @@ __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search promote clients', description: 'Searches promote client records by supported fields.' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
-    (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name' }),
-    (0, swagger_1.ApiQuery)({ name: 'lastName', required: false, description: 'Last name' }),
-    (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
+    (0, swagger_1.ApiQuery)({ name: 'tgId', required: false, description: 'Telegram account ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Owning client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Operational status (active/inactive)' }),
+    (0, swagger_1.ApiQuery)({ name: 'availableDate', required: false, description: 'Availability date' }),
+    (0, swagger_1.ApiQuery)({ name: 'channels', required: false, description: 'Channel count', type: Number }),
     (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -25679,7 +25519,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('joinChannelsForPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Prepare channel joins for promote clients', description: 'Builds the next join queue for eligible promote clients.' }),
-    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Join channels initiated successfully' } }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -25687,7 +25527,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateInfo'),
     (0, swagger_1.ApiOperation)({ summary: 'Refresh promote client metadata', description: 'Starts a background refresh of promote client metadata and channel counts.' }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -25695,7 +25535,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('checkPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Run promote warmup processing', description: 'Starts the background warmup processor for eligible promote clients.' }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -25704,7 +25544,7 @@ __decorate([
     (0, common_1.Post)('addNewUserstoPromoteClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into promote warmup', description: 'Starts background enrollment of candidate users into the promote client pool.' }),
     (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.BulkEnrollPromoteClientsRequestDto }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'goodIds, badIds, or clientsNeedingPromoteClients were not valid arrays.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -25726,7 +25566,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a promote client', description: 'Converts an existing user account into a warmup-managed promote client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID to assign promote client to (auto-assigned if omitted)', type: String }),
-    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as promote successfully' } }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
     (0, swagger_1.ApiConflictResponse)({ description: 'A promote client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -25737,8 +25577,8 @@ __decorate([
 ], PromoteClientController.prototype, "setAsPromoteClient", null);
 __decorate([
     (0, common_1.Get)('mobile/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get promote client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Promote client mobile number', type: String }),
     (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Promote client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -25748,8 +25588,8 @@ __decorate([
 ], PromoteClientController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)('mobile/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update promote client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Promote client mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
     (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Promote client not found.' }),
@@ -25761,8 +25601,8 @@ __decorate([
 ], PromoteClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Put)('mobile/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create or update promote client by mobile', description: 'Creates the promote client if it does not exist, otherwise updates it. Full payload required for creation.' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Promote client mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_promote_client_dto_1.UpdatePromoteClientDto }),
     (0, swagger_1.ApiOkResponse)({ type: promote_client_schema_1.PromoteClient }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -25770,11 +25610,11 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_promote_client_dto_1.UpdatePromoteClientDto]),
     __metadata("design:returntype", Promise)
-], PromoteClientController.prototype, "createdOrupdate", null);
+], PromoteClientController.prototype, "createOrUpdate", null);
 __decorate([
     (0, common_1.Delete)('mobile/:mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete promote client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Promote client mobile number', type: String }),
     (0, swagger_1.ApiOkResponse)({ schema: { type: 'null' } }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Promote client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -25785,7 +25625,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a raw promote client query', description: 'Executes a direct MongoDB-style filter against the promote client collection.' }),
-    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true } }),
     (0, swagger_1.ApiOkResponse)({ type: [promote_client_schema_1.PromoteClient] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -26458,7 +26298,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
     }
     async search(filter) {
-        return this.promoteClientModel.find(filter).exec();
+        const query = { ...filter };
+        const regexFields = ['mobile', 'clientId'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+            }
+        }
+        return this.promoteClientModel.find(query).exec();
     }
     async executeQuery(query, sort, limit, skip) {
         if (!query)
@@ -27097,156 +26944,155 @@ let PromoteClient = class PromoteClient {
 };
 exports.PromoteClient = PromoteClient;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Telegram account identifier.', example: '123456789' }),
+    (0, swagger_1.ApiProperty)({ description: 'Telegram account identifier.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "tgId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.', example: '+15551234567' }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Provider-specific last-active indicator recorded for the source user.', example: '2026-04-03' }),
+    (0, swagger_1.ApiProperty)({ description: 'Provider-specific last-active indicator recorded for the source user.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "lastActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.', example: '2026-04-03' }),
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "availableDate", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Current joined channel count.', example: 191 }),
+    (0, swagger_1.ApiProperty)({ description: 'Current joined channel count.' }),
     (0, mongoose_1.Prop)({ required: true, type: Number }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "channels", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning main client identifier.', example: 'client-a' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning main client identifier.' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Operational status for the record.', example: 'active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Operational status for the record.' }),
     (0, mongoose_1.Prop)({ required: false, default: 'active' }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational note attached to the client.', example: 'Enrolled for warmup' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational note attached to the client.' }),
     (0, mongoose_1.Prop)({ required: false, default: 'Account is functioning properly' }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "message", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when this account was last consumed by live usage.', example: '2026-04-01T12:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when this account was last consumed by live usage.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated during warmup.', example: '2026-03-10T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when privacy settings were updated during warmup.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "privacyUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.', example: '2026-03-28T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the final profile photo was uploaded.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "profilePicsUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.', example: '2026-03-18T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when display name and bio were updated.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "nameBioUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were removed.', example: '2026-03-14T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when legacy profile photos were removed.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "profilePicsDeletedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated or cleared.', example: '2026-03-20T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when username was updated or cleared.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "usernameUpdatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Record creation timestamp.', example: '2026-03-01T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record creation timestamp.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "createdAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Record last update timestamp.', example: '2026-04-03T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Record last update timestamp.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "updatedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent periodic health check.', example: '2026-04-02T09:15:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent periodic health check.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastChecked", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.', example: '2026-04-03T10:30:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the most recent warmup processing attempt.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUpdateAttempt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Current consecutive warmup failure count.', example: 0, default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'Current consecutive warmup failure count.', default: 0 }),
     (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "failedUpdateAttempts", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.', example: '2026-04-01T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the last failed warmup attempt.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "lastUpdateFailure", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Session string currently stored for this promote client.', example: '1AQAOMT...' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Session string currently stored for this promote client.' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether the account is currently reserved by an active workflow.', example: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether the account is currently reserved by an active workflow.' }),
     (0, mongoose_1.Prop)({ required: false, type: Boolean, default: false }),
     __metadata("design:type", Boolean)
 ], PromoteClient.prototype, "inUse", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.', example: '2026-03-12T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when 2FA was verified or configured.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "twoFASetAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other Telegram sessions were revoked.', example: '2026-03-15T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when other Telegram sessions were revoked.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "otherAuthsRemovedAt", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Current warmup lifecycle phase.',
-        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
-        example: 'growing',
+        enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated']
     }),
     (0, mongoose_1.Prop)({
         required: false,
         type: String,
         enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
-        default: null,
+        default: null
     }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "warmupPhase", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Per-account warmup jitter in days.', example: 2, default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'Per-account warmup jitter in days.', default: 0 }),
     (0, mongoose_1.Prop)({ required: false, type: Number, default: 0 }),
     __metadata("design:type", Number)
 ], PromoteClient.prototype, "warmupJitter", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.', example: '2026-03-03T08:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when the account entered warmup enrollment.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "enrolledAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.', example: '2026-04-03T09:45:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp of the latest organic activity execution.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "organicActivityAt", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created and recorded.', example: '2026-04-02T07:00:00.000Z' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Timestamp when a backup session was created and recorded.' }),
     (0, mongoose_1.Prop)({ required: false, type: Date, default: null }),
     __metadata("design:type", Date)
 ], PromoteClient.prototype, "sessionRotatedAt", void 0);
@@ -27278,8 +27124,8 @@ exports.PromoteClient = PromoteClient = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], PromoteClient);
 exports.PromoteClientSchema = mongoose_1.SchemaFactory.createForClass(PromoteClient);
@@ -27449,8 +27295,8 @@ exports.PromoteMsg = PromoteMsg = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        }, })
+            }
+        } })
 ], PromoteMsg);
 exports.PromoteMsgSchema = mongoose_1.SchemaFactory.createForClass(PromoteMsg);
 exports.PromoteMsgSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });
@@ -27538,35 +27384,35 @@ class CreatePromoteStatDto {
 }
 exports.CreatePromoteStatDto = CreatePromoteStatDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID' }),
     __metadata("design:type", String)
 ], CreatePromoteStatDto.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: { "Girls_Chating_Group_07": 4, "girls_friends_chatting_group_01": 14 }, description: 'Data' }),
+    (0, swagger_1.ApiProperty)({ description: 'Data' }),
     __metadata("design:type", Map)
 ], CreatePromoteStatDto.prototype, "data", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 552, description: 'Total Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Total Count' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "totalCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 314, description: 'Unique Channels' }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique Channels' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "uniqueChannels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719929752982.0, description: 'Release Day' }),
+    (0, swagger_1.ApiProperty)({ description: 'Release Day' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "releaseDay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719860106247.0, description: 'Last Updated TimeStamp' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last Updated TimeStamp' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "lastUpdatedTimeStamp", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Is Active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Is Active' }),
     __metadata("design:type", Boolean)
 ], CreatePromoteStatDto.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ["And_Girls_Boys_Group_Chatting", "Girls_Chating_Group_07"], description: 'Channels' }),
+    (0, swagger_1.ApiProperty)({ description: 'Channels' }),
     __metadata("design:type", Array)
 ], CreatePromoteStatDto.prototype, "channels", void 0);
 
@@ -27922,42 +27768,42 @@ let PromoteStat = class PromoteStat {
 };
 exports.PromoteStat = PromoteStat;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID' }),
     (0, mongoose_1.Prop)({ required: true, unique: true }),
     __metadata("design:type", String)
 ], PromoteStat.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: { "Girls_Chating_Group_07": 4, "girls_friends_chatting_group_01": 14 }, description: 'Data' }),
+    (0, swagger_1.ApiProperty)({ description: 'Data' }),
     (0, mongoose_1.Prop)({ required: true, type: Map, of: Number }),
     __metadata("design:type", Map)
 ], PromoteStat.prototype, "data", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 552, description: 'Total Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Total Count' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], PromoteStat.prototype, "totalCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 314, description: 'Unique Channels' }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique Channels' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], PromoteStat.prototype, "uniqueChannels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719929752982.0, description: 'Release Day' }),
+    (0, swagger_1.ApiProperty)({ description: 'Release Day' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], PromoteStat.prototype, "releaseDay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Is Active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Is Active' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], PromoteStat.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719929752982.0, description: 'Last Updated TimeStamp' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last Updated TimeStamp' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], PromoteStat.prototype, "lastUpdatedTimeStamp", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ["And_Girls_Boys_Group_Chatting", "Girls_Chating_Group_07"], description: 'Channels' }),
+    (0, swagger_1.ApiProperty)({ description: 'Channels' }),
     (0, mongoose_1.Prop)({ required: true, type: [String] }),
     __metadata("design:type", Array)
 ], PromoteStat.prototype, "channels", void 0);
@@ -28286,105 +28132,104 @@ let SessionAudit = class SessionAudit {
 };
 exports.SessionAudit = SessionAudit;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Phone number associated with the session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Phone number associated with the session' }),
     (0, mongoose_1.Prop)({ required: true, index: true }),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Encrypted session string' }),
+    (0, swagger_1.ApiProperty)({ description: 'Encrypted session string' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "sessionString", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Current status of the session', enum: SessionStatus }),
+    (0, swagger_1.ApiProperty)({ description: 'Current status of the session', enum: SessionStatus }),
     (0, mongoose_1.Prop)({ required: true, enum: SessionStatus, default: SessionStatus.CREATED }),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'old_session', description: 'Method used to create the session', enum: SessionCreationMethod }),
+    (0, swagger_1.ApiProperty)({ description: 'Method used to create the session', enum: SessionCreationMethod }),
     (0, mongoose_1.Prop)({ required: true, enum: SessionCreationMethod }),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "creationMethod", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Session created successfully', description: 'Creation success/failure message' }),
+    (0, swagger_1.ApiProperty)({ description: 'Creation success/failure message' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "creationMessage", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Previous session string used for creation (if applicable)' }),
+    (0, swagger_1.ApiProperty)({ description: 'Previous session string used for creation (if applicable)' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "previousSessionString", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T10:00:00Z', description: 'When the session was created' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the session was created' }),
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "createdAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:30:00Z', description: 'Last time the session was used' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last time the session was used' }),
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "lastUsedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2024-01-01T10:00:00Z', description: 'When the session expires' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the session expires' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "expiresAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID associated with this session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID associated with this session' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username associated with this session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Username associated with this session' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 3, description: 'Number of retry attempts during creation' }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of retry attempts during creation' }),
     (0, mongoose_1.Prop)({ default: 0 }),
     __metadata("design:type", Number)
 ], SessionAudit.prototype, "retryAttempts", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Rate limit exceeded', description: 'Error message if creation failed' }),
+    (0, swagger_1.ApiProperty)({ description: 'Error message if creation failed' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "errorMessage", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        example: { userAgent: 'Telegram-Desktop/1.0', ipAddress: '192.168.1.1' },
         description: 'Additional metadata about session creation'
     }),
     (0, mongoose_1.Prop)({ type: Object }),
     __metadata("design:type", Object)
 ], SessionAudit.prototype, "metadata", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this session is currently active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether this session is currently active' }),
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
 ], SessionAudit.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T16:00:00Z', description: 'When the session was revoked/expired' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the session was revoked/expired' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "revokedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'manual_revocation', description: 'Reason for session revocation' }),
+    (0, swagger_1.ApiProperty)({ description: 'Reason for session revocation' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "revocationReason", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 5, description: 'Number of times this session has been used' }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of times this session has been used' }),
     (0, mongoose_1.Prop)({ default: 0 }),
     __metadata("design:type", Number)
 ], SessionAudit.prototype, "usageCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'session_validation_failed', description: 'Last known error with this session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last known error with this session' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "lastError", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:45:00Z', description: 'When the last error occurred' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the last error occurred' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "lastErrorAt", void 0);
@@ -28399,8 +28244,8 @@ exports.SessionAudit = SessionAudit = __decorate([
             transform: (doc, ret) => {
                 delete ret._id;
                 delete ret.__v;
-            },
-        },
+            }
+        }
     })
 ], SessionAudit);
 exports.SessionAuditSchema = mongoose_1.SchemaFactory.createForClass(SessionAudit);
@@ -28815,8 +28660,7 @@ class CreateSessionDto {
 exports.CreateSessionDto = CreateSessionDto;
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Phone number with country code (optional if session provided)',
-        example: '+1234567890'
+        description: 'Phone number with country code (optional if session provided)'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -28824,8 +28668,7 @@ __decorate([
 ], CreateSessionDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Existing session string to use',
-        example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts...'
+        description: 'Existing session string to use'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -28845,8 +28688,7 @@ class SearchAuditDto {
 exports.SearchAuditDto = SearchAuditDto;
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Phone number to search for',
-        example: '+1234567890'
+        description: 'Phone number to search for'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -28888,8 +28730,7 @@ class GetOldestSessionDto {
 exports.GetOldestSessionDto = GetOldestSessionDto;
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Phone number to get session for',
-        example: '+1234567890'
+        description: 'Phone number to get session for'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -29092,10 +28933,10 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
-                message: { type: 'string', example: 'Session created successfully' },
-                session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
-                isNew: { type: 'boolean', example: true }
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                session: { type: 'string' },
+                isNew: { type: 'boolean' }
             }
         }
     }),
@@ -29124,24 +28965,24 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
+                success: { type: 'boolean' },
                 data: {
                     type: 'array',
                     items: {
                         type: 'object',
                         properties: {
-                            mobile: { type: 'string', example: '916265240911' },
-                            sessionString: { type: 'string', example: '1BQANOTEuM==...' },
-                            status: { type: 'string', example: 'active' },
-                            creationMethod: { type: 'string', example: 'old_session' },
-                            createdAt: { type: 'string', example: '2023-12-01T10:00:00Z' },
-                            lastUsedAt: { type: 'string', example: '2023-12-01T15:30:00Z' },
-                            usageCount: { type: 'number', example: 5 }
+                            mobile: { type: 'string' },
+                            sessionString: { type: 'string' },
+                            status: { type: 'string' },
+                            creationMethod: { type: 'string' },
+                            createdAt: { type: 'string' },
+                            lastUsedAt: { type: 'string' },
+                            usageCount: { type: 'number' }
                         }
                     }
                 },
-                total: { type: 'number', example: 25 },
-                message: { type: 'string', example: 'Audit records retrieved successfully' }
+                total: { type: 'number' },
+                message: { type: 'string' }
             }
         }
     }),
@@ -29166,17 +29007,17 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
-                message: { type: 'string', example: 'Oldest session retrieved successfully' },
+                success: { type: 'boolean' },
+                message: { type: 'string' },
                 data: {
                     type: 'object',
                     properties: {
-                        session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
-                        sessionAge: { type: 'number', example: 5, description: 'Age of session in days' },
-                        isNew: { type: 'boolean', example: false, description: 'Whether this is a newly created session' },
-                        usageCount: { type: 'number', example: 12, description: 'Number of times this session has been used' },
-                        lastUsedAt: { type: 'string', example: '2024-08-05T10:30:00Z', description: 'When the session was last used' },
-                        createdAt: { type: 'string', example: '2024-08-01T14:20:00Z', description: 'When the session was created' }
+                        session: { type: 'string' },
+                        sessionAge: { type: 'number', description: 'Age of session in days' },
+                        isNew: { type: 'boolean', description: 'Whether this is a newly created session' },
+                        usageCount: { type: 'number', description: 'Number of times this session has been used' },
+                        lastUsedAt: { type: 'string', description: 'When the session was last used' },
+                        createdAt: { type: 'string', description: 'When the session was created' }
                     }
                 }
             }
@@ -31907,8 +31748,7 @@ class AcceptedStringResponseDto {
 exports.AcceptedStringResponseDto = AcceptedStringResponseDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Acknowledgement returned when a long-running background operation is started.',
-        example: 'initiated Checking',
+        description: 'Acknowledgement returned when a long-running background operation is started.'
     }),
     __metadata("design:type", String)
 ], AcceptedStringResponseDto.prototype, "message", void 0);
@@ -31918,15 +31758,13 @@ exports.StatusUpdateRequestDto = StatusUpdateRequestDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Lifecycle status to assign to the client record.',
-        enum: ['active', 'inactive'],
-        example: 'active',
+        enum: ['active', 'inactive']
     }),
     __metadata("design:type", String)
 ], StatusUpdateRequestDto.prototype, "status", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Optional operator note explaining why the status changed.',
-        example: 'Re-enabled after manual review',
+        description: 'Optional operator note explaining why the status changed.'
     }),
     __metadata("design:type", String)
 ], StatusUpdateRequestDto.prototype, "message", void 0);
@@ -31935,8 +31773,7 @@ class ActivationRequestDto {
 exports.ActivationRequestDto = ActivationRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Optional operator note recorded when activating the client.',
-        example: 'Returned to active pool',
+        description: 'Optional operator note recorded when activating the client.'
     }),
     __metadata("design:type", String)
 ], ActivationRequestDto.prototype, "message", void 0);
@@ -31945,8 +31782,7 @@ class DeactivationRequestDto {
 exports.DeactivationRequestDto = DeactivationRequestDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Reason for deactivating the client.',
-        example: 'Health check failed repeatedly',
+        description: 'Reason for deactivating the client.'
     }),
     __metadata("design:type", String)
 ], DeactivationRequestDto.prototype, "reason", void 0);
@@ -31955,8 +31791,7 @@ class MarkUsedRequestDto {
 exports.MarkUsedRequestDto = MarkUsedRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Optional note describing where or why the client was consumed.',
-        example: 'Assigned to live campaign rotation',
+        description: 'Optional note describing where or why the client was consumed.'
     }),
     __metadata("design:type", String)
 ], MarkUsedRequestDto.prototype, "message", void 0);
@@ -31966,16 +31801,14 @@ exports.BulkEnrollClientsRequestDto = BulkEnrollClientsRequestDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Candidate user identifiers that passed upstream validation.',
-        type: [String],
-        example: ['10001', '10002'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollClientsRequestDto.prototype, "goodIds", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Candidate user identifiers that failed upstream validation and should be excluded.',
-        type: [String],
-        example: ['99999'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollClientsRequestDto.prototype, "badIds", void 0);
@@ -31985,8 +31818,7 @@ exports.BulkEnrollBufferClientsRequestDto = BulkEnrollBufferClientsRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Specific client IDs that currently need more buffer accounts.',
-        type: [String],
-        example: ['client-a', 'client-b'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollBufferClientsRequestDto.prototype, "clientsNeedingBufferClients", void 0);
@@ -31996,8 +31828,7 @@ exports.BulkEnrollPromoteClientsRequestDto = BulkEnrollPromoteClientsRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Specific client IDs that currently need more promote accounts.',
-        type: [String],
-        example: ['client-a', 'client-b'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollPromoteClientsRequestDto.prototype, "clientsNeedingPromoteClients", void 0);
@@ -32005,25 +31836,24 @@ class UsageStatisticsDto {
 }
 exports.UsageStatisticsDto = UsageStatisticsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of matching client records.', example: 48 }),
+    (0, swagger_1.ApiProperty)({ description: 'Total number of matching client records.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "totalClients", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Matching clients that have never been used.', example: 12 }),
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients that have never been used.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "neverUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 24 hours.', example: 6 }),
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 24 hours.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "usedInLast24Hours", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 7 days.', example: 21 }),
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 7 days.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "usedInLastWeek", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Average time gap between usages, in hours.',
-        example: 37.5,
+        description: 'Average time gap between usages, in hours.'
     }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "averageUsageGap", void 0);
@@ -32504,51 +32334,51 @@ class CreateStatDto {
 }
 exports.CreateStatDto = CreateStatDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '6785668464', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 12, description: 'Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Count' }),
     __metadata("design:type", Number)
 ], CreateStatDto.prototype, "count", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 50, description: 'Pay Amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay Amount' }),
     __metadata("design:type", Number)
 ], CreateStatDto.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given Today' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given Today' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "demoGivenToday", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'New User' }),
+    (0, swagger_1.ApiProperty)({ description: 'New User' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "newUser", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid Reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid Reply' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Amaan Khan', description: 'Name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Name' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second Show' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
+    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "didPay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "profile", void 0);
 
@@ -32738,62 +32568,62 @@ let Stat = class Stat {
 };
 exports.Stat = Stat;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '6785668464', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 12, description: 'Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Count' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Stat.prototype, "count", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 50, description: 'Pay Amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay Amount' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Stat.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given Today' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given Today' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat.prototype, "demoGivenToday", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'New User' }),
+    (0, swagger_1.ApiProperty)({ description: 'New User' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat.prototype, "newUser", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid Reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid Reply' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Amaan Khan', description: 'Name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second Show' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
+    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Boolean)
 ], Stat.prototype, "didPay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat.prototype, "profile", void 0);
@@ -32917,51 +32747,51 @@ class CreateStatDto {
 }
 exports.CreateStatDto = CreateStatDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '6785668464', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 12, description: 'Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Count' }),
     __metadata("design:type", Number)
 ], CreateStatDto.prototype, "count", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 50, description: 'Pay Amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay Amount' }),
     __metadata("design:type", Number)
 ], CreateStatDto.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given Today' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given Today' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "demoGivenToday", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'New User' }),
+    (0, swagger_1.ApiProperty)({ description: 'New User' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "newUser", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid Reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid Reply' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Amaan Khan', description: 'Name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Name' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second Show' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
+    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "didPay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "profile", void 0);
 
@@ -33151,62 +32981,62 @@ let Stat2 = class Stat2 {
 };
 exports.Stat2 = Stat2;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '6785668464', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 12, description: 'Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Count' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Stat2.prototype, "count", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 50, description: 'Pay Amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay Amount' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Stat2.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given Today' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given Today' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "demoGivenToday", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'New User' }),
+    (0, swagger_1.ApiProperty)({ description: 'New User' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "newUser", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid Reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid Reply' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Amaan Khan', description: 'Name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second Show' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
+    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "didPay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "profile", void 0);
@@ -33629,8 +33459,8 @@ exports.Timestamp = Timestamp = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Timestamp);
 exports.TimestampSchema = mongoose_1.SchemaFactory.createForClass(Timestamp);
@@ -33679,7 +33509,6 @@ exports.CreateTransactionDto = CreateTransactionDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Unique transaction ID (UTR)',
-        example: 'TXN123456789',
         minLength: 8
     }),
     (0, class_validator_1.IsString)(),
@@ -33691,7 +33520,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Amount involved in the transaction',
-        example: 100.50,
         minimum: 0
     }),
     (0, class_validator_1.IsNumber)(),
@@ -33701,8 +33529,7 @@ __decorate([
 ], CreateTransactionDto.prototype, "amount", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Issue type reported by the user',
-        example: 'payment_failed'
+        description: 'Issue type reported by the user'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -33710,8 +33537,7 @@ __decorate([
 ], CreateTransactionDto.prototype, "issue", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Description of issue reported by the user',
-        example: 'Payment failed due to network error'
+        description: 'Description of issue reported by the user'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -33720,7 +33546,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Refund method selected by the user',
-        example: 'bank_transfer',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -33730,7 +33555,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'User profile ID',
-        example: 'user123',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -33740,7 +33564,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'User chat ID',
-        example: 'chat123',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -33750,7 +33573,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'IP address of the user',
-        example: '192.168.1.1',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -33981,7 +33803,7 @@ exports.Transaction = Transaction = __decorate([
                 ret['id'] = ret._id;
                 delete ret._id;
                 return ret;
-            },
+            }
         }
     })
 ], Transaction);
@@ -34102,8 +33924,8 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Filter by chat ID' }),
     (0, swagger_1.ApiQuery)({ name: 'ip', required: false, description: 'Filter by IP address' }),
     (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Filter by transaction status' }),
-    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: 'number', description: 'Number of records to return', example: 10 }),
-    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: 'number', description: 'Number of records to skip', example: 0 }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: 'number', description: 'Number of records to return' }),
+    (0, swagger_1.ApiQuery)({ name: 'offset', required: false, type: 'number', description: 'Number of records to skip' }),
     __param(0, (0, common_1.Query)('transactionId')),
     __param(1, (0, common_1.Query)('amount')),
     __param(2, (0, common_1.Query)('issue')),
@@ -34616,8 +34438,8 @@ exports.UpiId = UpiId = __decorate([
             virtuals: false,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], UpiId);
 exports.UpiIdSchema = mongoose_1.SchemaFactory.createForClass(UpiId);
@@ -34837,83 +34659,83 @@ class CreateUserDataDto {
 }
 exports.CreateUserDataDto = CreateUserDataDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '5787751360', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1, description: 'Total count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Total count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "totalCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Picture count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Picture count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "picCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1718802722566, description: 'Last message timestamp' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last message timestamp' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "lastMsgTimeStamp", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1718802742567, description: 'Limit time' }),
+    (0, swagger_1.ApiProperty)({ description: 'Limit time' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "limitTime", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Paid count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "paidCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Profile count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "prfCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1, description: 'Can reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Can reply' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "canReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Pay amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay amount' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'highestPayAmount' }),
+    (0, swagger_1.ApiProperty)({ description: 'highestPayAmount' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "highestPayAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'cheatCount', default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'cheatCount', default: 0 }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "cheatCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'callTime', default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'callTime', default: 0 }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "callTime", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'بـِـعٰ۬ێډ الۿٰٕقاوٰ۬ێ ٴ🦅', description: 'Username' }),
+    (0, swagger_1.ApiProperty)({ description: 'Username' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '-7250939091939055173', description: 'Access hash' }),
+    (0, swagger_1.ApiProperty)({ description: 'Access hash' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "accessHash", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid reply status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid reply status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Demo given status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo given status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second show status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second show status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'sneha', description: 'Profile name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile name' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Pics Sent status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pics Sent status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "picsSent", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: [], description: 'videos' }),
+    (0, swagger_1.ApiProperty)({ description: 'videos' }),
     __metadata("design:type", Array)
 ], CreateUserDataDto.prototype, "videos", void 0);
 
@@ -35230,8 +35052,8 @@ exports.UserData = UserData = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], UserData);
 exports.UserDataSchema = mongoose_1.SchemaFactory.createForClass(UserData);
@@ -35322,10 +35144,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data', description: 'Searches user data based on provided query parameters.' }),
-    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
-    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean, example: true }),
-    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean, example: false }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'List of matching user data.', type: [user_data_schema_1.UserData] }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid query parameters.' }),
     __param(0, (0, common_1.Query)()),
@@ -35344,7 +35166,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('updateAll/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update all user data by chat ID', description: 'Updates all user data entries associated with a specific chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID to update user data for', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID to update user data for', type: String }),
     (0, swagger_1.ApiBody)({ type: update_user_data_dto_1.UpdateUserDataDto, description: 'User data fields to update' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully updated.', type: Object }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
@@ -35358,8 +35180,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by profile and chat ID', description: 'Retrieves a specific user data entry by profile and chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data found.', type: user_data_schema_1.UserData }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
@@ -35371,8 +35193,8 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by profile and chat ID', description: 'Updates a specific user data entry identified by profile and chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String }),
     (0, swagger_1.ApiBody)({ type: update_user_data_dto_1.UpdateUserDataDto, description: 'User data fields to update' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully updated.', type: user_data_schema_1.UserData }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
@@ -35387,8 +35209,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by profile and chat ID', description: 'Deletes a specific user data entry identified by profile and chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully deleted.', type: user_data_schema_1.UserData }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
@@ -35402,7 +35224,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.NoCache)(),
     (0, swagger_1.ApiOperation)({ summary: 'Clear count for user data', description: 'Clears the count for user data, optionally filtered by chat ID.' }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Count cleared successfully.' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid chat ID.' }),
     __param(0, (0, common_1.Query)('chatId')),
@@ -35418,10 +35240,10 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                query: { type: 'object', description: 'MongoDB query object', example: { profile: 'user123' } },
-                sort: { type: 'object', description: 'Sort criteria', example: { createdAt: -1 } },
-                limit: { type: 'number', description: 'Maximum number of results', example: 10 },
-                skip: { type: 'number', description: 'Number of results to skip', example: 0 }
+                query: { type: 'object', description: 'MongoDB query object' },
+                sort: { type: 'object', description: 'Sort criteria' },
+                limit: { type: 'number', description: 'Maximum number of results' },
+                skip: { type: 'number', description: 'Number of results to skip' }
             }
         }
     }),
@@ -35711,6 +35533,8 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateUserDto = exports.UserCallsDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 class UserCallsDto {
     constructor() {
         this.totalCalls = 0;
@@ -35722,23 +35546,33 @@ class UserCallsDto {
 }
 exports.UserCallsDto = UserCallsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total calls' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Total calls', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], UserCallsDto.prototype, "totalCalls", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Outgoing calls' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Outgoing calls', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], UserCallsDto.prototype, "outgoing", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Incoming calls' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Incoming calls', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], UserCallsDto.prototype, "incoming", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Video calls' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Video calls', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], UserCallsDto.prototype, "video", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Audio calls' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Audio calls', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], UserCallsDto.prototype, "audio", void 0);
 class CreateUserDto {
@@ -35765,100 +35599,200 @@ class CreateUserDto {
 exports.CreateUserDto = CreateUserDto;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Telegram session string' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "session", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'First name' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "firstName", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Last name' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastName", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Telegram username' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Telegram user ID' }),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Gender' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "gender", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: '2FA enabled' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: '2FA enabled', default: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateUserDto.prototype, "twoFA", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Account expired' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Account expired', default: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateUserDto.prototype, "expired", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: '2FA password' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: '2FA password' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Channel count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "channels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Personal chat count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Personal chat count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "personalChats", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total chat count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Total chat count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "totalChats", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Contact count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Contact count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "contacts", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "msgs", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total photo count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Total photo count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "photoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total video count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Total video count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "videoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Movie file count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Movie file count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "movieCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Sent photo count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sent photo count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "ownPhotoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Received photo count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Received photo count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "otherPhotoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Sent video count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sent video count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "ownVideoCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Received video count' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Received video count', default: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], CreateUserDto.prototype, "otherVideoCount", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Last active timestamp' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "lastActive", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Call statistics' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => UserCallsDto),
     __metadata("design:type", UserCallsDto)
 ], CreateUserDto.prototype, "calls", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/users/dto/execute-user-query.dto.ts"
+/*!************************************************************!*\
+  !*** ./src/components/users/dto/execute-user-query.dto.ts ***!
+  \************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ExecuteUserQueryDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class ExecuteUserQueryDto {
+}
+exports.ExecuteUserQueryDto = ExecuteUserQueryDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'MongoDB filter object', type: 'object', additionalProperties: true }),
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], ExecuteUserQueryDto.prototype, "query", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sort specification', type: 'object', additionalProperties: true }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], ExecuteUserQueryDto.prototype, "sort", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Max results to return', minimum: 1 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], ExecuteUserQueryDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Results to skip', minimum: 0 }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], ExecuteUserQueryDto.prototype, "skip", void 0);
 
 
 /***/ },
@@ -35888,6 +35822,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./create-user.dto */ "./src/components/users/dto/create-user.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./search-user.dto */ "./src/components/users/dto/search-user.dto.ts"), exports);
 __exportStar(__webpack_require__(/*! ./update-user.dto */ "./src/components/users/dto/update-user.dto.ts"), exports);
+__exportStar(__webpack_require__(/*! ./execute-user-query.dto */ "./src/components/users/dto/execute-user-query.dto.ts"), exports);
 
 
 /***/ },
@@ -35930,12 +35865,14 @@ __decorate([
 ], SearchUserDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: '2FA status' }),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchUserDto.prototype, "twoFA", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Expiration status' }),
+    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
@@ -35997,9 +35934,9 @@ __decorate([
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UpdateUserDto = void 0;
-const mapped_types_1 = __webpack_require__(/*! @nestjs/mapped-types */ "@nestjs/mapped-types");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const create_user_dto_1 = __webpack_require__(/*! ./create-user.dto */ "./src/components/users/dto/create-user.dto.ts");
-class UpdateUserDto extends (0, mapped_types_1.PartialType)(create_user_dto_1.CreateUserDto) {
+class UpdateUserDto extends (0, swagger_1.PartialType)(create_user_dto_1.CreateUserDto) {
 }
 exports.UpdateUserDto = UpdateUserDto;
 
@@ -36223,7 +36160,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Call statistics', required: false }),
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
-        default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
+        default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 }
     }),
     __metadata("design:type", Object)
 ], User.prototype, "calls", void 0);
@@ -36231,7 +36168,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Relationship analysis', required: false }),
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
-        default: { score: 0, bestScore: 0, computedAt: null, top: [] },
+        default: { score: 0, bestScore: 0, computedAt: null, top: [] }
     }),
     __metadata("design:type", Object)
 ], User.prototype, "relationships", void 0);
@@ -36243,8 +36180,8 @@ exports.User = User = __decorate([
             transform: (doc, ret) => {
                 delete ret._id;
                 return ret;
-            },
-        },
+            }
+        }
     })
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);
@@ -36383,10 +36320,12 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UsersController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const users_service_1 = __webpack_require__(/*! ./users.service */ "./src/components/users/users.service.ts");
+const user_schema_1 = __webpack_require__(/*! ./schemas/user.schema */ "./src/components/users/schemas/user.schema.ts");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const search_user_dto_1 = __webpack_require__(/*! ./dto/search-user.dto */ "./src/components/users/dto/search-user.dto.ts");
 const update_user_dto_1 = __webpack_require__(/*! ./dto/update-user.dto */ "./src/components/users/dto/update-user.dto.ts");
 const create_user_dto_1 = __webpack_require__(/*! ./dto/create-user.dto */ "./src/components/users/dto/create-user.dto.ts");
+const execute_user_query_dto_1 = __webpack_require__(/*! ./dto/execute-user-query.dto */ "./src/components/users/dto/execute-user-query.dto.ts");
 let UsersController = class UsersController {
     constructor(usersService) {
         this.usersService = usersService;
@@ -36403,7 +36342,7 @@ let UsersController = class UsersController {
             limit: limit ? parseInt(limit, 10) : undefined,
             minScore: minScore ? parseFloat(minScore) : undefined,
             gender,
-            excludeTwoFA: excludeTwoFA === 'true',
+            excludeTwoFA: excludeTwoFA === 'true'
         });
     }
     async getTopInteractionUsers(page, limit, minScore, minCalls, minPhotos, minVideos, excludeTwoFA, excludeAudited, gender, starred) {
@@ -36443,7 +36382,7 @@ let UsersController = class UsersController {
             excludeTwoFA: excludeTwoFABool,
             excludeAudited: excludeAuditedBool,
             gender,
-            starred: starred === 'true' ? true : undefined,
+            starred: starred === 'true' ? true : undefined
         });
     }
     async findAll(limit, skip, sortBy, sortOrder) {
@@ -36494,6 +36433,8 @@ exports.UsersController = UsersController;
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new user' }),
+    (0, swagger_1.ApiBody)({ type: create_user_dto_1.CreateUserDto }),
+    (0, swagger_1.ApiCreatedResponse)({ type: user_schema_1.User }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_user_dto_1.CreateUserDto]),
@@ -36502,6 +36443,18 @@ __decorate([
 __decorate([
     (0, common_1.Get)('/search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search users' }),
+    (0, swagger_1.ApiQuery)({ name: 'tgId', required: false, description: 'Telegram ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
+    (0, swagger_1.ApiQuery)({ name: 'twoFA', required: false, description: '2FA status', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'expired', required: false, description: 'Expiration status', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'session', required: false, description: 'Session string' }),
+    (0, swagger_1.ApiQuery)({ name: 'firstName', required: false, description: 'First name (partial match)' }),
+    (0, swagger_1.ApiQuery)({ name: 'lastName', required: false, description: 'Last name' }),
+    (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Telegram username' }),
+    (0, swagger_1.ApiQuery)({ name: 'gender', required: false, description: 'Gender' }),
+    (0, swagger_1.ApiQuery)({ name: 'demoGiven', required: false, description: 'Demo given status', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'starred', required: false, description: 'Starred status', type: Boolean }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [search_user_dto_1.SearchUserDto]),
@@ -36515,6 +36468,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'minScore', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'gender', required: false, type: String }),
     (0, swagger_1.ApiQuery)({ name: 'excludeTwoFA', required: false, type: Boolean }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { users: { type: 'array' }, total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' }, totalPages: { type: 'number' } } } }),
     __param(0, (0, common_1.Query)('page')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('minScore')),
@@ -36537,6 +36491,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'excludeAudited', required: false, type: Boolean }),
     (0, swagger_1.ApiQuery)({ name: 'gender', required: false, type: String }),
     (0, swagger_1.ApiQuery)({ name: 'starred', required: false, type: Boolean }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { users: { type: 'array' }, total: { type: 'number' }, page: { type: 'number' }, limit: { type: 'number' }, totalPages: { type: 'number' } } } }),
     __param(0, (0, common_1.Query)('page')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('minScore')),
@@ -36558,6 +36513,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'skip', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String, description: 'Field to sort by (e.g. msgs, totalChats, contacts, calls.totalCalls, score, lastActive, otherPhotoCount, otherVideoCount, relationships.score)' }),
     (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String, description: 'Sort order: asc or desc (default: desc)' }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
     __param(0, (0, common_1.Query)('limit')),
     __param(1, (0, common_1.Query)('skip')),
     __param(2, (0, common_1.Query)('sortBy')),
@@ -36569,7 +36525,9 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':mobile/relationships'),
     (0, swagger_1.ApiOperation)({ summary: 'Get relationship details for a specific user' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOkResponse)({ type: user_schema_1.User }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'User not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36582,6 +36540,8 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
     (0, swagger_1.ApiQuery)({ name: 'skip', required: false, type: Number }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Unknown computed field.' }),
     __param(0, (0, common_1.Query)('field')),
     __param(1, (0, common_1.Query)('sortOrder')),
     __param(2, (0, common_1.Query)('limit')),
@@ -36593,7 +36553,9 @@ __decorate([
 __decorate([
     (0, common_1.Post)('recompute-score/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Recompute relationship score (live Telegram connection)' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOkResponse)({ type: user_schema_1.User }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'User not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36602,7 +36564,9 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':tgId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user by tgId' }),
-    (0, swagger_1.ApiParam)({ name: 'tgId' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram user ID', type: String }),
+    (0, swagger_1.ApiOkResponse)({ type: user_schema_1.User }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'User not found.' }),
     __param(0, (0, common_1.Param)('tgId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36611,7 +36575,10 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':tgId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user by tgId' }),
-    (0, swagger_1.ApiParam)({ name: 'tgId' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram user ID', type: String }),
+    (0, swagger_1.ApiBody)({ type: update_user_dto_1.UpdateUserDto }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'number', description: 'Number of modified documents' } }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'User not found.' }),
     __param(0, (0, common_1.Param)('tgId')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -36621,7 +36588,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':mobile/star'),
     (0, swagger_1.ApiOperation)({ summary: 'Toggle starred status for a user' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', properties: { mobile: { type: 'string' }, starred: { type: 'boolean' } } } }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'User not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36630,7 +36599,9 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':tgId/expire'),
     (0, swagger_1.ApiOperation)({ summary: 'Mark user as expired (soft delete)' }),
-    (0, swagger_1.ApiParam)({ name: 'tgId' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram user ID', type: String }),
+    (0, swagger_1.ApiOkResponse)({ description: 'User marked as expired.' }),
+    (0, swagger_1.ApiNotFoundResponse)({ description: 'User not found.' }),
     __param(0, (0, common_1.Param)('tgId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -36639,9 +36610,11 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute custom MongoDB query' }),
+    (0, swagger_1.ApiBody)({ type: execute_user_query_dto_1.ExecuteUserQueryDto }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [execute_user_query_dto_1.ExecuteUserQueryDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "executeQuery", null);
 exports.UsersController = UsersController = __decorate([
@@ -36830,13 +36803,13 @@ let UsersService = UsersService_1 = class UsersService {
         return doc.toJSON();
     }
     async update(tgId, updateDto) {
-        const result = await this.userModel
-            .updateMany({ tgId }, { $set: updateDto })
+        const updated = await this.userModel
+            .findOneAndUpdate({ tgId }, { $set: updateDto }, { new: true })
             .exec();
-        if (result.matchedCount === 0) {
-            throw new common_1.NotFoundException(`Users with tgId ${tgId} not found`);
+        if (!updated) {
+            throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
-        return result.modifiedCount;
+        return updated;
     }
     async updateByFilter(filter, updateDto) {
         const result = await this.userModel
@@ -36863,8 +36836,12 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async search(filter) {
         const query = { ...filter };
-        if (query.firstName) {
-            query.firstName = { $regex: new RegExp(query.firstName, 'i') };
+        const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regexFields = ['firstName', 'lastName', 'username', 'mobile'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(escapeRegex(query[field]), 'i') };
+            }
         }
         if (!filter.mobile) {
             let excludedMobiles = [];
@@ -37358,17 +37335,17 @@ class ReplaceProxyDto {
 }
 exports.ReplaceProxyDto = ReplaceProxyDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy to replace', example: '1.2.3.4' }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy to replace' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], ReplaceProxyDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Port of the proxy to replace', example: 8080 }),
+    (0, swagger_1.ApiProperty)({ description: 'Port of the proxy to replace' }),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], ReplaceProxyDto.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Preferred country code for replacement', required: false, example: 'US' }),
+    (0, swagger_1.ApiProperty)({ description: 'Preferred country code for replacement', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -37377,11 +37354,11 @@ class ReplaceResultDto {
 }
 exports.ReplaceResultDto = ReplaceResultDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Boolean)
 ], ReplaceResultDto.prototype, "success", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Replacement initiated' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], ReplaceResultDto.prototype, "message", void 0);
 __decorate([
@@ -37418,9 +37395,8 @@ exports.SyncProxiesDto = SyncProxiesDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether to remove proxies from DB that are no longer in the Webshare list',
-        example: true,
         required: false,
-        default: true,
+        default: true
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -37430,27 +37406,27 @@ class SyncResultDto {
 }
 exports.SyncResultDto = SyncResultDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 100 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "totalFetched", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 80 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "created", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 15 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "updated", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 5 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "removed", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: [] }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Array)
 ], SyncResultDto.prototype, "errors", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 2345 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "durationMs", void 0);
 
@@ -37480,27 +37456,27 @@ class WebshareStatusDto {
 }
 exports.WebshareStatusDto = WebshareStatusDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Boolean)
 ], WebshareStatusDto.prototype, "configured", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Boolean)
 ], WebshareStatusDto.prototype, "apiKeyValid", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 100 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], WebshareStatusDto.prototype, "totalProxiesInWebshare", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 95 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], WebshareStatusDto.prototype, "totalProxiesInDb", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2026-03-29T10:00:00Z', required: false }),
+    (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", String)
 ], WebshareStatusDto.prototype, "lastSyncAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, required: false }),
+    (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", String)
 ], WebshareStatusDto.prototype, "lastSyncError", void 0);
 
@@ -40888,16 +40864,6 @@ module.exports = require("@nestjs/config");
 (module) {
 
 module.exports = require("@nestjs/core");
-
-/***/ },
-
-/***/ "@nestjs/mapped-types"
-/*!***************************************!*\
-  !*** external "@nestjs/mapped-types" ***!
-  \***************************************/
-(module) {
-
-module.exports = require("@nestjs/mapped-types");
 
 /***/ },
 

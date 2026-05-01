@@ -60,7 +60,7 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'id', description: 'The ID of the document to fetch' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Document fetched successfully',
+        description: 'Document fetched successfully'
     }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Document not found' }),
     __param(0, (0, common_1.Param)('id')),
@@ -73,16 +73,11 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Post a new document' }),
     (0, swagger_1.ApiBody)({
         description: 'The document to post',
-        schema: {
-            example: {
-                title: 'My Document',
-                content: 'This is the content of the document.',
-            },
-        },
+        schema: {}
     }),
     (0, swagger_1.ApiResponse)({
         status: 201,
-        description: 'Document posted successfully',
+        description: 'Document posted successfully'
     }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input' }),
     __param(0, (0, common_1.Body)()),
@@ -95,7 +90,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Fetch all documents' }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'List of all documents fetched successfully',
+        description: 'List of all documents fetched successfully'
     }),
     (0, swagger_1.ApiResponse)({ status: 500, description: 'Internal server error' }),
     __metadata("design:type", Function),
@@ -108,16 +103,11 @@ __decorate([
     (0, swagger_1.ApiParam)({ name: 'id', description: 'The ID of the document to update' }),
     (0, swagger_1.ApiBody)({
         description: 'The updated document',
-        schema: {
-            example: {
-                title: 'Updated Document',
-                content: 'This is the updated content of the document.',
-            },
-        },
+        schema: {}
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
-        description: 'Document updated successfully',
+        description: 'Document updated successfully'
     }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Document not found' }),
     __param(0, (0, common_1.Param)('id')),

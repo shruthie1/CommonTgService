@@ -141,8 +141,8 @@ exports.ActiveChannel = ActiveChannel = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], ActiveChannel);
 exports.ActiveChannelSchema = mongoose_1.SchemaFactory.createForClass(ActiveChannel);

@@ -15,83 +15,83 @@ class CreateUserDataDto {
 }
 exports.CreateUserDataDto = CreateUserDataDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '5787751360', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1, description: 'Total count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Total count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "totalCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Picture count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Picture count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "picCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1718802722566, description: 'Last message timestamp' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last message timestamp' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "lastMsgTimeStamp", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1718802742567, description: 'Limit time' }),
+    (0, swagger_1.ApiProperty)({ description: 'Limit time' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "limitTime", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Paid count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "paidCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Profile count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile count' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "prfCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1, description: 'Can reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Can reply' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "canReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'Pay amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay amount' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'highestPayAmount' }),
+    (0, swagger_1.ApiProperty)({ description: 'highestPayAmount' }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "highestPayAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'cheatCount', default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'cheatCount', default: 0 }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "cheatCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 0, description: 'callTime', default: 0 }),
+    (0, swagger_1.ApiProperty)({ description: 'callTime', default: 0 }),
     __metadata("design:type", Number)
 ], CreateUserDataDto.prototype, "callTime", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'بـِـعٰ۬ێډ الۿٰٕقاوٰ۬ێ ٴ🦅', description: 'Username' }),
+    (0, swagger_1.ApiProperty)({ description: 'Username' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '-7250939091939055173', description: 'Access hash' }),
+    (0, swagger_1.ApiProperty)({ description: 'Access hash' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "accessHash", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid reply status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid reply status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Demo given status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo given status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second show status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second show status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'sneha', description: 'Profile name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile name' }),
     __metadata("design:type", String)
 ], CreateUserDataDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Pics Sent status' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pics Sent status' }),
     __metadata("design:type", Boolean)
 ], CreateUserDataDto.prototype, "picsSent", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: [], description: 'videos' }),
+    (0, swagger_1.ApiProperty)({ description: 'videos' }),
     __metadata("design:type", Array)
 ], CreateUserDataDto.prototype, "videos", void 0);
 //# sourceMappingURL=create-user-data.dto.js.map

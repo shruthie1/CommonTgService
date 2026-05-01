@@ -347,7 +347,7 @@ let ClientService = ClientService_1 = class ClientService {
     }
     processTextSearchFields(filter) {
         const nextFilter = { ...filter };
-        const textFields = ['name'];
+        const textFields = ['name', 'mobile', 'clientId', 'username'];
         textFields.forEach((field) => {
             const value = nextFilter[field];
             if (typeof value === 'string' && value) {

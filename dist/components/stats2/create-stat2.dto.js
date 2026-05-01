@@ -15,51 +15,51 @@ class CreateStatDto {
 }
 exports.CreateStatDto = CreateStatDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '6785668464', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 12, description: 'Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Count' }),
     __metadata("design:type", Number)
 ], CreateStatDto.prototype, "count", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 50, description: 'Pay Amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay Amount' }),
     __metadata("design:type", Number)
 ], CreateStatDto.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given Today' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given Today' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "demoGivenToday", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'New User' }),
+    (0, swagger_1.ApiProperty)({ description: 'New User' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "newUser", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid Reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid Reply' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Amaan Khan', description: 'Name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Name' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second Show' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
+    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "didPay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "profile", void 0);
 //# sourceMappingURL=create-stat2.dto.js.map

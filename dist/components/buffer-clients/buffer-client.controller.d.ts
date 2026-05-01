@@ -38,6 +38,6 @@ export declare class BufferClientController {
     getUnusedBufferClients(hoursAgo?: number, clientId?: string): Promise<BufferClient[]>;
     findOne(mobile: string): Promise<BufferClient>;
     update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
-    createdOrupdate(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
+    createOrUpdate(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
     remove(mobile: string): Promise<void>;
 }

@@ -3,6 +3,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BufferClient } from '../buffer-clients/schemas/buffer-client.schema';
 import { PromoteClient } from '../promote-clients/schemas/promote-client.schema';
 import { Client } from '../clients/schemas/client.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 export interface MongoTestContext {
     mongod: MongoMemoryServer;
     connection: Connection;
@@ -12,6 +13,7 @@ export declare function stopMongo(ctx: MongoTestContext): Promise<void>;
 export declare function createBufferClientModel(connection: Connection): Model<BufferClient>;
 export declare function createPromoteClientModel(connection: Connection): Model<PromoteClient>;
 export declare function createClientModel(connection: Connection): Model<Client>;
+export declare function createUserModel(connection: Connection): Model<UserDocument>;
 export declare function mockBotsService(): {
     sendMessageByCategory: jest.Mock<any, any, any>;
 };
@@ -43,4 +45,5 @@ export declare function mockSessionService(): {};
 export declare function makeBufferClientData(overrides?: Partial<BufferClient>): any;
 export declare function makePromoteClientData(overrides?: Partial<PromoteClient>): any;
 export declare function makeClientData(overrides?: Partial<Client>): any;
+export declare function makeUserData(overrides?: Partial<User>): any;
 export declare function resetCounter(): void;

@@ -3,6 +3,7 @@ import { User } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ExecuteUserQueryDto } from './dto/execute-user-query.dto';
 export declare class UsersController {
     private readonly usersService;
     constructor(usersService: UsersService);
@@ -39,11 +40,11 @@ export declare class UsersController {
         __v: number;
     }>;
     findOne(tgId: string): Promise<User>;
-    update(tgId: string, updateUserDto: UpdateUserDto): Promise<number>;
+    update(tgId: string, updateUserDto: UpdateUserDto): Promise<User>;
     toggleStar(mobile: string): Promise<{
         mobile: string;
         starred: boolean;
     }>;
     expire(tgId: string): Promise<void>;
-    executeQuery(requestBody: any): Promise<any>;
+    executeQuery(requestBody: ExecuteUserQueryDto): Promise<any>;
 }

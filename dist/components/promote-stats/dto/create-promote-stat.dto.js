@@ -15,35 +15,35 @@ class CreatePromoteStatDto {
 }
 exports.CreatePromoteStatDto = CreatePromoteStatDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID' }),
     __metadata("design:type", String)
 ], CreatePromoteStatDto.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: { "Girls_Chating_Group_07": 4, "girls_friends_chatting_group_01": 14 }, description: 'Data' }),
+    (0, swagger_1.ApiProperty)({ description: 'Data' }),
     __metadata("design:type", Map)
 ], CreatePromoteStatDto.prototype, "data", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 552, description: 'Total Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Total Count' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "totalCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 314, description: 'Unique Channels' }),
+    (0, swagger_1.ApiProperty)({ description: 'Unique Channels' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "uniqueChannels", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719929752982.0, description: 'Release Day' }),
+    (0, swagger_1.ApiProperty)({ description: 'Release Day' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "releaseDay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1719860106247.0, description: 'Last Updated TimeStamp' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last Updated TimeStamp' }),
     __metadata("design:type", Number)
 ], CreatePromoteStatDto.prototype, "lastUpdatedTimeStamp", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Is Active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Is Active' }),
     __metadata("design:type", Boolean)
 ], CreatePromoteStatDto.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: ["And_Girls_Boys_Group_Chatting", "Girls_Chating_Group_07"], description: 'Channels' }),
+    (0, swagger_1.ApiProperty)({ description: 'Channels' }),
     __metadata("design:type", Array)
 ], CreatePromoteStatDto.prototype, "channels", void 0);
 //# sourceMappingURL=create-promote-stat.dto.js.map

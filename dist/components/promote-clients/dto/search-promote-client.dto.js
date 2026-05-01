@@ -13,13 +13,13 @@ exports.SearchPromoteClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
+const base_client_service_1 = require("../../shared/base-client.service");
 class SearchPromoteClientDto {
 }
 exports.SearchPromoteClientDto = SearchPromoteClientDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Telegram account identifier.',
-        example: '123456789',
+        description: 'Telegram account identifier.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -27,8 +27,7 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Mobile number of the promote client.',
-        example: '+1234567890',
+        description: 'Mobile number of the promote client.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -36,8 +35,24 @@ __decorate([
 ], SearchPromoteClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Availability date filter.',
-        example: '2026-04-03',
+        description: 'Owning client ID to filter by.'
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchPromoteClientDto.prototype, "clientId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Operational status filter.',
+        enum: ['active', 'inactive']
+    }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(base_client_service_1.ClientStatus),
+    __metadata("design:type", String)
+], SearchPromoteClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({
+        description: 'Availability date filter.'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -46,7 +61,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Exact channel count filter.',
-        example: 23,
         type: Number
     }),
     (0, class_validator_1.IsOptional)(),

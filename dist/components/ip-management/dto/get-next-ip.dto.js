@@ -16,19 +16,19 @@ class GetNextIpDto {
 }
 exports.GetNextIpDto = GetNextIpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Optional client ID to filter IPs by assignment', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional client ID to filter IPs by assignment', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GetNextIpDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Optional country code filter', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional country code filter', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], GetNextIpDto.prototype, "countryCode", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'socks5', description: 'Optional protocol filter', enum: ['http', 'https', 'socks5'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Optional protocol filter', enum: ['http', 'https', 'socks5'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
     __metadata("design:type", String)

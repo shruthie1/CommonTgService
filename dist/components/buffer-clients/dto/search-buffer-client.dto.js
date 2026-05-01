@@ -11,58 +11,38 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SearchBufferClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
-const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 class SearchBufferClientDto {
 }
 exports.SearchBufferClientDto = SearchBufferClientDto;
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.', example: '+15551234567' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning client ID to filter by.', example: 'client-a' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Owning client ID to filter by.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for.', example: 'sample_user' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "username", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Display name to search for.', example: 'Jane Doe' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "name", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Channel link to search for.', example: 'https://t.me/example' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "channelLink", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Repl link to search for.', example: 'https://replit.com/@team/demo' }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchBufferClientDto.prototype, "repl", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by active status.', example: true }),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsBoolean)(),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
-    __metadata("design:type", Boolean)
-], SearchBufferClientDto.prototype, "isActive", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filter by Telegram account ID.', example: '123456789' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Telegram account ID.' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "tgId", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Operational status filter.', enum: ['active', 'inactive'] }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Username to search for.' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SearchBufferClientDto.prototype, "username", void 0);
 //# sourceMappingURL=search-buffer-client.dto.js.map

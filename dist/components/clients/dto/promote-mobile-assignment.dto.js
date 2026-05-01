@@ -17,7 +17,7 @@ class PromoteMobileAssignmentDto {
 }
 exports.PromoteMobileAssignmentDto = PromoteMobileAssignmentDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911' }),
+    (0, swagger_1.ApiProperty)({}),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),

@@ -39,7 +39,7 @@ exports.Event = Event = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'events',
         versionKey: false,
-        timestamps: false,
+        timestamps: false
     })
 ], Event);
 exports.EventSchema = mongoose_1.SchemaFactory.createForClass(Event);

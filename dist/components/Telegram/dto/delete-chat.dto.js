@@ -21,14 +21,14 @@ class DeleteHistoryDto {
 exports.DeleteHistoryDto = DeleteHistoryDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Username or peer ID of the chat whose history you want to delete',
+        description: 'Username or peer ID of the chat whose history you want to delete'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], DeleteHistoryDto.prototype, "peer", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Deletes all messages with IDs less than or equal to this value',
+        description: 'Deletes all messages with IDs less than or equal to this value'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
@@ -37,7 +37,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'If true, clears the history only for the current user without deleting for others',
-        default: true,
+        default: true
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -46,7 +46,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'If true, deletes the message history for all participants (if permitted)',
-        default: false,
+        default: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -54,7 +54,7 @@ __decorate([
 ], DeleteHistoryDto.prototype, "revoke", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Minimum date (UNIX timestamp) for messages to be deleted',
+        description: 'Minimum date (UNIX timestamp) for messages to be deleted'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),
@@ -62,7 +62,7 @@ __decorate([
 ], DeleteHistoryDto.prototype, "minDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Maximum date (UNIX timestamp) for messages to be deleted',
+        description: 'Maximum date (UNIX timestamp) for messages to be deleted'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsInt)(),

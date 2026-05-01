@@ -16,11 +16,11 @@ class PromoteMobileMatchDto {
 }
 exports.PromoteMobileMatchDto = PromoteMobileMatchDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client-a' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], PromoteMobileMatchDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], PromoteMobileMatchDto.prototype, "mobile", void 0);
 class PromoteMobileSearchResponseDto {
@@ -35,7 +35,7 @@ __decorate([
     __metadata("design:type", Array)
 ], PromoteMobileSearchResponseDto.prototype, "matches", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], PromoteMobileSearchResponseDto.prototype, "searchedMobile", void 0);
 class EnhancedClientSearchResponseDto {
@@ -46,7 +46,7 @@ __decorate([
     __metadata("design:type", Array)
 ], EnhancedClientSearchResponseDto.prototype, "clients", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ enum: ['direct', 'promoteMobile', 'mixed'], example: 'promoteMobile' }),
+    (0, swagger_1.ApiProperty)({ enum: ['direct', 'promoteMobile', 'mixed'] }),
     __metadata("design:type", String)
 ], EnhancedClientSearchResponseDto.prototype, "searchType", void 0);
 __decorate([
@@ -54,7 +54,7 @@ __decorate([
     __metadata("design:type", Array)
 ], EnhancedClientSearchResponseDto.prototype, "promoteMobileMatches", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 4 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], EnhancedClientSearchResponseDto.prototype, "totalResults", void 0);
 //# sourceMappingURL=client-response.dto.js.map

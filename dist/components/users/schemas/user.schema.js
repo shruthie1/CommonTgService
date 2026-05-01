@@ -151,7 +151,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Call statistics', required: false }),
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
-        default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 },
+        default: { totalCalls: 0, outgoing: 0, incoming: 0, video: 0, audio: 0 }
     }),
     __metadata("design:type", Object)
 ], User.prototype, "calls", void 0);
@@ -159,7 +159,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Relationship analysis', required: false }),
     (0, mongoose_1.Prop)({
         type: mongoose_2.default.Schema.Types.Mixed,
-        default: { score: 0, bestScore: 0, computedAt: null, top: [] },
+        default: { score: 0, bestScore: 0, computedAt: null, top: [] }
     }),
     __metadata("design:type", Object)
 ], User.prototype, "relationships", void 0);
@@ -171,8 +171,8 @@ exports.User = User = __decorate([
             transform: (doc, ret) => {
                 delete ret._id;
                 return ret;
-            },
-        },
+            }
+        }
     })
 ], User);
 exports.UserSchema = mongoose_1.SchemaFactory.createForClass(User);

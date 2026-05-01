@@ -15,27 +15,27 @@ class WebshareStatusDto {
 }
 exports.WebshareStatusDto = WebshareStatusDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Boolean)
 ], WebshareStatusDto.prototype, "configured", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Boolean)
 ], WebshareStatusDto.prototype, "apiKeyValid", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 100 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], WebshareStatusDto.prototype, "totalProxiesInWebshare", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 95 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], WebshareStatusDto.prototype, "totalProxiesInDb", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2026-03-29T10:00:00Z', required: false }),
+    (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", String)
 ], WebshareStatusDto.prototype, "lastSyncAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, required: false }),
+    (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", String)
 ], WebshareStatusDto.prototype, "lastSyncError", void 0);
 //# sourceMappingURL=webshare-config.dto.js.map

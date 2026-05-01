@@ -22,8 +22,8 @@ exports.Configuration = Configuration = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Configuration);
 exports.ConfigurationSchema = mongoose_1.SchemaFactory.createForClass(Configuration);
