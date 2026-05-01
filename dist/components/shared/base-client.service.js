@@ -749,7 +749,7 @@ class BaseClientService {
             if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
                 this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
                 await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Marked inactive — manual review needed`, { parseMode: 'HTML' });
                 return { updateCount: 0 };
             }
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
@@ -796,6 +796,7 @@ class BaseClientService {
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase} → ready\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> All warmup steps complete — eligible for session rotation`, { parseMode: 'HTML' });
             return { updateCount: 0, updateSummary: 'advance_to_ready' };
         }
         try {
