@@ -786,6 +786,7 @@ describe('removeOtherAuths branches', () => {
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
             expect.anything(),
             expect.stringContaining('CRITICAL SESSION LOSS'),
+            expect.anything(),
         );
     });
 

@@ -9657,6 +9657,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Client ID to assign promote client to (auto-assigned if omitted)",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13563,9 +13572,7 @@
           "username",
           "clientId",
           "deployKey",
-          "product",
-          "qrId",
-          "gpayId"
+          "product"
         ]
       },
       "UpdateClientDto": {
@@ -13680,6 +13687,33 @@
             "items": {
               "type": "string"
             }
+          },
+          "assignedFirstName": {
+            "type": "string",
+            "description": "Assigned first name (set during setupClient)"
+          },
+          "assignedLastName": {
+            "type": "string",
+            "description": "Assigned last name"
+          },
+          "assignedBio": {
+            "type": "string",
+            "description": "Assigned bio"
+          },
+          "assignedPhotoFilenames": {
+            "description": "Assigned photo filenames",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "assignedPersonaPoolVersion": {
+            "type": "string",
+            "description": "Pool version at assignment time"
+          },
+          "personaPoolVersion": {
+            "type": "string",
+            "description": "Computed version hash of the persona pool"
           }
         }
       },

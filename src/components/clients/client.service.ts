@@ -295,7 +295,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           .findOneAndUpdate(
             { clientId },
             { $set: cleanUpdateDto },
-            { new: true, upsert: true, runValidators: true },
+            { new: true, runValidators: true },
           )
           .lean()
           .exec(),
@@ -619,12 +619,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           bufferUpdateError instanceof Error ? bufferUpdateError.stack : undefined,
         );
       }
-      this.logger.debug(`[${clientId}] Scheduling delayed profile refresh`, { delayMs: 15000, skipDeploy: true });
-      setTimeout(() => {
-        void this.updateClient(clientId, 'Delayed update after buffer removal', true, false, true).catch((delayedError) => {
-          parseError(delayedError, `[${clientId}] delayed updateClient failed`);
-        });
-      }, 15000);
+      // Profile refresh (name/bio, privacy, photos) is handled by tg-aut on startup
+      // via persona verifier + CMS photo refresh endpoint. No delayed update needed —
+      // avoids a second connection racing with tg-aut's own startup.
+      this.logger.debug(`[${clientId}] Skipping delayed profile refresh — tg-aut handles on startup`);
       try {
         if (existingClient.deployKey) {
           this.logger.info(`[${clientId}] Triggering deploy restart after cutover`, { deployKeyPresent: true });

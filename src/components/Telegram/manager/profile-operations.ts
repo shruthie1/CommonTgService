@@ -4,48 +4,121 @@ import { CustomFile } from 'telegram/client/uploads';
 import { sleep } from 'telegram/Helpers';
 import { TgContext, PrivacyBatchSettings } from './types';
 
-// ---- Shared privacy rule setter (parallelized) ----
+// ---- Privacy: read-first, write only mismatches ----
 
-async function setPrivacyRules(
-    ctx: TgContext,
-    rules: Array<{ key: Api.TypeInputPrivacyKey; rules: Api.TypeInputPrivacyRule[] }>
-): Promise<void> {
-    await Promise.all(
-        rules.map(({ key, rules: privacyRules }) =>
-            ctx.client.invoke(new Api.account.SetPrivacy({ key, rules: privacyRules }))
-        )
-    );
+interface PrivacyExpectation {
+    key: Api.TypeInputPrivacyKey;
+    label: string;
+    desired: 'allow' | 'disallow';
 }
+
+/**
+ * Read-first privacy enforcement with human-like sequential timing.
+ *
+ * 1. Read each rule sequentially with small random gaps.
+ * 2. Collect mismatches.
+ * 3. Write only mismatches sequentially with larger delays
+ *    (mimics a user toggling settings one at a time).
+ *
+ * Returns count of rules that were actually written.
+ */
+interface PrivacyResult {
+    updated: number;
+    readFailures: number;
+    writeFailures: number;
+    allConfirmed: boolean;
+}
+
+async function ensurePrivacy(ctx: TgContext, expectations: PrivacyExpectation[]): Promise<PrivacyResult> {
+    let readFailures = 0;
+    let writeFailures = 0;
+
+    // Phase 1: sequential reads with human-like gaps
+    const mismatches: PrivacyExpectation[] = [];
+    for (const expectation of expectations) {
+        const { key, label, desired } = expectation;
+        try {
+            const current = await ctx.client.invoke(new Api.account.GetPrivacy({ key }));
+            const hasAllowAll = current.rules.some((r: any) => r.className === 'PrivacyValueAllowAll');
+            const hasDisallowAll = current.rules.some((r: any) => r.className === 'PrivacyValueDisallowAll');
+            const isCorrect = desired === 'allow' ? hasAllowAll : hasDisallowAll;
+
+            if (isCorrect) {
+                ctx.logger.debug(ctx.phoneNumber, `Privacy ${label}: OK (${desired})`);
+            } else {
+                ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: mismatch → need ${desired} (was ${hasAllowAll ? 'allow' : hasDisallowAll ? 'disallow' : 'other'})`);
+                mismatches.push(expectation);
+            }
+        } catch (err: any) {
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${err.message}`);
+            readFailures++;
+        }
+        await sleep(1000 + Math.random() * 2000);
+    }
+
+    if (mismatches.length === 0) {
+        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0 };
+    }
+
+    // Phase 2: sequential writes with larger human-like delays
+    let updated = 0;
+    for (const { key, label, desired } of mismatches) {
+        try {
+            const rules = desired === 'allow'
+                ? [new Api.InputPrivacyValueAllowAll()]
+                : [new Api.InputPrivacyValueDisallowAll()];
+            await ctx.client.invoke(new Api.account.SetPrivacy({ key, rules }));
+            ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: fixed → ${desired}`);
+            updated++;
+        } catch (err: any) {
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${err.message}`);
+            writeFailures++;
+        }
+        await sleep(3000 + Math.random() * 7000);
+    }
+    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0 };
+}
+
+/**
+ * Active-account privacy: read-first, only fix ProfilePhoto and LastSeen.
+ * PhoneCall, PhoneNumber, Forwards, About stay as warmup set them.
+ */
+const ACTIVE_PRIVACY: PrivacyExpectation[] = [
+    { key: new Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
+    { key: new Api.InputPrivacyKeyProfilePhoto(), label: 'ProfilePhoto', desired: 'allow' },
+    { key: new Api.InputPrivacyKeyForwards(), label: 'Forwards', desired: 'allow' },
+    { key: new Api.InputPrivacyKeyPhoneNumber(), label: 'PhoneNumber', desired: 'disallow' },
+    { key: new Api.InputPrivacyKeyStatusTimestamp(), label: 'LastSeen', desired: 'allow' },
+];
 
 export async function updatePrivacy(ctx: TgContext): Promise<void> {
-    try {
-        await setPrivacyRules(ctx, [
-            { key: new Api.InputPrivacyKeyPhoneCall(), rules: [new Api.InputPrivacyValueDisallowAll()] },
-            { key: new Api.InputPrivacyKeyProfilePhoto(), rules: [new Api.InputPrivacyValueAllowAll()] },
-            { key: new Api.InputPrivacyKeyForwards(), rules: [new Api.InputPrivacyValueAllowAll()] },
-            { key: new Api.InputPrivacyKeyPhoneNumber(), rules: [new Api.InputPrivacyValueDisallowAll()] },
-            { key: new Api.InputPrivacyKeyStatusTimestamp(), rules: [new Api.InputPrivacyValueAllowAll()] },
-            { key: new Api.InputPrivacyKeyAbout(), rules: [new Api.InputPrivacyValueAllowAll()] },
-        ]);
-        ctx.logger.info(ctx.phoneNumber, 'Privacy Updated (all settings)');
-    } catch (e) {
-        throw e;
+    const result = await ensurePrivacy(ctx, ACTIVE_PRIVACY);
+    if (!result.allConfirmed) {
+        ctx.logger.warn(ctx.phoneNumber, `Privacy activate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`);
     }
+    ctx.logger.info(ctx.phoneNumber, `Privacy check complete: ${result.updated} rule(s) corrected`);
 }
 
+/**
+ * Deactivate privacy: hide everything when archived/rotated.
+ * Aligned with promote-clients HIDE_ALL_PRIVACY preset.
+ */
+const DEACTIVATE_PRIVACY: PrivacyExpectation[] = [
+    { key: new Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
+    { key: new Api.InputPrivacyKeyProfilePhoto(), label: 'ProfilePhoto', desired: 'disallow' },
+    { key: new Api.InputPrivacyKeyForwards(), label: 'Forwards', desired: 'disallow' },
+    { key: new Api.InputPrivacyKeyPhoneNumber(), label: 'PhoneNumber', desired: 'disallow' },
+    { key: new Api.InputPrivacyKeyStatusTimestamp(), label: 'LastSeen', desired: 'disallow' },
+];
+
 export async function updatePrivacyforDeletedAccount(ctx: TgContext): Promise<void> {
-    try {
-        await setPrivacyRules(ctx, [
-            { key: new Api.InputPrivacyKeyPhoneCall(), rules: [new Api.InputPrivacyValueDisallowAll()] },
-            { key: new Api.InputPrivacyKeyProfilePhoto(), rules: [new Api.InputPrivacyValueDisallowAll()] },
-            { key: new Api.InputPrivacyKeyPhoneNumber(), rules: [new Api.InputPrivacyValueDisallowAll()] },
-            { key: new Api.InputPrivacyKeyStatusTimestamp(), rules: [new Api.InputPrivacyValueAllowAll()] },
-            { key: new Api.InputPrivacyKeyAbout(), rules: [new Api.InputPrivacyValueDisallowAll()] },
-        ]);
-        ctx.logger.info(ctx.phoneNumber, 'Privacy Updated for Deleted Account (all settings)');
-    } catch (e) {
-        throw e;
+    const result = await ensurePrivacy(ctx, DEACTIVATE_PRIVACY);
+    if (!result.allConfirmed) {
+        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`;
+        ctx.logger.warn(ctx.phoneNumber, msg);
+        throw new Error(msg);
     }
+    ctx.logger.info(ctx.phoneNumber, `Privacy deactivated: ${result.updated} rule(s) hidden`);
 }
 
 export async function updatePrivacyBatch(ctx: TgContext, settings: PrivacyBatchSettings): Promise<boolean> {
@@ -66,18 +139,18 @@ export async function updatePrivacyBatch(ctx: TgContext, settings: PrivacyBatchS
         groups: Api.InputPrivacyKeyChatInvite,
     };
 
-    const updates: Promise<Api.account.PrivacyRules>[] = [];
-
+    // Sequential writes with delays to avoid parallel burst detection
     for (const [key, value] of Object.entries(settings)) {
         if (value && key in privacyMap) {
-            updates.push(ctx.client.invoke(new Api.account.SetPrivacy({
+            await ctx.client.invoke(new Api.account.SetPrivacy({
                 key: new privacyMap[key](),
                 rules: privacyRules[value],
-            })));
+            }));
+            ctx.logger.debug(ctx.phoneNumber, `Privacy batch: ${key} → ${value}`);
+            await sleep(2000 + Math.random() * 3000);
         }
     }
 
-    await Promise.all(updates);
     return true;
 }
 

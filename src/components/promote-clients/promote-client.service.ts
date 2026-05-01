@@ -422,6 +422,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument> {
         const updateData: UpdatePromoteClientDto = { status };
         if (message) updateData.message = message;
+        if (status === 'inactive') {
+            updateData.inUse = false;
+        }
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
             `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,

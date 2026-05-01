@@ -207,7 +207,7 @@ export class BufferClientController {
   @ApiBody({ type: ActivationRequestDto })
   @ApiOkResponse({ type: BufferClient })
   async markAsActive(@Param('mobile') mobile: string, @Body() body: ActivationRequestDto = {}): Promise<BufferClient> {
-    return this.clientService.updateStatus(mobile, 'active', body.message);
+    return this.clientService.updateStatus(mobile, 'active', body.message || 'Account is functioning properly');
   }
 
   @Patch('deactivate/:mobile')

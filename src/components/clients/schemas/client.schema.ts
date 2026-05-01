@@ -66,12 +66,12 @@ export class Client {
     @Prop({ required: true })
     product: string;
 
-    @ApiProperty({ description: 'Paytm QR ID' })
-    @Prop({ required: true })
+    @ApiProperty({ description: 'Paytm QR ID', required: false })
+    @Prop({ required: false, default: null })
     qrId: string;
 
-    @ApiProperty({ description: 'Google Pay ID' })
-    @Prop({ required: true })
+    @ApiProperty({ description: 'Google Pay ID', required: false })
+    @Prop({ required: false, default: null })
     gpayId: string;
 
     @ApiProperty({ description: 'Dedicated proxy IPs', required: false })

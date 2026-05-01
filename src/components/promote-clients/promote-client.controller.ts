@@ -116,11 +116,12 @@ export class PromoteClientController {
   @Get('SetAsPromoteClient/:mobile')
   @ApiOperation({ summary: 'Enroll a user as a promote client', description: 'Converts an existing user account into a warmup-managed promote client.' })
   @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Client ID to assign promote client to (auto-assigned if omitted)', type: String })
   @ApiOkResponse({ schema: { type: 'string', example: 'Client enrolled as promote successfully' } })
   @ApiBadRequestResponse({ description: 'The user was not found or is already an active main client.' })
   @ApiConflictResponse({ description: 'A promote client record already exists for this mobile.' })
-  async setAsPromoteClient(@Param('mobile') mobile: string) {
-    return this.clientService.setAsPromoteClient(mobile);
+  async setAsPromoteClient(@Param('mobile') mobile: string, @Query('clientId') clientId?: string) {
+    return this.clientService.setAsPromoteClient(mobile, clientId);
   }
 
   @Get('mobile/:mobile')

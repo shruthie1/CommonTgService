@@ -756,35 +756,39 @@ export async function getChats(ctx: TgContext, options: {
 export async function updateChatSettings(ctx: TgContext, settings: ChatSettingsUpdate): Promise<boolean> {
     if (!ctx.client) throw new Error('Client not initialized');
     const chat = await ctx.client.getEntity(settings.chatId);
-    const updates: Promise<Api.TypeUpdates | boolean>[] = [];
+    const delayBetween = () => new Promise<void>(resolve => setTimeout(resolve, 1500 + Math.random() * 2500));
 
     if (settings.title) {
-        updates.push(ctx.client.invoke(new Api.channels.EditTitle({ channel: chat, title: settings.title })));
+        await ctx.client.invoke(new Api.channels.EditTitle({ channel: chat, title: settings.title }));
+        await delayBetween();
     }
     if (settings.about) {
-        updates.push(ctx.client.invoke(new Api.messages.EditChatAbout({ peer: chat, about: settings.about })));
+        await ctx.client.invoke(new Api.messages.EditChatAbout({ peer: chat, about: settings.about }));
+        await delayBetween();
     }
     if (settings.photo) {
         const buffer = await downloadFileFromUrl(settings.photo);
         const file = await ctx.client.uploadFile({
             file: new CustomFile('photo.jpg', buffer.length, 'photo.jpg', buffer), workers: 1,
         });
-        updates.push(ctx.client.invoke(new Api.channels.EditPhoto({
+        await ctx.client.invoke(new Api.channels.EditPhoto({
             channel: chat, photo: new Api.InputChatUploadedPhoto({ file }),
-        })));
+        }));
+        await delayBetween();
     }
     if (settings.slowMode !== undefined) {
-        updates.push(ctx.client.invoke(new Api.channels.ToggleSlowMode({ channel: chat, seconds: settings.slowMode })));
+        await ctx.client.invoke(new Api.channels.ToggleSlowMode({ channel: chat, seconds: settings.slowMode }));
+        await delayBetween();
     }
     if (settings.linkedChat) {
         const linkedChannel = await ctx.client.getEntity(settings.linkedChat);
-        updates.push(ctx.client.invoke(new Api.channels.SetDiscussionGroup({ broadcast: chat, group: linkedChannel })));
+        await ctx.client.invoke(new Api.channels.SetDiscussionGroup({ broadcast: chat, group: linkedChannel }));
+        await delayBetween();
     }
     if (settings.username) {
-        updates.push(ctx.client.invoke(new Api.channels.UpdateUsername({ channel: chat, username: settings.username })));
+        await ctx.client.invoke(new Api.channels.UpdateUsername({ channel: chat, username: settings.username }));
     }
 
-    await Promise.all(updates);
     return true;
 }
 

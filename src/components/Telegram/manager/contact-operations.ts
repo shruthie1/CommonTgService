@@ -5,11 +5,18 @@ import { CustomFile } from 'telegram/client/uploads';
 import { TgContext, ContactStats, ImportContactResult, BlockListResult } from './types';
 import { generateCSV, generateVCard, createVCardContent } from './helpers';
 
+function getFloodWaitSeconds(error: any): number | null {
+    if (error?.seconds != null) return error.seconds;
+    const match = error?.errorMessage?.match?.(/FLOOD_WAIT_(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+}
+
 export async function addContact(ctx: TgContext, data: { mobile: string; tgId: string }[], namePrefix: string): Promise<void> {
     try {
-        const results = await Promise.allSettled(
-            data.map(async (user, i) => {
-                const firstName = `${namePrefix}${i + 1}`;
+        for (let i = 0; i < data.length; i++) {
+            const user = data[i];
+            const firstName = `${namePrefix}${i + 1}`;
+            try {
                 await ctx.client.invoke(
                     new Api.contacts.AddContact({
                         firstName,
@@ -18,11 +25,16 @@ export async function addContact(ctx: TgContext, data: { mobile: string; tgId: s
                         id: user.tgId,
                     })
                 );
-            })
-        );
-        for (const result of results) {
-            if (result.status === 'rejected') {
-                ctx.logger.info(ctx.phoneNumber, result.reason);
+            } catch (err) {
+                const floodWait = getFloodWaitSeconds(err);
+                if (floodWait != null) {
+                    ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during addContact, stopping batch`);
+                    break;
+                }
+                ctx.logger.info(ctx.phoneNumber, err);
+            }
+            if (i < data.length - 1) {
+                await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
             }
         }
     } catch (error) {
@@ -105,7 +117,9 @@ export async function exportContacts(ctx: TgContext, format: 'vcard' | 'csv', in
 export async function importContacts(ctx: TgContext, data: { firstName: string; lastName?: string; phone: string }[]): Promise<ImportContactResult[]> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    const results = await Promise.all(data.map(async contact => {
+    const results: ImportContactResult[] = [];
+    for (let i = 0; i < data.length; i++) {
+        const contact = data[i];
         try {
             await ctx.client.invoke(new Api.contacts.ImportContacts({
                 contacts: [new Api.InputPhoneContact({
@@ -115,11 +129,20 @@ export async function importContacts(ctx: TgContext, data: { firstName: string; 
                     lastName: contact.lastName || '',
                 })],
             }));
-            return { success: true, phone: contact.phone };
+            results.push({ success: true, phone: contact.phone });
         } catch (error) {
-            return { success: false, phone: contact.phone, error: error.message };
+            const floodWait = getFloodWaitSeconds(error);
+            if (floodWait != null) {
+                ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during importContacts, stopping batch`);
+                results.push({ success: false, phone: contact.phone, error: `FLOOD_WAIT_${floodWait}` });
+                break;
+            }
+            results.push({ success: false, phone: contact.phone, error: error.message });
         }
-    }));
+        if (i < data.length - 1) {
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+        }
+    }
 
     return results;
 }
@@ -127,18 +150,29 @@ export async function importContacts(ctx: TgContext, data: { firstName: string; 
 export async function manageBlockList(ctx: TgContext, userIds: string[], block: boolean): Promise<BlockListResult[]> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    const results = await Promise.all(userIds.map(async userId => {
+    const results: BlockListResult[] = [];
+    for (let i = 0; i < userIds.length; i++) {
+        const userId = userIds[i];
         try {
             if (block) {
                 await ctx.client.invoke(new Api.contacts.Block({ id: await ctx.client.getInputEntity(userId) }));
             } else {
                 await ctx.client.invoke(new Api.contacts.Unblock({ id: await ctx.client.getInputEntity(userId) }));
             }
-            return { success: true, userId };
+            results.push({ success: true, userId });
         } catch (error) {
-            return { success: false, userId, error: error.message };
+            const floodWait = getFloodWaitSeconds(error);
+            if (floodWait != null) {
+                ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during ${block ? 'block' : 'unblock'}, stopping batch`);
+                results.push({ success: false, userId, error: `FLOOD_WAIT_${floodWait}` });
+                break;
+            }
+            results.push({ success: false, userId, error: error.message });
         }
-    }));
+        if (i < userIds.length - 1) {
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
+        }
+    }
 
     return results;
 }

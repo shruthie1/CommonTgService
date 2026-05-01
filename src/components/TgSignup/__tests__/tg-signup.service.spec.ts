@@ -56,27 +56,52 @@ class FakeTelegramClient {
     }
 }
 
+// Stub classes needed by profile-operations.ts ACTIVE_PRIVACY / DEACTIVATE_PRIVACY at import time
+class StubPrivacyKey {}
+
+const sharedApi = {
+    auth: {
+        SendCode,
+        ResendCode,
+        SignIn,
+        SignUp,
+        CheckPassword,
+        SentCodeSuccess,
+        SentCodeTypeApp,
+        AuthorizationSignUpRequired,
+    },
+    account: {
+        GetPassword,
+        GetPrivacy: class {},
+        SetPrivacy: class {},
+        UpdateProfile: class {},
+        UpdateUsername: class {},
+        CheckUsername: class {},
+    },
+    CodeSettings,
+    InputPrivacyKeyPhoneCall: StubPrivacyKey,
+    InputPrivacyKeyProfilePhoto: StubPrivacyKey,
+    InputPrivacyKeyForwards: StubPrivacyKey,
+    InputPrivacyKeyPhoneNumber: StubPrivacyKey,
+    InputPrivacyKeyStatusTimestamp: StubPrivacyKey,
+    InputPrivacyKeyChatInvite: StubPrivacyKey,
+    InputPrivacyValueAllowAll: StubPrivacyKey,
+    InputPrivacyValueAllowContacts: StubPrivacyKey,
+    InputPrivacyValueDisallowAll: StubPrivacyKey,
+    photos: {
+        GetUserPhotos: class {},
+        UploadProfilePhoto: class {},
+        DeletePhotos: class {},
+    },
+};
+
 jest.mock('telegram', () => ({
     TelegramClient: FakeTelegramClient,
+    Api: sharedApi,
 }));
 
 jest.mock('telegram/tl', () => ({
-    Api: {
-        auth: {
-            SendCode,
-            ResendCode,
-            SignIn,
-            SignUp,
-            CheckPassword,
-            SentCodeSuccess,
-            SentCodeTypeApp,
-            AuthorizationSignUpRequired,
-        },
-        account: {
-            GetPassword,
-        },
-        CodeSettings,
-    },
+    Api: sharedApi,
 }));
 
 jest.mock('telegram/sessions', () => ({

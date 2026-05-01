@@ -32,6 +32,7 @@ export class UpdatePromoteClientDto extends PartialType(CreatePromoteClientDto) 
     otherAuthsRemovedAt?: Date;
     // Warmup tracking
     @ApiPropertyOptional({ enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'], example: 'growing' })
+    @IsOptional()
     @IsEnum(WarmupPhase)
     warmupPhase?: WarmupPhaseType;
     @ApiPropertyOptional({ description: 'Per-account warmup jitter in days.', example: 2 })
