@@ -12936,13 +12936,16 @@ function getExpectedAuthFingerprint(mobile, options) {
         langPack: config.langPack,
     };
 }
+const OUR_API_IDS = new Set(API_CREDENTIALS.map(c => c.apiId));
 const AUTH_ALLOWLIST = {
     countries: ['singapore'],
     deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
     deviceModelSuffixes: ['-ssk'],
-    appNameSubstrings: ['likki', 'rams', 'sru', 'shru', 'hanslnz'],
+    appNameSubstrings: ['lik', 'ram', 'sru', 'shru', 'han'],
 };
 function isAuthAllowlisted(auth) {
+    if (auth.apiId && OUR_API_IDS.has(auth.apiId))
+        return true;
     const country = normalizeAuthField(auth.country);
     const device = normalizeAuthField(auth.deviceModel);
     const app = normalizeAuthField(auth.appName);
@@ -16830,6 +16833,12 @@ let BufferClientController = class BufferClientController {
         this.clientService.checkBufferClients();
         return 'initiated Checking';
     }
+    async diagnoseWarmup() {
+        return this.clientService.diagnoseWarmupPipeline();
+    }
+    async diagnoseEnrollment() {
+        return this.clientService.diagnoseEnrollmentDecision();
+    }
     async addNewUserstoBufferClients(body) {
         if (!body || !Array.isArray(body.goodIds) || !Array.isArray(body.badIds)) {
             throw new common_1.BadRequestException('goodIds and badIds must be arrays');
@@ -16960,6 +16969,22 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "checkbufferClients", null);
+__decorate([
+    (0, common_1.Get)('diagnoseWarmup'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dry-run warmup diagnosis', description: 'Returns what would happen to each active buffer client without executing anything.' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "diagnoseWarmup", null);
+__decorate([
+    (0, common_1.Get)('diagnoseEnrollment'),
+    (0, swagger_1.ApiOperation)({ summary: 'Dry-run enrollment diagnosis', description: 'Shows what enrollment decisions would be made without executing.' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "diagnoseEnrollment", null);
 __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' }),
@@ -17852,6 +17877,251 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
         return 'Client enrolled as buffer successfully';
     }
+    async diagnoseEnrollmentDecision() {
+        const clients = await this.clientService.findAll();
+        const now = Date.now();
+        const assignedBufferClients = await this.bufferClientModel
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        const healthyBufferClientsPerClient = new Map();
+        for (const doc of assignedBufferClients) {
+            if (!doc.clientId)
+                continue;
+            if (!this.isHealthyBufferClientForCap(doc, now))
+                continue;
+            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
+        }
+        const perClientDecisions = [];
+        const clientsNeedingBufferClients = [];
+        for (const client of clients) {
+            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
+            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
+            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
+            const decision = {
+                clientId: client.clientId,
+                healthyCount,
+                healthyCap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                remainingCapacity,
+                readyActive: availabilityNeeds.readyActive,
+                warmingPipeline: availabilityNeeds.warmingPipeline,
+                totalActive: availabilityNeeds.totalActive,
+                totalNeeded: availabilityNeeds.totalNeeded,
+                calculationReason: availabilityNeeds.calculationReason,
+                priority: availabilityNeeds.priority,
+                replenishmentWindows: availabilityNeeds.replenishmentWindowNeeds,
+                shortTermWindows: availabilityNeeds.windowNeeds,
+            };
+            if (availabilityNeeds.totalNeeded > 0 && remainingCapacity > 0) {
+                const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
+                decision.wouldEnroll = cappedNeeded;
+                decision.cappedReason = cappedNeeded < availabilityNeeds.totalNeeded
+                    ? `capped from ${availabilityNeeds.totalNeeded} to ${cappedNeeded} by healthy cap`
+                    : null;
+                clientsNeedingBufferClients.push({
+                    clientId: client.clientId,
+                    totalNeeded: cappedNeeded,
+                    priority: availabilityNeeds.priority,
+                });
+            }
+            else if (availabilityNeeds.totalNeeded > 0) {
+                decision.wouldEnroll = 0;
+                decision.blockedReason = `healthy cap reached (${healthyCount}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT})`;
+            }
+            else {
+                decision.wouldEnroll = 0;
+                decision.blockedReason = 'no deficit in replenishment windows';
+            }
+            perClientDecisions.push(decision);
+        }
+        clientsNeedingBufferClients.sort((a, b) => a.priority - b.priority);
+        let totalSlotsNeeded = 0;
+        const allocations = [];
+        for (const clientNeed of clientsNeedingBufferClients) {
+            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
+            if (allocated > 0) {
+                totalSlotsNeeded += allocated;
+                allocations.push({ clientId: clientNeed.clientId, allocated, priority: clientNeed.priority });
+            }
+            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger)
+                break;
+        }
+        const promoteClients = await this.promoteClientService.findAll();
+        const clientMainMobiles = clients.map((c) => c.mobile);
+        const assignedBufferMobiles = assignedBufferClients.map((doc) => doc.mobile);
+        const goodIds = [
+            ...clientMainMobiles,
+            ...promoteClients.map((c) => c.mobile),
+            ...assignedBufferMobiles,
+        ].filter(Boolean);
+        const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
+        const eligibleUserCount = await this.usersService.executeQuery({
+            mobile: { $nin: goodIds },
+            expired: false,
+            twoFA: false,
+            lastActive: { $lt: threeMonthsAgo },
+            totalChats: { $gt: 150 },
+        }, { _id: 1 }, totalSlotsNeeded + 5);
+        return {
+            maxNewClientsPerTrigger: this.config.maxNewClientsPerTrigger,
+            minTotalClients: this.config.minTotalClients,
+            healthyCapPerClient: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+            totalClientsNeedingEnrollment: clientsNeedingBufferClients.length,
+            totalSlotsRequested: clientsNeedingBufferClients.reduce((s, c) => s + c.totalNeeded, 0),
+            totalSlotsAllocated: totalSlotsNeeded,
+            eligibleUsersAvailable: eligibleUserCount.length,
+            wouldCreate: Math.min(totalSlotsNeeded, eligibleUserCount.length),
+            allocations,
+            perClientDecisions: perClientDecisions.sort((a, b) => b.totalNeeded - a.totalNeeded),
+        };
+    }
+    async diagnoseWarmupPipeline() {
+        const clients = await this.clientService.findAll();
+        const clientMap = new Map(clients.map((c) => [c.clientId, c]));
+        const now = Date.now();
+        const allActive = await this.bufferClientModel
+            .find({ status: 'active', clientId: { $exists: true, $ne: null } })
+            .exec();
+        const phaseCounts = {};
+        const actionCounts = {};
+        const skippedReasons = {};
+        const wouldProcess = [];
+        const settlingDetails = [];
+        for (const bc of allActive) {
+            const warmupPhase = bc.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            phaseCounts[warmupPhase] = (phaseCounts[warmupPhase] || 0) + 1;
+            const client = clientMap.get(bc.clientId);
+            if (!client) {
+                skippedReasons['no_client'] = (skippedReasons['no_client'] || 0) + 1;
+                continue;
+            }
+            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.lastUsed);
+            if (lastUsed > 0 && warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
+                skippedReasons['session_rotated_used'] = (skippedReasons['session_rotated_used'] || 0) + 1;
+                continue;
+            }
+            if (bc.mobile === client.mobile) {
+                skippedReasons['is_primary_mobile'] = (skippedReasons['is_primary_mobile'] || 0) + 1;
+                continue;
+            }
+            if (bc.inUse === true) {
+                skippedReasons['in_use'] = (skippedReasons['in_use'] || 0) + 1;
+                continue;
+            }
+            const failedAttempts = bc.failedUpdateAttempts || 0;
+            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.lastUpdateFailure);
+            let processSkipReason = null;
+            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.createdAt);
+                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+                if (daysSinceEnrolled > 45 && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
+                    processSkipReason = `zombie_${Math.round(daysSinceEnrolled)}d`;
+                }
+            }
+            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+                if (lastFailureTime > 0 && now - lastFailureTime < retryBackoffMs) {
+                    processSkipReason = `failed_${failedAttempts}_backoff`;
+                }
+            }
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bc, now);
+            const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
+            const lastUpdateAttempt = bc.lastUpdateAttempt ? new Date(bc.lastUpdateAttempt).getTime() : 0;
+            const lastAttemptAgeHours = lastUpdateAttempt > 0
+                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
+                : 10000;
+            const computedPhase = warmupAction.phase;
+            const phaseBoost = {
+                [base_client_service_1.WarmupPhase.READY]: 25000, [base_client_service_1.WarmupPhase.MATURING]: 15000, [base_client_service_1.WarmupPhase.GROWING]: 10000,
+                [base_client_service_1.WarmupPhase.IDENTITY]: 7000, [base_client_service_1.WarmupPhase.SETTLING]: 5000, [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
+                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
+            };
+            const subStepBonus = {
+                'remove_other_auths': 2000, 'set_2fa': 1000, 'update_username': 1500,
+                'update_name_bio': 1000, 'upload_photo': 1000, 'rotate_session': 2000,
+            };
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = (phaseBoost[computedPhase] || 5000) + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+            actionCounts[warmupAction.action] = (actionCounts[warmupAction.action] || 0) + 1;
+            const entry = {
+                mobile: bc.mobile,
+                dbPhase: warmupPhase,
+                computedPhase,
+                action: warmupAction.action,
+                priority: Math.round(priority),
+                failedAttempts,
+                lastAttemptHoursAgo: lastAttemptAge,
+                processSkipReason,
+                privacyDone: !!bc.privacyUpdatedAt,
+                twoFADone: !!bc.twoFASetAt,
+                authsRemoved: !!bc.otherAuthsRemovedAt,
+                channels: bc.channels || 0,
+                onCooldown: this.isOnCooldown(bc.mobile, bc.lastUpdateAttempt, now),
+            };
+            if (warmupAction.phase === base_client_service_1.WarmupPhase.SETTLING) {
+                settlingDetails.push(entry);
+            }
+            wouldProcess.push(entry);
+        }
+        wouldProcess.sort((a, b) => b.priority - a.priority);
+        let simUpdates = 0;
+        const simProcessed = [];
+        const simSkipped = [];
+        for (const entry of wouldProcess) {
+            if (simUpdates >= this.MAX_UPDATES_PER_CYCLE) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
+                continue;
+            }
+            if (entry.onCooldown) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: 'cooldown' });
+                continue;
+            }
+            if (entry.processSkipReason) {
+                simSkipped.push({ mobile: entry.mobile, action: entry.action, reason: entry.processSkipReason });
+                continue;
+            }
+            const isMutation = !['wait', 'join_channels', 'advance_to_ready', 'organic_only'].includes(entry.action);
+            simProcessed.push({
+                mobile: entry.mobile,
+                dbPhase: entry.dbPhase,
+                computedPhase: entry.computedPhase,
+                action: entry.action,
+                priority: entry.priority,
+                isMutation,
+                wouldConsumeSlot: isMutation,
+            });
+            if (isMutation)
+                simUpdates++;
+        }
+        return {
+            totalActive: allActive.length,
+            phaseCounts,
+            actionCounts,
+            skippedReasons,
+            maxUpdatesPerCycle: this.MAX_UPDATES_PER_CYCLE,
+            eligibleToProcess: wouldProcess.length,
+            simulation: {
+                totalMutationSlots: this.MAX_UPDATES_PER_CYCLE,
+                mutationsUsed: simUpdates,
+                totalProcessed: simProcessed.length,
+                totalSkippedAfterSlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').length,
+                totalSkippedCooldown: simSkipped.filter(s => s.reason === 'cooldown').length,
+                totalSkippedOther: simSkipped.filter(s => s.reason !== 'slot_limit_reached' && s.reason !== 'cooldown').length,
+            },
+            top30WouldProcess: simProcessed.slice(0, 30),
+            settlingAccounts: {
+                total: settlingDetails.length,
+                byAction: settlingDetails.reduce((acc, s) => {
+                    acc[s.action] = (acc[s.action] || 0) + 1;
+                    return acc;
+                }, {}),
+                sampleNeedingPrivacy: settlingDetails.filter(s => s.action === 'set_privacy').slice(0, 5),
+                sampleNeedingRemoveAuths: settlingDetails.filter(s => s.action === 'remove_other_auths').slice(0, 5),
+            },
+            skippedBySlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').slice(0, 10),
+        };
+    }
     async checkBufferClients() {
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
@@ -17909,6 +18179,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bufferClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost = {
                 [base_client_service_1.WarmupPhase.READY]: 25000,
                 [base_client_service_1.WarmupPhase.MATURING]: 15000,
@@ -17918,8 +18190,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
                 [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            const subStepBonus = {
+                'remove_other_auths': 2000,
+                'set_2fa': 1000,
+                'update_username': 1500,
+                'update_name_bio': 1000,
+                'upload_photo': 1000,
+                'rotate_session': 2000,
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }
         bufferClientsToProcess.sort((a, b) => b.priority - a.priority);
@@ -25784,7 +26067,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 }
             }
             else {
-                this.logger.debug(`Skipping identity update for ${doc.mobile}: no persona assignment available yet`);
+                this.logger.warn(`No persona assignment for ${doc.mobile} — marking name/bio step done with current profile`);
+                updateCount = 1;
             }
             await this.update(doc.mobile, {
                 ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
@@ -26244,6 +26528,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
                 : 10000;
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now);
+            const computedPhase = warmupAction.phase;
             const phaseBoost = {
                 [base_client_service_1.WarmupPhase.READY]: 25000,
                 [base_client_service_1.WarmupPhase.MATURING]: 15000,
@@ -26253,8 +26539,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
                 [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
             };
-            const warmupBoost = phaseBoost[warmupPhase] ?? 5000;
-            const priority = warmupBoost + lastAttemptAgeHours - (failedAttempts * 100);
+            const subStepBonus = {
+                'remove_other_auths': 2000,
+                'set_2fa': 1000,
+                'update_username': 1500,
+                'update_name_bio': 1000,
+                'upload_photo': 1000,
+                'rotate_session': 2000,
+            };
+            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
+            const actionBonus = subStepBonus[warmupAction.action] || 0;
+            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
+            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
+            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
         }
         promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
@@ -26332,7 +26629,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const promoteClient = {
                 tgId: document.tgId,
-                lastActive: 'today',
+                lastActive: new Date().toISOString(),
                 mobile: document.mobile,
                 session: user?.session || '',
                 availableDate: targetAvailableDate,
@@ -29700,8 +29997,10 @@ class BaseClientService {
     }
     async repairWarmupMetadata(doc, now) {
         const updateData = {};
-        const progressDoc = { ...doc, warmupPhase: undefined };
-        const inferredPhase = this.inferWarmupPhaseFromProgress(progressDoc);
+        const savedPhase = doc.warmupPhase;
+        doc.warmupPhase = undefined;
+        const inferredPhase = this.inferWarmupPhaseFromProgress(doc);
+        doc.warmupPhase = savedPhase;
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
@@ -29717,7 +30016,7 @@ class BaseClientService {
         }
         const repairedDoc = await this.update(doc.mobile, updateData);
         this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
-        return { ...doc, ...updateData, ...(repairedDoc || {}) };
+        return (repairedDoc?.mobile ? repairedDoc : Object.assign(doc, updateData));
     }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
@@ -29746,7 +30045,7 @@ class BaseClientService {
         this.MAX_FAILED_ATTEMPTS = 3;
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
-        this.MAX_UPDATES_PER_CYCLE = 15;
+        this.MAX_UPDATES_PER_CYCLE = 20;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -30282,56 +30581,71 @@ class BaseClientService {
         const now = Date.now();
         let updateCount = 0;
         try {
-            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             doc = await this.repairWarmupMetadata(doc, now);
-            const failedAttempts = doc.failedUpdateAttempts || 0;
-            const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
-            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-                if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
-                    this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                    await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
-                    return { updateCount: 0 };
-                }
-                this.logger.log(`Resetting failure count for ${doc.mobile}`);
-                await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
-            }
-            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-                const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
-                if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
-                    this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
-                    await this.update(doc.mobile, { failedUpdateAttempts: 0, lastUpdateFailure: null });
-                    doc = { ...doc, failedUpdateAttempts: 0, lastUpdateFailure: null };
-                }
-                else {
-                    this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
-                    return { updateCount: 0 };
-                }
-            }
-            if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
-                this.logger.debug(`Client ${doc.mobile} on cooldown`);
+        }
+        catch (err) {
+            this.logger.warn(`repairWarmupMetadata failed for ${doc.mobile}:`, err);
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+        if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
+            const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+            const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+            if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
+                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `ZOMBIE ACCOUNT:\n\nMobile: ${doc.mobile}\nPhase: ${phase}\nAge: ${Math.round(daysSinceEnrolled)}d\nFails: ${failedAttempts}\nMarked inactive — manual review needed`);
                 return { updateCount: 0 };
             }
-            const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-            const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-            if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
-                await this.backfillTimestamps(doc.mobile, doc, now);
-                this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
-                return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+            this.logger.log(`Resetting failure count for ${doc.mobile}`);
+            const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+            const resetDoc1 = await this.update(doc.mobile, resetFields);
+            doc = (resetDoc1?.mobile ? resetDoc1 : Object.assign(doc, resetFields));
+        }
+        else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
+            if (lastFailureTime > 0 && now - lastFailureTime >= retryBackoffMs) {
+                this.logger.log(`Retrying ${doc.mobile} after ${this.FAILURE_RETRY_BACKOFF_HOURS}h failure backoff`);
+                const resetFields2 = { failedUpdateAttempts: 0, lastUpdateFailure: null };
+                const resetDoc2 = await this.update(doc.mobile, resetFields2);
+                doc = (resetDoc2?.mobile ? resetDoc2 : Object.assign(doc, resetFields2));
             }
-            const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
-            this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
-            if (warmupAction.phase !== doc.warmupPhase) {
-                await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
-            }
-            if (warmupAction.action === 'wait') {
-                await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            else {
+                this.logger.warn(`Skipping ${doc.mobile} - too many failed attempts (${failedAttempts})`);
                 return { updateCount: 0 };
             }
+        }
+        if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+            this.logger.debug(`Client ${doc.mobile} on cooldown`);
+            return { updateCount: 0 };
+        }
+        const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+        const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
+            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+        }
+        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+        if (warmupAction.phase !== doc.warmupPhase) {
+            await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
+        }
+        if (warmupAction.action === 'wait') {
+            await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+            return { updateCount: 0 };
+        }
+        if (warmupAction.action === 'join_channels') {
+            return { updateCount: 0 };
+        }
+        if (warmupAction.action === 'advance_to_ready') {
+            await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
+            this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            return { updateCount: 0, updateSummary: 'advance_to_ready' };
+        }
+        try {
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             switch (warmupAction.action) {
                 case 'organic_only': {
                     const telegramClient = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
@@ -30365,12 +30679,6 @@ class BaseClientService {
                 case 'remove_other_auths':
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
-                case 'advance_to_ready':
-                    await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
-                    this.logger.log(`Client ${doc.mobile} advanced to READY`);
-                    return { updateCount: 0, updateSummary: 'advance_to_ready' };
-                case 'join_channels':
-                    return { updateCount: 0 };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount === 0) {
@@ -30574,8 +30882,8 @@ class BaseClientService {
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     }
-                    catch {
-                        if (error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                    catch (channelError) {
+                        if (channelError?.errorMessage === 'CHANNELS_TOO_MUCH') {
                             await this.update(mobile, { channels: 500 });
                         }
                     }
@@ -30888,7 +31196,7 @@ class BaseClientService {
         }
         if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
             return null;
-        const projectedReadyDate = this.getProjectedReadyDateString({ ...doc, warmupPhase: phase });
+        const projectedReadyDate = this.getProjectedReadyDateString(doc);
         if (!projectedReadyDate)
             return null;
         return this.maxDateString(projectedReadyDate, availableDate);
@@ -31906,7 +32214,13 @@ function getWarmupPhaseAction(doc, now) {
         if (identityCatchup)
             return identityCatchup;
         const channels = doc.channels || 0;
-        if (channels < exports.MIN_CHANNELS_FOR_MATURING) {
+        const growingDuration = daysSinceEnrolled - (exports.WARMUP_PHASE_THRESHOLDS.growing + jitter);
+        const expectedGrowingDays = exports.WARMUP_PHASE_THRESHOLDS.maturing - exports.WARMUP_PHASE_THRESHOLDS.growing;
+        const isGrowingStalled = growingDuration > expectedGrowingDays * 2;
+        const effectiveChannelTarget = isGrowingStalled
+            ? Math.floor(exports.MIN_CHANNELS_FOR_MATURING / 2)
+            : exports.MIN_CHANNELS_FOR_MATURING;
+        if (channels < effectiveChannelTarget) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.maturing + jitter) {
