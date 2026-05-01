@@ -50,20 +50,35 @@ const fs = __importStar(require("fs"));
 const big_integer_1 = __importDefault(require("big-integer"));
 const uploads_1 = require("telegram/client/uploads");
 const helpers_1 = require("./helpers");
+function getFloodWaitSeconds(error) {
+    if (error?.seconds != null)
+        return error.seconds;
+    const match = error?.errorMessage?.match?.(/FLOOD_WAIT_(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+}
 async function addContact(ctx, data, namePrefix) {
     try {
-        const results = await Promise.allSettled(data.map(async (user, i) => {
+        for (let i = 0; i < data.length; i++) {
+            const user = data[i];
             const firstName = `${namePrefix}${i + 1}`;
-            await ctx.client.invoke(new telegram_1.Api.contacts.AddContact({
-                firstName,
-                lastName: '',
-                phone: user.mobile,
-                id: user.tgId,
-            }));
-        }));
-        for (const result of results) {
-            if (result.status === 'rejected') {
-                ctx.logger.info(ctx.phoneNumber, result.reason);
+            try {
+                await ctx.client.invoke(new telegram_1.Api.contacts.AddContact({
+                    firstName,
+                    lastName: '',
+                    phone: user.mobile,
+                    id: user.tgId,
+                }));
+            }
+            catch (err) {
+                const floodWait = getFloodWaitSeconds(err);
+                if (floodWait != null) {
+                    ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during addContact, stopping batch`);
+                    break;
+                }
+                ctx.logger.info(ctx.phoneNumber, err);
+            }
+            if (i < data.length - 1) {
+                await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
             }
         }
     }
@@ -140,7 +155,9 @@ async function exportContacts(ctx, format, includeBlocked = false) {
 async function importContacts(ctx, data) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const results = await Promise.all(data.map(async (contact) => {
+    const results = [];
+    for (let i = 0; i < data.length; i++) {
+        const contact = data[i];
         try {
             await ctx.client.invoke(new telegram_1.Api.contacts.ImportContacts({
                 contacts: [new telegram_1.Api.InputPhoneContact({
@@ -150,18 +167,29 @@ async function importContacts(ctx, data) {
                         lastName: contact.lastName || '',
                     })],
             }));
-            return { success: true, phone: contact.phone };
+            results.push({ success: true, phone: contact.phone });
         }
         catch (error) {
-            return { success: false, phone: contact.phone, error: error.message };
+            const floodWait = getFloodWaitSeconds(error);
+            if (floodWait != null) {
+                ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during importContacts, stopping batch`);
+                results.push({ success: false, phone: contact.phone, error: `FLOOD_WAIT_${floodWait}` });
+                break;
+            }
+            results.push({ success: false, phone: contact.phone, error: error.message });
         }
-    }));
+        if (i < data.length - 1) {
+            await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+        }
+    }
     return results;
 }
 async function manageBlockList(ctx, userIds, block) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const results = await Promise.all(userIds.map(async (userId) => {
+    const results = [];
+    for (let i = 0; i < userIds.length; i++) {
+        const userId = userIds[i];
         try {
             if (block) {
                 await ctx.client.invoke(new telegram_1.Api.contacts.Block({ id: await ctx.client.getInputEntity(userId) }));
@@ -169,12 +197,21 @@ async function manageBlockList(ctx, userIds, block) {
             else {
                 await ctx.client.invoke(new telegram_1.Api.contacts.Unblock({ id: await ctx.client.getInputEntity(userId) }));
             }
-            return { success: true, userId };
+            results.push({ success: true, userId });
         }
         catch (error) {
-            return { success: false, userId, error: error.message };
+            const floodWait = getFloodWaitSeconds(error);
+            if (floodWait != null) {
+                ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during ${block ? 'block' : 'unblock'}, stopping batch`);
+                results.push({ success: false, userId, error: `FLOOD_WAIT_${floodWait}` });
+                break;
+            }
+            results.push({ success: false, userId, error: error.message });
         }
-    }));
+        if (i < userIds.length - 1) {
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 2500));
+        }
+    }
     return results;
 }
 async function getContactStatistics(ctx) {

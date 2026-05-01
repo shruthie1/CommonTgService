@@ -727,33 +727,37 @@ async function updateChatSettings(ctx, settings) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const chat = await ctx.client.getEntity(settings.chatId);
-    const updates = [];
+    const delayBetween = () => new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2500));
     if (settings.title) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.EditTitle({ channel: chat, title: settings.title })));
+        await ctx.client.invoke(new telegram_1.Api.channels.EditTitle({ channel: chat, title: settings.title }));
+        await delayBetween();
     }
     if (settings.about) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.messages.EditChatAbout({ peer: chat, about: settings.about })));
+        await ctx.client.invoke(new telegram_1.Api.messages.EditChatAbout({ peer: chat, about: settings.about }));
+        await delayBetween();
     }
     if (settings.photo) {
         const buffer = await (0, helpers_1.downloadFileFromUrl)(settings.photo);
         const file = await ctx.client.uploadFile({
             file: new uploads_1.CustomFile('photo.jpg', buffer.length, 'photo.jpg', buffer), workers: 1,
         });
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.EditPhoto({
+        await ctx.client.invoke(new telegram_1.Api.channels.EditPhoto({
             channel: chat, photo: new telegram_1.Api.InputChatUploadedPhoto({ file }),
-        })));
+        }));
+        await delayBetween();
     }
     if (settings.slowMode !== undefined) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.ToggleSlowMode({ channel: chat, seconds: settings.slowMode })));
+        await ctx.client.invoke(new telegram_1.Api.channels.ToggleSlowMode({ channel: chat, seconds: settings.slowMode }));
+        await delayBetween();
     }
     if (settings.linkedChat) {
         const linkedChannel = await ctx.client.getEntity(settings.linkedChat);
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.SetDiscussionGroup({ broadcast: chat, group: linkedChannel })));
+        await ctx.client.invoke(new telegram_1.Api.channels.SetDiscussionGroup({ broadcast: chat, group: linkedChannel }));
+        await delayBetween();
     }
     if (settings.username) {
-        updates.push(ctx.client.invoke(new telegram_1.Api.channels.UpdateUsername({ channel: chat, username: settings.username })));
+        await ctx.client.invoke(new telegram_1.Api.channels.UpdateUsername({ channel: chat, username: settings.username }));
     }
-    await Promise.all(updates);
     return true;
 }
 async function createChatFolder(ctx, options) {
