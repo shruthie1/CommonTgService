@@ -149,28 +149,6 @@ async function fetchNextProxy(clientId?: string): Promise<ProxyInterface> {
   };
 }
 
-function logResolvedConfig(
-  mobile: string,
-  details: {
-    cacheHit: boolean;
-    proxyEnabled: boolean;
-    proxyApplied: boolean;
-    proxySource: ProxySource;
-    proxy?: ProxyInterface;
-    note?: string;
-  }
-): void {
-  logger.info("Resolved Telegram client config", {
-    mobile,
-    cacheHit: details.cacheHit,
-    proxyEnabled: details.proxyEnabled,
-    proxyApplied: details.proxyApplied,
-    proxySource: details.proxySource,
-    proxy: details.proxy ? `${details.proxy.ip}:${details.proxy.port}` : "none",
-    note: details.note,
-  });
-}
-
 async function reportProxyInactive(ip: string, port: number): Promise<boolean> {
   const { baseUrl, apiKey, timeout } = getApiConfig();
   const url = `${baseUrl}/proxy-ips/${ip}/${port}`;
@@ -677,45 +655,24 @@ export async function generateTGConfig(
   mobile: string,
   ttl: number = CONFIG_TTL_SECONDS
 ): Promise<TGConfigResult> {
-  logger.debug("Generating config", { mobile, ttl });
   const redisKey = `${CONFIG_PREFIX}${mobile}`;
   const proxiesEnabled = isProxyEnabled();
 
   // Redis cache — apiId, apiHash, and params all from one object
   const cached = await RedisClient.getObject<CachedTGConfig>(redisKey);
   if (cached && cached.deviceModel && cached._apiId) {
-    logger.debug("Config cache hit", { mobile });
 
     if (proxiesEnabled && !cached.proxy) {
       try {
-        const { proxy, source } = await _resolveProxyWithSource(mobile);
+        const { proxy } = await _resolveProxyWithSource(mobile);
         const withProxy = { ...cached, proxy };
         try { await RedisClient.set(redisKey, withProxy, ttl); } catch { }
-        logResolvedConfig(mobile, {
-          cacheHit: true,
-          proxyEnabled: true,
-          proxyApplied: true,
-          proxySource: source,
-          proxy,
-          note: "attached proxy to cached config",
-        });
         return cachedToResult(withProxy);
-      } catch (err: any) {
-        logger.debug("Failed to attach proxy to cached config", { mobile, error: err.message });
-      }
+      } catch { }
     }
 
     if (!proxiesEnabled && cached.proxy) {
-      // Strip proxy from returned config but keep it in Redis cache —
-      // when PROXY_ENABLED flips back on, the proxy is still there.
       const { proxy: _, ...withoutProxy } = cached;
-      logResolvedConfig(mobile, {
-        cacheHit: true,
-        proxyEnabled: false,
-        proxyApplied: false,
-        proxySource: "config_cache_stripped",
-        note: "cached proxy stripped because PROXY_ENABLED is false",
-      });
       return cachedToResult(withoutProxy as CachedTGConfig);
     }
 
@@ -726,69 +683,26 @@ export async function generateTGConfig(
         const cachedKey = `${cached.proxy.ip}:${cached.proxy.port}`;
         const mapKey = `${currentProxy.ip}:${currentProxy.port}`;
         if (cachedKey !== mapKey) {
-          // Proxy map was updated (rotation) but config cache is stale
           const reconciled = { ...cached, proxy: currentProxy };
           try { await RedisClient.set(redisKey, reconciled, ttl); } catch { }
           logger.info("Reconciled stale proxy in config cache", { mobile, from: cachedKey, to: mapKey });
           _registerMobile(mobile, currentProxy);
-          logResolvedConfig(mobile, {
-            cacheHit: true,
-            proxyEnabled: true,
-            proxyApplied: true,
-            proxySource: "proxy_map_reconciled",
-            proxy: currentProxy,
-            note: `reconciled cached proxy ${cachedKey} -> ${mapKey}`,
-          });
           return cachedToResult(reconciled);
         }
-        logResolvedConfig(mobile, {
-          cacheHit: true,
-          proxyEnabled: true,
-          proxyApplied: true,
-          proxySource: "config_cache",
-          proxy: cached.proxy as ProxyInterface,
-          note: "cached config proxy matches sticky proxy mapping",
-        });
-      } catch {
-        logResolvedConfig(mobile, {
-          cacheHit: true,
-          proxyEnabled: true,
-          proxyApplied: true,
-          proxySource: "config_cache_fallback",
-          proxy: cached.proxy as ProxyInterface,
-          note: "proxy map lookup failed; using cached proxy from config",
-        });
-      }
+      } catch { }
       _registerMobile(mobile, cached.proxy as ProxyInterface);
-      if (!cached.proxy) {
-        logResolvedConfig(mobile, {
-          cacheHit: true,
-          proxyEnabled: true,
-          proxyApplied: false,
-          proxySource: "none",
-        });
-      }
       return cachedToResult(cached);
     }
 
-    logResolvedConfig(mobile, {
-      cacheHit: true,
-      proxyEnabled: proxiesEnabled,
-      proxyApplied: false,
-      proxySource: "none",
-      note: "cached config without proxy",
-    });
     return cachedToResult(cached);
   }
 
   // Generate new config
   let proxy: ProxyInterface | undefined;
-  let proxySource: ProxySource = "none";
   if (proxiesEnabled) {
     try {
       const resolved = await _resolveProxyWithSource(mobile);
       proxy = resolved.proxy;
-      proxySource = resolved.source;
     } catch (err: any) {
       logger.warn("No proxy available — proceeding without", { mobile, error: err.message });
     }
@@ -804,21 +718,7 @@ export async function generateTGConfig(
     logger.warn("Redis SET failed for config — using config anyway", { mobile, error: e.message });
   }
 
-  logger.info("Generated and cached config", {
-    mobile,
-    device: realisticConfig.deviceModel,
-    system: realisticConfig.systemVersion,
-    app: realisticConfig.appVersion,
-    proxy: proxy ? `${proxy.ip}:${proxy.port}` : "none",
-  });
-
-  logResolvedConfig(mobile, {
-    cacheHit: false,
-    proxyEnabled: proxiesEnabled,
-    proxyApplied: Boolean(proxy),
-    proxySource: proxy ? proxySource : "none",
-    proxy,
-  });
+  logger.info("Generated new TG config", { mobile, device: realisticConfig.deviceModel });
 
   return cachedToResult(toStore);
 }
