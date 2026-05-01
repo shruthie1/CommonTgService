@@ -27,4 +27,9 @@ export class SetupClientQueryDto {
     @Transform(toBoolean)
     @IsBoolean()
     formalities: boolean = true;
+
+    @ApiPropertyOptional({ description: 'Reason for triggering the swap (e.g. permanent error from tg-aut)' })
+    @IsOptional()
+    @IsString()
+    reason?: string;
 }

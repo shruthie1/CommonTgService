@@ -19,6 +19,7 @@ export interface ActiveClientSetup {
     newMobile: string;
     existingMobile: string;
     clientId: string;
+    reason?: string;
 }
 
 // ---- Return types for every domain ----

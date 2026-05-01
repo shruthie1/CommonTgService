@@ -550,7 +550,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const scope = setupMobile ? ` for ${setupMobile}` : '';
       throw new BadRequestException(`No active client setup found${scope}`);
     }
-    const { archiveOld, clientId, existingMobile, formalities, newMobile } = setup;
+    const { archiveOld, clientId, existingMobile, formalities, newMobile, reason } = setup;
     const days = setup.days ?? 0;
     this.logger.info(`[${clientId}] Starting client session cutover`, {
       existingMobile,
@@ -640,7 +640,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         formalities,
         days,
       });
-      await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days);
+      await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason);
       this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
       await this.notify(`Client Swap Complete\n\nClient: ${clientId}\nOld Mobile: ${existingMobile}\nNew Mobile: ${newMobile}\nStatus: Cutover finished successfully`);
     } catch (error) {
@@ -668,6 +668,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     formalities: boolean,
     archiveOld: boolean,
     days: number,
+    reason?: string,
   ) {
     try {
       const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
@@ -684,6 +685,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           inUse: false,
           lastUsed: new Date(),
           status: 'inactive',
+          message: reason || 'Deactivated during client swap (archival skipped)',
         });
         this.logger.log('Client Archive Skipped');
         await this.notify(`Archival Skipped\n\nOld Mobile: ${existingMobile}\nStatus: Old client marked inactive without archival`);
