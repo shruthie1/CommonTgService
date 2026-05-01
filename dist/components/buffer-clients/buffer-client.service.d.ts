@@ -16,6 +16,7 @@ import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } f
 export declare class BufferClientService extends BaseClientService<BufferClientDocument> {
     private bufferClientModel;
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT;
+    private isCheckingBufferClients;
     private promoteClientService;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientServiceRef: PromoteClientService, sessionService: SessionService, botsService: BotsService);
     private getPrimaryClientMobiles;
@@ -29,6 +30,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument>;
     findAll(status?: ClientStatusType): Promise<BufferClientDocument[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<BufferClientDocument>;
+    existsByMobile(mobile: string): Promise<boolean>;
     update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument>;
     createOrUpdate(mobile: string, createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClientDocument>;
     remove(mobile: string, message?: string): Promise<void>;
@@ -44,8 +46,10 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     diagnoseEnrollmentDecision(): Promise<any>;
     diagnoseWarmupPipeline(): Promise<any>;
     checkBufferClients(): Promise<void>;
+    private _checkBufferClientsInternal;
     updateInfo(): Promise<void>;
     joinchannelForBufferClients(skipExisting?: boolean, clientId?: string): Promise<string>;
+    private isMobileEnrolledAnywhere;
     private createBufferClientFromUser;
     addNewUserstoBufferClients(badIds: string[], goodIds: string[], clientsNeedingBufferClients?: string[], bufferClientsPerClient?: Map<string, number>): Promise<void>;
     addNewUserstoBufferClientsDynamic(badIds: string[], goodIds: string[], clientsNeedingBufferClients: Array<{

@@ -15,6 +15,7 @@ import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } f
 export declare class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private promoteClientModel;
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT;
+    private isCheckingPromoteClients;
     private bufferClientService;
     constructor(promoteClientModel: Model<PromoteClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, bufferClientServiceRef: BufferClientService, sessionService: SessionService, botsService: BotsService);
     get model(): Model<PromoteClientDocument>;
@@ -26,6 +27,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: ClientStatusType): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClientDocument>;
+    existsByMobile(mobile: string): Promise<boolean>;
     update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument>;
     updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument>;
     refillJoinQueue(clientId?: string | null): Promise<number>;
@@ -41,6 +43,8 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;
     checkPromoteClients(): Promise<void>;
+    private _checkPromoteClientsInternal;
+    private isMobileEnrolledAnywhere;
     private createPromoteClientFromUser;
     addNewUserstoPromoteClients(badIds: string[], goodIds: string[], clientsNeedingPromoteClients?: string[], promoteClientsPerClient?: Map<string, number>): Promise<void>;
     addNewUserstoPromoteClientsDynamic(badIds: string[], goodIds: string[], clientsNeedingPromoteClients: Array<{
