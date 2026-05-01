@@ -91,7 +91,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.updateStatus(mobile, body.status, body.message);
     }
     async markAsActive(mobile, body = {}) {
-        return this.clientService.updateStatus(mobile, 'active', body.message || 'Account is functioning properly');
+        return this.clientService.markAsActive(mobile, body.message);
     }
     async markAsInactive(mobile, body) {
         return this.clientService.markAsInactive(mobile, body.reason);
@@ -102,7 +102,7 @@ let BufferClientController = class BufferClientController {
     async resetFailedAttempts(mobile) {
         await this.clientService.update(mobile, {
             failedUpdateAttempts: 0,
-            lastUpdateFailure: null,
+            lastUpdateFailure: null
         });
         return { message: `Reset failed attempts for ${mobile}` };
     }
@@ -122,7 +122,7 @@ let BufferClientController = class BufferClientController {
     async update(mobile, updateClientDto) {
         return this.clientService.update(mobile, updateClientDto);
     }
-    async createdOrupdate(mobile, updateClientDto) {
+    async createOrUpdate(mobile, updateClientDto) {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async remove(mobile) {
@@ -145,12 +145,10 @@ __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search buffer clients', description: 'Searches buffer client records by indexed and operational fields.' }),
     (0, swagger_1.ApiQuery)({ name: 'mobile', required: false, description: 'Mobile number' }),
-    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Owning client ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'tgId', required: false, description: 'Telegram account ID' }),
+    (0, swagger_1.ApiQuery)({ name: 'status', required: false, description: 'Operational status (active/inactive)' }),
     (0, swagger_1.ApiQuery)({ name: 'username', required: false, description: 'Username' }),
-    (0, swagger_1.ApiQuery)({ name: 'name', required: false, description: 'Name' }),
-    (0, swagger_1.ApiQuery)({ name: 'channelLink', required: false, description: 'Channel link' }),
-    (0, swagger_1.ApiQuery)({ name: 'repl', required: false, description: 'Repl link' }),
-    (0, swagger_1.ApiQuery)({ name: 'isActive', required: false, description: 'Filter by active status' }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -160,7 +158,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('updateInfo'),
     (0, swagger_1.ApiOperation)({ summary: 'Refresh buffer client metadata', description: 'Starts a background refresh of buffer client metadata and channel counts.' }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -169,7 +167,7 @@ __decorate([
     (0, common_1.Get)('joinChannelsForBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Prepare channel joins for buffer clients', description: 'Builds the next join queue for eligible buffer clients.' }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false, description: 'Filter by specific client ID', type: String }),
-    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Join channels initiated successfully' } }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string' } }),
     __param(0, (0, common_1.Query)('clientId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -178,7 +176,7 @@ __decorate([
 __decorate([
     (0, common_1.Get)('checkBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Run buffer warmup processing', description: 'Starts the background warmup processor for eligible buffer clients.' }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -203,7 +201,7 @@ __decorate([
     (0, common_1.Post)('addNewUserstoBufferClients'),
     (0, swagger_1.ApiOperation)({ summary: 'Bulk enroll users into buffer warmup', description: 'Starts background enrollment of candidate users into the buffer client pool.' }),
     (0, swagger_1.ApiBody)({ type: client_swagger_dto_1.BulkEnrollBufferClientsRequestDto }),
-    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string', example: 'initiated Checking' } }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'goodIds, badIds, or clientsNeedingBufferClients were not valid arrays.' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -225,7 +223,7 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: 'Enroll a user as a buffer client', description: 'Converts an existing user account into a warmup-managed buffer client.' }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
     (0, swagger_1.ApiParam)({ name: 'clientId', description: 'Client ID to assign buffer client to', type: String }),
-    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string', example: 'Client enrolled as buffer successfully' } }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'string' } }),
     (0, swagger_1.ApiBadRequestResponse)({ description: 'The user was not found or is already an active main client.' }),
     (0, swagger_1.ApiConflictResponse)({ description: 'A buffer client record already exists for this mobile.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -237,7 +235,7 @@ __decorate([
 __decorate([
     (0, common_1.Post)('query'),
     (0, swagger_1.ApiOperation)({ summary: 'Execute a raw buffer client query', description: 'Executes a direct MongoDB-style filter against the buffer client collection.' }),
-    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true, example: { status: 'active', clientId: 'client-a' } } }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', additionalProperties: true } }),
     (0, swagger_1.ApiOkResponse)({ type: [buffer_client_schema_1.BufferClient] }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -368,8 +366,8 @@ __decorate([
 ], BufferClientController.prototype, "getUnusedBufferClients", null);
 __decorate([
     (0, common_1.Get)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Get user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Get buffer client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -379,8 +377,8 @@ __decorate([
 ], BufferClientController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Update buffer client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
     (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
@@ -392,8 +390,8 @@ __decorate([
 ], BufferClientController.prototype, "update", null);
 __decorate([
     (0, common_1.Put)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Update user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Create or update buffer client by mobile', description: 'Creates the buffer client if it does not exist, otherwise updates it. Full payload required for creation.' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiBody)({ type: update_buffer_client_dto_1.UpdateBufferClientDto }),
     (0, swagger_1.ApiOkResponse)({ type: buffer_client_schema_1.BufferClient }),
     __param(0, (0, common_1.Param)('mobile')),
@@ -401,11 +399,11 @@ __decorate([
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, update_buffer_client_dto_1.UpdateBufferClientDto]),
     __metadata("design:returntype", Promise)
-], BufferClientController.prototype, "createdOrupdate", null);
+], BufferClientController.prototype, "createOrUpdate", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
-    (0, swagger_1.ApiOperation)({ summary: 'Delete user data by ID' }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'User mobile number', type: String }),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete buffer client by mobile' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Buffer client mobile number', type: String }),
     (0, swagger_1.ApiOkResponse)({ schema: { type: 'null' } }),
     (0, swagger_1.ApiNotFoundResponse)({ description: 'Buffer client not found.' }),
     __param(0, (0, common_1.Param)('mobile')),

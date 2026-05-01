@@ -16,8 +16,7 @@ class AcceptedStringResponseDto {
 exports.AcceptedStringResponseDto = AcceptedStringResponseDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Acknowledgement returned when a long-running background operation is started.',
-        example: 'initiated Checking',
+        description: 'Acknowledgement returned when a long-running background operation is started.'
     }),
     __metadata("design:type", String)
 ], AcceptedStringResponseDto.prototype, "message", void 0);
@@ -27,15 +26,13 @@ exports.StatusUpdateRequestDto = StatusUpdateRequestDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Lifecycle status to assign to the client record.',
-        enum: ['active', 'inactive'],
-        example: 'active',
+        enum: ['active', 'inactive']
     }),
     __metadata("design:type", String)
 ], StatusUpdateRequestDto.prototype, "status", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Optional operator note explaining why the status changed.',
-        example: 'Re-enabled after manual review',
+        description: 'Optional operator note explaining why the status changed.'
     }),
     __metadata("design:type", String)
 ], StatusUpdateRequestDto.prototype, "message", void 0);
@@ -44,8 +41,7 @@ class ActivationRequestDto {
 exports.ActivationRequestDto = ActivationRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Optional operator note recorded when activating the client.',
-        example: 'Returned to active pool',
+        description: 'Optional operator note recorded when activating the client.'
     }),
     __metadata("design:type", String)
 ], ActivationRequestDto.prototype, "message", void 0);
@@ -54,8 +50,7 @@ class DeactivationRequestDto {
 exports.DeactivationRequestDto = DeactivationRequestDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Reason for deactivating the client.',
-        example: 'Health check failed repeatedly',
+        description: 'Reason for deactivating the client.'
     }),
     __metadata("design:type", String)
 ], DeactivationRequestDto.prototype, "reason", void 0);
@@ -64,8 +59,7 @@ class MarkUsedRequestDto {
 exports.MarkUsedRequestDto = MarkUsedRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Optional note describing where or why the client was consumed.',
-        example: 'Assigned to live campaign rotation',
+        description: 'Optional note describing where or why the client was consumed.'
     }),
     __metadata("design:type", String)
 ], MarkUsedRequestDto.prototype, "message", void 0);
@@ -75,16 +69,14 @@ exports.BulkEnrollClientsRequestDto = BulkEnrollClientsRequestDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Candidate user identifiers that passed upstream validation.',
-        type: [String],
-        example: ['10001', '10002'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollClientsRequestDto.prototype, "goodIds", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Candidate user identifiers that failed upstream validation and should be excluded.',
-        type: [String],
-        example: ['99999'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollClientsRequestDto.prototype, "badIds", void 0);
@@ -94,8 +86,7 @@ exports.BulkEnrollBufferClientsRequestDto = BulkEnrollBufferClientsRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Specific client IDs that currently need more buffer accounts.',
-        type: [String],
-        example: ['client-a', 'client-b'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollBufferClientsRequestDto.prototype, "clientsNeedingBufferClients", void 0);
@@ -105,8 +96,7 @@ exports.BulkEnrollPromoteClientsRequestDto = BulkEnrollPromoteClientsRequestDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Specific client IDs that currently need more promote accounts.',
-        type: [String],
-        example: ['client-a', 'client-b'],
+        type: [String]
     }),
     __metadata("design:type", Array)
 ], BulkEnrollPromoteClientsRequestDto.prototype, "clientsNeedingPromoteClients", void 0);
@@ -114,25 +104,24 @@ class UsageStatisticsDto {
 }
 exports.UsageStatisticsDto = UsageStatisticsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of matching client records.', example: 48 }),
+    (0, swagger_1.ApiProperty)({ description: 'Total number of matching client records.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "totalClients", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Matching clients that have never been used.', example: 12 }),
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients that have never been used.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "neverUsed", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 24 hours.', example: 6 }),
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 24 hours.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "usedInLast24Hours", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 7 days.', example: 21 }),
+    (0, swagger_1.ApiProperty)({ description: 'Matching clients used within the last 7 days.' }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "usedInLastWeek", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Average time gap between usages, in hours.',
-        example: 37.5,
+        description: 'Average time gap between usages, in hours.'
     }),
     __metadata("design:type", Number)
 ], UsageStatisticsDto.prototype, "averageUsageGap", void 0);

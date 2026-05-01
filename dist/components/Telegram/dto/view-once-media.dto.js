@@ -23,8 +23,7 @@ class ViewOnceMediaDto {
 exports.ViewOnceMediaDto = ViewOnceMediaDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Chat ID to send the view once media to',
-        example: '123456789'
+        description: 'Chat ID to send the view once media to'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -33,8 +32,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Source type of the media: url, base64, or binary',
-        enum: MediaSourceType,
-        example: 'url'
+        enum: MediaSourceType
     }),
     (0, class_validator_1.IsEnum)(MediaSourceType),
     (0, class_validator_1.IsNotEmpty)(),
@@ -43,8 +41,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'URL of the media file (when sourceType is url)',
-        required: false,
-        example: 'https://example.com/image.jpg'
+        required: false
     }),
     (0, class_validator_1.ValidateIf)(o => o.sourceType === MediaSourceType.PATH),
     (0, class_validator_1.IsString)(),
@@ -54,8 +51,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Base64 encoded media data (when sourceType is base64)',
-        required: false,
-        example: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...'
+        required: false
     }),
     (0, class_validator_1.ValidateIf)(o => o.sourceType === MediaSourceType.BASE64),
     (0, class_validator_1.IsString)(),
@@ -75,8 +71,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional caption for the media',
-        required: false,
-        example: 'Check this out! It will disappear after viewing'
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -85,8 +80,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional filename for the media',
-        required: false,
-        example: 'secret_image.jpg'
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),

@@ -166,8 +166,7 @@ class SendPhotoDto {
 exports.SendPhotoDto = SendPhotoDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Photo URL or file ID',
-        example: 'https://example.com/photo.jpg'
+        description: 'Photo URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -188,8 +187,7 @@ class SendVideoDto {
 exports.SendVideoDto = SendVideoDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Video URL or file ID',
-        example: 'https://example.com/video.mp4'
+        description: 'Video URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -210,8 +208,7 @@ class SendAudioDto {
 exports.SendAudioDto = SendAudioDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Audio URL or file ID',
-        example: 'https://example.com/audio.mp3'
+        description: 'Audio URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -232,8 +229,7 @@ class SendDocumentDto {
 exports.SendDocumentDto = SendDocumentDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Document URL or file ID',
-        example: 'https://example.com/document.pdf'
+        description: 'Document URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

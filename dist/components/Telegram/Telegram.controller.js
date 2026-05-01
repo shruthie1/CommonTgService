@@ -455,7 +455,7 @@ let TelegramController = class TelegramController {
             archived: archived === true,
             peerType: peerType,
             ignorePinned: ignorePinned === true,
-            includePhotos,
+            includePhotos
         });
     }
     async getLastActiveTime(mobile) {
@@ -641,7 +641,7 @@ let TelegramController = class TelegramController {
             staleConfigs: [],
             validConfigs: 0,
             noConfigKeys: 0,
-            errors: [],
+            errors: []
         };
         try {
             let keys = [];
@@ -672,7 +672,7 @@ let TelegramController = class TelegramController {
                             mobile: mobileFromKey,
                             apiId: apiId || 0,
                             deviceModel: config.deviceModel || 'unknown',
-                            deleted: false,
+                            deleted: false
                         };
                         if (shouldExecute) {
                             await redis.del(key);
@@ -699,7 +699,7 @@ let TelegramController = class TelegramController {
             ...result,
             summary: shouldExecute
                 ? `Deleted ${result.staleConfigs.filter(s => s.deleted).length} stale configs out of ${result.totalScanned} total`
-                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`,
+                : `Found ${result.staleConfigs.length} stale configs out of ${result.totalScanned} total (pass ?execute=true to delete)`
         };
     }
 };
@@ -1066,7 +1066,7 @@ __decorate([
         summary: 'Send media message',
         description: 'Send a photo or file to a chat. Maximum file size is 100MB. Supports images, videos, and documents.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaDto }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1093,19 +1093,17 @@ __decorate([
         summary: 'Preview or download media from a message',
         description: 'Download or preview media from a Telegram message. Images and videos preview in browser, other files download. Supports HTTP Range requests for video streaming.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'messageId',
         required: true,
         description: 'Message ID containing the media (must be a positive number)',
-        type: Number,
-        example: 12345
+        type: Number
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1146,25 +1144,23 @@ __decorate([
         summary: 'Get thumbnail for a media message',
         description: 'Get thumbnail image for a Telegram message containing media (photo or video). Returns JPEG image. Supports caching with ETag headers.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username (e.g., "channelname"), or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'messageId',
         required: true,
         description: 'Message ID containing the media (must be a positive number)',
-        type: Number,
-        example: 12345
+        type: Number
     }),
     (0, swagger_1.ApiQuery)({
         name: 'quality',
         required: false,
         description: 'Thumbnail quality: low (smallest, fast) or high (medium size)',
-        enum: ['low', 'high'],
+        enum: ['low', 'high']
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1200,7 +1196,7 @@ __decorate([
         summary: 'Send media album (multiple photos/videos)',
         description: 'Send multiple media files as an album. If some items fail, the operation continues and returns a summary of successful and failed items.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiBody)({ type: dto_1.SendMediaAlbumDto }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1244,53 +1240,46 @@ __decorate([
         summary: 'Get media metadata from a chat',
         description: 'Retrieve metadata for media messages in a chat. Supports filtering by type, date range, and message ID range. Use maxId for pagination (get messages with ID less than maxId).'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'types',
         enum: ['photo', 'video', 'document', 'voice', 'all'],
         required: false,
         isArray: true,
-        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
-        example: ['photo', 'video']
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'startDate',
         required: false,
-        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-01-01'
+        description: 'Start date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'endDate',
         required: false,
-        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-12-31'
+        description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'limit',
         description: 'Maximum number of messages to fetch (default: 50, max: 1000)',
         required: false,
-        type: Number,
-        example: 50
+        type: Number
     }),
     (0, swagger_1.ApiQuery)({
         name: 'maxId',
         required: false,
         type: Number,
-        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
-        example: 12345
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'minId',
         required: false,
         type: Number,
-        description: 'Minimum message ID to include',
-        example: 1000
+        description: 'Minimum message ID to include'
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1319,53 +1308,46 @@ __decorate([
         summary: 'Get filtered media messages from a chat',
         description: 'Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiQuery)({
         name: 'chatId',
         required: true,
-        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID',
-        example: 'me'
+        description: 'Chat ID or username. Use "me" for saved messages, channel username, or numeric ID'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'types',
         required: false,
         enum: ['photo', 'video', 'document', 'voice', 'all'],
         isArray: true,
-        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.',
-        example: ['photo', 'video']
+        description: 'Filter by media types. Use "all" to get all types grouped by type. If not specified, returns all media types.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'startDate',
         required: false,
-        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-01-01'
+        description: 'Filter media after this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'endDate',
         required: false,
-        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
-        example: '2024-12-31'
+        description: 'Filter media before this date (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'limit',
         required: false,
         type: Number,
-        description: 'Maximum number of media items to fetch (default: 50, max: 1000)',
-        example: 50
+        description: 'Maximum number of media items to fetch (default: 50, max: 1000)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'maxId',
         required: false,
         type: Number,
-        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)',
-        example: 12345
+        description: 'Maximum message ID to include (use for pagination - get messages with ID less than this. Use nextMaxId from previous response for next page)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'minId',
         required: false,
         type: Number,
-        description: 'Minimum message ID to include',
-        example: 1000
+        description: 'Minimum message ID to include'
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -1453,7 +1435,7 @@ __decorate([
     (0, common_1.Get)('dialogs/:mobile'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get dialogs (paginated dialog list)',
-        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.',
+        description: 'Paginated dialog list with optional filters. Use nextOffsetDate from response as offsetDate for next page (time-based cursor). Single endpoint for dialog list.'
     }),
     (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number', required: true }),
     (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Items per page (default 100)' }),
@@ -1470,9 +1452,9 @@ __decorate([
             properties: {
                 items: { type: 'array', description: 'Chat list (id, title, username, type, unreadCount, lastMessage, etc.)' },
                 hasMore: { type: 'boolean' },
-                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' },
-            },
-        },
+                nextOffsetDate: { type: 'number', description: 'Use as offsetDate for next page (Unix s)' }
+            }
+        }
     }),
     __param(0, (0, common_1.Param)('mobile')),
     __param(1, (0, common_1.Query)('limit')),
@@ -1588,7 +1570,7 @@ __decorate([
                 gif: { type: 'number' },
                 audio: { type: 'number', description: 'Music files' },
                 link: { type: 'number', description: 'Shared URLs' },
-                totalMedia: { type: 'number', description: 'Total media count (excludes links)' },
+                totalMedia: { type: 'number', description: 'Total media count (excludes links)' }
             }
         }
     }),
@@ -1632,7 +1614,7 @@ __decorate([
                             durationSeconds: { type: 'number' },
                             video: { type: 'boolean' },
                             outgoing: { type: 'boolean' },
-                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] },
+                            reason: { type: 'string', enum: ['missed', 'busy', 'hangup', 'disconnect', 'unknown'] }
                         }
                     }
                 }
@@ -1690,14 +1672,14 @@ __decorate([
         summary: 'Send voice message',
         description: 'Send a voice message (audio file) to a chat. Maximum file size is 100MB. Duration is optional but recommended for better playback.'
     }),
-    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true, example: '1234567890' }),
+    (0, swagger_1.ApiParam)({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',
             properties: {
-                chatId: { type: 'string', description: 'Chat ID or username', example: 'me' },
-                url: { type: 'string', description: 'URL of the voice file (must be accessible)', example: 'https://example.com/voice.ogg' },
-                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)', example: 30 },
+                chatId: { type: 'string', description: 'Chat ID or username' },
+                url: { type: 'string', description: 'URL of the voice file (must be accessible)' },
+                duration: { type: 'number', description: 'Duration in seconds (optional but recommended)' },
                 caption: { type: 'string', description: 'Optional caption for the voice message' }
             },
             required: ['chatId', 'url']
@@ -1977,21 +1959,19 @@ __decorate([
         name: 'limit',
         required: false,
         type: Number,
-        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)',
-        example: 45
+        description: 'Maximum number of top chats to return (default: 10, min: 1, max: 50)'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'enrichMedia',
         required: false,
         type: Boolean,
-        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.',
-        example: false
+        description: 'Include detailed per-type media breakdown (photo, video, document, etc). Slower due to extra API calls per chat.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'offsetDate',
         required: false,
         type: Number,
-        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.',
+        description: 'Unix timestamp from pagination.nextOffsetDate of previous response. Omit for first page.'
     }),
     (0, swagger_1.ApiResponse)({
         status: 200,
@@ -2018,7 +1998,7 @@ __decorate([
                                 properties: {
                                     photo: { type: 'number' }, video: { type: 'number' }, roundVideo: { type: 'number' },
                                     document: { type: 'number' }, voice: { type: 'number' }, gif: { type: 'number' },
-                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' },
+                                    audio: { type: 'number' }, link: { type: 'number' }, totalMedia: { type: 'number' }
                                 }
                             },
                             calls: {
@@ -2031,9 +2011,9 @@ __decorate([
                                     totalDuration: { type: 'number', description: 'Seconds' },
                                     averageDuration: { type: 'number', description: 'Seconds' },
                                     longestCall: { type: 'number', description: 'Seconds' },
-                                    lastCallDate: { type: 'string', nullable: true },
+                                    lastCallDate: { type: 'string', nullable: true }
                                 }
-                            },
+                            }
                         }
                     }
                 },
@@ -2043,7 +2023,7 @@ __decorate([
                         count: { type: 'number', description: 'Number of items returned' },
                         hasMore: { type: 'boolean' },
                         previousOffsetDate: { type: 'number', description: 'The offsetDate that was passed in (for prev button)' },
-                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' },
+                        nextOffsetDate: { type: 'number', description: 'Pass as offsetDate for next page' }
                     }
                 }
             }
@@ -2072,7 +2052,6 @@ __decorate([
         required: false,
         type: Number,
         description: 'Maximum number of messages to analyze (default: 500, max: 10000)',
-        example: 500,
         minimum: 1,
         maximum: 10000
     }),

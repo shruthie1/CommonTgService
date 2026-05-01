@@ -137,8 +137,8 @@ exports.Client = Client = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Client);
 exports.ClientSchema = mongoose_1.SchemaFactory.createForClass(Client);

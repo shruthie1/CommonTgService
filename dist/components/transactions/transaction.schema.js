@@ -68,8 +68,8 @@ exports.Transaction = Transaction = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Transaction);
 exports.TransactionSchema = mongoose_1.SchemaFactory.createForClass(Transaction);

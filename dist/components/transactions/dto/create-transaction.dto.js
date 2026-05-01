@@ -32,7 +32,6 @@ exports.CreateTransactionDto = CreateTransactionDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Unique transaction ID (UTR)',
-        example: 'TXN123456789',
         minLength: 8
     }),
     (0, class_validator_1.IsString)(),
@@ -44,7 +43,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Amount involved in the transaction',
-        example: 100.50,
         minimum: 0
     }),
     (0, class_validator_1.IsNumber)(),
@@ -54,8 +52,7 @@ __decorate([
 ], CreateTransactionDto.prototype, "amount", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Issue type reported by the user',
-        example: 'payment_failed'
+        description: 'Issue type reported by the user'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -63,8 +60,7 @@ __decorate([
 ], CreateTransactionDto.prototype, "issue", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Description of issue reported by the user',
-        example: 'Payment failed due to network error'
+        description: 'Description of issue reported by the user'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -73,7 +69,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Refund method selected by the user',
-        example: 'bank_transfer',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -83,7 +78,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'User profile ID',
-        example: 'user123',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -93,7 +87,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'User chat ID',
-        example: 'chat123',
         required: false
     }),
     (0, class_validator_1.IsString)(),
@@ -103,7 +96,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'IP address of the user',
-        example: '192.168.1.1',
         required: false
     }),
     (0, class_validator_1.IsString)(),

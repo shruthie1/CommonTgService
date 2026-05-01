@@ -58,7 +58,7 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
     __metadata("design:type", String)
-], SearchClientDto.prototype, "number", void 0);
+], SearchClientDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Password' }),
     (0, class_validator_1.IsOptional)(),
@@ -79,13 +79,6 @@ __decorate([
     (0, class_validator_1.IsUrl)({}, { message: 'Invalid URL format' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "promoteRepl", void 0);
-__decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Client name' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.IsString)(),
-    __metadata("design:type", String)
-], SearchClientDto.prototype, "clientName", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Deploy restart URL' }),
     (0, class_transformer_1.Transform)(({ value }) => value?.trim()),

@@ -16,49 +16,49 @@ class SearchProxyIpDto {
 }
 exports.SearchProxyIpDto = SearchProxyIpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Port number to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], SearchProxyIpDto.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type to search for', enum: ['http', 'https', 'socks5'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Protocol type to search for', enum: ['http', 'https', 'socks5'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "protocol", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Country code to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Country code to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "country", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status to search for', enum: ['active', 'inactive', 'blocked', 'maintenance'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Status to search for', enum: ['active', 'inactive', 'blocked', 'maintenance'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['active', 'inactive', 'blocked', 'maintenance']),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Whether to search for assigned or unassigned IPs', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether to search for assigned or unassigned IPs', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SearchProxyIpDto.prototype, "isAssigned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchProxyIpDto.prototype, "assignedToClient", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'DataCenter', description: 'Provider to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Provider to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -67,25 +67,25 @@ class SearchIpMobileMappingDto {
 }
 exports.SearchIpMobileMappingDto = SearchIpMobileMappingDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Mobile number to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Mobile number to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchIpMobileMappingDto.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100:8080', description: 'IP address to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchIpMobileMappingDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID to search for', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID to search for', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SearchIpMobileMappingDto.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status to search for', enum: ['active', 'inactive'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Status to search for', enum: ['active', 'inactive'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['active', 'inactive']),
     __metadata("design:type", String)

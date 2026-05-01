@@ -16,50 +16,43 @@ class SearchChannelDto {
 exports.SearchChannelDto = SearchChannelDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Unique identifier for the channel',
-        example: '803387987',
+        description: 'Unique identifier for the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "channelId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Title of the channel',
-        example: 'Earn money with Ayesha',
+        description: 'Title of the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "title", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'privacy of the channel',
-        example: false,
+        description: 'privacy of the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "private", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Username of the channel',
-        example: 'ayesha_channel',
+        description: 'Username of the channel'
     }),
     __metadata("design:type", String)
 ], SearchChannelDto.prototype, "username", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Indicates if the channel can send messages',
-        example: true,
+        description: 'Indicates if the channel can send messages'
     }),
     __metadata("design:type", Boolean)
 ], SearchChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Minimum number of participants in the channel',
-        example: 10,
+        description: 'Minimum number of participants in the channel'
     }),
     __metadata("design:type", Number)
 ], SearchChannelDto.prototype, "minParticipantsCount", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Maximum number of participants in the channel',
-        example: 100,
+        description: 'Maximum number of participants in the channel'
     }),
     __metadata("design:type", Number)
 ], SearchChannelDto.prototype, "maxParticipantsCount", void 0);

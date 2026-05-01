@@ -15,11 +15,11 @@ class CreateEventDto {
 }
 exports.CreateEventDto = CreateEventDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '123456789' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], CreateEventDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 1700000000000 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], CreateEventDto.prototype, "time", void 0);
 __decorate([
@@ -27,11 +27,11 @@ __decorate([
     __metadata("design:type", String)
 ], CreateEventDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], CreateEventDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: { message: 'Hello' }, required: false }),
+    (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", Object)
 ], CreateEventDto.prototype, "payload", void 0);
 //# sourceMappingURL=create-event.dto.js.map

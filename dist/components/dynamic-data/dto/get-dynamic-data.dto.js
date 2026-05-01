@@ -18,13 +18,12 @@ exports.GetDynamicDataDto = GetDynamicDataDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Path to retrieve specific data using dot notation',
-        example: 'profile.name',
-        required: false,
+        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.Matches)(/^[a-zA-Z0-9]+([\._][a-zA-Z0-9]+)*$/, {
-        message: 'Invalid path format. Use dot notation (e.g., profile.name)',
+        message: 'Invalid path format. Use dot notation (e.g., profile.name)'
     }),
     __metadata("design:type", String)
 ], GetDynamicDataDto.prototype, "path", void 0);

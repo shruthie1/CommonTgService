@@ -17,8 +17,7 @@ class UpdateUsernameDto {
 exports.UpdateUsernameDto = UpdateUsernameDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'New username to set for the Telegram user',
-        example: 'new_username123',
+        description: 'New username to set for the Telegram user'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

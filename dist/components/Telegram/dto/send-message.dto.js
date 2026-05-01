@@ -17,16 +17,14 @@ class SendTgMessageDto {
 exports.SendTgMessageDto = SendTgMessageDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Target username or peer ID',
-        example: 'someusername',
+        description: 'Target username or peer ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], SendTgMessageDto.prototype, "peer", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Message text to send',
-        example: 'Hello from NestJS and GramJS!',
+        description: 'Message text to send'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -34,8 +32,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional message parse mode (Markdown, HTML)',
-        required: false,
-        example: 'Markdown',
+        required: false
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),

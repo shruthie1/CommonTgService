@@ -4,11 +4,10 @@ export declare class SearchClientDto {
     channelLink?: string;
     link?: string;
     name?: string;
-    number?: string;
+    mobile?: string;
     password?: string;
     repl?: string;
     promoteRepl?: string;
-    clientName?: string;
     deployKey?: string;
     product?: string;
     qrId?: string;

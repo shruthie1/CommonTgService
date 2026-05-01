@@ -18,51 +18,51 @@ class MediaItemDto {
 }
 exports.MediaItemDto = MediaItemDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message ID', example: 12345 }),
+    (0, swagger_1.ApiProperty)({ description: 'Message ID' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "messageId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID', example: 'me' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Message date (Unix timestamp)', example: 1704067200 }),
+    (0, swagger_1.ApiProperty)({ description: 'Message date (Unix timestamp)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "date", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Caption text', example: 'Beautiful sunset' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Caption text' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "caption", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'File size in bytes', example: 1024000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'File size in bytes' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "fileSize", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'MIME type', example: 'image/jpeg' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'MIME type' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "mimeType", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Filename', example: 'photo.jpg' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Filename' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "filename", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Thumbnail (base64 encoded)', example: 'data:image/jpeg;base64,...' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Thumbnail (base64 encoded)' }),
     __metadata("design:type", String)
 ], MediaItemDto.prototype, "thumbnail", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Width in pixels (for images/videos)', example: 1920 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Width in pixels (for images/videos)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "width", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Height in pixels (for images/videos)', example: 1080 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Height in pixels (for images/videos)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "height", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Duration in seconds (for video/voice)', example: 120 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Duration in seconds (for video/voice)' }),
     __metadata("design:type", Number)
 ], MediaItemDto.prototype, "duration", void 0);
 __decorate([
@@ -73,69 +73,69 @@ class PaginationDto {
 }
 exports.PaginationDto = PaginationDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Current page number (1-indexed)', example: 1 }),
+    (0, swagger_1.ApiProperty)({ description: 'Current page number (1-indexed)' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "page", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Items per page', example: 50 }),
+    (0, swagger_1.ApiProperty)({ description: 'Items per page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "limit", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of items in current page', example: 50 }),
+    (0, swagger_1.ApiProperty)({ description: 'Total number of items in current page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "total", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Total number of pages (if known, -1 for unknown)', example: 5 }),
+    (0, swagger_1.ApiProperty)({ description: 'Total number of pages (if known, -1 for unknown)' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "totalPages", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Whether there are more items available', example: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether there are more items available' }),
     __metadata("design:type", Boolean)
 ], PaginationDto.prototype, "hasMore", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)', example: 12345 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for next page (get messages with ID less than this)' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "nextMaxId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for previous page', example: 12000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Message ID to use as maxId for previous page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "prevMaxId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'First message ID in current page', example: 12345 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'First message ID in current page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "firstMessageId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Last message ID in current page', example: 12300 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Last message ID in current page' }),
     __metadata("design:type", Number)
 ], PaginationDto.prototype, "lastMessageId", void 0);
 class MediaFiltersDto {
 }
 exports.MediaFiltersDto = MediaFiltersDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID', example: 'me' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: media_operations_dto_1.MediaType, example: ['photo', 'video'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types filter', type: [String], enum: media_operations_dto_1.MediaType }),
     __metadata("design:type", Array)
 ], MediaFiltersDto.prototype, "types", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date filter (ISO 8601)', example: '2024-01-01' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date filter (ISO 8601)' }),
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "startDate", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'End date filter (ISO 8601)', example: '2024-12-31' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'End date filter (ISO 8601)' }),
     __metadata("design:type", String)
 ], MediaFiltersDto.prototype, "endDate", void 0);
 class MediaGroupDto {
 }
 exports.MediaGroupDto = MediaGroupDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType, example: 'photo' }),
+    (0, swagger_1.ApiProperty)({ description: 'Media type', enum: media_operations_dto_1.MediaType }),
     __metadata("design:type", String)
 ], MediaGroupDto.prototype, "type", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Number of items of this type', example: 25 }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of items of this type' }),
     __metadata("design:type", Number)
 ], MediaGroupDto.prototype, "count", void 0);
 __decorate([
@@ -169,12 +169,12 @@ class MediaMetadataQueryDto {
 }
 exports.MediaMetadataQueryDto = MediaMetadataQueryDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Chat ID or username', example: 'me' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID or username' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: media_operations_dto_1.MediaType, isArray: true, example: ['photo', 'video'] }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Media types to filter. Use "all" to get all types grouped by type', enum: media_operations_dto_1.MediaType, isArray: true }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsEnum)(media_operations_dto_1.MediaType, { each: true }),
@@ -187,19 +187,19 @@ __decorate([
     __metadata("design:type", Array)
 ], MediaMetadataQueryDto.prototype, "types", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date (ISO 8601)', example: '2024-01-01' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Start date (ISO 8601)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "startDate", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'End date (ISO 8601)', example: '2024-12-31' }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'End date (ISO 8601)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], MediaMetadataQueryDto.prototype, "endDate", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum number of items (1-1000)', example: 50, minimum: 1, maximum: 1000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum number of items (1-1000)', minimum: 1, maximum: 1000 }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
@@ -208,14 +208,14 @@ __decorate([
     __metadata("design:type", Number)
 ], MediaMetadataQueryDto.prototype, "limit", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)', example: 12345 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum message ID to include (use for pagination - get messages with ID less than this)' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], MediaMetadataQueryDto.prototype, "maxId", void 0);
 __decorate([
-    (0, swagger_1.ApiPropertyOptional)({ description: 'Minimum message ID to include', example: 1000 }),
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Minimum message ID to include' }),
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),
     (0, class_validator_1.IsNumber)(),

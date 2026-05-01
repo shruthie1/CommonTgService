@@ -15,15 +15,15 @@ class ScheduleEventsDto {
 }
 exports.ScheduleEventsDto = ScheduleEventsDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '123456789' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], ScheduleEventsDto.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], ScheduleEventsDto.prototype, "profile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1', enum: ['1', '2', '3'], required: false }),
+    (0, swagger_1.ApiProperty)({ enum: ['1', '2', '3'], required: false }),
     __metadata("design:type", String)
 ], ScheduleEventsDto.prototype, "type", void 0);
 //# sourceMappingURL=schedule-events.dto.js.map

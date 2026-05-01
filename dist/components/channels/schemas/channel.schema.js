@@ -146,8 +146,8 @@ exports.Channel = Channel = __decorate([
             virtuals: true,
             transform: (_doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Channel);
 exports.ChannelSchema = mongoose_1.SchemaFactory.createForClass(Channel);

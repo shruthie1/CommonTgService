@@ -16,62 +16,62 @@ let Stat2 = class Stat2 {
 };
 exports.Stat2 = Stat2;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '6785668464', description: 'Chat ID' }),
+    (0, swagger_1.ApiProperty)({ description: 'Chat ID' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "chatId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 12, description: 'Count' }),
+    (0, swagger_1.ApiProperty)({ description: 'Count' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Stat2.prototype, "count", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 50, description: 'Pay Amount' }),
+    (0, swagger_1.ApiProperty)({ description: 'Pay Amount' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Number)
 ], Stat2.prototype, "payAmount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "demoGiven", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Demo Given Today' }),
+    (0, swagger_1.ApiProperty)({ description: 'Demo Given Today' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "demoGivenToday", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'New User' }),
+    (0, swagger_1.ApiProperty)({ description: 'New User' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "newUser", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true, description: 'Paid Reply' }),
+    (0, swagger_1.ApiProperty)({ description: 'Paid Reply' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "paidReply", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Amaan Khan', description: 'Name' }),
+    (0, swagger_1.ApiProperty)({ description: 'Name' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "name", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Second Show' }),
+    (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: null, description: 'Did Pay' }),
+    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "didPay", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "client", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi', description: 'Profile' }),
+    (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "profile", void 0);

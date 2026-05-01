@@ -16,17 +16,17 @@ class ReplaceProxyDto {
 }
 exports.ReplaceProxyDto = ReplaceProxyDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy to replace', example: '1.2.3.4' }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy to replace' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], ReplaceProxyDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Port of the proxy to replace', example: 8080 }),
+    (0, swagger_1.ApiProperty)({ description: 'Port of the proxy to replace' }),
     (0, class_validator_1.IsNumber)(),
     __metadata("design:type", Number)
 ], ReplaceProxyDto.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Preferred country code for replacement', required: false, example: 'US' }),
+    (0, swagger_1.ApiProperty)({ description: 'Preferred country code for replacement', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -35,11 +35,11 @@ class ReplaceResultDto {
 }
 exports.ReplaceResultDto = ReplaceResultDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: true }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Boolean)
 ], ReplaceResultDto.prototype, "success", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Replacement initiated' }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
 ], ReplaceResultDto.prototype, "message", void 0);
 __decorate([

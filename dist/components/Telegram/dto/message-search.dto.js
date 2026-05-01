@@ -39,7 +39,7 @@ class SearchMessagesDto {
 exports.SearchMessagesDto = SearchMessagesDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Chat ID to search in (required for chat-specific search)',
+        description: 'Chat ID to search in (required for chat-specific search)'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -47,7 +47,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Search query string',
+        description: 'Search query string'
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -58,8 +58,7 @@ __decorate([
         description: 'Filter by multiple types options',
         isArray: true,
         enum: MessageMediaType,
-        example: [MessageMediaType.TEXT, MessageMediaType.PHOTO],
-        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO],
+        default: [MessageMediaType.ALL, MessageMediaType.TEXT, MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.VOICE, MessageMediaType.DOCUMENT, MessageMediaType.ROUND_VIDEO, MessageMediaType.ROUND_VOICE, MessageMediaType.STICKER, MessageMediaType.ANIMATION, MessageMediaType.CONTACT, MessageMediaType.MUSIC, MessageMediaType.CHAT_PHOTO]
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),
@@ -69,7 +68,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "types", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Minimum message ID for filtering',
+        description: 'Minimum message ID for filtering'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -78,7 +77,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "minId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Maximum message ID for filtering',
+        description: 'Maximum message ID for filtering'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -89,7 +88,7 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Maximum number of messages to retrieve',
         minimum: 1,
-        maximum: 500,
+        maximum: 500
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(1),
@@ -99,7 +98,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "limit", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Offset ID for pagination',
+        description: 'Offset ID for pagination'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -108,7 +107,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "offsetId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Offset date as Unix timestamp',
+        description: 'Offset date as Unix timestamp'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -117,7 +116,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "offsetDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'Start date for filtering messages by date range',
+        description: 'Start date for filtering messages by date range'
     }),
     (0, class_transformer_1.Type)(() => Date),
     (0, class_validator_1.IsDate)(),
@@ -126,7 +125,7 @@ __decorate([
 ], SearchMessagesDto.prototype, "startDate", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
-        description: 'End date for filtering messages by date range',
+        description: 'End date for filtering messages by date range'
     }),
     (0, class_transformer_1.Type)(() => Date),
     (0, class_validator_1.IsDate)(),
@@ -139,8 +138,7 @@ exports.MessageTypeResult = MessageTypeResult;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Array of message IDs matching the search criteria',
-        type: [Number],
-        example: [1001, 1005, 1010]
+        type: [Number]
     }),
     (0, class_validator_1.IsArray)(),
     (0, class_validator_1.IsInt)({ each: true }),
@@ -148,8 +146,7 @@ __decorate([
 ], MessageTypeResult.prototype, "messages", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Total count of messages matching the search criteria',
-        example: 3
+        description: 'Total count of messages matching the search criteria'
     }),
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.Min)(0),
@@ -167,9 +164,9 @@ __decorate([
                 date: { type: 'string', description: 'ISO 8601 date' },
                 chatId: { type: 'string' },
                 senderName: { type: 'string', nullable: true },
-                mediaType: { type: 'string', nullable: true },
-            },
-        },
+                mediaType: { type: 'string', nullable: true }
+            }
+        }
     }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Array)

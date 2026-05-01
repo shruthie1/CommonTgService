@@ -75,10 +75,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search user data', description: 'Searches user data based on provided query parameters.' }),
-    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
-    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean, example: true }),
-    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean, example: false }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', required: false, description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID associated with the user', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'isTesting', required: false, description: 'Filter for testing users', type: Boolean }),
+    (0, swagger_1.ApiQuery)({ name: 'banned', required: false, description: 'Filter for banned users', type: Boolean }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'List of matching user data.', type: [user_data_schema_1.UserData] }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid query parameters.' }),
     __param(0, (0, common_1.Query)()),
@@ -97,7 +97,7 @@ __decorate([
 __decorate([
     (0, common_1.Patch)('updateAll/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update all user data by chat ID', description: 'Updates all user data entries associated with a specific chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID to update user data for', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID to update user data for', type: String }),
     (0, swagger_1.ApiBody)({ type: update_user_data_dto_1.UpdateUserDataDto, description: 'User data fields to update' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully updated.', type: Object }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
@@ -111,8 +111,8 @@ __decorate([
 __decorate([
     (0, common_1.Get)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Get user data by profile and chat ID', description: 'Retrieves a specific user data entry by profile and chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data found.', type: user_data_schema_1.UserData }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
@@ -124,8 +124,8 @@ __decorate([
 __decorate([
     (0, common_1.Patch)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Update user data by profile and chat ID', description: 'Updates a specific user data entry identified by profile and chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String }),
     (0, swagger_1.ApiBody)({ type: update_user_data_dto_1.UpdateUserDataDto, description: 'User data fields to update' }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully updated.', type: user_data_schema_1.UserData }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid input data.' }),
@@ -140,8 +140,8 @@ __decorate([
 __decorate([
     (0, common_1.Delete)(':profile/:chatId'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete user data by profile and chat ID', description: 'Deletes a specific user data entry identified by profile and chat ID.' }),
-    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String, example: 'user123' }),
-    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiParam)({ name: 'profile', description: 'User profile identifier', type: String }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID associated with the user', type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'User data successfully deleted.', type: user_data_schema_1.UserData }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'User data not found.' }),
     __param(0, (0, common_1.Param)('profile')),
@@ -155,7 +155,7 @@ __decorate([
     (0, common_1.UseInterceptors)(interceptors_1.CloudflareCacheInterceptor),
     (0, decorators_1.NoCache)(),
     (0, swagger_1.ApiOperation)({ summary: 'Clear count for user data', description: 'Clears the count for user data, optionally filtered by chat ID.' }),
-    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String, example: 'chat456' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', required: false, description: 'Chat ID to clear count for', type: String }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Count cleared successfully.' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid chat ID.' }),
     __param(0, (0, common_1.Query)('chatId')),
@@ -171,10 +171,10 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                query: { type: 'object', description: 'MongoDB query object', example: { profile: 'user123' } },
-                sort: { type: 'object', description: 'Sort criteria', example: { createdAt: -1 } },
-                limit: { type: 'number', description: 'Maximum number of results', example: 10 },
-                skip: { type: 'number', description: 'Number of results to skip', example: 0 }
+                query: { type: 'object', description: 'MongoDB query object' },
+                sort: { type: 'object', description: 'Sort criteria' },
+                limit: { type: 'number', description: 'Maximum number of results' },
+                skip: { type: 'number', description: 'Number of results to skip' }
             }
         }
     }),

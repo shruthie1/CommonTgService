@@ -386,7 +386,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             return [];
         }
-        return await this.bufferClientModel.find(filter).exec();
+        const query = { ...filter };
+        const regexFields = ['mobile', 'username', 'clientId'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+            }
+        }
+        return await this.bufferClientModel.find(query).exec();
     }
     async executeQuery(query, sort, limit, skip) {
         if (!query) {
@@ -542,6 +549,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return currentChannels < 220
             ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
             : this.channelsService.getActiveChannels(capped, 0, excludedIds);
+    }
+    async markAsActive(mobile, message = 'Account is functioning properly') {
+        return this.updateStatus(mobile, 'active', message);
     }
     async markAsInactive(mobile, reason) {
         try {

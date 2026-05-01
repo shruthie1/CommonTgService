@@ -21,8 +21,8 @@ exports.PromoteMsg = PromoteMsg = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        }, })
+            }
+        } })
 ], PromoteMsg);
 exports.PromoteMsgSchema = mongoose_1.SchemaFactory.createForClass(PromoteMsg);
 exports.PromoteMsgSchema.add({ type: mongoose_2.default.Schema.Types.Mixed });

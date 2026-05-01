@@ -105,8 +105,8 @@ exports.UserData = UserData = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], UserData);
 exports.UserDataSchema = mongoose_1.SchemaFactory.createForClass(UserData);

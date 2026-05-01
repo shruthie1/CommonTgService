@@ -25,8 +25,8 @@ exports.Timestamp = Timestamp = __decorate([
             virtuals: true,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], Timestamp);
 exports.TimestampSchema = mongoose_1.SchemaFactory.createForClass(Timestamp);

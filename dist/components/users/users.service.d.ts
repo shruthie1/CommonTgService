@@ -35,7 +35,7 @@ export declare class UsersService {
     findAll(limit?: number, skip?: number): Promise<User[]>;
     findAllSorted(limit?: number, skip?: number, sort?: Record<string, 1 | -1>): Promise<User[]>;
     findOne(tgId: string): Promise<User>;
-    update(tgId: string, updateDto: UpdateUserDto): Promise<number>;
+    update(tgId: string, updateDto: UpdateUserDto): Promise<User>;
     updateByFilter(filter: QueryFilter<UserDocument>, updateDto: UpdateUserDto): Promise<number>;
     toggleStar(mobile: string): Promise<{
         mobile: string;

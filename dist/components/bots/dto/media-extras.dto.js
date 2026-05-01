@@ -20,7 +20,7 @@ exports.VoiceOptionsDto = VoiceOptionsDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Duration of the voice message in seconds',
-        required: false,
+        required: false
     }),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.IsOptional)(),
@@ -31,8 +31,7 @@ class SendVoiceDto {
 exports.SendVoiceDto = SendVoiceDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Voice message URL or file ID',
-        example: 'https://example.com/voice.ogg',
+        description: 'Voice message URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -41,7 +40,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Voice sending options',
         required: false,
-        type: () => VoiceOptionsDto,
+        type: () => VoiceOptionsDto
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
@@ -74,8 +73,7 @@ class SendAnimationDto {
 exports.SendAnimationDto = SendAnimationDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Animation (GIF/MP4) URL or file ID',
-        example: 'https://example.com/animation.gif',
+        description: 'Animation (GIF/MP4) URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -84,7 +82,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Animation sending options',
         required: false,
-        type: () => AnimationOptionsDto,
+        type: () => AnimationOptionsDto
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
@@ -97,8 +95,7 @@ exports.StickerOptionsDto = StickerOptionsDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Emoji associated with the sticker',
-        required: false,
-        example: '😊',
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -109,8 +106,7 @@ class SendStickerDto {
 exports.SendStickerDto = SendStickerDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Sticker URL or file ID',
-        example: 'https://example.com/sticker.webp',
+        description: 'Sticker URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -119,7 +115,7 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Sticker sending options',
         required: false,
-        type: () => StickerOptionsDto,
+        type: () => StickerOptionsDto
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),

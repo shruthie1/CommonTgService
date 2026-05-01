@@ -8,6 +8,7 @@ exports.stopMongo = stopMongo;
 exports.createBufferClientModel = createBufferClientModel;
 exports.createPromoteClientModel = createPromoteClientModel;
 exports.createClientModel = createClientModel;
+exports.createUserModel = createUserModel;
 exports.mockBotsService = mockBotsService;
 exports.mockTelegramService = mockTelegramService;
 exports.mockUsersService = mockUsersService;
@@ -18,12 +19,14 @@ exports.mockSessionService = mockSessionService;
 exports.makeBufferClientData = makeBufferClientData;
 exports.makePromoteClientData = makePromoteClientData;
 exports.makeClientData = makeClientData;
+exports.makeUserData = makeUserData;
 exports.resetCounter = resetCounter;
 const mongoose_1 = __importDefault(require("mongoose"));
 const mongodb_memory_server_1 = require("mongodb-memory-server");
 const buffer_client_schema_1 = require("../buffer-clients/schemas/buffer-client.schema");
 const promote_client_schema_1 = require("../promote-clients/schemas/promote-client.schema");
 const client_schema_1 = require("../clients/schemas/client.schema");
+const user_schema_1 = require("../users/schemas/user.schema");
 async function startMongo(dbName) {
     const mongod = await mongodb_memory_server_1.MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
     const connection = await mongoose_1.default.createConnection(mongod.getUri(), { dbName }).asPromise();
@@ -47,6 +50,10 @@ function createPromoteClientModel(connection) {
 }
 function createClientModel(connection) {
     const model = connection.model('ClientApiTest', client_schema_1.ClientSchema);
+    return model;
+}
+function createUserModel(connection) {
+    const model = connection.model('UserApiTest', user_schema_1.UserSchema);
     return model;
 }
 function mockBotsService() {
@@ -131,6 +138,35 @@ function makeClientData(overrides = {}) {
         product: 'test-product',
         qrId: `qr-${counter}`,
         gpayId: `gpay-${counter}`,
+        ...overrides,
+    };
+}
+function makeUserData(overrides = {}) {
+    counter++;
+    return {
+        mobile: `+155530${String(counter).padStart(5, '0')}`,
+        session: `session-user-${counter}`,
+        tgId: `tg-user-${counter}`,
+        firstName: `User${counter}`,
+        lastName: `Last${counter}`,
+        username: `user_${counter}`,
+        gender: null,
+        twoFA: false,
+        expired: false,
+        password: null,
+        channels: 10,
+        personalChats: 5,
+        totalChats: 15,
+        contacts: 3,
+        msgs: 50,
+        photoCount: 2,
+        videoCount: 1,
+        movieCount: 0,
+        ownPhotoCount: 1,
+        otherPhotoCount: 1,
+        ownVideoCount: 0,
+        otherVideoCount: 1,
+        lastActive: '2026-04-01',
         ...overrides,
     };
 }

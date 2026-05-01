@@ -132,7 +132,7 @@ __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Create a new bot',
-        description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.',
+        description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.'
     }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Bot has been successfully created' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid bot configuration provided' }),
@@ -147,7 +147,7 @@ __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Get all bots or filter by category',
-        description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.',
+        description: 'Retrieves a list of all registered bots. Can be filtered by category if provided.'
     }),
     (0, swagger_1.ApiQuery)({
         name: 'category',
@@ -166,7 +166,7 @@ __decorate([
     (0, common_1.Get)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get a bot by ID',
-        description: 'Retrieves detailed information about a specific bot using its unique identifier.',
+        description: 'Retrieves detailed information about a specific bot using its unique identifier.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot details retrieved successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
@@ -179,7 +179,7 @@ __decorate([
     (0, common_1.Patch)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Update a bot',
-        description: 'Updates the configuration of an existing bot. Only provided fields will be modified.',
+        description: 'Updates the configuration of an existing bot. Only provided fields will be modified.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot updated successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
@@ -194,7 +194,7 @@ __decorate([
     (0, common_1.Delete)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Delete a bot',
-        description: 'Removes a bot from the system. This action cannot be undone.',
+        description: 'Removes a bot from the system. This action cannot be undone.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot successfully deleted' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),
@@ -207,7 +207,7 @@ __decorate([
     (0, common_1.Post)('category/:category/message'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a message using bots in a category',
-        description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -237,7 +237,7 @@ __decorate([
     (0, common_1.Post)('category/:category/photo'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a photo using bots in a category',
-        description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -267,7 +267,7 @@ __decorate([
     (0, common_1.Post)('category/:category/video'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a video using bots in a category',
-        description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -297,7 +297,7 @@ __decorate([
     (0, common_1.Post)('category/:category/audio'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send audio using bots in a category',
-        description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends an audio file using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -327,7 +327,7 @@ __decorate([
     (0, common_1.Post)('category/:category/document'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a document using bots in a category',
-        description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a document file using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -357,7 +357,7 @@ __decorate([
     (0, common_1.Post)('category/:category/voice'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a voice message using bots in a category',
-        description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a voice message using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -387,7 +387,7 @@ __decorate([
     (0, common_1.Post)('category/:category/animation'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send an animation using bots in a category',
-        description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends an animation (GIF or short video) using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -417,7 +417,7 @@ __decorate([
     (0, common_1.Post)('category/:category/sticker'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a sticker using bots in a category',
-        description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a sticker using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -447,7 +447,7 @@ __decorate([
     (0, common_1.Post)('category/:category/media-group'),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a media group using bots in a category',
-        description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.',
+        description: 'Sends a group of media (photos and videos) as an album using either all bots in a category or a specific bot if botId is provided.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',
@@ -477,7 +477,7 @@ __decorate([
     (0, common_1.Get)('category/:category/stats'),
     (0, swagger_1.ApiOperation)({
         summary: 'Get bot statistics by category',
-        description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.',
+        description: 'Retrieves aggregated statistics for all bots in a specific category, including message counts and performance metrics.'
     }),
     (0, swagger_1.ApiParam)({
         name: 'category',

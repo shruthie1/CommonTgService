@@ -23,8 +23,7 @@ class CreateSessionDto {
 exports.CreateSessionDto = CreateSessionDto;
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Phone number with country code (optional if session provided)',
-        example: '+1234567890'
+        description: 'Phone number with country code (optional if session provided)'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -32,8 +31,7 @@ __decorate([
 ], CreateSessionDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Existing session string to use',
-        example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6zPg2CwJjFBw5wHkJfFpBVts...'
+        description: 'Existing session string to use'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -53,8 +51,7 @@ class SearchAuditDto {
 exports.SearchAuditDto = SearchAuditDto;
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Phone number to search for',
-        example: '+1234567890'
+        description: 'Phone number to search for'
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
@@ -96,8 +93,7 @@ class GetOldestSessionDto {
 exports.GetOldestSessionDto = GetOldestSessionDto;
 __decorate([
     (0, swagger_2.ApiPropertyOptional)({
-        description: 'Phone number to get session for',
-        example: '+1234567890'
+        description: 'Phone number to get session for'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -300,10 +296,10 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
-                message: { type: 'string', example: 'Session created successfully' },
-                session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
-                isNew: { type: 'boolean', example: true }
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                session: { type: 'string' },
+                isNew: { type: 'boolean' }
             }
         }
     }),
@@ -332,24 +328,24 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
+                success: { type: 'boolean' },
                 data: {
                     type: 'array',
                     items: {
                         type: 'object',
                         properties: {
-                            mobile: { type: 'string', example: '916265240911' },
-                            sessionString: { type: 'string', example: '1BQANOTEuM==...' },
-                            status: { type: 'string', example: 'active' },
-                            creationMethod: { type: 'string', example: 'old_session' },
-                            createdAt: { type: 'string', example: '2023-12-01T10:00:00Z' },
-                            lastUsedAt: { type: 'string', example: '2023-12-01T15:30:00Z' },
-                            usageCount: { type: 'number', example: 5 }
+                            mobile: { type: 'string' },
+                            sessionString: { type: 'string' },
+                            status: { type: 'string' },
+                            creationMethod: { type: 'string' },
+                            createdAt: { type: 'string' },
+                            lastUsedAt: { type: 'string' },
+                            usageCount: { type: 'number' }
                         }
                     }
                 },
-                total: { type: 'number', example: 25 },
-                message: { type: 'string', example: 'Audit records retrieved successfully' }
+                total: { type: 'number' },
+                message: { type: 'string' }
             }
         }
     }),
@@ -374,17 +370,17 @@ __decorate([
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
-                message: { type: 'string', example: 'Oldest session retrieved successfully' },
+                success: { type: 'boolean' },
+                message: { type: 'string' },
                 data: {
                     type: 'object',
                     properties: {
-                        session: { type: 'string', example: '1BVtsOHIBu2iBJgvn6U6SfJTgN6z...' },
-                        sessionAge: { type: 'number', example: 5, description: 'Age of session in days' },
-                        isNew: { type: 'boolean', example: false, description: 'Whether this is a newly created session' },
-                        usageCount: { type: 'number', example: 12, description: 'Number of times this session has been used' },
-                        lastUsedAt: { type: 'string', example: '2024-08-05T10:30:00Z', description: 'When the session was last used' },
-                        createdAt: { type: 'string', example: '2024-08-01T14:20:00Z', description: 'When the session was created' }
+                        session: { type: 'string' },
+                        sessionAge: { type: 'number', description: 'Age of session in days' },
+                        isNew: { type: 'boolean', description: 'Whether this is a newly created session' },
+                        usageCount: { type: 'number', description: 'Number of times this session has been used' },
+                        lastUsedAt: { type: 'string', description: 'When the session was last used' },
+                        createdAt: { type: 'string', description: 'When the session was created' }
                     }
                 }
             }

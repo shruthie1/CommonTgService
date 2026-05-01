@@ -18,8 +18,7 @@ class CreateBotDto {
 exports.CreateBotDto = CreateBotDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Telegram bot token',
-        example: '1234567890:ABCdefGHIjklMNOpqrsTUVwxyz'
+        description: 'Telegram bot token'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -27,16 +26,14 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Channel category the bot belongs to',
-        enum: bots_service_1.ChannelCategory,
-        example: bots_service_1.ChannelCategory.CLIENT_UPDATES
+        enum: bots_service_1.ChannelCategory
     }),
     (0, class_validator_1.IsEnum)(bots_service_1.ChannelCategory),
     __metadata("design:type", String)
 ], CreateBotDto.prototype, "category", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Channel ID where bot will post messages',
-        example: '-1001234567890'
+        description: 'Channel ID where bot will post messages'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
@@ -44,8 +41,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Optional description of the bot',
-        required: false,
-        example: 'Bot for sending client updates'
+        required: false
     }),
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),

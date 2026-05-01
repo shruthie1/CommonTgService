@@ -124,7 +124,7 @@ exports.Transaction = Transaction = __decorate([
                 ret['id'] = ret._id;
                 delete ret._id;
                 return ret;
-            },
+            }
         }
     })
 ], Transaction);

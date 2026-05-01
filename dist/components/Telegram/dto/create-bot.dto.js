@@ -17,8 +17,7 @@ class CreateTgBotDto {
 exports.CreateTgBotDto = CreateTgBotDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Name of the bot (required)',
-        example: 'MyAwesomeBot'
+        description: 'Name of the bot (required)'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.IsString)(),
@@ -27,8 +26,7 @@ __decorate([
 ], CreateTgBotDto.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Username for the bot (required)',
-        example: 'my_awesome_bot'
+        description: 'Username for the bot (required)'
     }),
     (0, class_validator_1.IsNotEmpty)(),
     (0, class_validator_1.IsString)(),
@@ -38,7 +36,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Description of what your bot can do',
-        example: 'This bot helps you manage your tasks',
         required: false
     }),
     (0, class_validator_1.IsOptional)(),
@@ -49,7 +46,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'What the bot can be used for',
-        example: 'Task Management, Reminders, Notes',
         required: false
     }),
     (0, class_validator_1.IsOptional)(),
@@ -60,7 +56,6 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'URL to the bot\'s profile photo',
-        example: 'https://example.com/bot-photo.jpg',
         required: false
     }),
     (0, class_validator_1.IsOptional)(),

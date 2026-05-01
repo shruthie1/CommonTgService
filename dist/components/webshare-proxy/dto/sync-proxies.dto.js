@@ -18,9 +18,8 @@ exports.SyncProxiesDto = SyncProxiesDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Whether to remove proxies from DB that are no longer in the Webshare list',
-        example: true,
         required: false,
-        default: true,
+        default: true
     }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
@@ -30,27 +29,27 @@ class SyncResultDto {
 }
 exports.SyncResultDto = SyncResultDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 100 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "totalFetched", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 80 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "created", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 15 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "updated", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 5 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "removed", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: [] }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Array)
 ], SyncResultDto.prototype, "errors", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 2345 }),
+    (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", Number)
 ], SyncResultDto.prototype, "durationMs", void 0);
 //# sourceMappingURL=sync-proxies.dto.js.map

@@ -16,72 +16,72 @@ class CreateProxyIpDto {
 }
 exports.CreateProxyIpDto = CreateProxyIpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '192.168.1.100', description: 'IP address of the proxy' }),
+    (0, swagger_1.ApiProperty)({ description: 'IP address of the proxy' }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "ipAddress", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 8080, description: 'Port number of the proxy' }),
+    (0, swagger_1.ApiProperty)({ description: 'Port number of the proxy' }),
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(1),
     (0, class_validator_1.Max)(65535),
     __metadata("design:type", Number)
 ], CreateProxyIpDto.prototype, "port", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'http', description: 'Protocol type', enum: ['http', 'https', 'socks5'] }),
+    (0, swagger_1.ApiProperty)({ description: 'Protocol type', enum: ['http', 'https', 'socks5'] }),
     (0, class_validator_1.IsEnum)(['http', 'https', 'socks5']),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "protocol", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'username', description: 'Username for proxy authentication', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Username for proxy authentication', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'password', description: 'Password for proxy authentication', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Password for proxy authentication', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "password", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Status of the proxy IP', enum: ['active', 'inactive'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Status of the proxy IP', enum: ['active', 'inactive'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['active', 'inactive']),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this IP is currently assigned', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether this IP is currently assigned', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], CreateProxyIpDto.prototype, "isAssigned", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'client1', description: 'Client ID that owns this IP', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID that owns this IP', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "assignedToClient", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'manual', description: 'Source of the proxy', enum: ['manual', 'webshare'], required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Source of the proxy', enum: ['manual', 'webshare'], required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsEnum)(['manual', 'webshare']),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "source", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'abc123', description: 'Webshare proxy ID', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Webshare proxy ID', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "webshareId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'US', description: 'Country code', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'Country code', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateProxyIpDto.prototype, "countryCode", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'New York', description: 'City name', required: false }),
+    (0, swagger_1.ApiProperty)({ description: 'City name', required: false }),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

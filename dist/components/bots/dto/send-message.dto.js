@@ -135,8 +135,7 @@ class SendMessageDto {
 exports.SendMessageDto = SendMessageDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Message text to send',
-        example: 'Hello, this is a test message!'
+        description: 'Message text to send'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

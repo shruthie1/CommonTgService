@@ -38,6 +38,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument>;
     refillJoinQueue(clientId?: string | null): Promise<number>;
     private fetchJoinableChannels;
+    markAsActive(mobile: string, message?: string): Promise<BufferClientDocument>;
     markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null>;
     setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
     diagnoseEnrollmentDecision(): Promise<any>;

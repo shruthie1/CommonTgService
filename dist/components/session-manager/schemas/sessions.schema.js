@@ -30,105 +30,104 @@ let SessionAudit = class SessionAudit {
 };
 exports.SessionAudit = SessionAudit;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '916265240911', description: 'Phone number associated with the session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Phone number associated with the session' }),
     (0, mongoose_1.Prop)({ required: true, index: true }),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "mobile", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Encrypted session string' }),
+    (0, swagger_1.ApiProperty)({ description: 'Encrypted session string' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "sessionString", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'active', description: 'Current status of the session', enum: SessionStatus }),
+    (0, swagger_1.ApiProperty)({ description: 'Current status of the session', enum: SessionStatus }),
     (0, mongoose_1.Prop)({ required: true, enum: SessionStatus, default: SessionStatus.CREATED }),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "status", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'old_session', description: 'Method used to create the session', enum: SessionCreationMethod }),
+    (0, swagger_1.ApiProperty)({ description: 'Method used to create the session', enum: SessionCreationMethod }),
     (0, mongoose_1.Prop)({ required: true, enum: SessionCreationMethod }),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "creationMethod", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Session created successfully', description: 'Creation success/failure message' }),
+    (0, swagger_1.ApiProperty)({ description: 'Creation success/failure message' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "creationMessage", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '1BQANOTEuM==...', description: 'Previous session string used for creation (if applicable)' }),
+    (0, swagger_1.ApiProperty)({ description: 'Previous session string used for creation (if applicable)' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "previousSessionString", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T10:00:00Z', description: 'When the session was created' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the session was created' }),
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "createdAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:30:00Z', description: 'Last time the session was used' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last time the session was used' }),
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "lastUsedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2024-01-01T10:00:00Z', description: 'When the session expires' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the session expires' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "expiresAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'shruthi1', description: 'Client ID associated with this session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Client ID associated with this session' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "clientId", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'ShruthiRedd2', description: 'Username associated with this session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Username associated with this session' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 3, description: 'Number of retry attempts during creation' }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of retry attempts during creation' }),
     (0, mongoose_1.Prop)({ default: 0 }),
     __metadata("design:type", Number)
 ], SessionAudit.prototype, "retryAttempts", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'Rate limit exceeded', description: 'Error message if creation failed' }),
+    (0, swagger_1.ApiProperty)({ description: 'Error message if creation failed' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "errorMessage", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        example: { userAgent: 'Telegram-Desktop/1.0', ipAddress: '192.168.1.1' },
         description: 'Additional metadata about session creation'
     }),
     (0, mongoose_1.Prop)({ type: Object }),
     __metadata("design:type", Object)
 ], SessionAudit.prototype, "metadata", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: false, description: 'Whether this session is currently active' }),
+    (0, swagger_1.ApiProperty)({ description: 'Whether this session is currently active' }),
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
 ], SessionAudit.prototype, "isActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T16:00:00Z', description: 'When the session was revoked/expired' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the session was revoked/expired' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "revokedAt", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'manual_revocation', description: 'Reason for session revocation' }),
+    (0, swagger_1.ApiProperty)({ description: 'Reason for session revocation' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "revocationReason", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 5, description: 'Number of times this session has been used' }),
+    (0, swagger_1.ApiProperty)({ description: 'Number of times this session has been used' }),
     (0, mongoose_1.Prop)({ default: 0 }),
     __metadata("design:type", Number)
 ], SessionAudit.prototype, "usageCount", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: 'session_validation_failed', description: 'Last known error with this session' }),
+    (0, swagger_1.ApiProperty)({ description: 'Last known error with this session' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
 ], SessionAudit.prototype, "lastError", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '2023-12-01T15:45:00Z', description: 'When the last error occurred' }),
+    (0, swagger_1.ApiProperty)({ description: 'When the last error occurred' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", Date)
 ], SessionAudit.prototype, "lastErrorAt", void 0);
@@ -143,8 +142,8 @@ exports.SessionAudit = SessionAudit = __decorate([
             transform: (doc, ret) => {
                 delete ret._id;
                 delete ret.__v;
-            },
-        },
+            }
+        }
     })
 ], SessionAudit);
 exports.SessionAuditSchema = mongoose_1.SchemaFactory.createForClass(SessionAudit);

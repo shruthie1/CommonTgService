@@ -446,7 +446,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
     }
     async search(filter) {
-        return this.promoteClientModel.find(filter).exec();
+        const query = { ...filter };
+        const regexFields = ['mobile', 'clientId'];
+        for (const field of regexFields) {
+            if (typeof query[field] === 'string' && query[field]) {
+                query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+            }
+        }
+        return this.promoteClientModel.find(query).exec();
     }
     async executeQuery(query, sort, limit, skip) {
         if (!query)

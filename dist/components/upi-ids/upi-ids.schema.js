@@ -24,8 +24,8 @@ exports.UpiId = UpiId = __decorate([
             virtuals: false,
             transform: (doc, ret) => {
                 delete ret._id;
-            },
-        },
+            }
+        }
     })
 ], UpiId);
 exports.UpiIdSchema = mongoose_1.SchemaFactory.createForClass(UpiId);

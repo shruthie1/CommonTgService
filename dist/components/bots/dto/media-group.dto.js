@@ -20,16 +20,14 @@ exports.MediaGroupItemDto = MediaGroupItemDto;
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Type of media',
-        enum: ['photo', 'video', 'audio', 'document'],
-        example: 'photo'
+        enum: ['photo', 'video', 'audio', 'document']
     }),
     (0, class_validator_1.IsEnum)(['photo', 'video', 'audio', 'document']),
     __metadata("design:type", String)
 ], MediaGroupItemDto.prototype, "type", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
-        description: 'Media URL or file ID',
-        example: 'https://example.com/media.jpg'
+        description: 'Media URL or file ID'
     }),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
