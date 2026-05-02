@@ -16929,6 +16929,10 @@ let BufferClientController = class BufferClientController {
     async createOrUpdate(mobile, updateClientDto) {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
+    async healDeadSessions() {
+        this.clientService.healDeadSessions();
+        return 'Session healing initiated for buffer clients';
+    }
     async remove(mobile) {
         return this.clientService.remove(mobile);
     }
@@ -17204,6 +17208,17 @@ __decorate([
     __metadata("design:paramtypes", [String, update_buffer_client_dto_1.UpdateBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "createOrUpdate", null);
+__decorate([
+    (0, common_1.Post)('healDeadSessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Heal dead sessions for buffer clients',
+        description: 'Iterates all active buffer clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.'
+    }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "healDeadSessions", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete buffer client by mobile' }),
@@ -17982,7 +17997,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             ...clientMainMobiles,
             ...promoteClients.map((c) => c.mobile),
             ...assignedBufferMobiles,
-        ].filter(Boolean);
+        ].filter((id) => typeof id === 'string' && id.length > 0);
         const threeMonthsAgo = client_helper_utils_1.ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
         const eligibleUserCount = await this.usersService.executeQuery({
             mobile: { $nin: goodIds },
@@ -18165,6 +18180,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         try {
             await this._checkBufferClientsInternal();
         }
+        catch (error) {
+            const errMsg = (0, parseError_1.parseError)(error, 'checkBufferClients').message;
+            this.logger.error(`checkBufferClients crashed: ${errMsg}`);
+            try {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`⚠️ checkBufferClients CRASHED\n\n${errMsg}`)}`);
+            }
+            catch { }
+        }
         finally {
             this.isCheckingBufferClients = false;
         }
@@ -18184,7 +18207,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             ...clientMainMobiles,
             ...promoteClients.map((c) => c.mobile),
             ...allBufferClientMobiles,
-        ].filter(Boolean);
+        ].filter((id) => typeof id === 'string' && id.length > 0);
         const healthyBufferClientsPerClient = new Map();
         for (const doc of assignedBufferClients) {
             if (!doc.clientId)
@@ -18305,7 +18328,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             createdEntries: [],
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
+            try {
+                dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
+            }
+            catch (error) {
+                const errMsg = (0, parseError_1.parseError)(error, 'addNewUserstoBufferClientsDynamic').message;
+                this.logger.error(`Dynamic buffer enrollment failed: ${errMsg}`);
+                try {
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`⚠️ Buffer Enrollment Failed\n\n${errMsg}`)}`);
+                }
+                catch { }
+            }
         }
         await this.sendBufferCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
@@ -25393,6 +25426,10 @@ let PromoteClientController = class PromoteClientController {
     async createOrUpdate(mobile, updateClientDto) {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
+    async healDeadSessions() {
+        this.clientService.healDeadSessions();
+        return 'Session healing initiated for promote clients';
+    }
     async remove(mobile) {
         return this.clientService.remove(mobile);
     }
@@ -25575,6 +25612,17 @@ __decorate([
     __metadata("design:paramtypes", [String, update_promote_client_dto_1.UpdatePromoteClientDto]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "createOrUpdate", null);
+__decorate([
+    (0, common_1.Post)('healDeadSessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Heal dead sessions for promote clients',
+        description: 'Iterates all active promote clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.'
+    }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], PromoteClientController.prototype, "healDeadSessions", null);
 __decorate([
     (0, common_1.Delete)('mobile/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete promote client by mobile' }),
@@ -26476,6 +26524,14 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         try {
             await this._checkPromoteClientsInternal();
         }
+        catch (error) {
+            const errMsg = (0, parseError_1.parseError)(error, 'checkPromoteClients').message;
+            this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
+            try {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`⚠️ checkPromoteClients CRASHED\n\n${errMsg}`)}`);
+            }
+            catch { }
+        }
         finally {
             this.isCheckingPromoteClients = false;
         }
@@ -26492,7 +26548,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
             .exec();
         const allPromoteClientMobiles = (await this.promoteClientModel.find({}, { mobile: 1 }).lean().exec()).map((doc) => doc.mobile);
-        const goodIds = [...clientMainMobiles, ...bufferClientIds, ...allPromoteClientMobiles].filter(Boolean);
+        const goodIds = [...clientMainMobiles, ...bufferClientIds, ...allPromoteClientMobiles].filter((id) => typeof id === 'string' && id.length > 0);
         const healthyPromoteClientsPerClient = new Map();
         for (const doc of assignedPromoteClients) {
             if (!doc.clientId)
@@ -26608,7 +26664,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             createdEntries: [],
         };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
+            try {
+                dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
+            }
+            catch (error) {
+                const errMsg = (0, parseError_1.parseError)(error, 'addNewUserstoPromoteClientsDynamic').message;
+                this.logger.error(`Dynamic promote enrollment failed: ${errMsg}`);
+                try {
+                    await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`⚠️ Promote Enrollment Failed\n\n${errMsg}`)}`);
+                }
+                catch { }
+            }
         }
         await this.sendPromoteCheckSummaryNotification(totalUpdates, dynamicCreateResult.createdCount, dynamicCreateResult.attemptedCount, updatedEntries, dynamicCreateResult.createdEntries);
     }
@@ -31525,13 +31591,17 @@ class BaseClientService {
             return client;
         }
         catch (error) {
-            this.logger.warn(`Session liveness check failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'verifySessionLive').message}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `verifySessionLive: ${mobile}`);
+            this.logger.warn(`Session liveness check failed for ${mobile}: ${errorDetails.message}`);
             if (client) {
                 try {
                     await client.destroy();
                 }
                 catch {
                 }
+            }
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                throw error;
             }
             return null;
         }
@@ -31651,7 +31721,11 @@ class BaseClientService {
             return true;
         }
         catch (error) {
-            this.logger.error(`Session rotation failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'rotateSession').message}`);
+            const errorDetails = (0, parseError_1.parseError)(error, 'rotateSession');
+            this.logger.error(`Session rotation failed for ${mobile}: ${errorDetails.message}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                throw error;
+            }
             return false;
         }
         finally {
@@ -31664,6 +31738,78 @@ class BaseClientService {
             }
             await this.safeUnregisterClient(mobile);
         }
+    }
+    async healDeadSessions() {
+        const results = {
+            total: 0,
+            healthy: 0,
+            healed: 0,
+            deactivated: 0,
+            skipped: 0,
+            errors: [],
+        };
+        const clients = await this.model.find({
+            status: 'active',
+            inUse: { $ne: true },
+        }).lean().exec();
+        results.total = clients.length;
+        this.logger.log(`[HealSessions] Starting session heal for ${clients.length} ${this.clientType} clients`);
+        for (const doc of clients) {
+            const mobile = doc.mobile;
+            const session = doc.session;
+            if (!session?.trim()) {
+                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — skipping`);
+                results.skipped++;
+                continue;
+            }
+            let isAlive = false;
+            let livenessError = '';
+            try {
+                const client = await this.createVerifiedSessionClient(mobile, session);
+                if (client) {
+                    isAlive = true;
+                    try {
+                        await client.destroy();
+                    }
+                    catch { }
+                }
+            }
+            catch (error) {
+                livenessError = (0, parseError_1.parseError)(error, `healSession:${mobile}`).message;
+            }
+            if (isAlive) {
+                results.healthy++;
+                this.logger.log(`[HealSessions] ${mobile}: session alive ✓`);
+                await (0, Helpers_1.sleep)(2000);
+                continue;
+            }
+            this.logger.warn(`[HealSessions] ${mobile}: session dead (${livenessError || 'returned null'}). Attempting recovery...`);
+            try {
+                const createResult = await this.sessionService.createSession({ mobile });
+                if (createResult.success && createResult.session) {
+                    await this.update(mobile, { session: createResult.session });
+                    results.healed++;
+                    this.logger.log(`[HealSessions] ${mobile}: session healed ✓`);
+                }
+                else {
+                    this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
+                    await this.markAsInactive(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    results.deactivated++;
+                    results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivated' });
+                }
+            }
+            catch (error) {
+                const errMsg = (0, parseError_1.parseError)(error, `healSessionCreate:${mobile}`).message;
+                this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
+                await this.markAsInactive(mobile, `Session heal: creation error — ${errMsg}`);
+                results.deactivated++;
+                results.errors.push({ mobile, error: errMsg, action: 'deactivated (creation error)' });
+            }
+            await (0, Helpers_1.sleep)(5000);
+        }
+        this.logger.log(`[HealSessions] Complete: ${results.total} total, ${results.healthy} healthy, ` +
+            `${results.healed} healed, ${results.deactivated} deactivated, ${results.skipped} skipped`);
+        return results;
     }
 }
 exports.BaseClientService = BaseClientService;

@@ -125,6 +125,10 @@ let BufferClientController = class BufferClientController {
     async createOrUpdate(mobile, updateClientDto) {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
+    async healDeadSessions() {
+        this.clientService.healDeadSessions();
+        return 'Session healing initiated for buffer clients';
+    }
     async remove(mobile) {
         return this.clientService.remove(mobile);
     }
@@ -400,6 +404,17 @@ __decorate([
     __metadata("design:paramtypes", [String, update_buffer_client_dto_1.UpdateBufferClientDto]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "createOrUpdate", null);
+__decorate([
+    (0, common_1.Post)('healDeadSessions'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Heal dead sessions for buffer clients',
+        description: 'Iterates all active buffer clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.'
+    }),
+    (0, swagger_1.ApiAcceptedResponse)({ schema: { type: 'string' } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "healDeadSessions", null);
 __decorate([
     (0, common_1.Delete)(':mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Delete buffer client by mobile' }),
