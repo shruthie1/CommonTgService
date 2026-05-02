@@ -152,6 +152,17 @@ export class PromoteClientController {
     return this.clientService.createOrUpdate(mobile, updateClientDto);
   }
 
+  @Post('healDeadSessions')
+  @ApiOperation({
+    summary: 'Heal dead sessions for promote clients',
+    description: 'Iterates all active promote clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.'
+  })
+  @ApiAcceptedResponse({ schema: { type: 'string' } })
+  async healDeadSessions(): Promise<string> {
+    this.clientService.healDeadSessions();
+    return 'Session healing initiated for promote clients';
+  }
+
   @Delete('mobile/:mobile')
   @ApiOperation({ summary: 'Delete promote client by mobile' })
   @ApiParam({ name: 'mobile', description: 'Promote client mobile number', type: String })

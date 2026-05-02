@@ -832,7 +832,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             ...clientMainMobiles,
             ...promoteClients.map((c) => c.mobile),
             ...assignedBufferMobiles,
-        ].filter(Boolean);
+        ].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
         const eligibleUserCount = await this.usersService.executeQuery(
@@ -1037,6 +1037,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         this.isCheckingBufferClients = true;
         try {
             await this._checkBufferClientsInternal();
+        } catch (error) {
+            const errMsg = parseError(error, 'checkBufferClients').message;
+            this.logger.error(`checkBufferClients crashed: ${errMsg}`);
+            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkBufferClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
             this.isCheckingBufferClients = false;
         }
@@ -1061,7 +1065,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             ...clientMainMobiles,
             ...promoteClients.map((c) => c.mobile),
             ...allBufferClientMobiles,
-        ].filter(Boolean);
+        ].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
         const healthyBufferClientsPerClient = new Map<string, number>();
         for (const doc of assignedBufferClients) {
@@ -1217,7 +1221,13 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             createdEntries: [],
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
+            try {
+                dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
+            } catch (error) {
+                const errMsg = parseError(error, 'addNewUserstoBufferClientsDynamic').message;
+                this.logger.error(`Dynamic buffer enrollment failed: ${errMsg}`);
+                try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ Buffer Enrollment Failed\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            }
         }
 
         await this.sendBufferCheckSummaryNotification(

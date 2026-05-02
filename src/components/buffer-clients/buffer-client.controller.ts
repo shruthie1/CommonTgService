@@ -288,6 +288,17 @@ export class BufferClientController {
     return this.clientService.createOrUpdate(mobile, updateClientDto);
   }
 
+  @Post('healDeadSessions')
+  @ApiOperation({
+    summary: 'Heal dead sessions for buffer clients',
+    description: 'Iterates all active buffer clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.'
+  })
+  @ApiAcceptedResponse({ schema: { type: 'string' } })
+  async healDeadSessions(): Promise<string> {
+    this.clientService.healDeadSessions();
+    return 'Session healing initiated for buffer clients';
+  }
+
   @Delete(':mobile')
   @ApiOperation({ summary: 'Delete buffer client by mobile' })
   @ApiParam({ name: 'mobile', description: 'Buffer client mobile number', type: String })

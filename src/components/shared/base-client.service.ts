@@ -2134,13 +2134,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
             return client;
         } catch (error) {
-            this.logger.warn(`Session liveness check failed for ${mobile}: ${parseError(error, 'verifySessionLive').message}`);
+            const errorDetails = parseError(error, `verifySessionLive: ${mobile}`);
+            this.logger.warn(`Session liveness check failed for ${mobile}: ${errorDetails.message}`);
             if (client) {
                 try {
                     await client.destroy();
                 } catch {
                     // Best-effort cleanup only.
                 }
+            }
+            // Re-throw permanent errors so callers can mark the account inactive
+            if (isPermanentError(errorDetails)) {
+                throw error;
             }
             return null;
         }
@@ -2291,7 +2296,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.log(`Session rotation complete for ${mobile} — active session retained, users backup verified`);
             return true;
         } catch (error) {
-            this.logger.error(`Session rotation failed for ${mobile}: ${parseError(error, 'rotateSession').message}`);
+            const errorDetails = parseError(error, 'rotateSession');
+            this.logger.error(`Session rotation failed for ${mobile}: ${errorDetails.message}`);
+            // Re-throw permanent errors so processClient can mark the account inactive
+            if (isPermanentError(errorDetails)) {
+                throw error;
+            }
             return false;
         } finally {
             if (activeClient) {
@@ -2303,5 +2313,105 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
             await this.safeUnregisterClient(mobile);
         }
+    }
+
+    // ---- Session Healing ----
+
+    /**
+     * Iterate all active clients (skipping inUse), test each session,
+     * and for dead sessions attempt to create a new one from the user's backup.
+     * Only marks inactive when backup recovery also fails.
+     */
+    async healDeadSessions(): Promise<{
+        total: number;
+        healthy: number;
+        healed: number;
+        deactivated: number;
+        skipped: number;
+        errors: Array<{ mobile: string; error: string; action: string }>;
+    }> {
+        const results = {
+            total: 0,
+            healthy: 0,
+            healed: 0,
+            deactivated: 0,
+            skipped: 0,
+            errors: [] as Array<{ mobile: string; error: string; action: string }>,
+        };
+
+        // Fetch all active clients that are NOT currently in use
+        const clients = await this.model.find({
+            status: 'active',
+            inUse: { $ne: true },
+        }).lean().exec();
+
+        results.total = clients.length;
+        this.logger.log(`[HealSessions] Starting session heal for ${clients.length} ${this.clientType} clients`);
+
+        for (const doc of clients) {
+            const mobile = (doc as any).mobile as string;
+            const session = (doc as any).session as string;
+
+            if (!session?.trim()) {
+                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — skipping`);
+                results.skipped++;
+                continue;
+            }
+
+            // Step 1: Test session liveness
+            let isAlive = false;
+            let livenessError = '';
+
+            try {
+                const client = await this.createVerifiedSessionClient(mobile, session);
+                if (client) {
+                    isAlive = true;
+                    try { await client.destroy(); } catch { /* cleanup */ }
+                }
+            } catch (error) {
+                livenessError = parseError(error, `healSession:${mobile}`).message;
+            }
+
+            if (isAlive) {
+                results.healthy++;
+                this.logger.log(`[HealSessions] ${mobile}: session alive ✓`);
+                await sleep(2000);
+                continue;
+            }
+
+            this.logger.warn(`[HealSessions] ${mobile}: session dead (${livenessError || 'returned null'}). Attempting recovery...`);
+
+            // Step 2: Create new session (service picks best strategy internally)
+            try {
+                const createResult = await this.sessionService.createSession({ mobile });
+
+                if (createResult.success && createResult.session) {
+                    await this.update(mobile, { session: createResult.session } as any);
+                    results.healed++;
+                    this.logger.log(`[HealSessions] ${mobile}: session healed ✓`);
+                } else {
+                    this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
+                    await this.markAsInactive(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    results.deactivated++;
+                    results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivated' });
+                }
+            } catch (error) {
+                const errMsg = parseError(error, `healSessionCreate:${mobile}`).message;
+                this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
+                await this.markAsInactive(mobile, `Session heal: creation error — ${errMsg}`);
+                results.deactivated++;
+                results.errors.push({ mobile, error: errMsg, action: 'deactivated (creation error)' });
+            }
+
+            // Rate-limit between session creation attempts
+            await sleep(5000);
+        }
+
+        this.logger.log(
+            `[HealSessions] Complete: ${results.total} total, ${results.healthy} healthy, ` +
+            `${results.healed} healed, ${results.deactivated} deactivated, ${results.skipped} skipped`
+        );
+
+        return results;
     }
 }

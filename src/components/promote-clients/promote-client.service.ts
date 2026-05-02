@@ -791,6 +791,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         this.isCheckingPromoteClients = true;
         try {
             await this._checkPromoteClientsInternal();
+        } catch (error) {
+            const errMsg = parseError(error, 'checkPromoteClients').message;
+            this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
+            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkPromoteClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
             this.isCheckingPromoteClients = false;
         }
@@ -813,7 +817,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         // Exclude ALL promote client mobiles (not just active) from candidate pool to prevent re-enrollment
         const allPromoteClientMobiles = (await this.promoteClientModel.find({}, { mobile: 1 }).lean().exec()).map((doc) => doc.mobile);
 
-        const goodIds = [...clientMainMobiles, ...bufferClientIds, ...allPromoteClientMobiles].filter(Boolean);
+        const goodIds = [...clientMainMobiles, ...bufferClientIds, ...allPromoteClientMobiles].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
         const healthyPromoteClientsPerClient = new Map<string, number>();
         for (const doc of assignedPromoteClients) {
@@ -954,7 +958,13 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             createdEntries: [],
         };
         if (clientNeedingPromoteClients.length > 0 && totalSlotsNeeded > 0) {
-            dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
+            try {
+                dynamicCreateResult = await this.addNewUserstoPromoteClientsDynamic([], goodIds, clientNeedingPromoteClients, healthyPromoteClientsPerClient);
+            } catch (error) {
+                const errMsg = parseError(error, 'addNewUserstoPromoteClientsDynamic').message;
+                this.logger.error(`Dynamic promote enrollment failed: ${errMsg}`);
+                try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ Promote Enrollment Failed\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            }
         }
 
         await this.sendPromoteCheckSummaryNotification(

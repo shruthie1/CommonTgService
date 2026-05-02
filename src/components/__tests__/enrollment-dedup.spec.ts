@@ -247,12 +247,13 @@ describe('Enrollment Deduplication', () => {
             expect(callCount).toBe(2);
         });
 
-        it('promote: flag resets even if internal method throws', async () => {
+        it('promote: flag resets even if internal method throws (error is caught, not propagated)', async () => {
             (promoteService as any)._checkPromoteClientsInternal = jest.fn(async () => {
                 throw new Error('simulated crash');
             });
 
-            await expect(promoteService.checkPromoteClients()).rejects.toThrow('simulated crash');
+            // Error is caught internally — does not reject
+            await promoteService.checkPromoteClients();
 
             // Flag should be reset — next call must work
             let ranAgain = false;
@@ -261,12 +262,13 @@ describe('Enrollment Deduplication', () => {
             expect(ranAgain).toBe(true);
         });
 
-        it('buffer: flag resets even if internal method throws', async () => {
+        it('buffer: flag resets even if internal method throws (error is caught, not propagated)', async () => {
             (bufferService as any)._checkBufferClientsInternal = jest.fn(async () => {
                 throw new Error('simulated crash');
             });
 
-            await expect(bufferService.checkBufferClients()).rejects.toThrow('simulated crash');
+            // Error is caught internally — does not reject
+            await bufferService.checkBufferClients();
 
             let ranAgain = false;
             (bufferService as any)._checkBufferClientsInternal = jest.fn(async () => { ranAgain = true; });

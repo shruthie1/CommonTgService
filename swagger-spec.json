@@ -9174,6 +9174,29 @@
         ]
       }
     },
+    "/bufferclients/healDeadSessions": {
+      "post": {
+        "description": "Iterates all active buffer clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.",
+        "operationId": "BufferClientController_healDeadSessions",
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Heal dead sessions for buffer clients",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
     "/channels": {
       "post": {
         "operationId": "ChannelsController_create",
@@ -9884,6 +9907,29 @@
           }
         },
         "summary": "Delete promote client by mobile",
+        "tags": [
+          "Promote Clients"
+        ]
+      }
+    },
+    "/promoteclients/healDeadSessions": {
+      "post": {
+        "description": "Iterates all active promote clients (skipping inUse), tests each session, creates new session from backup if dead, or marks inactive. Fire-and-forget — returns immediately.",
+        "operationId": "PromoteClientController_healDeadSessions",
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Heal dead sessions for promote clients",
         "tags": [
           "Promote Clients"
         ]
