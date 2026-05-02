@@ -3,4 +3,5 @@ export declare class SetupClientQueryDto {
     archiveOld: boolean;
     mobile?: string;
     formalities: boolean;
+    reason?: string;
 }

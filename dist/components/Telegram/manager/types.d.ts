@@ -14,6 +14,7 @@ export interface ActiveClientSetup {
     newMobile: string;
     existingMobile: string;
     clientId: string;
+    reason?: string;
 }
 export interface GroupCreationResult {
     id: bigInt.BigInteger;

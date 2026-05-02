@@ -49,4 +49,10 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], SetupClientQueryDto.prototype, "formalities", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Reason for triggering the swap (e.g. permanent error from tg-aut)' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], SetupClientQueryDto.prototype, "reason", void 0);
 //# sourceMappingURL=setup-client.dto.js.map
