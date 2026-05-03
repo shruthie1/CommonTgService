@@ -32,8 +32,34 @@ export declare class UsersService {
         limit: number;
         totalPages: number;
     }>;
+    leaderboard(options: {
+        aspect: string;
+        limit?: number;
+    }): Promise<{
+        ranked: any[];
+        stats: {
+            highest: number;
+            average: number;
+            withValue: number;
+        };
+    }>;
     findAll(limit?: number, skip?: number): Promise<User[]>;
     findAllSorted(limit?: number, skip?: number, sort?: Record<string, 1 | -1>): Promise<User[]>;
+    summary(): Promise<Record<string, any>>;
+    paginated(options: {
+        page?: number;
+        limit?: number;
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
+        search?: string;
+        filter?: 'all' | 'active' | 'starred' | 'expired' | 'withCalls';
+    }): Promise<{
+        users: User[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
     findOne(tgId: string): Promise<User>;
     update(tgId: string, updateDto: UpdateUserDto): Promise<User>;
     updateByFilter(filter: QueryFilter<UserDocument>, updateDto: UpdateUserDto): Promise<number>;

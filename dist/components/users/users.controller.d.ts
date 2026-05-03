@@ -27,6 +27,22 @@ export declare class UsersController {
         limit: number;
         totalPages: number;
     }>;
+    leaderboard(aspect: string, limit?: string): Promise<{
+        ranked: any[];
+        stats: {
+            highest: number;
+            average: number;
+            withValue: number;
+        };
+    }>;
+    summary(): Promise<Record<string, any>>;
+    paginated(page?: string, limit?: string, sortBy?: string, sortOrder?: string, search?: string, filter?: string): Promise<{
+        users: User[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
     findAll(limit?: string, skip?: string, sortBy?: string, sortOrder?: string): Promise<User[]>;
     getUserRelationships(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;

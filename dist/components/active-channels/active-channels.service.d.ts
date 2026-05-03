@@ -20,6 +20,21 @@ export declare class ActiveChannelsService {
     remove(channelId: string): Promise<void>;
     search(filter: any): Promise<ActiveChannel[]>;
     getActiveChannels(limit?: number, skip?: number, notIds?: string[]): Promise<ActiveChannel[]>;
+    analytics(): Promise<Record<string, any>>;
+    paginated(options: {
+        page?: number;
+        limit?: number;
+        sortBy?: string;
+        sortOrder?: 'asc' | 'desc';
+        search?: string;
+        filter?: string;
+    }): Promise<{
+        channels: ActiveChannel[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>;
     executeQuery(query: any, sort?: any, limit?: number, skip?: number): Promise<ActiveChannel[]>;
     resetWordRestrictions(): Promise<void>;
     resetAvailableMsgs(): Promise<void>;

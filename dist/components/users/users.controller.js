@@ -80,6 +80,27 @@ let UsersController = class UsersController {
             starred: starred === 'true' ? true : undefined
         });
     }
+    async leaderboard(aspect, limit) {
+        if (!aspect)
+            throw new common_1.BadRequestException('aspect query parameter is required');
+        return this.usersService.leaderboard({
+            aspect,
+            limit: limit ? parseInt(limit, 10) : undefined,
+        });
+    }
+    async summary() {
+        return this.usersService.summary();
+    }
+    async paginated(page, limit, sortBy, sortOrder, search, filter) {
+        return this.usersService.paginated({
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
+            sortBy: sortBy || undefined,
+            sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc'),
+            search: search || undefined,
+            filter: filter || undefined,
+        });
+    }
     async findAll(limit, skip, sortBy, sortOrder) {
         const limitNum = limit ? parseInt(limit, 10) : 100;
         const skipNum = skip ? parseInt(skip, 10) : 0;
@@ -201,6 +222,92 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getTopInteractionUsers", null);
+__decorate([
+    (0, common_1.Get)('leaderboard'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get ranked users for leaderboard by aspect' }),
+    (0, swagger_1.ApiQuery)({ name: 'aspect', required: true, type: String, description: 'Aspect to rank by: msgs, totalChats, personalChats, channels, contacts, totalCalls, incomingCalls, outgoingCalls, videoCalls, totalMedia, otherPhotos, otherVideos, ownPhotos, ownVideos, movieCount, relationshipScore, relationshipBestScore, engagement, recency' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of top users to return (default: 25, max: 100)' }),
+    (0, swagger_1.ApiOkResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                ranked: { type: 'array' },
+                stats: {
+                    type: 'object',
+                    properties: {
+                        highest: { type: 'number' },
+                        average: { type: 'number' },
+                        withValue: { type: 'number' },
+                    },
+                },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Query)('aspect')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "leaderboard", null);
+__decorate([
+    (0, common_1.Get)('summary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get aggregated user stats for dashboard' }),
+    (0, swagger_1.ApiOkResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                total: { type: 'number' },
+                active: { type: 'number' },
+                starred: { type: 'number' },
+                expired: { type: 'number' },
+                withTwoFA: { type: 'number' },
+                withCalls: { type: 'number' },
+                withRelationship: { type: 'number' },
+                avgMsgs: { type: 'number' },
+                avgContacts: { type: 'number' },
+                avgChats: { type: 'number' },
+                totalMsgs: { type: 'number' },
+                totalCalls: { type: 'number' },
+                totalContacts: { type: 'number' },
+                genderBreakdown: { type: 'object' },
+            },
+        },
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "summary", null);
+__decorate([
+    (0, common_1.Get)('paginated'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get paginated users with search and filters' }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 50, max: 200)' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String, description: 'Sort field (default: lastActive)' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' }),
+    (0, swagger_1.ApiQuery)({ name: 'search', required: false, type: String, description: 'Search by name, mobile, username, or tgId' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, type: String, description: 'all | active | starred | expired | withCalls' }),
+    (0, swagger_1.ApiOkResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                users: { type: 'array' },
+                total: { type: 'number' },
+                page: { type: 'number' },
+                limit: { type: 'number' },
+                totalPages: { type: 'number' },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('sortBy')),
+    __param(3, (0, common_1.Query)('sortOrder')),
+    __param(4, (0, common_1.Query)('search')),
+    __param(5, (0, common_1.Query)('filter')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "paginated", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all users with optional sorting' }),

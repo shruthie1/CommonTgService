@@ -28,6 +28,19 @@ let ActiveChannelsController = class ActiveChannelsController {
     async createMultiple(createChannelDtos) {
         return this.activeChannelsService.createMultiple(createChannelDtos);
     }
+    async analytics() {
+        return this.activeChannelsService.analytics();
+    }
+    async paginated(page, limit, sortBy, sortOrder, search, filter) {
+        return this.activeChannelsService.paginated({
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
+            sortBy: sortBy || undefined,
+            sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc'),
+            search: search || undefined,
+            filter: filter || undefined,
+        });
+    }
     search(query) {
         return this.activeChannelsService.search(query);
     }
@@ -62,6 +75,32 @@ __decorate([
     __metadata("design:paramtypes", [Array]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "createMultiple", null);
+__decorate([
+    (0, common_1.Get)('analytics'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get comprehensive channel analytics' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "analytics", null);
+__decorate([
+    (0, common_1.Get)('paginated'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get paginated channels with search and filters' }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'search', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | temp_banned | with_errors | exhausted | high_deleted' }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('sortBy')),
+    __param(3, (0, common_1.Query)('sortOrder')),
+    __param(4, (0, common_1.Query)('search')),
+    __param(5, (0, common_1.Query)('filter')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "paginated", null);
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search channels by filters' }),
