@@ -20,6 +20,7 @@ export declare class PromoteClientController {
     findOne(mobile: string): Promise<PromoteClient>;
     update(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
     createOrUpdate(mobile: string, updateClientDto: UpdatePromoteClientDto): Promise<PromoteClient>;
+    healDeadSessions(): Promise<string>;
     remove(mobile: string): Promise<void>;
     executeQuery(query: object): Promise<any>;
     refreshProfilePics(mobile: string): Promise<{

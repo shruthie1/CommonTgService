@@ -1663,13 +1663,17 @@ class BaseClientService {
             return client;
         }
         catch (error) {
-            this.logger.warn(`Session liveness check failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'verifySessionLive').message}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `verifySessionLive: ${mobile}`);
+            this.logger.warn(`Session liveness check failed for ${mobile}: ${errorDetails.message}`);
             if (client) {
                 try {
                     await client.destroy();
                 }
                 catch {
                 }
+            }
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                throw error;
             }
             return null;
         }
@@ -1789,7 +1793,11 @@ class BaseClientService {
             return true;
         }
         catch (error) {
-            this.logger.error(`Session rotation failed for ${mobile}: ${(0, parseError_1.parseError)(error, 'rotateSession').message}`);
+            const errorDetails = (0, parseError_1.parseError)(error, 'rotateSession');
+            this.logger.error(`Session rotation failed for ${mobile}: ${errorDetails.message}`);
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                throw error;
+            }
             return false;
         }
         finally {
@@ -1802,6 +1810,78 @@ class BaseClientService {
             }
             await this.safeUnregisterClient(mobile);
         }
+    }
+    async healDeadSessions() {
+        const results = {
+            total: 0,
+            healthy: 0,
+            healed: 0,
+            deactivated: 0,
+            skipped: 0,
+            errors: [],
+        };
+        const clients = await this.model.find({
+            status: 'active',
+            inUse: { $ne: true },
+        }).lean().exec();
+        results.total = clients.length;
+        this.logger.log(`[HealSessions] Starting session heal for ${clients.length} ${this.clientType} clients`);
+        for (const doc of clients) {
+            const mobile = doc.mobile;
+            const session = doc.session;
+            if (!session?.trim()) {
+                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — skipping`);
+                results.skipped++;
+                continue;
+            }
+            let isAlive = false;
+            let livenessError = '';
+            try {
+                const client = await this.createVerifiedSessionClient(mobile, session);
+                if (client) {
+                    isAlive = true;
+                    try {
+                        await client.destroy();
+                    }
+                    catch { }
+                }
+            }
+            catch (error) {
+                livenessError = (0, parseError_1.parseError)(error, `healSession:${mobile}`).message;
+            }
+            if (isAlive) {
+                results.healthy++;
+                this.logger.log(`[HealSessions] ${mobile}: session alive ✓`);
+                await (0, Helpers_1.sleep)(2000);
+                continue;
+            }
+            this.logger.warn(`[HealSessions] ${mobile}: session dead (${livenessError || 'returned null'}). Attempting recovery...`);
+            try {
+                const createResult = await this.sessionService.createSession({ mobile });
+                if (createResult.success && createResult.session) {
+                    await this.update(mobile, { session: createResult.session });
+                    results.healed++;
+                    this.logger.log(`[HealSessions] ${mobile}: session healed ✓`);
+                }
+                else {
+                    this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
+                    await this.markAsInactive(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    results.deactivated++;
+                    results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivated' });
+                }
+            }
+            catch (error) {
+                const errMsg = (0, parseError_1.parseError)(error, `healSessionCreate:${mobile}`).message;
+                this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
+                await this.markAsInactive(mobile, `Session heal: creation error — ${errMsg}`);
+                results.deactivated++;
+                results.errors.push({ mobile, error: errMsg, action: 'deactivated (creation error)' });
+            }
+            await (0, Helpers_1.sleep)(5000);
+        }
+        this.logger.log(`[HealSessions] Complete: ${results.total} total, ${results.healthy} healthy, ` +
+            `${results.healed} healed, ${results.deactivated} deactivated, ${results.skipped} skipped`);
+        return results;
     }
 }
 exports.BaseClientService = BaseClientService;

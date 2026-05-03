@@ -257,4 +257,16 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     }>;
     protected verifyRotationPersistence(mobile: string, activeSession: string, expectedBackupSession: string): Promise<boolean>;
     rotateSession(mobile: string): Promise<boolean>;
+    healDeadSessions(): Promise<{
+        total: number;
+        healthy: number;
+        healed: number;
+        deactivated: number;
+        skipped: number;
+        errors: Array<{
+            mobile: string;
+            error: string;
+            action: string;
+        }>;
+    }>;
 }

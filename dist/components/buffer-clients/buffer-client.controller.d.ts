@@ -39,5 +39,6 @@ export declare class BufferClientController {
     findOne(mobile: string): Promise<BufferClient>;
     update(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
     createOrUpdate(mobile: string, updateClientDto: UpdateBufferClientDto): Promise<BufferClient>;
+    healDeadSessions(): Promise<string>;
     remove(mobile: string): Promise<void>;
 }
