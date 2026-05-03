@@ -137,6 +137,102 @@ export class UsersController {
       starred: starred === 'true' ? true : undefined });
   }
 
+  @Get('leaderboard')
+  @ApiOperation({ summary: 'Get ranked users for leaderboard by aspect' })
+  @ApiQuery({ name: 'aspect', required: true, type: String, description: 'Aspect to rank by: msgs, totalChats, personalChats, channels, contacts, totalCalls, incomingCalls, outgoingCalls, videoCalls, totalMedia, otherPhotos, otherVideos, ownPhotos, ownVideos, movieCount, relationshipScore, relationshipBestScore, engagement, recency' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of top users to return (default: 25, max: 100)' })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: {
+        ranked: { type: 'array' },
+        stats: {
+          type: 'object',
+          properties: {
+            highest: { type: 'number' },
+            average: { type: 'number' },
+            withValue: { type: 'number' },
+          },
+        },
+      },
+    },
+  })
+  async leaderboard(
+    @Query('aspect') aspect: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!aspect) throw new BadRequestException('aspect query parameter is required');
+    return this.usersService.leaderboard({
+      aspect,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get('summary')
+  @ApiOperation({ summary: 'Get aggregated user stats for dashboard' })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: {
+        total: { type: 'number' },
+        active: { type: 'number' },
+        starred: { type: 'number' },
+        expired: { type: 'number' },
+        withTwoFA: { type: 'number' },
+        withCalls: { type: 'number' },
+        withRelationship: { type: 'number' },
+        avgMsgs: { type: 'number' },
+        avgContacts: { type: 'number' },
+        avgChats: { type: 'number' },
+        totalMsgs: { type: 'number' },
+        totalCalls: { type: 'number' },
+        totalContacts: { type: 'number' },
+        genderBreakdown: { type: 'object' },
+      },
+    },
+  })
+  async summary() {
+    return this.usersService.summary();
+  }
+
+  @Get('paginated')
+  @ApiOperation({ summary: 'Get paginated users with search and filters' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 50, max: 200)' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Sort field (default: lastActive)' })
+  @ApiQuery({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search by name, mobile, username, or tgId' })
+  @ApiQuery({ name: 'filter', required: false, type: String, description: 'all | active | starred | expired | withCalls' })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: {
+        users: { type: 'array' },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
+  })
+  async paginated(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('search') search?: string,
+    @Query('filter') filter?: string,
+  ) {
+    return this.usersService.paginated({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      sortBy: sortBy || undefined,
+      sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+      search: search || undefined,
+      filter: (filter as any) || undefined,
+    });
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all users with optional sorting' })
   @ApiQuery({ name: 'limit', required: false, type: Number })

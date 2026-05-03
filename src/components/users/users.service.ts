@@ -132,6 +132,132 @@ export class UsersService {
     return { users: users as User[], total, page: pageNum, limit: limitNum, totalPages };
   }
 
+  async leaderboard(options: {
+    aspect: string;
+    limit?: number;
+  }): Promise<{
+    ranked: any[];
+    stats: { highest: number; average: number; withValue: number };
+  }> {
+    const { aspect, limit = 25 } = options;
+    const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+
+    // Map aspect IDs to MongoDB field expressions
+    const ASPECT_MAP: Record<string, { field?: string; computed?: any }> = {
+      msgs: { field: 'msgs' },
+      totalChats: { field: 'totalChats' },
+      personalChats: { field: 'personalChats' },
+      channels: { field: 'channels' },
+      contacts: { field: 'contacts' },
+      totalCalls: { field: 'calls.totalCalls' },
+      incomingCalls: { field: 'calls.incoming' },
+      outgoingCalls: { field: 'calls.outgoing' },
+      videoCalls: { field: 'calls.video' },
+      movieCount: { field: 'movieCount' },
+      otherPhotos: { field: 'otherPhotoCount' },
+      otherVideos: { field: 'otherVideoCount' },
+      ownPhotos: { field: 'ownPhotoCount' },
+      ownVideos: { field: 'ownVideoCount' },
+      relationshipScore: { field: 'relationships.score' },
+      relationshipBestScore: { field: 'relationships.bestScore' },
+      totalMedia: {
+        computed: {
+          $add: [
+            { $ifNull: ['$photoCount', 0] },
+            { $ifNull: ['$videoCount', 0] },
+            { $ifNull: ['$otherPhotoCount', 0] },
+            { $ifNull: ['$otherVideoCount', 0] },
+            { $ifNull: ['$ownPhotoCount', 0] },
+            { $ifNull: ['$ownVideoCount', 0] },
+          ],
+        },
+      },
+      engagement: {
+        computed: {
+          $add: [
+            { $ifNull: ['$msgs', 0] },
+            { $multiply: [{ $ifNull: ['$totalChats', 0] }, 10] },
+            { $multiply: [{ $ifNull: ['$calls.totalCalls', 0] }, 20] },
+            { $multiply: [{ $ifNull: ['$contacts', 0] }, 2] },
+          ],
+        },
+      },
+      recency: { field: 'lastActive' },
+    };
+
+    const aspectDef = ASPECT_MAP[aspect];
+    if (!aspectDef) {
+      throw new BadRequestException(`Unknown aspect: ${aspect}`);
+    }
+
+    let excludedMobiles: string[] = [];
+    try {
+      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    } catch { }
+
+    const matchStage: any = {};
+    if (excludedMobiles.length > 0) matchStage.mobile = { $nin: excludedMobiles };
+
+    // For recency, sort by lastActive descending (string comparison works for ISO dates)
+    const isRecency = aspect === 'recency';
+    const sortField = '_sortValue';
+
+    const valueExpr = aspectDef.computed
+      ? aspectDef.computed
+      : (isRecency ? `$${aspectDef.field}` : { $ifNull: [`$${aspectDef.field}`, 0] });
+
+    const pipeline: any[] = [
+      { $match: matchStage },
+      { $addFields: { [sortField]: valueExpr } },
+    ];
+
+    // Filter out zero/null values (except recency where we filter empty strings)
+    if (isRecency) {
+      pipeline.push({ $match: { [sortField]: { $exists: true, $nin: ['', null] } } });
+    } else {
+      pipeline.push({ $match: { [sortField]: { $gt: 0 } } });
+    }
+
+    // Stats facet: get count + avg + max, then top N ranked
+    pipeline.push({
+      $facet: {
+        stats: [
+          {
+            $group: {
+              _id: null,
+              withValue: { $sum: 1 },
+              average: { $avg: isRecency ? 1 : `$${sortField}` },
+              highest: { $max: isRecency ? 1 : `$${sortField}` },
+            },
+          },
+        ],
+        ranked: [
+          { $sort: { [sortField]: -1 } },
+          { $limit: limitNum },
+          {
+            $project: {
+              session: 0,
+              password: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    const [result] = await this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
+
+    const stats = result.stats[0] || { highest: 0, average: 0, withValue: 0 };
+
+    return {
+      ranked: result.ranked || [],
+      stats: {
+        highest: isRecency ? 0 : Math.round(stats.highest || 0),
+        average: isRecency ? 0 : Math.round(stats.average || 0),
+        withValue: stats.withValue || 0,
+      },
+    };
+  }
+
   async findAll(limit: number = 100, skip: number = 0): Promise<User[]> {
     return this.userModel.find().limit(limit).skip(skip).exec();
   }
@@ -146,6 +272,135 @@ export class UsersService {
     const query = this.userModel.find(filter).lean();
     if (sort) query.sort(sort);
     return query.skip(skip).limit(limit).allowDiskUse(true).exec();
+  }
+
+  async summary(): Promise<Record<string, any>> {
+    const [result] = await this.userModel.aggregate([
+      {
+        $facet: {
+          totals: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                active: {
+                  $sum: { $cond: [{ $gte: ['$lastActive', '2026-01-01'] }, 1, 0] },
+                },
+                starred: { $sum: { $cond: [{ $eq: ['$starred', true] }, 1, 0] } },
+                expired: { $sum: { $cond: [{ $eq: ['$expired', true] }, 1, 0] } },
+                withTwoFA: { $sum: { $cond: [{ $eq: ['$twoFA', true] }, 1, 0] } },
+                withCalls: {
+                  $sum: { $cond: [{ $gt: ['$calls.totalCalls', 0] }, 1, 0] },
+                },
+                withRelationship: {
+                  $sum: { $cond: [{ $gt: ['$relationships.score', 0] }, 1, 0] },
+                },
+                avgMsgs: { $avg: '$msgs' },
+                avgContacts: { $avg: '$contacts' },
+                avgChats: { $avg: '$totalChats' },
+                totalMsgs: { $sum: '$msgs' },
+                totalCalls: { $sum: '$calls.totalCalls' },
+                totalContacts: { $sum: '$contacts' },
+              },
+            },
+          ],
+          genderBreakdown: [
+            { $group: { _id: '$gender', count: { $sum: 1 } } },
+          ],
+        },
+      },
+    ]).allowDiskUse(true).exec();
+
+    const totals = result.totals[0] || {};
+    const genderBreakdown = Object.fromEntries(
+      (result.genderBreakdown || []).map((g: any) => [g._id || 'unknown', g.count]),
+    );
+
+    return {
+      total: totals.total || 0,
+      active: totals.active || 0,
+      starred: totals.starred || 0,
+      expired: totals.expired || 0,
+      withTwoFA: totals.withTwoFA || 0,
+      withCalls: totals.withCalls || 0,
+      withRelationship: totals.withRelationship || 0,
+      avgMsgs: Math.round(totals.avgMsgs || 0),
+      avgContacts: Math.round(totals.avgContacts || 0),
+      avgChats: Math.round(totals.avgChats || 0),
+      totalMsgs: totals.totalMsgs || 0,
+      totalCalls: totals.totalCalls || 0,
+      totalContacts: totals.totalContacts || 0,
+      genderBreakdown,
+    };
+  }
+
+  async paginated(options: {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+    filter?: 'all' | 'active' | 'starred' | 'expired' | 'withCalls';
+  }): Promise<{
+    users: User[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const {
+      page = 1,
+      limit = 50,
+      sortBy = 'lastActive',
+      sortOrder = 'desc',
+      search,
+      filter = 'all',
+    } = options;
+
+    const pageNum = Math.max(1, Math.floor(page));
+    const limitNum = Math.min(Math.max(1, Math.floor(limit)), 200);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query: any = {};
+
+    // Apply filter
+    if (filter === 'active') query.lastActive = { $gte: '2026-01-01' };
+    else if (filter === 'starred') query.starred = true;
+    else if (filter === 'expired') query.expired = true;
+    else if (filter === 'withCalls') query['calls.totalCalls'] = { $gt: 0 };
+
+    // Apply search (name, mobile, username, tgId)
+    if (search?.trim()) {
+      const q = search.trim();
+      query.$or = [
+        { firstName: { $regex: q, $options: 'i' } },
+        { lastName: { $regex: q, $options: 'i' } },
+        { username: { $regex: q, $options: 'i' } },
+        { mobile: { $regex: q } },
+        { tgId: q },
+      ];
+    }
+
+    const total = await this.userModel.countDocuments(query).exec();
+    const totalPages = Math.ceil(total / limitNum);
+
+    if (total === 0) {
+      return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+    }
+
+    const sort: Record<string, 1 | -1> = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+
+    const users = await this.userModel
+      .find(query)
+      .select('-session -password')
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .allowDiskUse(true)
+      .lean()
+      .exec();
+
+    return { users: users as User[], total, page: pageNum, limit: limitNum, totalPages };
   }
 
   async findOne(tgId: string): Promise<User> {

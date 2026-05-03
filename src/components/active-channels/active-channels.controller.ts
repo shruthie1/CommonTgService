@@ -23,6 +23,38 @@ export class ActiveChannelsController {
     return this.activeChannelsService.createMultiple(createChannelDtos);
   }
 
+  @Get('analytics')
+  @ApiOperation({ summary: 'Get comprehensive channel analytics' })
+  async analytics() {
+    return this.activeChannelsService.analytics();
+  }
+
+  @Get('paginated')
+  @ApiOperation({ summary: 'Get paginated channels with search and filters' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({ name: 'sortOrder', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | temp_banned | with_errors | exhausted | high_deleted' })
+  async paginated(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('search') search?: string,
+    @Query('filter') filter?: string,
+  ) {
+    return this.activeChannelsService.paginated({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      sortBy: sortBy || undefined,
+      sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc',
+      search: search || undefined,
+      filter: (filter as any) || undefined,
+    });
+  }
+
   @Get('search')
   @ApiOperation({ summary: 'Search channels by filters' })
   @ApiQuery({ name: 'channelId', required: false, type: String })
