@@ -71,6 +71,7 @@ const homoglyph_normalizer_1 = require("../../utils/homoglyph-normalizer");
 const warmup_phases_1 = require("../shared/warmup-phases");
 const client_helper_utils_1 = require("../shared/client-helper.utils");
 const helpers_1 = require("../Telegram/manager/helpers");
+const mobile_utils_1 = require("../shared/mobile-utils");
 const CONFIG = {
     REFRESH_INTERVAL: 5 * 60 * 1000,
     CACHE_TTL: 10 * 60 * 1000,
@@ -191,9 +192,13 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async create(createClientDto) {
+        const createData = {
+            ...createClientDto,
+            mobile: this.canonicalMobile(createClientDto.mobile),
+        };
         try {
             const createdClient = await this.executeWithRetry(() => {
-                const client = new this.clientModel(createClientDto);
+                const client = new this.clientModel(createData);
                 return client.save();
             });
             this.clientsMap.set(createdClient.clientId, createdClient.toObject());
@@ -201,7 +206,7 @@ let ClientService = ClientService_1 = class ClientService {
             return createdClient;
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to create client | mobile: ${createClientDto.mobile}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to create client | mobile: ${createData.mobile}`);
             throw new common_1.BadRequestException(errorDetails.message);
         }
     }
@@ -260,6 +265,9 @@ let ClientService = ClientService_1 = class ClientService {
         this.ensureInitialized();
         try {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
+            if (cleanUpdateDto.mobile !== undefined) {
+                cleanUpdateDto.mobile = this.canonicalMobile(cleanUpdateDto.mobile);
+            }
             await this.notifyClientUpdate(clientId);
             const updatedClient = await this.executeWithRetry(() => this.clientModel
                 .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, runValidators: true })
@@ -315,6 +323,15 @@ let ClientService = ClientService_1 = class ClientService {
         delete cleaned._id;
         return cleaned;
     }
+    canonicalMobile(mobile) {
+        try {
+            return (0, mobile_utils_1.canonicalizeMobile)(mobile);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new common_1.BadRequestException(message);
+        }
+    }
     async notifyClientUpdate(clientId) {
         await this.notify(`Client Update\n\nClient: ${clientId}\nStatus: Updating existing client`);
     }
@@ -325,7 +342,8 @@ let ClientService = ClientService_1 = class ClientService {
             });
         }
         catch (error) {
-            this.logger.warn('Failed to send notification', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn('Failed to send notification', errorMessage);
         }
     }
     performPostUpdateTasks(updatedClient) {
@@ -347,7 +365,10 @@ let ClientService = ClientService_1 = class ClientService {
     }
     processTextSearchFields(filter) {
         const nextFilter = { ...filter };
-        const textFields = ['name', 'mobile', 'clientId', 'username'];
+        if (typeof nextFilter.mobile === 'string' && nextFilter.mobile) {
+            nextFilter.mobile = this.canonicalMobile(nextFilter.mobile);
+        }
+        const textFields = ['name', 'clientId', 'username'];
         textFields.forEach((field) => {
             const value = nextFilter[field];
             if (typeof value === 'string' && value) {
@@ -365,7 +386,8 @@ let ClientService = ClientService_1 = class ClientService {
                 return await operation();
             }
             catch (error) {
-                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, error.message);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, errorMessage);
                 if (attempt === retries)
                     throw error;
                 const delay = CONFIG.RETRY_DELAY * Math.pow(2, attempt - 1);
@@ -458,7 +480,8 @@ let ClientService = ClientService_1 = class ClientService {
             await this.updateClientSession(newBufferClient.session, newBufferClient.mobile);
         }
         catch (error) {
-            await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${error.message?.substring(0, 200)}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${errorMessage.substring(0, 200)}`);
             const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
@@ -590,8 +613,13 @@ let ClientService = ClientService_1 = class ClientService {
     async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason) {
         try {
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-            if (!existingClientUser)
+            if (!existingClientUser) {
+                const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;
+                this.logger.warn(reasonMessage);
+                await this.markBufferInactiveForArchival(existingMobile, reasonMessage);
+                await this.notify(`Archival User Missing\n\nOld Mobile: ${existingMobile}\nStatus: Buffer marked inactive`);
                 return;
+            }
             if (formalities) {
                 await this.handleFormalities(existingMobile);
             }
@@ -616,9 +644,25 @@ let ClientService = ClientService_1 = class ClientService {
             const errorDetails = (0, parseError_1.parseError)(e, `Error in Archiving Old Client: ${existingMobile}`, false);
             const errorMessage = e instanceof Error ? e.message : String(e);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(existingMobile, errorMessage);
+                await this.markBufferInactiveForArchival(existingMobile, errorMessage);
             }
             await this.notify(`Archival Failed\n\nOld Mobile: ${existingMobile}\nError: ${errorMessage?.substring(0, 200)}`);
+        }
+    }
+    async markBufferInactiveForArchival(mobile, reason) {
+        try {
+            const updated = await this.bufferClientService.updateStatus(mobile, 'inactive', reason);
+            this.logger.warn(`Archived buffer client marked inactive`, {
+                mobile,
+                status: updated?.status,
+                message: updated?.message,
+            });
+            await this.notify(`Buffer Marked Inactive\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 200)}`);
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to mark archived buffer inactive: ${mobile}`, false);
+            this.logger.error(`Failed to mark archived buffer inactive for ${mobile}: ${errorDetails.message}`);
+            await this.notify(`Buffer Inactive Update Failed\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 160)}\nError: ${errorDetails.message.substring(0, 200)}`);
         }
     }
     async handleFormalities(mobile) {
@@ -655,8 +699,8 @@ let ClientService = ClientService_1 = class ClientService {
             const errorDetails = (0, parseError_1.parseError)(error, `Error in Archiving Old Client: ${existingMobile}`, true);
             await this.notify(`Archival Error\n\nOld Mobile: ${existingMobile}\nError: ${errorDetails.message?.substring(0, 200)}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                this.logger.log('Marking archived user inactive:', existingClientUser.mobile);
-                await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
+                this.logger.log('Marking archived buffer inactive:', existingMobile);
+                await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
             }
             else {
                 this.logger.log('Not Deleting user');

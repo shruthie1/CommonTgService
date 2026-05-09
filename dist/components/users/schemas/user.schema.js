@@ -16,6 +16,7 @@ exports.UserSchema = exports.User = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = __importDefault(require("mongoose"));
 const swagger_1 = require("@nestjs/swagger");
+const mobile_utils_1 = require("../../shared/mobile-utils");
 let User = class User {
     constructor() {
         this.twoFA = false;
@@ -27,7 +28,7 @@ let User = class User {
 exports.User = User;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], User.prototype, "mobile", void 0);
 __decorate([

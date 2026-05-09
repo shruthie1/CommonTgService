@@ -45,16 +45,33 @@ const telegram_1 = require("telegram");
 const fs = __importStar(require("fs"));
 const uploads_1 = require("telegram/client/uploads");
 const Helpers_1 = require("telegram/Helpers");
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function getErrorMessage(error) {
+    if (error instanceof Error)
+        return error.message;
+    if (isRecord(error)) {
+        const errorMessage = error.errorMessage;
+        if (typeof errorMessage === 'string')
+            return errorMessage;
+        const message = error.message;
+        if (typeof message === 'string')
+            return message;
+    }
+    return String(error);
+}
 async function ensurePrivacy(ctx, expectations) {
     let readFailures = 0;
     let writeFailures = 0;
+    const failureReasons = [];
     const mismatches = [];
     for (const expectation of expectations) {
         const { key, label, desired } = expectation;
         try {
             const current = await ctx.client.invoke(new telegram_1.Api.account.GetPrivacy({ key }));
-            const hasAllowAll = current.rules.some((r) => r.className === 'PrivacyValueAllowAll');
-            const hasDisallowAll = current.rules.some((r) => r.className === 'PrivacyValueDisallowAll');
+            const hasAllowAll = current.rules.some((rule) => rule.className === 'PrivacyValueAllowAll');
+            const hasDisallowAll = current.rules.some((rule) => rule.className === 'PrivacyValueDisallowAll');
             const isCorrect = desired === 'allow' ? hasAllowAll : hasDisallowAll;
             if (isCorrect) {
                 ctx.logger.debug(ctx.phoneNumber, `Privacy ${label}: OK (${desired})`);
@@ -65,13 +82,15 @@ async function ensurePrivacy(ctx, expectations) {
             }
         }
         catch (err) {
-            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${err.message}`);
+            const errorMessage = getErrorMessage(err);
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${errorMessage}`);
+            failureReasons.push(`${label} read: ${errorMessage}`);
             readFailures++;
         }
         await (0, Helpers_1.sleep)(1000 + Math.random() * 2000);
     }
     if (mismatches.length === 0) {
-        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0 };
+        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0, failureReasons };
     }
     let updated = 0;
     for (const { key, label, desired } of mismatches) {
@@ -84,12 +103,14 @@ async function ensurePrivacy(ctx, expectations) {
             updated++;
         }
         catch (err) {
-            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${err.message}`);
+            const errorMessage = getErrorMessage(err);
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${errorMessage}`);
+            failureReasons.push(`${label} write: ${errorMessage}`);
             writeFailures++;
         }
         await (0, Helpers_1.sleep)(3000 + Math.random() * 7000);
     }
-    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0 };
+    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0, failureReasons };
 }
 const ACTIVE_PRIVACY = [
     { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
@@ -115,7 +136,8 @@ const DEACTIVATE_PRIVACY = [
 async function updatePrivacyforDeletedAccount(ctx) {
     const result = await ensurePrivacy(ctx, DEACTIVATE_PRIVACY);
     if (!result.allConfirmed) {
-        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`;
+        const details = result.failureReasons.slice(0, 5).join('; ');
+        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)${details ? ` — ${details}` : ''}`;
         ctx.logger.warn(ctx.phoneNumber, msg);
         throw new Error(msg);
     }

@@ -61,10 +61,14 @@ Object.defineProperty(exports, "getWarmupPhaseAction", { enumerable: true, get: 
 Object.defineProperty(exports, "WarmupPhase", { enumerable: true, get: function () { return warmup_phases_1.WarmupPhase; } });
 Object.defineProperty(exports, "isAccountReady", { enumerable: true, get: function () { return warmup_phases_1.isAccountReady; } });
 Object.defineProperty(exports, "isAccountWarmingUp", { enumerable: true, get: function () { return warmup_phases_1.isAccountWarmingUp; } });
+const mobile_utils_1 = require("./mobile-utils");
 exports.ClientStatus = {
     ACTIVE: 'active',
     INACTIVE: 'inactive',
 };
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 class BaseClientService {
     resetDailyJoinCountersIfNeeded() {
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
@@ -107,8 +111,8 @@ class BaseClientService {
             return false;
         return now - lastAttemptTs < this.getEffectiveCooldownMs(mobile, lastAttemptTs);
     }
-    inferWarmupPhaseFromProgress(doc) {
-        if (doc.warmupPhase)
+    inferWarmupPhaseFromProgress(doc, useStoredPhase = true) {
+        if (useStoredPhase && doc.warmupPhase)
             return doc.warmupPhase;
         if (doc.sessionRotatedAt)
             return warmup_phases_1.WarmupPhase.SESSION_ROTATED;
@@ -141,10 +145,34 @@ class BaseClientService {
         if (currentRank < this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.IDENTITY)) {
             return null;
         }
+        const privacyDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
         const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
         const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
-        if (twoFADone && !authsRemoved) {
-            return { phase: warmup_phases_1.WarmupPhase.SETTLING, missing: ['otherAuthsRemovedAt'] };
+        const missingSecurity = [];
+        if (!privacyDone)
+            missingSecurity.push('privacyUpdatedAt');
+        if (!twoFADone)
+            missingSecurity.push('twoFASetAt');
+        if (!authsRemoved)
+            missingSecurity.push('otherAuthsRemovedAt');
+        if (missingSecurity.length > 0) {
+            return { phase: warmup_phases_1.WarmupPhase.SETTLING, missing: missingSecurity };
+        }
+        if (currentRank >= this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.GROWING)) {
+            const identityMissing = [];
+            if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) <= 0)
+                identityMissing.push('profilePicsDeletedAt');
+            if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) <= 0)
+                identityMissing.push('nameBioUpdatedAt');
+            if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) <= 0)
+                identityMissing.push('usernameUpdatedAt');
+            if (identityMissing.length > 0) {
+                return { phase: warmup_phases_1.WarmupPhase.IDENTITY, missing: identityMissing };
+            }
+        }
+        if (currentRank >= this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.READY) &&
+            client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) <= 0) {
+            return { phase: warmup_phases_1.WarmupPhase.MATURING, missing: ['profilePicsUpdatedAt'] };
         }
         return null;
     }
@@ -163,10 +191,7 @@ class BaseClientService {
     }
     async repairWarmupMetadata(doc, now) {
         const updateData = {};
-        const savedPhase = doc.warmupPhase;
-        doc.warmupPhase = undefined;
-        const inferredPhase = this.inferWarmupPhaseFromProgress(doc);
-        doc.warmupPhase = savedPhase;
+        const inferredPhase = this.inferWarmupPhaseFromProgress(doc, false);
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
         const missingPrerequisite = this.getMissingPrerequisitePhase(doc);
@@ -278,6 +303,29 @@ class BaseClientService {
         const contextWithMobile = mobile ? `${context}: ${mobile}` : context;
         return (0, parseError_1.parseError)(error, contextWithMobile, false);
     }
+    canonicalMobile(mobile) {
+        try {
+            return (0, mobile_utils_1.canonicalizeMobile)(mobile);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new common_1.BadRequestException(message);
+        }
+    }
+    mobilesMatch(a, b) {
+        return (0, mobile_utils_1.mobilesEqual)(a, b);
+    }
+    async deactivateClient(mobile, reason) {
+        try {
+            await this.updateStatus(mobile, 'inactive', reason);
+            return true;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
+            return false;
+        }
+    }
     async updateUser2FAStatus(tgId, mobile) {
         try {
             await this.usersService.update(tgId, { twoFA: true });
@@ -286,8 +334,37 @@ class BaseClientService {
             this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
         }
     }
+    readNestedString(root, path) {
+        let current = root;
+        for (const segment of path) {
+            if (typeof segment === 'number') {
+                if (!Array.isArray(current))
+                    return '';
+                current = current[segment];
+                continue;
+            }
+            if (!isRecord(current))
+                return '';
+            current = current[segment];
+        }
+        return typeof current === 'string' ? current : '';
+    }
+    getErrorText(error) {
+        if (error instanceof Error)
+            return error.message;
+        if (isRecord(error)) {
+            const errorMessage = error.errorMessage;
+            if (typeof errorMessage === 'string')
+                return errorMessage;
+            const message = error.message;
+            if (typeof message === 'string')
+                return message;
+        }
+        return String(error);
+    }
     isFrozenError(errorDetails) {
-        const message = `${errorDetails?.message || ''} ${errorDetails?.error?.message || ''} ${errorDetails?.error?.errorMessage || ''}`.toLowerCase();
+        const nestedErrorMessage = this.getErrorText(errorDetails.error || '');
+        const message = `${errorDetails?.message || ''} ${nestedErrorMessage}`.toLowerCase();
         return message.includes('frozen_method_invalid') || message.includes('frozen_participant_missing');
     }
     extractConfigValue(node, targetKey) {
@@ -301,7 +378,7 @@ class BaseClientService {
             }
             return undefined;
         }
-        if (typeof node !== 'object')
+        if (!isRecord(node))
             return undefined;
         if (node.key === targetKey && 'value' in node) {
             return node.value;
@@ -325,12 +402,14 @@ class BaseClientService {
             const freezeSince = this.extractConfigValue(appConfig, 'freeze_since_date');
             const freezeUntil = this.extractConfigValue(appConfig, 'freeze_until_date');
             const freezeAppealUrl = this.extractConfigValue(appConfig, 'freeze_appeal_url');
+            const freezeSinceNumber = typeof freezeSince === 'number' || typeof freezeSince === 'string' ? Number(freezeSince) : NaN;
+            const freezeUntilNumber = typeof freezeUntil === 'number' || typeof freezeUntil === 'string' ? Number(freezeUntil) : NaN;
             const extras = [];
-            if (freezeSince)
-                extras.push(`freeze_since=${new Date(Number(freezeSince) * 1000).toISOString()}`);
-            if (freezeUntil)
-                extras.push(`freeze_until=${new Date(Number(freezeUntil) * 1000).toISOString()}`);
-            if (freezeAppealUrl)
+            if (Number.isFinite(freezeSinceNumber))
+                extras.push(`freeze_since=${new Date(freezeSinceNumber * 1000).toISOString()}`);
+            if (Number.isFinite(freezeUntilNumber))
+                extras.push(`freeze_until=${new Date(freezeUntilNumber * 1000).toISOString()}`);
+            if (typeof freezeAppealUrl === 'string' && freezeAppealUrl)
                 extras.push(`appeal_url=${freezeAppealUrl}`);
             return extras.length > 0 ? `${baseReason} (${extras.join(', ')})` : baseReason;
         }
@@ -405,7 +484,7 @@ class BaseClientService {
         const healthCheckIntervalDays = client_helper_utils_1.ClientHelperUtils.gaussianRandom(7, 1.5, 4, 10);
         const needsHealthCheck = !lastChecked || (now - lastChecked > healthCheckIntervalDays * this.ONE_DAY_MS);
         if (!needsHealthCheck) {
-            return true;
+            return { passed: true, performed: false };
         }
         let telegramClient = null;
         try {
@@ -422,17 +501,17 @@ class BaseClientService {
             });
             this.logger.debug(`Health check passed for ${mobile}`);
             await (0, Helpers_1.sleep)(5000);
-            return true;
+            return { passed: true, performed: true };
         }
         catch (error) {
             const errorDetails = this.handleError(error, 'Health check failed', mobile);
             this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
-                await this.markAsInactive(mobile, reason);
+                await this.deactivateClient(mobile, reason);
             }
             await (0, Helpers_1.sleep)(5000);
-            return false;
+            return { passed: false, performed: true };
         }
         finally {
             await connection_manager_1.connectionManager.unregisterClient(mobile);
@@ -463,7 +542,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -502,7 +581,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -620,7 +699,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -638,7 +717,7 @@ class BaseClientService {
             return 'ours';
         }
         catch (error) {
-            const msg = (error?.message || error?.errorMessage || '').toLowerCase();
+            const msg = this.getErrorText(error).toLowerCase();
             if (msg.includes('password_hash_invalid')) {
                 this.logger.warn(`${mobile}: 2FA password verification failed — foreign password`);
                 return 'foreign';
@@ -668,8 +747,8 @@ class BaseClientService {
                 }
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
-                    await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — marked inactive`, { parseMode: 'HTML' });
+                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                     return 0;
                 }
                 throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
@@ -696,7 +775,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -725,8 +804,8 @@ class BaseClientService {
             const errorMsg = errorDetails?.message || '';
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                await this.markAsInactive(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — marked inactive`, { parseMode: 'HTML' });
+                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                 return 0;
             }
             await this.update(doc.mobile, {
@@ -736,7 +815,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -755,6 +834,22 @@ class BaseClientService {
         }
         const now = Date.now();
         let updateCount = 0;
+        const initialLastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+        const initialWarmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (initialLastUsed > 0 && (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY || initialWarmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            if (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY) {
+                const updateData = {
+                    warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
+                };
+                await this.update(doc.mobile, updateData);
+                this.logger.log(`Client ${doc.mobile} has lastUsed in ${initialWarmupPhase}; marking warmup as ${warmup_phases_1.WarmupPhase.SESSION_ROTATED}`);
+                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
+            }
+            this.logger.debug(`Client ${doc.mobile} has been used and is ${initialWarmupPhase}, assuming configured`);
+            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+        }
         try {
             doc = await this.repairWarmupMetadata(doc, now);
         }
@@ -769,8 +864,8 @@ class BaseClientService {
             const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
             if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
                 this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Marked inactive — manual review needed`, { parseMode: 'HTML' });
+                const deactivated = await this.deactivateClient(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
                 return { updateCount: 0 };
             }
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
@@ -797,8 +892,17 @@ class BaseClientService {
         }
         const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
         const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
+        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.READY || warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)) {
             await this.backfillTimestamps(doc.mobile, doc, now);
+            if (warmupPhase === warmup_phases_1.WarmupPhase.READY) {
+                const updateData = {
+                    warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
+                };
+                await this.update(doc.mobile, updateData);
+                this.logger.log(`Client ${doc.mobile} has lastUsed in ${warmupPhase}; marking warmup as ${warmup_phases_1.WarmupPhase.SESSION_ROTATED}`);
+                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
+            }
             this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
             return { updateCount: 0, updateSummary: 'backfill_timestamps' };
         }
@@ -929,8 +1033,8 @@ class BaseClientService {
             }
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                await this.markAsInactive(doc.mobile, reason);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> Marked inactive`, { parseMode: 'HTML' });
+                const deactivated = await this.deactivateClient(doc.mobile, reason);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'}`, { parseMode: 'HTML' });
             }
             else {
                 this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failCount}/${this.MAX_FAILED_ATTEMPTS}\n<b>Error:</b> ${errorDetails?.message?.substring(0, 200) || 'unknown'}`, { parseMode: 'HTML' });
@@ -1101,7 +1205,8 @@ class BaseClientService {
             }
             catch (error) {
                 const errorDetails = this.handleError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`, mobile);
-                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                const rawErrorMessage = this.getErrorText(error);
+                if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
@@ -1110,7 +1215,7 @@ class BaseClientService {
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     }
                     catch (channelError) {
-                        if (channelError?.errorMessage === 'CHANNELS_TOO_MUCH') {
+                        if (this.getErrorText(channelError) === 'CHANNELS_TOO_MUCH') {
                             await this.update(mobile, { channels: 500 });
                         }
                     }
@@ -1118,8 +1223,9 @@ class BaseClientService {
                 else if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
-                    await this.expireUserByMobile(mobile);
+                    const deactivated = await this.deactivateClient(mobile, reason);
+                    if (deactivated)
+                        await this.expireUserByMobile(mobile);
                 }
                 else {
                     const channels = this.joinChannelMap.get(mobile);
@@ -1228,8 +1334,9 @@ class BaseClientService {
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
-                    await this.expireUserByMobile(mobile);
+                    const deactivated = await this.deactivateClient(mobile, reason);
+                    if (deactivated)
+                        await this.expireUserByMobile(mobile);
                     this.removeFromLeaveMap(mobile);
                 }
                 else if (channelsToProcess.length > 0) {
@@ -1419,6 +1526,9 @@ class BaseClientService {
         }
         const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
         if ((0, warmup_phases_1.isAccountReady)(phase)) {
+            return availableDate || client_helper_utils_1.ClientHelperUtils.toDateString(now);
+        }
+        if (phase === warmup_phases_1.WarmupPhase.READY) {
             return availableDate || client_helper_utils_1.ClientHelperUtils.toDateString(now);
         }
         if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
@@ -1865,7 +1975,7 @@ class BaseClientService {
         const clients = await this.model.find({
             status: 'active',
             inUse: { $ne: true },
-        }).lean().exec();
+        }).select('mobile session').exec();
         results.total = clients.length;
         this.logger.log(`[HealSessions] Starting session heal for ${clients.length} ${this.clientType} clients`);
         for (const doc of clients) {
@@ -1907,17 +2017,20 @@ class BaseClientService {
                 }
                 else {
                     this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
-                    await this.markAsInactive(mobile, `Session heal: creation failed — ${createResult.error}`);
-                    results.deactivated++;
-                    results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivated' });
+                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    if (deactivated)
+                        results.deactivated++;
+                    else
+                        results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivation failed' });
                 }
             }
             catch (error) {
                 const errMsg = (0, parseError_1.parseError)(error, `healSessionCreate:${mobile}`).message;
                 this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
-                await this.markAsInactive(mobile, `Session heal: creation error — ${errMsg}`);
-                results.deactivated++;
-                results.errors.push({ mobile, error: errMsg, action: 'deactivated (creation error)' });
+                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`);
+                if (deactivated)
+                    results.deactivated++;
+                results.errors.push({ mobile, error: errMsg, action: deactivated ? 'deactivated (creation error)' : 'deactivation failed (creation error)' });
             }
             await (0, Helpers_1.sleep)(5000);
         }

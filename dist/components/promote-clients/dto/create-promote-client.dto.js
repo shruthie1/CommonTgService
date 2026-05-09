@@ -11,8 +11,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreatePromoteClientDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
+const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
 const base_client_service_1 = require("../../shared/base-client.service");
+const mobile_utils_1 = require("../../shared/mobile-utils");
 class CreatePromoteClientDto {
 }
 exports.CreatePromoteClientDto = CreatePromoteClientDto;
@@ -27,7 +29,9 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Mobile number of the client'
     }),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "mobile", void 0);
 __decorate([

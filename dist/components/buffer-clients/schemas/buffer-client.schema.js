@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BufferClientSchema = exports.BufferClient = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const mongoose_1 = require("@nestjs/mongoose");
+const mobile_utils_1 = require("../../shared/mobile-utils");
 let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
@@ -22,7 +23,7 @@ __decorate([
 ], BufferClient.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "mobile", void 0);
 __decorate([

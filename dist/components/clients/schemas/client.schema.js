@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClientSchema = exports.Client = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
 const swagger_1 = require("@nestjs/swagger");
+const mobile_utils_1 = require("../../shared/mobile-utils");
 let Client = class Client {
 };
 exports.Client = Client;
@@ -37,7 +38,7 @@ __decorate([
 ], Client.prototype, "name", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Mobile number' }),
-    (0, mongoose_1.Prop)({ required: true, unique: true }),
+    (0, mongoose_1.Prop)({ required: true, unique: true, set: mobile_utils_1.canonicalizeMobile }),
     __metadata("design:type", String)
 ], Client.prototype, "mobile", void 0);
 __decorate([

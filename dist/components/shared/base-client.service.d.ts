@@ -77,6 +77,8 @@ export interface ProcessClientResult {
     updateCount: number;
     updateSummary?: string | null;
 }
+type ObjectPathSegment = string | number;
+type MongoQuery = Record<string, unknown>;
 export interface AvailabilityNeeds {
     totalNeeded: number;
     windowNeeds: Array<{
@@ -145,7 +147,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected isMobileDailyCapped(mobile: string): boolean;
     protected getEffectiveCooldownMs(mobile: string, lastUpdateAttempt: number): number;
     protected isOnCooldown(mobile: string, lastUpdateAttempt: Date | string | null | undefined, now: number): boolean;
-    protected inferWarmupPhaseFromProgress(doc: TDoc): WarmupPhaseType;
+    protected inferWarmupPhaseFromProgress(doc: Partial<BaseClientDocument>, useStoredPhase?: boolean): WarmupPhaseType;
     protected getWarmupPhaseRank(phase: WarmupPhaseType | null | undefined): number;
     protected getMissingPrerequisitePhase(doc: TDoc): {
         phase: WarmupPhaseType;
@@ -159,7 +161,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     abstract get config(): ClientConfig;
     abstract updateNameAndBio(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     abstract updateUsername(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
-    abstract findOne(mobile: string, throwErr?: boolean): Promise<TDoc>;
+    abstract findOne(mobile: string, throwErr?: boolean): Promise<TDoc | null>;
     abstract update(mobile: string, updateDto: BaseClientUpdate): Promise<TDoc>;
     abstract markAsInactive(mobile: string, reason: string): Promise<TDoc | null>;
     abstract updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc>;
@@ -171,10 +173,15 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected clearAllTimeouts(): void;
     protected safeUnregisterClient(mobile: string): Promise<void>;
     protected handleError(error: unknown, context: string, mobile?: string): ReturnType<typeof parseError>;
+    protected canonicalMobile(mobile: string): string;
+    protected mobilesMatch(a?: string | null, b?: string | null): boolean;
+    protected deactivateClient(mobile: string, reason: string): Promise<boolean>;
     protected updateUser2FAStatus(tgId: string, mobile: string): Promise<void>;
+    protected readNestedString(root: unknown, path: readonly ObjectPathSegment[]): string;
+    protected getErrorText(error: unknown): string;
     protected isFrozenError(errorDetails: {
         message?: string;
-        error?: any;
+        error?: unknown;
     }): boolean;
     private extractConfigValue;
     protected buildPermanentAccountReason(baseReason: string, telegramClient?: TelegramManager | null): Promise<string>;
@@ -185,7 +192,10 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     clearJoinMap(): void;
     clearLeaveMap(): void;
     protected prepareJoinChannelRefresh(skipExisting: boolean): Promise<Set<string>>;
-    protected performHealthCheck(mobile: string, lastChecked: number, now: number): Promise<boolean>;
+    protected performHealthCheck(mobile: string, lastChecked: number, now: number): Promise<{
+        passed: boolean;
+        performed: boolean;
+    }>;
     protected updatePrivacySettings(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     protected deleteProfilePhotos(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
     private getProfilePicExtension;
@@ -211,7 +221,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected processLeaveChannelSequentially(): Promise<void>;
     clearJoinChannelInterval(): void;
     clearLeaveChannelInterval(): void;
-    protected getMissingWarmupPhaseQuery(clientId?: string): Record<string, any>;
+    protected getMissingWarmupPhaseQuery(clientId?: string): MongoQuery;
     protected selfHealLegacyUsedAccounts(clientId?: string, limit?: number): Promise<number>;
     protected selfHealLegacyWarmupAccounts(clientId?: string, limit?: number): Promise<number>;
     protected selfHealLegacyOperationalState(clientId?: string): Promise<void>;

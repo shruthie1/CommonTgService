@@ -60,6 +60,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     search(filter: ClientSearchFilter | ClientMongoQuery): Promise<Client[]>;
     private ensureInitialized;
     private cleanUpdateObject;
+    private canonicalMobile;
     private notifyClientUpdate;
     private notify;
     private performPostUpdateTasks;
@@ -86,6 +87,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private handleSetupClient;
     updateClientSession(newSession: string, setupMobile?: string): Promise<void>;
     private handleClientArchival;
+    private markBufferInactiveForArchival;
     private handleFormalities;
     private archiveOldClient;
     private findSafeSetupBufferCandidate;

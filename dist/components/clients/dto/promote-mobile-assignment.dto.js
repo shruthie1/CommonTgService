@@ -13,14 +13,15 @@ exports.PromoteMobileAssignmentDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_transformer_1 = require("class-transformer");
 const class_validator_1 = require("class-validator");
+const mobile_utils_1 = require("../../shared/mobile-utils");
 class PromoteMobileAssignmentDto {
 }
 exports.PromoteMobileAssignmentDto = PromoteMobileAssignmentDto;
 __decorate([
     (0, swagger_1.ApiProperty)({}),
-    (0, class_transformer_1.Transform)(({ value }) => value?.trim()),
+    (0, class_transformer_1.Transform)(({ value }) => typeof value === 'string' ? (0, mobile_utils_1.normalizeMobileInput)(value) : value),
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.Matches)(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' }),
+    (0, class_validator_1.Matches)(mobile_utils_1.CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' }),
     __metadata("design:type", String)
 ], PromoteMobileAssignmentDto.prototype, "mobileNumber", void 0);
 //# sourceMappingURL=promote-mobile-assignment.dto.js.map

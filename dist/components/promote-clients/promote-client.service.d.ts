@@ -26,7 +26,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     updateUsername(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: ClientStatusType): Promise<PromoteClient[]>;
-    findOne(mobile: string, throwErr?: boolean): Promise<PromoteClientDocument>;
+    findOne(mobile: string, throwErr?: boolean): Promise<PromoteClientDocument | null>;
     existsByMobile(mobile: string): Promise<boolean>;
     update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument>;
     updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument>;
@@ -38,7 +38,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     createOrUpdate(mobile: string, createOrUpdateUserDto: CreatePromoteClientDto | UpdatePromoteClientDto): Promise<PromoteClient>;
     remove(mobile: string, message?: string): Promise<void>;
     search(filter: Partial<PromoteClient>): Promise<PromoteClient[]>;
-    executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<PromoteClientDocument[]>;
+    executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<PromoteClientDocument[]>;
     setAsPromoteClient(mobile: string, clientId?: string, availableDate?: string): Promise<string>;
     updateInfo(): Promise<void>;
     joinchannelForPromoteClients(skipExisting?: boolean): Promise<string>;

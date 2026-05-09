@@ -29,13 +29,13 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     updateUsername(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number>;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument>;
     findAll(status?: ClientStatusType): Promise<BufferClientDocument[]>;
-    findOne(mobile: string, throwErr?: boolean): Promise<BufferClientDocument>;
+    findOne(mobile: string, throwErr?: boolean): Promise<BufferClientDocument | null>;
     existsByMobile(mobile: string): Promise<boolean>;
     update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument>;
     createOrUpdate(mobile: string, createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClientDocument>;
     remove(mobile: string, message?: string): Promise<void>;
     search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]>;
-    executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<BufferClientDocument[]>;
+    executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<BufferClientDocument[]>;
     updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument>;
     setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument>;
     refillJoinQueue(clientId?: string | null): Promise<number>;
@@ -43,8 +43,8 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     markAsActive(mobile: string, message?: string): Promise<BufferClientDocument>;
     markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null>;
     setAsBufferClient(mobile: string, clientId: string, availableDate?: string): Promise<string>;
-    diagnoseEnrollmentDecision(): Promise<any>;
-    diagnoseWarmupPipeline(): Promise<any>;
+    diagnoseEnrollmentDecision(): Promise<Record<string, unknown>>;
+    diagnoseWarmupPipeline(): Promise<Record<string, unknown>>;
     checkBufferClients(): Promise<void>;
     private _checkBufferClientsInternal;
     updateInfo(): Promise<void>;

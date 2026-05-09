@@ -207,8 +207,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     assignment.assignedBio != null);
                 if (hasAnyAssignment) {
                     const fullUser = await telegramClient.client.invoke(new telegram_1.Api.users.GetFullUser({ id: new telegram_1.Api.InputUserSelf() }));
-                    const currentLastName = fullUser?.users?.[0]?.lastName || '';
-                    const currentBio = fullUser?.fullUser?.about || '';
+                    const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
+                    const currentBio = this.readNestedString(fullUser, ['fullUser', 'about']);
                     const firstNameWrong = assignment?.assignedFirstName != null
                         && !(0, homoglyph_normalizer_1.nameMatchesAssignment)(me.firstName || '', assignment.assignedFirstName);
                     const lastNameWrong = assignment?.assignedLastName != null
@@ -258,7 +258,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -304,7 +304,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         }
@@ -313,15 +313,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async create(bufferClient) {
+        const canonicalMobile = this.canonicalMobile(bufferClient.mobile);
+        const createData = { ...bufferClient, mobile: canonicalMobile };
         const result = await this.bufferClientModel.create({
-            ...bufferClient,
+            ...createData,
             status: bufferClient.status || 'active',
         });
-        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Buffer Client Created</b>',
             '',
-            `<b>Mobile:</b> ${bufferClient.mobile}`,
+            `<b>Mobile:</b> ${canonicalMobile}`,
             `<b>Client ID:</b> ${bufferClient.clientId || '-'}`,
             `<b>Status:</b> ${result.status}`,
             `<b>Available Date:</b> ${bufferClient.availableDate || '-'}`,
@@ -335,18 +337,29 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return this.bufferClientModel.find(filter).exec();
     }
     async findOne(mobile, throwErr = true) {
-        const bufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const bufferClient = (await this.bufferClientModel.findOne({ mobile: canonicalMobile }).exec())?.toJSON() || null;
         if (!bufferClient && throwErr) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
         return bufferClient;
     }
     async existsByMobile(mobile) {
-        return !!(await this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
+        const canonicalMobile = this.canonicalMobile(mobile);
+        return !!(await this.bufferClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
     async update(mobile, updateClientDto) {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const updateData = { ...updateClientDto };
+        if (updateData.mobile !== undefined) {
+            const payloadMobile = this.canonicalMobile(updateData.mobile);
+            if (payloadMobile !== canonicalMobile) {
+                throw new common_1.BadRequestException('mobile in payload must match route mobile');
+            }
+            updateData.mobile = canonicalMobile;
+        }
         const updatedBufferClient = await this.bufferClientModel
-            .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
             .exec();
         if (!updatedBufferClient) {
             throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
@@ -354,13 +367,18 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         return updatedBufferClient;
     }
     async createOrUpdate(mobile, createorUpdateBufferClientDto) {
-        const existingBufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (existingBufferClient) {
-            return this.update(existingBufferClient.mobile, createorUpdateBufferClientDto);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        if (await this.existsByMobile(canonicalMobile)) {
+            const updateDto = {
+                ...createorUpdateBufferClientDto,
+                mobile: canonicalMobile,
+            };
+            return this.update(canonicalMobile, updateDto);
         }
         else {
             const createDto = {
                 ...createorUpdateBufferClientDto,
+                mobile: canonicalMobile,
                 status: createorUpdateBufferClientDto.status || 'active',
             };
             return this.create(createDto);
@@ -368,13 +386,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async remove(mobile, message) {
         try {
-            const bufferClient = await this.findOne(mobile, false);
+            const canonicalMobile = this.canonicalMobile(mobile);
+            const bufferClient = await this.findOne(canonicalMobile, false);
             if (!bufferClient) {
                 throw new common_1.NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
-            this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
-            await this.bufferClientModel.deleteOne({ mobile }).exec();
+            this.logger.log(`Removing BufferClient with mobile: ${canonicalMobile}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${canonicalMobile}\nReason: ${message || 'manual removal'}`)}`);
+            await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `failed to delete BufferClient: ${mobile}`);
@@ -391,7 +410,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             return [];
         }
         const query = { ...filter };
-        const regexFields = ['mobile', 'username', 'clientId'];
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
+        const regexFields = ['username', 'clientId'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
@@ -427,8 +449,18 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         if (status === 'inactive') {
             updateData.inUse = false;
         }
-        await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' });
-        return await this.update(mobile, updateData);
+        try {
+            const updated = await this.update(mobile, updateData);
+            this.logger.log(`Buffer client ${mobile} status updated to ${status}`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`, { parseMode: 'HTML' }).catch((error) => this.logger.error(`Failed to send buffer status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            return updated;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            throw error;
+        }
     }
     async setPrimaryInUse(clientId, mobile) {
         const now = new Date();
@@ -531,7 +563,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason);
                 }
             }
             finally {
@@ -569,24 +601,25 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         }
     }
     async setAsBufferClient(mobile, clientId, availableDate = client_helper_utils_1.ClientHelperUtils.getTodayDateString()) {
-        const user = (await this.usersService.search({ mobile, expired: false }))[0];
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user)
             throw new common_1.BadRequestException('user not found');
-        const isExist = await this.findOne(mobile, false);
+        const isExist = await this.findOne(canonicalMobile, false);
         if (isExist)
             throw new common_1.ConflictException('BufferClient already exist');
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile))
+        if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile)))
             throw new common_1.BadRequestException('Number is an Active Client');
-        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false });
+        const telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
-            const channels = await this.telegramService.getChannelInfo(mobile, true);
+            const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const bufferClient = {
                 tgId: user.tgId,
                 session: user.session,
-                mobile: user.mobile,
+                mobile: canonicalMobile,
                 availableDate,
                 channels: channels.ids.length,
                 clientId,
@@ -595,7 +628,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 lastUsed: null,
             };
             await this.bufferClientModel
-                .findOneAndUpdate({ mobile: user.mobile }, {
+                .findOneAndUpdate({ mobile: canonicalMobile }, {
                 $set: {
                     ...bufferClient,
                     warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
@@ -606,7 +639,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 .exec();
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${mobile}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
                     await this.usersService.update(user.tgId, { expired: true });
@@ -616,7 +649,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
-            await this.safeUnregisterClient(mobile);
+            await this.safeUnregisterClient(canonicalMobile);
         }
         return 'Client enrolled as buffer successfully';
     }
@@ -976,8 +1009,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
-                const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
-                if (!healthCheckPassed)
+                const healthCheck = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
+                if (!healthCheck.passed)
                     continue;
             }
             const processResult = await this.processClient(bufferClient, client);
@@ -1121,7 +1154,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
+                    await this.deactivateClient(mobile, reason);
                 }
             }
             finally {
@@ -1142,9 +1175,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async isMobileEnrolledAnywhere(mobile) {
         const [bufferExists, promoteExists, clientExists] = await Promise.all([
-            this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.existsByMobile(mobile),
             this.promoteClientService.existsByMobile(mobile),
-            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+            this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (bufferExists)
             return 'bufferClients';
@@ -1171,10 +1204,14 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const channels = await (0, channelinfo_1.channelInfo)(telegramClient.client, true);
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
+            if (!user?.session?.trim()) {
+                this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: source user/session missing`);
+                return false;
+            }
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const bufferClient = {
                 tgId: document.tgId,
-                session: user?.session || '',
+                session: user.session,
                 mobile: document.mobile,
                 lastUsed: null,
                 availableDate: targetAvailableDate,
@@ -1208,10 +1245,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                try {
-                    await this.markAsInactive(document.mobile, errorDetails.message);
-                }
-                catch { }
+                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
                     await this.usersService.update(document.tgId, { expired: true });
                 }

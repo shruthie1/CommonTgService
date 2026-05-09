@@ -100,7 +100,7 @@ function makeBufferClientData(overrides = {}) {
     counter++;
     return {
         tgId: `tg-buf-${counter}`,
-        mobile: `+155500${String(counter).padStart(5, '0')}`,
+        mobile: `155500${String(counter).padStart(5, '0')}`,
         session: `session-buf-${counter}`,
         availableDate: '2026-04-01',
         channels: 100,
@@ -112,7 +112,7 @@ function makePromoteClientData(overrides = {}) {
     counter++;
     return {
         tgId: `tg-prom-${counter}`,
-        mobile: `+155510${String(counter).padStart(5, '0')}`,
+        mobile: `155510${String(counter).padStart(5, '0')}`,
         lastActive: '2026-04-01',
         availableDate: '2026-04-01',
         channels: 150,
@@ -127,7 +127,7 @@ function makeClientData(overrides = {}) {
         dbcoll: `test-db-${counter}`,
         link: `https://example.com/link-${counter}`,
         name: `Test Client ${counter}`,
-        mobile: `+155520${String(counter).padStart(5, '0')}`,
+        mobile: `155520${String(counter).padStart(5, '0')}`,
         password: 'testpass123',
         repl: `https://example.com/repl-${counter}`,
         promoteRepl: `https://example.com/promote-${counter}`,
@@ -144,7 +144,7 @@ function makeClientData(overrides = {}) {
 function makeUserData(overrides = {}) {
     counter++;
     return {
-        mobile: `+155530${String(counter).padStart(5, '0')}`,
+        mobile: `155530${String(counter).padStart(5, '0')}`,
         session: `session-user-${counter}`,
         tgId: `tg-user-${counter}`,
         firstName: `User${counter}`,
