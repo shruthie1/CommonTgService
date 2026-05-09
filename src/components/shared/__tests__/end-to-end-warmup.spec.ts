@@ -265,7 +265,7 @@ describe('processClient — all exit paths', () => {
     test('EXIT 9: action=advance_to_ready → sets phase to READY', async () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.MATURING,
-            enrolledAt: daysAgo(22, mockNow),
+            enrolledAt: daysAgo(25, mockNow),
             channels: 250,
             privacyUpdatedAt: daysAgo(20, mockNow),
             twoFASetAt: daysAgo(18, mockNow),
@@ -315,6 +315,23 @@ describe('processClient — all exit paths', () => {
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateSummary).toBe('remove_other_auths');
+    });
+
+    test('EXIT 10: action=remove_other_auths failure → sends failure notification', async () => {
+        jest.spyOn(service as any, 'removeOtherAuths').mockResolvedValue(0);
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.SETTLING,
+            enrolledAt: daysAgo(10, mockNow),
+            privacyUpdatedAt: daysAgo(8, mockNow),
+            twoFASetAt: daysAgo(5, mockNow),
+        });
+        const result = await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(result.updateSummary).toBeNull();
+        expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.stringContaining('WARMUP FAILED'),
+            expect.anything(),
+        );
     });
 
     test('EXIT 10: action=delete_photos → calls deleteProfilePhotos', async () => {
@@ -515,11 +532,11 @@ describe('Warmup phase transitions — jitter & stalled growing', () => {
         expect(result.action).toBe('organic_only');
     });
 
-    test('max jitter=7, day 28 → advance_to_ready', () => {
+    test('max jitter=7, day 32 → advance_to_ready', () => {
         const doc = {
             warmupPhase: WarmupPhase.MATURING,
             warmupJitter: 7,
-            enrolledAt: daysAgo(28, now),
+            enrolledAt: daysAgo(32, now),
             profilePicsUpdatedAt: daysAgo(3, now),
             channels: 250,
             privacyUpdatedAt: daysAgo(24, now),
@@ -691,15 +708,20 @@ describe('set2fa branches', () => {
             client: { invoke: jest.fn().mockResolvedValue({ hasPassword: true }) },
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue(true);
+        jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue('ours');
         jest.spyOn(service as any, 'updateUser2FAStatus').mockResolvedValue(undefined);
 
-        const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
+        const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1', failedUpdateAttempts: 2, lastUpdateFailure: new Date() });
         const result = await (service as any).set2fa(doc, 0);
         expect(result).toBe(1);
         expect(service.updateMock).toHaveBeenCalledWith(
             doc.mobile,
-            expect.objectContaining({ twoFASetAt: expect.any(Date) }),
+            expect.objectContaining({
+                twoFASetAt: expect.any(Date),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: expect.any(Date),
+            }),
         );
     });
 
@@ -712,7 +734,7 @@ describe('set2fa branches', () => {
             client: { invoke: jest.fn() },
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue(false);
+        jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue('foreign');
         const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
@@ -723,6 +745,31 @@ describe('set2fa branches', () => {
             expect.stringContaining('Foreign 2FA'),
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalled();
+    });
+
+    test('hasPassword=true + unverifiable password → retries later instead of marking inactive', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+            hasPassword: jest.fn().mockResolvedValue(true),
+            getDialogs: jest.fn().mockResolvedValue([]),
+            getContacts: jest.fn().mockResolvedValue([]),
+            client: { invoke: jest.fn() },
+        } as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue('unknown');
+        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+
+        const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
+        const result = await (service as any).set2fa(doc, 3);
+        expect(result).toBe(0);
+        expect(markInactiveSpy).not.toHaveBeenCalled();
+        expect(service.updateMock).toHaveBeenCalledWith(
+            doc.mobile,
+            expect.objectContaining({
+                failedUpdateAttempts: 4,
+                lastUpdateFailure: expect.any(Date),
+            }),
+        );
     });
 
     test('hasPassword=false → calls set2fa on TG, returns 1', async () => {
@@ -932,7 +979,7 @@ describe('deleteProfilePhotos', () => {
         );
     });
 
-    test('no photos → returns 0 but still sets profilePicsDeletedAt', async () => {
+    test('no photos → returns 1 and sets profilePicsDeletedAt', async () => {
         const service = new TestBaseService();
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
             getDialogs: jest.fn().mockResolvedValue([]),
@@ -943,7 +990,7 @@ describe('deleteProfilePhotos', () => {
 
         const doc = makeDoc();
         const result = await (service as any).deleteProfilePhotos(doc, {} as any, 0);
-        expect(result).toBe(0);
+        expect(result).toBe(1);
         // Still sets profilePicsDeletedAt so pipeline advances
         expect(service.updateMock).toHaveBeenCalledWith(
             doc.mobile,
@@ -957,19 +1004,19 @@ describe('deleteProfilePhotos', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('Projected ready date calculations', () => {
-    test('enrolled account with jitter=0 → ready date is enrolledAt + 20 days', () => {
+    test('enrolled account with jitter=0 → ready date is enrolledAt + 24 days', () => {
         const enrolledAt = new Date('2026-03-01T12:00:00.000Z');
         const expectedReadyMs = enrolledAt.getTime() + WARMUP_PHASE_THRESHOLDS.ready * ONE_DAY_MS;
         const expectedDate = new Date(expectedReadyMs).toISOString().split('T')[0];
-        expect(expectedDate).toBe('2026-03-21');
+        expect(expectedDate).toBe('2026-03-25');
     });
 
-    test('enrolled account with jitter=5 → ready date is enrolledAt + 25 days', () => {
+    test('enrolled account with jitter=5 → ready date is enrolledAt + 29 days', () => {
         const enrolledAt = new Date('2026-03-01T12:00:00.000Z');
         const jitter = 5;
         const expectedReadyMs = enrolledAt.getTime() + (WARMUP_PHASE_THRESHOLDS.ready + jitter) * ONE_DAY_MS;
         const expectedDate = new Date(expectedReadyMs).toISOString().split('T')[0];
-        expect(expectedDate).toBe('2026-03-26');
+        expect(expectedDate).toBe('2026-03-30');
     });
 
     test('ready account → operational date is availableDate or today', () => {
@@ -1024,43 +1071,51 @@ describe('Full lifecycle simulation — jitter=3', () => {
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('remove_other_auths');
         doc.otherAuthsRemovedAt = new Date(simNow);
 
-        // Day 10: all settling done, need day 4+3=7 for identity → already past, advance
+        // Day 10: auth cleanup just happened, wait before identity changes.
+        expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
+
+        // Day 13.5: auth cleanup cooled down, advance to identity.
+        simNow = enrolledAt.getTime() + 13.5 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('delete_photos');
         doc.warmupPhase = WarmupPhase.IDENTITY;
         doc.profilePicsDeletedAt = new Date(simNow);
 
-        // Day 12.5: name/bio (photos deleted 2.5 days ago)
-        simNow = enrolledAt.getTime() + 12.5 * ONE_DAY_MS;
+        // Day 16: name/bio (photos deleted 2.5 days ago)
+        simNow = enrolledAt.getTime() + 16 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('update_name_bio');
         doc.nameBioUpdatedAt = new Date(simNow);
 
-        // Day 15: username (name/bio 2.5 days ago)
-        simNow = enrolledAt.getTime() + 15 * ONE_DAY_MS;
+        // Day 19.5: username (name/bio 3.5 days ago)
+        simNow = enrolledAt.getTime() + 19.5 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('update_username');
         doc.usernameUpdatedAt = new Date(simNow);
 
-        // Identity done, need day 8+3=11 → already past, advance to growing
+        // Same day as username update, wait before joining.
+        expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
+
+        // Day 22: username cooled down, advance to growing.
+        simNow = enrolledAt.getTime() + 22 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('join_channels');
         doc.warmupPhase = WarmupPhase.GROWING;
         doc.channels = 50;
 
-        // Day 16: still growing
-        simNow = enrolledAt.getTime() + 16 * ONE_DAY_MS;
+        // Day 23: still growing
+        simNow = enrolledAt.getTime() + 23 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('join_channels');
         doc.channels = 210;
 
-        // Day 22: channels=210, need day 18+3=21 → advance to maturing
-        simNow = enrolledAt.getTime() + 22 * ONE_DAY_MS;
+        // Day 24: channels=210, need day 20+3=23 → advance to maturing
+        simNow = enrolledAt.getTime() + 24 * ONE_DAY_MS;
         const maturingResult = getWarmupPhaseAction(doc, simNow);
         expect(maturingResult.action).toBe('upload_photo');
         doc.warmupPhase = WarmupPhase.MATURING;
         doc.profilePicsUpdatedAt = new Date(simNow);
 
-        // Day 22: photo done, need day 20+3=23 → organic_only
+        // Day 24: photo done, need day 24+3=27 → organic_only
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
 
-        // Day 24: ready (day 20+3=23, and 24 ≥ 23)
-        simNow = enrolledAt.getTime() + 24 * ONE_DAY_MS;
+        // Day 28: ready (day 24+3=27, and 28 >= 27)
+        simNow = enrolledAt.getTime() + 28 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('advance_to_ready');
         doc.warmupPhase = WarmupPhase.READY;
 
@@ -1198,8 +1253,8 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             { new: true },
         ))!;
 
-        // Day 8: all settling done, day≥4 → identity (delete_photos)
-        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 8 * ONE_DAY_MS);
+        // Day 11: auth cleanup cooled down → identity (delete_photos)
+        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 11 * ONE_DAY_MS);
         expect(action.action).toBe('delete_photos');
         expect(action.phase).toBe(WarmupPhase.IDENTITY);
 
@@ -1209,16 +1264,16 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             {
                 $set: {
                     warmupPhase: WarmupPhase.IDENTITY,
-                    profilePicsDeletedAt: new Date(enrolledAt.getTime() + 8 * ONE_DAY_MS),
-                    nameBioUpdatedAt: new Date(enrolledAt.getTime() + 10.5 * ONE_DAY_MS),
-                    usernameUpdatedAt: new Date(enrolledAt.getTime() + 13 * ONE_DAY_MS),
+                    profilePicsDeletedAt: new Date(enrolledAt.getTime() + 11 * ONE_DAY_MS),
+                    nameBioUpdatedAt: new Date(enrolledAt.getTime() + 13.5 * ONE_DAY_MS),
+                    usernameUpdatedAt: new Date(enrolledAt.getTime() + 17 * ONE_DAY_MS),
                 },
             },
             { new: true },
         ))!;
 
-        // Day 13: all identity done, day≥8 → join_channels
-        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 13 * ONE_DAY_MS);
+        // Day 19.5: username cooled down and day>=14 → join_channels
+        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 19.5 * ONE_DAY_MS);
         expect(action.action).toBe('join_channels');
         expect(action.phase).toBe(WarmupPhase.GROWING);
 
@@ -1229,8 +1284,8 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             { new: true },
         ))!;
 
-        // Day 19: channels=220, day≥18 → maturing (upload_photo)
-        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 19 * ONE_DAY_MS);
+        // Day 21: channels=220, day>=20 → maturing (upload_photo)
+        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 21 * ONE_DAY_MS);
         expect(action.action).toBe('upload_photo');
         expect(action.phase).toBe(WarmupPhase.MATURING);
 
@@ -1240,14 +1295,14 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             {
                 $set: {
                     warmupPhase: WarmupPhase.MATURING,
-                    profilePicsUpdatedAt: new Date(enrolledAt.getTime() + 19 * ONE_DAY_MS),
+                    profilePicsUpdatedAt: new Date(enrolledAt.getTime() + 21 * ONE_DAY_MS),
                 },
             },
             { new: true },
         ))!;
 
-        // Day 21: photo done, day≥20 → advance_to_ready
-        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 21 * ONE_DAY_MS);
+        // Day 25: photo done, day>=24 → advance_to_ready
+        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 25 * ONE_DAY_MS);
         expect(action.action).toBe('advance_to_ready');
 
         // Step 8: Ready
@@ -1256,7 +1311,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             { $set: { warmupPhase: WarmupPhase.READY } },
             { new: true },
         ))!;
-        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 21 * ONE_DAY_MS);
+        action = getWarmupPhaseAction(client, enrolledAt.getTime() + 25 * ONE_DAY_MS);
         expect(action.action).toBe('rotate_session');
 
         // Step 9: Session rotated
@@ -1426,7 +1481,7 @@ describe('repairWarmupMetadata — phase inference', () => {
         );
     });
 
-    test('never moves warmup phase backwards', async () => {
+    test('corrects advanced phase when mandatory settling steps are missing', async () => {
         const service = new TestBaseService();
         const doc = {
             mobile: '9990099005',
@@ -1435,11 +1490,34 @@ describe('repairWarmupMetadata — phase inference', () => {
             enrolledAt: daysAgo(15, mockNow),
             createdAt: daysAgo(15, mockNow),
             privacyUpdatedAt: daysAgo(13, mockNow),
-            // Only settling done — inferred phase would be SETTLING (lower rank)
+            twoFASetAt: daysAgo(11, mockNow),
+            // 2FA was set, but removeOtherAuths was never stamped, so growing is unsafe.
+        } as any;
+
+        await (service as any).repairWarmupMetadata(doc, mockNow);
+        expect(service.updateMock).toHaveBeenCalledWith(
+            '9990099005',
+            expect.objectContaining({ warmupPhase: WarmupPhase.SETTLING }),
+        );
+    });
+
+    test('does not move backwards when prerequisites for stored phase are complete', async () => {
+        const service = new TestBaseService();
+        const doc = {
+            mobile: '9990099006',
+            warmupPhase: WarmupPhase.GROWING,
+            warmupJitter: 0,
+            enrolledAt: daysAgo(15, mockNow),
+            createdAt: daysAgo(15, mockNow),
+            privacyUpdatedAt: daysAgo(13, mockNow),
+            twoFASetAt: daysAgo(11, mockNow),
+            otherAuthsRemovedAt: daysAgo(9, mockNow),
+            profilePicsDeletedAt: daysAgo(7, mockNow),
+            nameBioUpdatedAt: daysAgo(5, mockNow),
+            usernameUpdatedAt: daysAgo(3, mockNow),
         } as any;
 
         const result = await (service as any).repairWarmupMetadata(doc, mockNow);
-        // Should NOT downgrade from GROWING to SETTLING
         expect(service.updateMock).not.toHaveBeenCalled();
         expect(result).toBe(doc);
     });

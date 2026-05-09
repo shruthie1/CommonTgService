@@ -5,6 +5,9 @@ import {
     isAccountWarmingUp,
     WARMUP_PHASE_THRESHOLDS,
     MIN_DAYS_BETWEEN_IDENTITY_STEPS,
+    MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY,
+    MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME,
+    MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING,
     MIN_CHANNELS_FOR_MATURING,
 } from '../warmup-phases';
 
@@ -156,13 +159,13 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('remove_other_auths');
         });
 
-        test('settling, all done, day 5, jitter=0 → advance to identity (delete_photos)', () => {
+        test('settling, all done, auth cleanup 3 days ago → advance to identity (delete_photos)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.SETTLING,
-                enrolledAt: daysAgo(5, now),
-                privacyUpdatedAt: daysAgo(4, now),
-                twoFASetAt: daysAgo(3, now),
-                otherAuthsRemovedAt: daysAgo(2, now),
+                enrolledAt: daysAgo(7, now),
+                privacyUpdatedAt: daysAgo(6, now),
+                twoFASetAt: daysAgo(5, now),
+                otherAuthsRemovedAt: daysAgo(MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY, now),
                 warmupJitter: 0,
             });
             const result = getWarmupPhaseAction(doc, now);
@@ -216,7 +219,7 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('update_name_bio');
         });
 
-        test('identity, name/bio done yesterday → organic_only (need 2 day gap for username)', () => {
+        test('identity, name/bio done yesterday → organic_only (need safer gap for username)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.IDENTITY,
                 enrolledAt: daysAgo(10, now),
@@ -232,19 +235,19 @@ describe('getWarmupPhaseAction', () => {
                 warmupPhase: WarmupPhase.IDENTITY,
                 enrolledAt: daysAgo(10, now),
                 profilePicsDeletedAt: daysAgo(6, now),
-                nameBioUpdatedAt: daysAgo(3, now),
+                nameBioUpdatedAt: daysAgo(MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME, now),
             });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('update_username');
         });
 
-        test('identity, all steps done, enrolled 9 days, jitter=0 → join_channels (growing)', () => {
+        test('identity, all steps done, enrolled 15 days, jitter=0 → join_channels (growing)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.IDENTITY,
-                enrolledAt: daysAgo(9, now),
-                profilePicsDeletedAt: daysAgo(6, now),
-                nameBioUpdatedAt: daysAgo(4, now),
-                usernameUpdatedAt: daysAgo(2, now),
+                enrolledAt: daysAgo(15, now),
+                profilePicsDeletedAt: daysAgo(8, now),
+                nameBioUpdatedAt: daysAgo(5, now),
+                usernameUpdatedAt: daysAgo(MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING, now),
                 warmupJitter: 0,
             });
             const result = getWarmupPhaseAction(doc, now);
@@ -252,7 +255,7 @@ describe('getWarmupPhaseAction', () => {
             expect(result.phase).toBe(WarmupPhase.GROWING);
         });
 
-        test('identity, all steps done, enrolled 6 days, jitter=3 → organic_only (needs 8+3=11)', () => {
+        test('identity, all steps done, enrolled 6 days, jitter=3 → organic_only (needs 14+3=17)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.IDENTITY,
                 enrolledAt: daysAgo(6, now),
@@ -289,7 +292,7 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('join_channels');
         });
 
-        test('growing, channels=200, enrolled 15 days, jitter=0 → organic_only (needs 18 days for maturing)', () => {
+        test('growing, channels=200, enrolled 15 days, jitter=0 → organic_only (needs 20 days for maturing)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: daysAgo(15, now),
@@ -301,10 +304,10 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('organic_only');
         });
 
-        test('growing, channels=250, enrolled 20 days, jitter=0 → upload_photo (maturing)', () => {
+        test('growing, channels=250, enrolled 25 days, jitter=0 → upload_photo (maturing)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
-                enrolledAt: daysAgo(20, now),
+                enrolledAt: daysAgo(25, now),
                 channels: 250,
                 warmupJitter: 0,
                 ...fullySettledIdentity,
@@ -314,10 +317,10 @@ describe('getWarmupPhaseAction', () => {
             expect(result.phase).toBe(WarmupPhase.MATURING);
         });
 
-        test('growing, channels=250, enrolled 19 days, jitter=0, photo done → organic_only (needs day 20)', () => {
+        test('growing, channels=250, enrolled 21 days, jitter=0, photo done → organic_only (needs day 24)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
-                enrolledAt: daysAgo(19, now),
+                enrolledAt: daysAgo(21, now),
                 channels: 250,
                 warmupJitter: 0,
                 profilePicsUpdatedAt: daysAgo(1, now),
@@ -328,10 +331,10 @@ describe('getWarmupPhaseAction', () => {
             expect(result.phase).toBe(WarmupPhase.MATURING);
         });
 
-        test('growing, channels=250, enrolled 21 days, jitter=0, photo done → advance_to_ready', () => {
+        test('growing, channels=250, enrolled 25 days, jitter=0, photo done → advance_to_ready', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
-                enrolledAt: daysAgo(21, now),
+                enrolledAt: daysAgo(25, now),
                 channels: 250,
                 warmupJitter: 0,
                 profilePicsUpdatedAt: daysAgo(1, now),
@@ -388,10 +391,10 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('upload_photo');
         });
 
-        test('maturing, photo done, day 19, jitter=0 → organic_only (needs day 20)', () => {
+        test('maturing, photo done, day 21, jitter=0 → organic_only (needs day 24)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.MATURING,
-                enrolledAt: daysAgo(19, now),
+                enrolledAt: daysAgo(21, now),
                 channels: 250,
                 profilePicsUpdatedAt: daysAgo(1, now),
                 warmupJitter: 0,
@@ -401,10 +404,10 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('organic_only');
         });
 
-        test('maturing, photo done, day 21, jitter=0 → advance_to_ready', () => {
+        test('maturing, photo done, day 25, jitter=0 → advance_to_ready', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.MATURING,
-                enrolledAt: daysAgo(21, now),
+                enrolledAt: daysAgo(25, now),
                 channels: 250,
                 profilePicsUpdatedAt: daysAgo(3, now),
                 warmupJitter: 0,
@@ -506,8 +509,8 @@ describe('getWarmupPhaseAction', () => {
     // ======= FULL TIMELINE SIMULATION =======
 
     describe('Full timeline simulation (jitter=0)', () => {
-        test('complete warmup journey over 25 days', () => {
-            const enrolledAt = new Date(now - 25 * ONE_DAY_MS);
+        test('complete warmup journey over 26 days', () => {
+            const enrolledAt = new Date(now - 26 * ONE_DAY_MS);
 
             // Day 0: enrolled, wait
             let doc = makeDoc({ warmupPhase: WarmupPhase.ENROLLED, enrolledAt, warmupJitter: 0 });
@@ -540,8 +543,8 @@ describe('getWarmupPhaseAction', () => {
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('remove_other_auths');
             doc.otherAuthsRemovedAt = new Date(simNow);
 
-            // Day 7: all settling done, but still need day 4+ for identity (already past) → delete_photos
-            simNow = enrolledAt.getTime() + 7 * ONE_DAY_MS;
+            // Day 9.5: auth cleanup has cooled down for 3 days → delete_photos
+            simNow = enrolledAt.getTime() + 9.5 * ONE_DAY_MS;
             result = getWarmupPhaseAction(doc, simNow);
             expect(result.action).toBe('delete_photos');
             expect(result.phase).toBe(WarmupPhase.IDENTITY);
@@ -549,38 +552,43 @@ describe('getWarmupPhaseAction', () => {
             doc.warmupPhase = WarmupPhase.IDENTITY;
             doc.profilePicsDeletedAt = new Date(simNow);
 
-            // Day 8: organic_only (need 2 day gap for name/bio)
-            simNow = enrolledAt.getTime() + 8 * ONE_DAY_MS;
+            // Day 10.5: organic_only (need 2 day gap for name/bio)
+            simNow = enrolledAt.getTime() + 10.5 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
 
-            // Day 9.5: update_name_bio
-            simNow = enrolledAt.getTime() + 9.5 * ONE_DAY_MS;
+            // Day 12: update_name_bio
+            simNow = enrolledAt.getTime() + 12 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('update_name_bio');
             doc.nameBioUpdatedAt = new Date(simNow);
 
-            // Day 12: update_username (2+ days after name/bio AND 8+ days enrolled)
-            simNow = enrolledAt.getTime() + 12 * ONE_DAY_MS;
+            // Day 15: update_username (3+ days after name/bio)
+            simNow = enrolledAt.getTime() + 15 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('update_username');
             doc.usernameUpdatedAt = new Date(simNow);
 
-            // Day 12: all identity done, 12 >= 8 → join_channels
+            // Same day as username update: wait before joining channels
+            result = getWarmupPhaseAction(doc, simNow);
+            expect(result.action).toBe('organic_only');
+
+            // Day 17.5: username cooled down and day >= 14 → join_channels
+            simNow = enrolledAt.getTime() + 17.5 * ONE_DAY_MS;
             result = getWarmupPhaseAction(doc, simNow);
             expect(result.action).toBe('join_channels');
 
             doc.warmupPhase = WarmupPhase.GROWING;
             doc.channels = 50;
 
-            // Day 14: still growing
-            simNow = enrolledAt.getTime() + 14 * ONE_DAY_MS;
+            // Day 18: still growing
+            simNow = enrolledAt.getTime() + 18 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('join_channels');
 
-            // Day 16: channels reached 200, but need day 18 for maturing
+            // Day 19: channels reached 200, but need day 20 for maturing
             doc.channels = 210;
-            simNow = enrolledAt.getTime() + 16 * ONE_DAY_MS;
+            simNow = enrolledAt.getTime() + 19 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
 
-            // Day 19: channels=210, day >= 18 → upload_photo (maturing)
-            simNow = enrolledAt.getTime() + 19 * ONE_DAY_MS;
+            // Day 21: channels=210, day >= 20 → upload_photo (maturing)
+            simNow = enrolledAt.getTime() + 21 * ONE_DAY_MS;
             result = getWarmupPhaseAction(doc, simNow);
             expect(result.action).toBe('upload_photo');
             expect(result.phase).toBe(WarmupPhase.MATURING);
@@ -588,12 +596,12 @@ describe('getWarmupPhaseAction', () => {
             doc.warmupPhase = WarmupPhase.MATURING;
             doc.profilePicsUpdatedAt = new Date(simNow);
 
-            // Day 19: photo done but day < 20 → organic_only (day-20 floor)
+            // Day 21: photo done but day < 24 → organic_only (day-24 floor)
             result = getWarmupPhaseAction(doc, simNow);
             expect(result.action).toBe('organic_only');
 
-            // Day 21: day >= 20 → advance_to_ready
-            simNow = enrolledAt.getTime() + 21 * ONE_DAY_MS;
+            // Day 25: day >= 24 → advance_to_ready
+            simNow = enrolledAt.getTime() + 25 * ONE_DAY_MS;
             result = getWarmupPhaseAction(doc, simNow);
             expect(result.action).toBe('advance_to_ready');
 
@@ -706,10 +714,10 @@ describe('Catch-up: growing phase with missed settling steps', () => {
         expect(result.action).toBe('join_channels');
     });
 
-    test('growing account fully caught up, channels >= 200, day >= 18 → maturing upload_photo', () => {
+    test('growing account fully caught up, channels >= 200, day >= 20 → maturing upload_photo', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.GROWING,
-            enrolledAt: daysAgo(20, now),
+            enrolledAt: daysAgo(25, now),
             channels: 210,
             privacyUpdatedAt: daysAgo(15, now),
             twoFASetAt: daysAgo(13, now),
@@ -754,10 +762,10 @@ describe('Catch-up: maturing phase with missed settling steps', () => {
         expect(result.action).toBe('upload_photo');
     });
 
-    test('maturing with all done including photo, day >= 20 → advance_to_ready', () => {
+    test('maturing with all done including photo, day >= 24 → advance_to_ready', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.MATURING,
-            enrolledAt: daysAgo(22, now),
+            enrolledAt: daysAgo(25, now),
             channels: 250,
             privacyUpdatedAt: daysAgo(20, now),
             twoFASetAt: daysAgo(18, now),
@@ -811,13 +819,13 @@ describe('Normal phases unaffected by catch-up', () => {
     test('settling account with all steps done transitions normally', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
-            enrolledAt: daysAgo(5, now),
-            privacyUpdatedAt: daysAgo(4, now),
-            twoFASetAt: daysAgo(2, now),
-            otherAuthsRemovedAt: daysAgo(0.5, now),
+            enrolledAt: daysAgo(8, now),
+            privacyUpdatedAt: daysAgo(7, now),
+            twoFASetAt: daysAgo(5, now),
+            otherAuthsRemovedAt: daysAgo(3, now),
         });
         const result = getWarmupPhaseAction(doc, now);
-        // All settling done, day >= 4 → should transition to identity
+        // All settling done and auth cleanup cooled down → should transition to identity
         expect(result.phase).toBe(WarmupPhase.IDENTITY);
         expect(result.action).toBe('delete_photos');
     });

@@ -24,15 +24,22 @@ export type WarmupPhaseType = typeof WarmupPhase[keyof typeof WarmupPhase];
 export const WARMUP_PHASE_THRESHOLDS = {
     settling: 1,      // Day 1+: first "app open", set privacy
     identity: 4,      // Day 4+: profile cleanup (one change per cycle)
-    growing: 8,       // Day 8+: start joining channels
-    maturing: 18,     // Day 18+: final touches (photo + 2FA)
-    ready: 20,        // Day 20+: fully warmed, eligible for use
+    growing: 14,      // Day 14+: start joining channels after identity cooldown
+    maturing: 20,     // Day 20+: final touches after capped channel growth
+    ready: 24,        // Day 24+: fully warmed, eligible for use
 } as const;
 
 /**
  * Minimum days between identity sub-steps (delete photos, name/bio, username).
  */
 export const MIN_DAYS_BETWEEN_IDENTITY_STEPS = 2;
+
+/**
+ * Extra safety gaps to avoid clustering security, identity, and growth actions.
+ */
+export const MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = 3;
+export const MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = 3;
+export const MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 
 /**
  * Minimum channels required before maturing phase.
@@ -139,8 +146,11 @@ export function getWarmupPhaseAction(
             return { phase: WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'light' };
         }
 
-        // All settling steps done — check if ready for identity
-        if (daysSinceEnrolled >= WARMUP_PHASE_THRESHOLDS.identity + jitter) {
+        // All settling steps done — let security cleanup cool down before profile edits.
+        if (
+            daysSince(doc.otherAuthsRemovedAt) >= MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY &&
+            daysSinceEnrolled >= WARMUP_PHASE_THRESHOLDS.identity + jitter
+        ) {
             return { phase: WarmupPhase.IDENTITY, action: 'delete_photos', organicIntensity: 'medium' };
         }
         return { phase: WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'medium' };
@@ -167,14 +177,17 @@ export function getWarmupPhaseAction(
 
         // Sub-step 3: Username (requires name/bio done 2+ days ago)
         if (!usernameDone) {
-            if (daysSince(doc.nameBioUpdatedAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            if (daysSince(doc.nameBioUpdatedAt) >= MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME) {
                 return { phase: WarmupPhase.IDENTITY, action: 'update_username', organicIntensity: 'medium' };
             }
             return { phase: WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
         }
 
         // All identity steps complete — check if ready for growing
-        if (daysSinceEnrolled >= WARMUP_PHASE_THRESHOLDS.growing + jitter) {
+        if (
+            daysSince(doc.usernameUpdatedAt) >= MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING &&
+            daysSinceEnrolled >= WARMUP_PHASE_THRESHOLDS.growing + jitter
+        ) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         return { phase: WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
@@ -204,15 +217,21 @@ export function getWarmupPhaseAction(
         const photosDeleted = ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
         const nameBioDone = ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
         const usernameDone = ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (daysSince(doc.otherAuthsRemovedAt) < MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY) {
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        }
         if (!photosDeleted) return { phase, action: 'delete_photos', organicIntensity: 'medium' };
         if (!nameBioDone && daysSince(doc.profilePicsDeletedAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
             return { phase, action: 'update_name_bio', organicIntensity: 'medium' };
         }
         if (!nameBioDone) return { phase, action: 'organic_only', organicIntensity: 'light' };
-        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME) {
             return { phase, action: 'update_username', organicIntensity: 'medium' };
         }
         if (!usernameDone) return { phase, action: 'organic_only', organicIntensity: 'light' };
+        if (daysSince(doc.usernameUpdatedAt) < MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING) {
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        }
         return null;
     };
 

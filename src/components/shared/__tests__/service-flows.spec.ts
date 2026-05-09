@@ -1245,10 +1245,11 @@ describe('Service flow reliability', () => {
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
                 sessionRotatedAt: expect.any(Date),
                 enrolledAt: expect.any(Date),
-                twoFASetAt: expect.any(Date),
-                otherAuthsRemovedAt: expect.any(Date),
             }),
         );
+        const backfillPayload = service.updateMock.mock.calls.find((call: any[]) => call[0] === '9990005555')?.[1];
+        expect(backfillPayload).not.toHaveProperty('twoFASetAt');
+        expect(backfillPayload).not.toHaveProperty('otherAuthsRemovedAt');
     });
 
     test('availability calculation self-heals legacy used accounts before counting ready pool', async () => {

@@ -18,6 +18,7 @@ import { MediaAlbumOptions } from './types/telegram-types';
 import * as fs from 'fs';
 import { sleep } from 'telegram/Helpers';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
+import { notifbot } from '../../utils/logbots';
 import { SearchMessagesDto } from './dto/message-search.dto';
 import { CreateTgBotDto } from './dto/create-bot.dto';
 import { Api } from 'telegram';
@@ -564,9 +565,17 @@ export class TelegramService implements OnModuleDestroy {
 
     async removeOtherAuths(mobile: string) {
         const telegramClient = await connectionManager.getClient(mobile);
-        await telegramClient.removeOtherAuths();
-        this.logger.info(mobile, 'Removed other authorizations');
-        return "Removed other authorizations";
+        try {
+            await telegramClient.removeOtherAuths();
+            this.logger.info(mobile, 'Removed other authorizations');
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Remove Other Auths Success\n\nMobile: ${mobile}\nStatus: Non-protected sessions removed`)}`, { timeout: 5000 });
+            return "Removed other authorizations";
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(mobile, 'Failed to remove other authorizations', error);
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Remove Other Auths Failed\n\nMobile: ${mobile}\nError: ${message.substring(0, 500)}`)}`, { timeout: 5000 });
+            throw error;
+        }
     }
 
     public async processBatch<T>(
