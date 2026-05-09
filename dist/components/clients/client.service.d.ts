@@ -87,6 +87,7 @@ export declare class ClientService implements OnModuleDestroy, OnModuleInit {
     private handleSetupClient;
     updateClientSession(newSession: string, setupMobile?: string): Promise<void>;
     private handleClientArchival;
+    private isPermanentArchivalReason;
     private markBufferInactiveForArchival;
     private handleFormalities;
     private archiveOldClient;
