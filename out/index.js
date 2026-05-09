@@ -13801,6 +13801,19 @@ let ActiveChannelsController = class ActiveChannelsController {
     async createMultiple(createChannelDtos) {
         return this.activeChannelsService.createMultiple(createChannelDtos);
     }
+    async analytics() {
+        return this.activeChannelsService.analytics();
+    }
+    async paginated(page, limit, sortBy, sortOrder, search, filter) {
+        return this.activeChannelsService.paginated({
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
+            sortBy: sortBy || undefined,
+            sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc'),
+            search: search || undefined,
+            filter: filter || undefined,
+        });
+    }
     search(query) {
         return this.activeChannelsService.search(query);
     }
@@ -13835,6 +13848,32 @@ __decorate([
     __metadata("design:paramtypes", [Array]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "createMultiple", null);
+__decorate([
+    (0, common_1.Get)('analytics'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get comprehensive channel analytics' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "analytics", null);
+__decorate([
+    (0, common_1.Get)('paginated'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get paginated channels with search and filters' }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'search', required: false, type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | temp_banned | with_errors | exhausted | high_deleted' }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('sortBy')),
+    __param(3, (0, common_1.Query)('sortOrder')),
+    __param(4, (0, common_1.Query)('search')),
+    __param(5, (0, common_1.Query)('filter')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "paginated", null);
 __decorate([
     (0, common_1.Get)('search'),
     (0, swagger_1.ApiOperation)({ summary: 'Search channels by filters' }),
@@ -14213,6 +14252,259 @@ let ActiveChannelsService = class ActiveChannelsService {
         catch (error) {
             throw this.handleError(error, 'Failed to fetch active channels');
         }
+    }
+    async analytics() {
+        const [result] = await this.activeChannelModel.aggregate([
+            {
+                $facet: {
+                    overview: [
+                        {
+                            $group: {
+                                _id: null,
+                                total: { $sum: 1 },
+                                canSend: { $sum: { $cond: [{ $eq: ['$canSendMsgs', true] }, 1, 0] } },
+                                restricted: { $sum: { $cond: [{ $eq: ['$restricted', true] }, 1, 0] } },
+                                banned: { $sum: { $cond: [{ $eq: ['$banned', true] }, 1, 0] } },
+                                forbidden: { $sum: { $cond: [{ $eq: ['$forbidden', true] }, 1, 0] } },
+                                tempBan: { $sum: { $cond: [{ $eq: ['$tempBan', true] }, 1, 0] } },
+                                reactRestricted: { $sum: { $cond: [{ $eq: ['$reactRestricted', true] }, 1, 0] } },
+                                isPrivate: { $sum: { $cond: [{ $eq: ['$private', true] }, 1, 0] } },
+                                broadcast: { $sum: { $cond: [{ $eq: ['$broadcast', true] }, 1, 0] } },
+                                megagroup: { $sum: { $cond: [{ $eq: ['$megagroup', true] }, 1, 0] } },
+                                starred: { $sum: { $cond: [{ $eq: ['$starred', true] }, 1, 0] } },
+                                withUsername: { $sum: { $cond: [{ $and: [{ $ne: ['$username', null] }, { $ne: ['$username', ''] }] }, 1, 0] } },
+                            },
+                        },
+                    ],
+                    messageStats: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalSent: { $sum: { $ifNull: ['$successMsgCount', 0] } },
+                                totalFailed: { $sum: { $ifNull: ['$failureMsgCount', 0] } },
+                                totalDeleted: { $sum: { $ifNull: ['$deletedCount', 0] } },
+                                followupSent: { $sum: { $ifNull: ['$followupMsgSuccessCount', 0] } },
+                                followupFailed: { $sum: { $ifNull: ['$followupMsgFailureCount', 0] } },
+                                channelsWithSends: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$successMsgCount', 0] }, 0] }, 1, 0] } },
+                                channelsWithFailures: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$failureMsgCount', 0] }, 0] }, 1, 0] } },
+                                channelsWithDeleted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$deletedCount', 0] }, 0] }, 1, 0] } },
+                                avgSent: { $avg: { $ifNull: ['$successMsgCount', 0] } },
+                                avgFailed: { $avg: { $ifNull: ['$failureMsgCount', 0] } },
+                            },
+                        },
+                    ],
+                    participantStats: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalParticipants: { $sum: { $ifNull: ['$participantsCount', 0] } },
+                                avgParticipants: { $avg: { $ifNull: ['$participantsCount', 0] } },
+                                maxParticipants: { $max: { $ifNull: ['$participantsCount', 0] } },
+                                above10k: { $sum: { $cond: [{ $gte: [{ $ifNull: ['$participantsCount', 0] }, 10000] }, 1, 0] } },
+                                above1k: { $sum: { $cond: [{ $gte: [{ $ifNull: ['$participantsCount', 0] }, 1000] }, 1, 0] } },
+                                below600: { $sum: { $cond: [{ $lt: [{ $ifNull: ['$participantsCount', 0] }, 600] }, 1, 0] } },
+                            },
+                        },
+                    ],
+                    restrictionStats: [
+                        {
+                            $group: {
+                                _id: null,
+                                wordRestricted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$wordRestriction', 0] }, 0] }, 1, 0] } },
+                                dmRestricted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$dMRestriction', 0] }, 0] }, 1, 0] } },
+                                totalWordRestrictions: { $sum: { $ifNull: ['$wordRestriction', 0] } },
+                                totalDmRestrictions: { $sum: { $ifNull: ['$dMRestriction', 0] } },
+                            },
+                        },
+                    ],
+                    promoCoverage: [
+                        {
+                            $group: {
+                                _id: null,
+                                withPromos: { $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ['$availableMsgs', []] } }, 0] }, 1, 0] } },
+                                exhausted: { $sum: { $cond: [{ $eq: [{ $size: { $ifNull: ['$availableMsgs', []] } }, 0] }, 1, 0] } },
+                                avgPromoCount: { $avg: { $size: { $ifNull: ['$availableMsgs', []] } } },
+                                totalPromos: { $sum: { $size: { $ifNull: ['$availableMsgs', []] } } },
+                            },
+                        },
+                    ],
+                    errorBreakdown: [
+                        { $match: { lastErrorType: { $ne: null, $exists: true } } },
+                        { $group: { _id: '$lastErrorType', count: { $sum: 1 } } },
+                        { $sort: { count: -1 } },
+                        { $limit: 15 },
+                    ],
+                    successRateDist: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $gt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$failureMsgCount', 0] }] }, 0],
+                                },
+                            },
+                        },
+                        {
+                            $addFields: {
+                                _rate: {
+                                    $multiply: [
+                                        { $divide: [{ $ifNull: ['$successMsgCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$failureMsgCount', 0] }] }] },
+                                        100,
+                                    ],
+                                },
+                            },
+                        },
+                        {
+                            $bucket: {
+                                groupBy: '$_rate',
+                                boundaries: [0, 20, 40, 60, 80, 101],
+                                default: 'other',
+                                output: { count: { $sum: 1 } },
+                            },
+                        },
+                    ],
+                    topBySuccess: [
+                        { $match: { successMsgCount: { $gt: 0 } } },
+                        { $sort: { successMsgCount: -1 } },
+                        { $limit: 10 },
+                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, failureMsgCount: 1, deletedCount: 1 } },
+                    ],
+                    topByFailure: [
+                        { $match: { failureMsgCount: { $gt: 0 } } },
+                        { $sort: { failureMsgCount: -1 } },
+                        { $limit: 10 },
+                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, failureMsgCount: 1, lastErrorType: 1 } },
+                    ],
+                    topByDeleted: [
+                        { $match: { deletedCount: { $gt: 0 } } },
+                        { $sort: { deletedCount: -1 } },
+                        { $limit: 10 },
+                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, deletedCount: 1, successMsgCount: 1 } },
+                    ],
+                    topByParticipants: [
+                        { $sort: { participantsCount: -1 } },
+                        { $limit: 10 },
+                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, canSendMsgs: 1, banned: 1 } },
+                    ],
+                },
+            },
+        ]).allowDiskUse(true).exec();
+        const overview = result.overview[0] || {};
+        const msgStats = result.messageStats[0] || {};
+        const partStats = result.participantStats[0] || {};
+        const restrictStats = result.restrictionStats[0] || {};
+        const promoCov = result.promoCoverage[0] || {};
+        const totalAttempts = (msgStats.totalSent || 0) + (msgStats.totalFailed || 0);
+        return {
+            overview: {
+                total: overview.total || 0,
+                canSend: overview.canSend || 0,
+                restricted: overview.restricted || 0,
+                banned: overview.banned || 0,
+                forbidden: overview.forbidden || 0,
+                tempBan: overview.tempBan || 0,
+                reactRestricted: overview.reactRestricted || 0,
+                private: overview.isPrivate || 0,
+                broadcast: overview.broadcast || 0,
+                megagroup: overview.megagroup || 0,
+                starred: overview.starred || 0,
+                withUsername: overview.withUsername || 0,
+            },
+            messages: {
+                totalSent: msgStats.totalSent || 0,
+                totalFailed: msgStats.totalFailed || 0,
+                totalDeleted: msgStats.totalDeleted || 0,
+                followupSent: msgStats.followupSent || 0,
+                followupFailed: msgStats.followupFailed || 0,
+                successRate: totalAttempts > 0 ? Math.round(((msgStats.totalSent || 0) / totalAttempts) * 100) : 0,
+                channelsWithSends: msgStats.channelsWithSends || 0,
+                channelsWithFailures: msgStats.channelsWithFailures || 0,
+                channelsWithDeleted: msgStats.channelsWithDeleted || 0,
+                avgSent: Math.round(msgStats.avgSent || 0),
+                avgFailed: Math.round(msgStats.avgFailed || 0),
+            },
+            participants: {
+                total: partStats.totalParticipants || 0,
+                average: Math.round(partStats.avgParticipants || 0),
+                max: partStats.maxParticipants || 0,
+                above10k: partStats.above10k || 0,
+                above1k: partStats.above1k || 0,
+                below600: partStats.below600 || 0,
+            },
+            restrictions: {
+                wordRestricted: restrictStats.wordRestricted || 0,
+                dmRestricted: restrictStats.dmRestricted || 0,
+                totalWordRestrictions: restrictStats.totalWordRestrictions || 0,
+                totalDmRestrictions: restrictStats.totalDmRestrictions || 0,
+            },
+            promos: {
+                withPromos: promoCov.withPromos || 0,
+                exhausted: promoCov.exhausted || 0,
+                avgPromoCount: Math.round((promoCov.avgPromoCount || 0) * 10) / 10,
+                totalPromos: promoCov.totalPromos || 0,
+            },
+            errorBreakdown: (result.errorBreakdown || []).map((e) => ({
+                error: e._id,
+                count: e.count,
+            })),
+            successRateDistribution: (result.successRateDist || []).map((b) => ({
+                range: b._id === 'other' ? 'other' : `${b._id}-${b._id + 20}%`,
+                count: b.count,
+            })),
+            topBySuccess: result.topBySuccess || [],
+            topByFailure: result.topByFailure || [],
+            topByDeleted: result.topByDeleted || [],
+            topByParticipants: result.topByParticipants || [],
+        };
+    }
+    async paginated(options) {
+        const { page = 1, limit = 50, sortBy = 'successMsgCount', sortOrder = 'desc', search, filter = 'all', } = options;
+        const pageNum = Math.max(1, Math.floor(page));
+        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 200);
+        const skip = (pageNum - 1) * limitNum;
+        const query = {};
+        if (filter === 'can_send') {
+            query.canSendMsgs = true;
+            query.restricted = { $ne: true };
+            query.banned = { $ne: true };
+            query.forbidden = { $ne: true };
+        }
+        else if (filter === 'restricted')
+            query.restricted = true;
+        else if (filter === 'banned') {
+            query.$or = [{ banned: true }, { forbidden: true }];
+        }
+        else if (filter === 'temp_banned')
+            query.tempBan = true;
+        else if (filter === 'with_errors') {
+            query.lastErrorType = { $ne: null, $exists: true };
+        }
+        else if (filter === 'exhausted') {
+            query.$expr = { $eq: [{ $size: { $ifNull: ['$availableMsgs', []] } }, 0] };
+        }
+        else if (filter === 'high_deleted') {
+            query.deletedCount = { $gt: 30 };
+        }
+        if (search?.trim()) {
+            const q = search.trim();
+            query.$or = [
+                { title: { $regex: q, $options: 'i' } },
+                { username: { $regex: q, $options: 'i' } },
+                { channelId: q },
+            ];
+        }
+        const total = await this.activeChannelModel.countDocuments(query).exec();
+        const totalPages = Math.ceil(total / limitNum);
+        if (total === 0) {
+            return { channels: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+        }
+        const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+        const channels = await this.activeChannelModel
+            .find(query)
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum)
+            .lean()
+            .exec();
+        return { channels: channels, total, page: pageNum, limit: limitNum, totalPages };
     }
     async executeQuery(query, sort, limit, skip) {
         try {
@@ -36537,6 +36829,27 @@ let UsersController = class UsersController {
             starred: starred === 'true' ? true : undefined
         });
     }
+    async leaderboard(aspect, limit) {
+        if (!aspect)
+            throw new common_1.BadRequestException('aspect query parameter is required');
+        return this.usersService.leaderboard({
+            aspect,
+            limit: limit ? parseInt(limit, 10) : undefined,
+        });
+    }
+    async summary() {
+        return this.usersService.summary();
+    }
+    async paginated(page, limit, sortBy, sortOrder, search, filter) {
+        return this.usersService.paginated({
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
+            sortBy: sortBy || undefined,
+            sortOrder: (sortOrder === 'asc' ? 'asc' : 'desc'),
+            search: search || undefined,
+            filter: filter || undefined,
+        });
+    }
     async findAll(limit, skip, sortBy, sortOrder) {
         const limitNum = limit ? parseInt(limit, 10) : 100;
         const skipNum = skip ? parseInt(skip, 10) : 0;
@@ -36658,6 +36971,92 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "getTopInteractionUsers", null);
+__decorate([
+    (0, common_1.Get)('leaderboard'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get ranked users for leaderboard by aspect' }),
+    (0, swagger_1.ApiQuery)({ name: 'aspect', required: true, type: String, description: 'Aspect to rank by: msgs, totalChats, personalChats, channels, contacts, totalCalls, incomingCalls, outgoingCalls, videoCalls, totalMedia, otherPhotos, otherVideos, ownPhotos, ownVideos, movieCount, relationshipScore, relationshipBestScore, engagement, recency' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Number of top users to return (default: 25, max: 100)' }),
+    (0, swagger_1.ApiOkResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                ranked: { type: 'array' },
+                stats: {
+                    type: 'object',
+                    properties: {
+                        highest: { type: 'number' },
+                        average: { type: 'number' },
+                        withValue: { type: 'number' },
+                    },
+                },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Query)('aspect')),
+    __param(1, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "leaderboard", null);
+__decorate([
+    (0, common_1.Get)('summary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get aggregated user stats for dashboard' }),
+    (0, swagger_1.ApiOkResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                total: { type: 'number' },
+                active: { type: 'number' },
+                starred: { type: 'number' },
+                expired: { type: 'number' },
+                withTwoFA: { type: 'number' },
+                withCalls: { type: 'number' },
+                withRelationship: { type: 'number' },
+                avgMsgs: { type: 'number' },
+                avgContacts: { type: 'number' },
+                avgChats: { type: 'number' },
+                totalMsgs: { type: 'number' },
+                totalCalls: { type: 'number' },
+                totalContacts: { type: 'number' },
+                genderBreakdown: { type: 'object' },
+            },
+        },
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "summary", null);
+__decorate([
+    (0, common_1.Get)('paginated'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get paginated users with search and filters' }),
+    (0, swagger_1.ApiQuery)({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 50, max: 200)' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String, description: 'Sort field (default: lastActive)' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String, description: 'asc or desc (default: desc)' }),
+    (0, swagger_1.ApiQuery)({ name: 'search', required: false, type: String, description: 'Search by name, mobile, username, or tgId' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, type: String, description: 'all | active | starred | expired | withCalls' }),
+    (0, swagger_1.ApiOkResponse)({
+        schema: {
+            type: 'object',
+            properties: {
+                users: { type: 'array' },
+                total: { type: 'number' },
+                page: { type: 'number' },
+                limit: { type: 'number' },
+                totalPages: { type: 'number' },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Query)('page')),
+    __param(1, (0, common_1.Query)('limit')),
+    __param(2, (0, common_1.Query)('sortBy')),
+    __param(3, (0, common_1.Query)('sortOrder')),
+    __param(4, (0, common_1.Query)('search')),
+    __param(5, (0, common_1.Query)('filter')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "paginated", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get all users with optional sorting' }),
@@ -36932,6 +37331,112 @@ let UsersService = UsersService_1 = class UsersService {
             .exec();
         return { users: users, total, page: pageNum, limit: limitNum, totalPages };
     }
+    async leaderboard(options) {
+        const { aspect, limit = 25 } = options;
+        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 100);
+        const ASPECT_MAP = {
+            msgs: { field: 'msgs' },
+            totalChats: { field: 'totalChats' },
+            personalChats: { field: 'personalChats' },
+            channels: { field: 'channels' },
+            contacts: { field: 'contacts' },
+            totalCalls: { field: 'calls.totalCalls' },
+            incomingCalls: { field: 'calls.incoming' },
+            outgoingCalls: { field: 'calls.outgoing' },
+            videoCalls: { field: 'calls.video' },
+            movieCount: { field: 'movieCount' },
+            otherPhotos: { field: 'otherPhotoCount' },
+            otherVideos: { field: 'otherVideoCount' },
+            ownPhotos: { field: 'ownPhotoCount' },
+            ownVideos: { field: 'ownVideoCount' },
+            relationshipScore: { field: 'relationships.score' },
+            relationshipBestScore: { field: 'relationships.bestScore' },
+            totalMedia: {
+                computed: {
+                    $add: [
+                        { $ifNull: ['$photoCount', 0] },
+                        { $ifNull: ['$videoCount', 0] },
+                        { $ifNull: ['$otherPhotoCount', 0] },
+                        { $ifNull: ['$otherVideoCount', 0] },
+                        { $ifNull: ['$ownPhotoCount', 0] },
+                        { $ifNull: ['$ownVideoCount', 0] },
+                    ],
+                },
+            },
+            engagement: {
+                computed: {
+                    $add: [
+                        { $ifNull: ['$msgs', 0] },
+                        { $multiply: [{ $ifNull: ['$totalChats', 0] }, 10] },
+                        { $multiply: [{ $ifNull: ['$calls.totalCalls', 0] }, 20] },
+                        { $multiply: [{ $ifNull: ['$contacts', 0] }, 2] },
+                    ],
+                },
+            },
+            recency: { field: 'lastActive' },
+        };
+        const aspectDef = ASPECT_MAP[aspect];
+        if (!aspectDef) {
+            throw new common_1.BadRequestException(`Unknown aspect: ${aspect}`);
+        }
+        let excludedMobiles = [];
+        try {
+            excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+        }
+        catch { }
+        const matchStage = {};
+        if (excludedMobiles.length > 0)
+            matchStage.mobile = { $nin: excludedMobiles };
+        const isRecency = aspect === 'recency';
+        const sortField = '_sortValue';
+        const valueExpr = aspectDef.computed
+            ? aspectDef.computed
+            : (isRecency ? `$${aspectDef.field}` : { $ifNull: [`$${aspectDef.field}`, 0] });
+        const pipeline = [
+            { $match: matchStage },
+            { $addFields: { [sortField]: valueExpr } },
+        ];
+        if (isRecency) {
+            pipeline.push({ $match: { [sortField]: { $exists: true, $nin: ['', null] } } });
+        }
+        else {
+            pipeline.push({ $match: { [sortField]: { $gt: 0 } } });
+        }
+        pipeline.push({
+            $facet: {
+                stats: [
+                    {
+                        $group: {
+                            _id: null,
+                            withValue: { $sum: 1 },
+                            average: { $avg: isRecency ? 1 : `$${sortField}` },
+                            highest: { $max: isRecency ? 1 : `$${sortField}` },
+                        },
+                    },
+                ],
+                ranked: [
+                    { $sort: { [sortField]: -1 } },
+                    { $limit: limitNum },
+                    {
+                        $project: {
+                            session: 0,
+                            password: 0,
+                        },
+                    },
+                ],
+            },
+        });
+        const [result] = await this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
+        const stats = result.stats[0] || { highest: 0, average: 0, withValue: 0 };
+        return {
+            ranked: result.ranked || [],
+            stats: {
+                highest: isRecency ? 0 : Math.round(stats.highest || 0),
+                average: isRecency ? 0 : Math.round(stats.average || 0),
+                withValue: stats.withValue || 0,
+            },
+        };
+    }
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
     }
@@ -36946,6 +37451,102 @@ let UsersService = UsersService_1 = class UsersService {
         if (sort)
             query.sort(sort);
         return query.skip(skip).limit(limit).allowDiskUse(true).exec();
+    }
+    async summary() {
+        const [result] = await this.userModel.aggregate([
+            {
+                $facet: {
+                    totals: [
+                        {
+                            $group: {
+                                _id: null,
+                                total: { $sum: 1 },
+                                active: {
+                                    $sum: { $cond: [{ $gte: ['$lastActive', '2026-01-01'] }, 1, 0] },
+                                },
+                                starred: { $sum: { $cond: [{ $eq: ['$starred', true] }, 1, 0] } },
+                                expired: { $sum: { $cond: [{ $eq: ['$expired', true] }, 1, 0] } },
+                                withTwoFA: { $sum: { $cond: [{ $eq: ['$twoFA', true] }, 1, 0] } },
+                                withCalls: {
+                                    $sum: { $cond: [{ $gt: ['$calls.totalCalls', 0] }, 1, 0] },
+                                },
+                                withRelationship: {
+                                    $sum: { $cond: [{ $gt: ['$relationships.score', 0] }, 1, 0] },
+                                },
+                                avgMsgs: { $avg: '$msgs' },
+                                avgContacts: { $avg: '$contacts' },
+                                avgChats: { $avg: '$totalChats' },
+                                totalMsgs: { $sum: '$msgs' },
+                                totalCalls: { $sum: '$calls.totalCalls' },
+                                totalContacts: { $sum: '$contacts' },
+                            },
+                        },
+                    ],
+                    genderBreakdown: [
+                        { $group: { _id: '$gender', count: { $sum: 1 } } },
+                    ],
+                },
+            },
+        ]).allowDiskUse(true).exec();
+        const totals = result.totals[0] || {};
+        const genderBreakdown = Object.fromEntries((result.genderBreakdown || []).map((g) => [g._id || 'unknown', g.count]));
+        return {
+            total: totals.total || 0,
+            active: totals.active || 0,
+            starred: totals.starred || 0,
+            expired: totals.expired || 0,
+            withTwoFA: totals.withTwoFA || 0,
+            withCalls: totals.withCalls || 0,
+            withRelationship: totals.withRelationship || 0,
+            avgMsgs: Math.round(totals.avgMsgs || 0),
+            avgContacts: Math.round(totals.avgContacts || 0),
+            avgChats: Math.round(totals.avgChats || 0),
+            totalMsgs: totals.totalMsgs || 0,
+            totalCalls: totals.totalCalls || 0,
+            totalContacts: totals.totalContacts || 0,
+            genderBreakdown,
+        };
+    }
+    async paginated(options) {
+        const { page = 1, limit = 50, sortBy = 'lastActive', sortOrder = 'desc', search, filter = 'all', } = options;
+        const pageNum = Math.max(1, Math.floor(page));
+        const limitNum = Math.min(Math.max(1, Math.floor(limit)), 200);
+        const skip = (pageNum - 1) * limitNum;
+        const query = {};
+        if (filter === 'active')
+            query.lastActive = { $gte: '2026-01-01' };
+        else if (filter === 'starred')
+            query.starred = true;
+        else if (filter === 'expired')
+            query.expired = true;
+        else if (filter === 'withCalls')
+            query['calls.totalCalls'] = { $gt: 0 };
+        if (search?.trim()) {
+            const q = search.trim();
+            query.$or = [
+                { firstName: { $regex: q, $options: 'i' } },
+                { lastName: { $regex: q, $options: 'i' } },
+                { username: { $regex: q, $options: 'i' } },
+                { mobile: { $regex: q } },
+                { tgId: q },
+            ];
+        }
+        const total = await this.userModel.countDocuments(query).exec();
+        const totalPages = Math.ceil(total / limitNum);
+        if (total === 0) {
+            return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
+        }
+        const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+        const users = await this.userModel
+            .find(query)
+            .select('-session -password')
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum)
+            .allowDiskUse(true)
+            .lean()
+            .exec();
+        return { users: users, total, page: pageNum, limit: limitNum, totalPages };
     }
     async findOne(tgId) {
         const doc = await this.userModel.findOne({ tgId }).exec();
