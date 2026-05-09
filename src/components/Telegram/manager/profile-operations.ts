@@ -221,9 +221,9 @@ export async function updateUsername(ctx: TgContext, baseUsername: string): Prom
                     increment++;
                     await sleep(2000);
                 }
-            } catch (error) {
-                ctx.logger.info(ctx.phoneNumber, error.message);
-                if (error.errorMessage == 'USERNAME_NOT_MODIFIED') {
+            } catch (error: unknown) {
+                ctx.logger.info(ctx.phoneNumber, (error as Error).message);
+                if ((error as Error).message == 'USERNAME_NOT_MODIFIED') {
                     newUserName = username;
                     break;
                 }

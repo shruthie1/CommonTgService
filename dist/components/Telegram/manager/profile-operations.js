@@ -223,7 +223,7 @@ async function updateUsername(ctx, baseUsername) {
             }
             catch (error) {
                 ctx.logger.info(ctx.phoneNumber, error.message);
-                if (error.errorMessage == 'USERNAME_NOT_MODIFIED') {
+                if (error.message == 'USERNAME_NOT_MODIFIED') {
                     newUserName = username;
                     break;
                 }
