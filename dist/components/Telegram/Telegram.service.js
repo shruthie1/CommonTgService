@@ -65,6 +65,7 @@ const telegram_logger_1 = require("./utils/telegram-logger");
 const fs = __importStar(require("fs"));
 const Helpers_1 = require("telegram/Helpers");
 const fetchWithTimeout_1 = require("../../utils/fetchWithTimeout");
+const logbots_1 = require("../../utils/logbots");
 const telegram_1 = require("telegram");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
@@ -495,9 +496,18 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async removeOtherAuths(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        await telegramClient.removeOtherAuths();
-        this.logger.info(mobile, 'Removed other authorizations');
-        return "Removed other authorizations";
+        try {
+            await telegramClient.removeOtherAuths();
+            this.logger.info(mobile, 'Removed other authorizations');
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Remove Other Auths Success\n\nMobile: ${mobile}\nStatus: Non-protected sessions removed`)}`, { timeout: 5000 });
+            return "Removed other authorizations";
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(mobile, 'Failed to remove other authorizations', error);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Remove Other Auths Failed\n\nMobile: ${mobile}\nError: ${message.substring(0, 500)}`)}`, { timeout: 5000 });
+            throw error;
+        }
     }
     async processBatch(items, batchSize, processor, delayMs = 2000) {
         const errors = [];

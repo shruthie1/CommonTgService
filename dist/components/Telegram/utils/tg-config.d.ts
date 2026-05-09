@@ -73,5 +73,6 @@ export declare function generateTGConfigWithProxy(mobile: string, proxyConfig: {
 export declare function getAvailablePlatforms(): string[];
 export declare function getPlatformConfig(platform: string): TGPlatformConfig | undefined;
 export declare function getExpectedAuthFingerprint(mobile: string, options?: Parameters<typeof generateTGConfig>[2]): TGAuthFingerprint;
+export declare function getAuthProtectionReason(auth: Api.Authorization): string | null;
 export declare function isAuthAllowlisted(auth: Api.Authorization): boolean;
 export declare function isAuthFingerprintMatch(mobile: string, auth: Api.Authorization): boolean;

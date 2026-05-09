@@ -11,11 +11,14 @@ export type WarmupPhaseType = typeof WarmupPhase[keyof typeof WarmupPhase];
 export declare const WARMUP_PHASE_THRESHOLDS: {
     readonly settling: 1;
     readonly identity: 4;
-    readonly growing: 8;
-    readonly maturing: 18;
-    readonly ready: 20;
+    readonly growing: 14;
+    readonly maturing: 20;
+    readonly ready: 24;
 };
 export declare const MIN_DAYS_BETWEEN_IDENTITY_STEPS = 2;
+export declare const MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = 3;
+export declare const MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = 3;
+export declare const MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 export declare const MIN_CHANNELS_FOR_MATURING = 200;
 export interface WarmupAction {
     phase: WarmupPhaseType;
