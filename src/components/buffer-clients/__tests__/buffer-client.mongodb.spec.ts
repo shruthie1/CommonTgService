@@ -9,7 +9,7 @@ describe('BufferClient Mongo integration', () => {
 
   const createBufferClient = (overrides: Partial<BufferClient> = {}) => ({
     tgId: `tg-${Math.random().toString(36).slice(2, 10)}`,
-    mobile: `+1555${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`,
+    mobile: `1555${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`,
     session: `session-${Math.random().toString(36).slice(2, 12)}`,
     availableDate: '2026-04-11',
     channels: 0,
@@ -66,13 +66,13 @@ describe('BufferClient Mongo integration', () => {
 
   it('matches both null and missing warmup dates with `{ enrolledAt: null }`', async () => {
     await BufferClientModel.create(createBufferClient({
-      mobile: '+155500000001',
+      mobile: '155500000001',
       session: 'session-null',
       enrolledAt: null,
     }));
 
     await connection.db.collection('bufferClients').insertOne(createBufferClient({
-      mobile: '+155500000002',
+      mobile: '155500000002',
       session: 'session-missing',
       clientId: 'main-client-2',
     }));
@@ -80,12 +80,12 @@ describe('BufferClient Mongo integration', () => {
     const matches = await BufferClientModel.find({ enrolledAt: null }).lean();
     const matchedMobiles = matches.map((doc) => doc.mobile).sort();
 
-    expect(matchedMobiles).toEqual(['+155500000001', '+155500000002']);
+    expect(matchedMobiles).toEqual(['155500000001', '155500000002']);
   });
 
   it('persists warmup progress through findOneAndUpdate', async () => {
     const created = await BufferClientModel.create(createBufferClient({
-      mobile: '+155500000003',
+      mobile: '155500000003',
       session: 'session-update',
     }));
     const stepCompletedAt = new Date('2026-04-11T10:00:00.000Z');
@@ -110,19 +110,19 @@ describe('BufferClient Mongo integration', () => {
 
   it('enforces the partial unique client reservation index only when inUse is true', async () => {
     await BufferClientModel.create(createBufferClient({
-      mobile: '+155500000004',
+      mobile: '155500000004',
       session: 'session-free-1',
       clientId: 'main-client-unique',
       inUse: false,
     }));
     await BufferClientModel.create(createBufferClient({
-      mobile: '+155500000005',
+      mobile: '155500000005',
       session: 'session-free-2',
       clientId: 'main-client-unique',
       inUse: false,
     }));
     await BufferClientModel.create(createBufferClient({
-      mobile: '+155500000006',
+      mobile: '155500000006',
       session: 'session-busy-1',
       clientId: 'main-client-unique',
       inUse: true,
@@ -130,7 +130,7 @@ describe('BufferClient Mongo integration', () => {
 
     await expect(
       BufferClientModel.create(createBufferClient({
-        mobile: '+155500000007',
+        mobile: '155500000007',
         session: 'session-busy-2',
         clientId: 'main-client-unique',
         inUse: true,

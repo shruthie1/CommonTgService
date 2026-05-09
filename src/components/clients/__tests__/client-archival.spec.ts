@@ -38,6 +38,7 @@ jest.mock('../../Telegram/utils/connection-manager', () => ({
 function makeBufferClientService(overrides: any = {}) {
     return {
         update: jest.fn().mockResolvedValue({}),
+        updateStatus: jest.fn().mockResolvedValue({ status: 'inactive', message: 'inactive' }),
         createOrUpdate: jest.fn().mockResolvedValue({}),
         markAsInactive: jest.fn().mockResolvedValue({}),
         findOne: jest.fn().mockResolvedValue({ mobile: '90001', session: 'buf-session', username: 'buf_user' }),
@@ -228,7 +229,7 @@ describe('Client Archival', () => {
             expect(updateDto.lastUsed.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime());
         });
 
-        it('skips archival when user not found in users collection', async () => {
+        it('marks buffer inactive when user not found in users collection', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([]); // no users
             const service = makeService({ bufferClientService: bufferService, usersService });
@@ -237,8 +238,13 @@ describe('Client Archival', () => {
                 existingClient, '80001', false, false, 0, 'AUTH_KEY_DUPLICATED',
             );
 
-            // Should not update buffer — returned early because user not found
+            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+                '80001',
+                'inactive',
+                expect.stringContaining('user document missing'),
+            );
             expect(bufferService.update).not.toHaveBeenCalled();
+            expect(bufferService.createOrUpdate).not.toHaveBeenCalled();
         });
     });
 
@@ -329,8 +335,8 @@ describe('Client Archival', () => {
                 existingClient, '80001', false, true, 10,
             );
 
-            // Should have called markAsInactive because assertDistinctUserBackupSession threw permanent error
-            expect(bufferService.markAsInactive).toHaveBeenCalledWith('80001', expect.any(String));
+            // Should have called strict inactive marker because assertDistinctUserBackupSession threw permanent error
+            expect(bufferService.updateStatus).toHaveBeenCalledWith('80001', 'inactive', expect.any(String));
         });
     });
 
@@ -364,6 +370,27 @@ describe('Client Archival', () => {
             );
 
             expect(telegramService.updatePrivacyforDeletedAccount).not.toHaveBeenCalled();
+        });
+
+        it('marks old buffer inactive when privacy formalities fail with a permanent frozen error', async () => {
+            const telegramService = makeTelegramService();
+            telegramService.updatePrivacyforDeletedAccount.mockRejectedValue(
+                new Error('Privacy deactivate incomplete: 5 read failure(s), 0 write failure(s) — PhoneCall read: FROZEN_METHOD_INVALID'),
+            );
+            const bufferService = makeBufferClientService();
+            const usersService = makeUsersService([existingUser]);
+            const service = makeService({ telegramService, bufferClientService: bufferService, usersService });
+
+            await (service as any).handleClientArchival(
+                existingClient, '80001', true, true, 0,
+            );
+
+            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+                '80001',
+                'inactive',
+                expect.stringContaining('FROZEN_METHOD_INVALID'),
+            );
+            expect(bufferService.createOrUpdate).not.toHaveBeenCalled();
         });
     });
 

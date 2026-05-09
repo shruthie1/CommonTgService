@@ -49,6 +49,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 class TestBaseService extends BaseClientService<BaseClientDocument> {
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
+    public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => null);
     public readonly telegramServiceMock: any;
     public readonly usersServiceMock: any;
     public readonly botsServiceMock: any;
@@ -97,7 +98,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     async findOne(): Promise<any> { return null; }
     async update(mobile: string, updateDto: any): Promise<any> { return this.updateMock(mobile, updateDto); }
     async markAsInactive(): Promise<any> { return null; }
-    async updateStatus(): Promise<any> { return null; }
+    async updateStatus(mobile: string, status: string, message?: string): Promise<any> { return this.updateStatusMock(mobile, status, message); }
     async refillJoinQueue(): Promise<number> { return 0; }
 }
 
@@ -151,7 +152,7 @@ describe('processClient — all exit paths', () => {
     });
 
     test('EXIT 3: zombie detected (50 days in settling with failures)', async () => {
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
             enrolledAt: daysAgo(50, mockNow),
@@ -159,14 +160,15 @@ describe('processClient — all exit paths', () => {
             lastUpdateFailure: daysAgo(10, mockNow),
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(markInactiveSpy).toHaveBeenCalledWith(
+        expect(updateStatusSpy).toHaveBeenCalledWith(
             doc.mobile,
+            'inactive',
             expect.stringContaining('Zombie'),
         );
     });
 
     test('EXIT 3b: 44 days in settling — NOT zombie (below 45d threshold)', async () => {
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
@@ -176,20 +178,27 @@ describe('processClient — all exit paths', () => {
             lastUpdateFailure: daysAgo(10, mockNow),
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(markInactiveSpy).not.toHaveBeenCalled();
+        expect(updateStatusSpy).not.toHaveBeenCalled();
     });
 
     test('EXIT 3c: 50 days but phase=READY → NOT zombie (terminal phase)', async () => {
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.READY,
             enrolledAt: daysAgo(50, mockNow),
             failedUpdateAttempts: 3,
             lastUpdateFailure: daysAgo(10, mockNow),
+            privacyUpdatedAt: daysAgo(45, mockNow),
+            twoFASetAt: daysAgo(44, mockNow),
+            otherAuthsRemovedAt: daysAgo(43, mockNow),
+            profilePicsDeletedAt: daysAgo(42, mockNow),
+            nameBioUpdatedAt: daysAgo(41, mockNow),
+            usernameUpdatedAt: daysAgo(40, mockNow),
+            profilePicsUpdatedAt: daysAgo(39, mockNow),
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(markInactiveSpy).not.toHaveBeenCalled();
+        expect(updateStatusSpy).not.toHaveBeenCalled();
     });
 
     test('EXIT 4: too many failures + backoff active → skip', async () => {
@@ -219,6 +228,24 @@ describe('processClient — all exit paths', () => {
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateSummary).toBe('backfill_timestamps');
+    });
+
+    test('EXIT 6a: READY account with lastUsed → mark session_rotated without Telegram rotation', async () => {
+        const rotateSpy = jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.READY,
+            lastUsed: new Date('2026-03-20T12:00:00.000Z'),
+        });
+        const result = await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(result.updateSummary).toBe('mark_session_rotated_from_last_used');
+        expect(rotateSpy).not.toHaveBeenCalled();
+        expect(service.updateMock).toHaveBeenCalledWith(
+            doc.mobile,
+            expect.objectContaining({
+                warmupPhase: WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: expect.any(Date),
+            }),
+        );
     });
 
     test('EXIT 6b: SETTLING account with lastUsed → still processes (not terminal)', async () => {
@@ -339,6 +366,9 @@ describe('processClient — all exit paths', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.IDENTITY,
             enrolledAt: daysAgo(10, mockNow),
+            privacyUpdatedAt: daysAgo(9, mockNow),
+            twoFASetAt: daysAgo(8, mockNow),
+            otherAuthsRemovedAt: daysAgo(7, mockNow),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateSummary).toBe('delete_photos');
@@ -349,6 +379,9 @@ describe('processClient — all exit paths', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.IDENTITY,
             enrolledAt: daysAgo(10, mockNow),
+            privacyUpdatedAt: daysAgo(9, mockNow),
+            twoFASetAt: daysAgo(8, mockNow),
+            otherAuthsRemovedAt: daysAgo(7, mockNow),
             profilePicsDeletedAt: daysAgo(5, mockNow),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
@@ -360,6 +393,9 @@ describe('processClient — all exit paths', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.IDENTITY,
             enrolledAt: daysAgo(12, mockNow),
+            privacyUpdatedAt: daysAgo(11, mockNow),
+            twoFASetAt: daysAgo(10, mockNow),
+            otherAuthsRemovedAt: daysAgo(9, mockNow),
             profilePicsDeletedAt: daysAgo(8, mockNow),
             nameBioUpdatedAt: daysAgo(5, mockNow),
         });
@@ -386,7 +422,16 @@ describe('processClient — all exit paths', () => {
 
     test('EXIT 10: action=rotate_session → calls rotateSession', async () => {
         jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
-        const doc = makeDoc({ warmupPhase: WarmupPhase.READY });
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.READY,
+            privacyUpdatedAt: daysAgo(12, mockNow),
+            twoFASetAt: daysAgo(11, mockNow),
+            otherAuthsRemovedAt: daysAgo(10, mockNow),
+            profilePicsDeletedAt: daysAgo(9, mockNow),
+            nameBioUpdatedAt: daysAgo(8, mockNow),
+            usernameUpdatedAt: daysAgo(7, mockNow),
+            profilePicsUpdatedAt: daysAgo(6, mockNow),
+        });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateCount).toBe(1);
         expect(service.rotateSession).toHaveBeenCalledWith(doc.mobile);
@@ -394,7 +439,16 @@ describe('processClient — all exit paths', () => {
 
     test('EXIT 10: rotate_session fails → increments failures', async () => {
         jest.spyOn(service, 'rotateSession').mockResolvedValue(false);
-        const doc = makeDoc({ warmupPhase: WarmupPhase.READY });
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.READY,
+            privacyUpdatedAt: daysAgo(12, mockNow),
+            twoFASetAt: daysAgo(11, mockNow),
+            otherAuthsRemovedAt: daysAgo(10, mockNow),
+            profilePicsDeletedAt: daysAgo(9, mockNow),
+            nameBioUpdatedAt: daysAgo(8, mockNow),
+            usernameUpdatedAt: daysAgo(7, mockNow),
+            profilePicsUpdatedAt: daysAgo(6, mockNow),
+        });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateCount).toBe(0);
         // Should have incremented failure counters
@@ -468,6 +522,13 @@ describe('processClient — failure reset edge cases', () => {
             warmupPhase: WarmupPhase.READY,
             failedUpdateAttempts: 2,
             lastUpdateFailure: null,
+            privacyUpdatedAt: daysAgo(12, mockNow),
+            twoFASetAt: daysAgo(11, mockNow),
+            otherAuthsRemovedAt: daysAgo(10, mockNow),
+            profilePicsDeletedAt: daysAgo(9, mockNow),
+            nameBioUpdatedAt: daysAgo(8, mockNow),
+            usernameUpdatedAt: daysAgo(7, mockNow),
+            profilePicsUpdatedAt: daysAgo(6, mockNow),
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(service.updateMock).toHaveBeenCalledWith(
@@ -496,6 +557,13 @@ describe('processClient — failure reset edge cases', () => {
             warmupPhase: WarmupPhase.READY,
             failedUpdateAttempts: 3,
             lastUpdateFailure: daysAgo(2, mockNow), // 2 days ago, past 24h backoff
+            privacyUpdatedAt: daysAgo(12, mockNow),
+            twoFASetAt: daysAgo(11, mockNow),
+            otherAuthsRemovedAt: daysAgo(10, mockNow),
+            profilePicsDeletedAt: daysAgo(9, mockNow),
+            nameBioUpdatedAt: daysAgo(8, mockNow),
+            usernameUpdatedAt: daysAgo(7, mockNow),
+            profilePicsUpdatedAt: daysAgo(6, mockNow),
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(service.updateMock).toHaveBeenCalledWith(
@@ -735,13 +803,14 @@ describe('set2fa branches', () => {
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
         jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue('foreign');
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
         const result = await (service as any).set2fa(doc, 0);
         expect(result).toBe(0);
-        expect(markInactiveSpy).toHaveBeenCalledWith(
+        expect(updateStatusSpy).toHaveBeenCalledWith(
             doc.mobile,
+            'inactive',
             expect.stringContaining('Foreign 2FA'),
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalled();
@@ -757,12 +826,12 @@ describe('set2fa branches', () => {
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
         jest.spyOn(service as any, 'verifyOurPassword').mockResolvedValue('unknown');
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING, tgId: 'tg-1' });
         const result = await (service as any).set2fa(doc, 3);
         expect(result).toBe(0);
-        expect(markInactiveSpy).not.toHaveBeenCalled();
+        expect(updateStatusSpy).not.toHaveBeenCalled();
         expect(service.updateMock).toHaveBeenCalledWith(
             doc.mobile,
             expect.objectContaining({
@@ -821,13 +890,14 @@ describe('removeOtherAuths branches', () => {
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
         const result = await (service as any).removeOtherAuths(doc, 0);
         expect(result).toBe(0);
-        expect(markInactiveSpy).toHaveBeenCalledWith(
+        expect(updateStatusSpy).toHaveBeenCalledWith(
             doc.mobile,
+            'inactive',
             expect.stringContaining('Session lost'),
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
@@ -845,12 +915,12 @@ describe('removeOtherAuths branches', () => {
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
         const result = await (service as any).removeOtherAuths(doc, 0);
         expect(result).toBe(0);
-        expect(markInactiveSpy).toHaveBeenCalled();
+        expect(updateStatusSpy).toHaveBeenCalled();
     });
 
     test('transient error → increments failures, does NOT mark inactive', async () => {
@@ -861,12 +931,12 @@ describe('removeOtherAuths branches', () => {
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
         const result = await (service as any).removeOtherAuths(doc, 1);
         expect(result).toBe(0);
-        expect(markInactiveSpy).not.toHaveBeenCalled();
+        expect(updateStatusSpy).not.toHaveBeenCalled();
         expect(service.updateMock).toHaveBeenCalledWith(
             doc.mobile,
             expect.objectContaining({ failedUpdateAttempts: 2 }),
@@ -1180,7 +1250,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
 
     const makeClient = (overrides: Partial<BufferClient> = {}) => ({
         tgId: `tg-lifecycle`,
-        mobile: `+15550000001`,
+        mobile: `15550000001`,
         session: `session-lifecycle`,
         availableDate: '2026-04-01',
         channels: 0,
@@ -1344,7 +1414,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
     test('concurrent updates preserve all fields (no spread data loss)', async () => {
         const enrolledAt = new Date('2026-03-01T00:00:00.000Z');
         const created = await BufferClientModel.create(makeClient({
-            mobile: '+15550000002',
+            mobile: '15550000002',
             warmupPhase: WarmupPhase.SETTLING as any,
             enrolledAt,
             warmupJitter: 2,
@@ -1378,7 +1448,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
 
     test('$inc on channels is atomic', async () => {
         const created = await BufferClientModel.create(makeClient({
-            mobile: '+15550000003',
+            mobile: '15550000003',
             channels: 100,
         }));
 

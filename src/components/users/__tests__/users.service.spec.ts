@@ -61,7 +61,7 @@ describe('UsersService', () => {
         );
 
         await service.create({
-            mobile: '9199990001',
+            mobile: '91999990001',
             session: 'signup-session',
             firstName: 'User',
             lastName: '',
@@ -82,6 +82,6 @@ describe('UsersService', () => {
         expect(modelInstances).toHaveLength(1);
         expect(modelInstances[0].save).toHaveBeenCalledTimes(1);
         expect(telegramService.createNewSession).not.toHaveBeenCalled();
-        expect(unregisterSpy).toHaveBeenCalledWith('9199990001');
+        expect(unregisterSpy).toHaveBeenCalledWith('91999990001');
     });
 });

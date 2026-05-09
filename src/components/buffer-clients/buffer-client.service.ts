@@ -49,6 +49,48 @@ import {
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 
+type ClientCount = { _id: string; count: number };
+type EnrollmentDecision = {
+    clientId: string;
+    healthyCount: number;
+    healthyCap: number;
+    remainingCapacity: number;
+    readyActive: number;
+    warmingPipeline: number;
+    totalActive: number;
+    totalNeeded: number;
+    calculationReason: string;
+    priority: number;
+    replenishmentWindows: unknown;
+    shortTermWindows: unknown;
+    wouldEnroll?: number;
+    cappedReason?: string | null;
+    blockedReason?: string;
+};
+type ClientNeed = { clientId: string; totalNeeded: number; priority: number };
+type Allocation = { clientId: string; allocated: number; priority: number };
+type BufferClientQuery = Record<string, unknown>;
+type WarmupDiagnosticEntry = {
+    mobile: string;
+    dbPhase: string;
+    computedPhase: string;
+    action: string;
+    priority: number;
+    failedAttempts: number;
+    lastAttemptHoursAgo: number | null;
+    processSkipReason: string | null;
+    privacyDone: boolean;
+    twoFADone: boolean;
+    authsRemoved: boolean;
+    channels: number;
+    onCooldown: boolean;
+};
+type WarmupSimulationEntry = Pick<WarmupDiagnosticEntry, 'mobile' | 'dbPhase' | 'computedPhase' | 'action' | 'priority'> & {
+    isMutation: boolean;
+    wouldConsumeSlot: boolean;
+};
+type WarmupSimulationSkip = { mobile: string; action: string; priority?: number; reason: string };
+
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
@@ -287,9 +329,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 );
                 if (hasAnyAssignment) {
                     // Read current TG profile state once (needed for lastName and bio checks)
-                    const fullUser = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
-                    const currentLastName: string = (fullUser as any)?.users?.[0]?.lastName || '';
-                    const currentBio: string = (fullUser as any)?.fullUser?.about || '';
+                    const fullUser: unknown = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
+                    const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
+                    const currentBio = this.readNestedString(fullUser, ['fullUser', 'about']);
 
                     // Check firstName mismatch
                     const firstNameWrong = assignment?.assignedFirstName != null
@@ -346,7 +388,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         } finally {
@@ -395,7 +437,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         } finally {
@@ -406,17 +448,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- CRUD (buffer-specific) ----
 
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument> {
+        const canonicalMobile = this.canonicalMobile(bufferClient.mobile);
+        const createData: CreateBufferClientDto = { ...bufferClient, mobile: canonicalMobile };
         const result = await this.bufferClientModel.create({
-            ...bufferClient,
+            ...createData,
             status: bufferClient.status || 'active',
         });
-        this.logger.log(`Buffer Client Created:\n\nMobile: ${bufferClient.mobile}`);
+        this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
             [
                 '<b>Buffer Client Created</b>',
                 '',
-                `<b>Mobile:</b> ${bufferClient.mobile}`,
+                `<b>Mobile:</b> ${canonicalMobile}`,
                 `<b>Client ID:</b> ${bufferClient.clientId || '-'}`,
                 `<b>Status:</b> ${result.status}`,
                 `<b>Available Date:</b> ${bufferClient.availableDate || '-'}`,
@@ -433,8 +477,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return this.bufferClientModel.find(filter).exec();
     }
 
-    async findOne(mobile: string, throwErr: boolean = true): Promise<BufferClientDocument> {
-        const bufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
+    async findOne(mobile: string, throwErr: boolean = true): Promise<BufferClientDocument | null> {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const bufferClient = (await this.bufferClientModel.findOne({ mobile: canonicalMobile }).exec())?.toJSON() || null;
         if (!bufferClient && throwErr) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
@@ -442,12 +487,22 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     }
 
     async existsByMobile(mobile: string): Promise<boolean> {
-        return !!(await this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
+        const canonicalMobile = this.canonicalMobile(mobile);
+        return !!(await this.bufferClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
 
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument> {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
+        if (updateData.mobile !== undefined) {
+            const payloadMobile = this.canonicalMobile(updateData.mobile);
+            if (payloadMobile !== canonicalMobile) {
+                throw new BadRequestException('mobile in payload must match route mobile');
+            }
+            updateData.mobile = canonicalMobile;
+        }
         const updatedBufferClient = await this.bufferClientModel
-            .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
             .exec();
         if (!updatedBufferClient) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
@@ -456,12 +511,17 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     }
 
     async createOrUpdate(mobile: string, createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClientDocument> {
-        const existingBufferClient = (await this.bufferClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (existingBufferClient) {
-            return this.update(existingBufferClient.mobile, createorUpdateBufferClientDto as UpdateBufferClientDto);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        if (await this.existsByMobile(canonicalMobile)) {
+            const updateDto: UpdateBufferClientDto = {
+                ...createorUpdateBufferClientDto,
+                mobile: canonicalMobile,
+            };
+            return this.update(canonicalMobile, updateDto);
         } else {
             const createDto: CreateBufferClientDto = {
                 ...createorUpdateBufferClientDto,
+                mobile: canonicalMobile,
                 status: (createorUpdateBufferClientDto as CreateBufferClientDto).status || 'active',
             } as CreateBufferClientDto;
             return this.create(createDto);
@@ -470,13 +530,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     async remove(mobile: string, message?: string): Promise<void> {
         try {
-            const bufferClient = await this.findOne(mobile, false);
+            const canonicalMobile = this.canonicalMobile(mobile);
+            const bufferClient = await this.findOne(canonicalMobile, false);
             if (!bufferClient) {
                 throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
-            this.logger.log(`Removing BufferClient with mobile: ${mobile}`);
-            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
-            await this.bufferClientModel.deleteOne({ mobile }).exec();
+            this.logger.log(`Removing BufferClient with mobile: ${canonicalMobile}`);
+            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${canonicalMobile}\nReason: ${message || 'manual removal'}`)}`);
+            await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
         } catch (error) {
             const errorDetails = parseError(error, `failed to delete BufferClient: ${mobile}`);
             this.logger.error(`Error removing BufferClient with mobile ${mobile}: ${errorDetails.message}`);
@@ -492,8 +553,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             });
             return [];
         }
-        const query: Record<string, any> = { ...filter };
-        const regexFields = ['mobile', 'username', 'clientId'];
+        const query: BufferClientQuery = { ...filter };
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
+        const regexFields = ['username', 'clientId'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
@@ -502,7 +566,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return await this.bufferClientModel.find(query).exec();
     }
 
-    async executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<BufferClientDocument[]> {
+    async executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<BufferClientDocument[]> {
         if (!query) {
             throw new BadRequestException('Query is invalid.');
         }
@@ -525,12 +589,25 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (status === 'inactive') {
             updateData.inUse = false;
         }
-        await this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
-            { parseMode: 'HTML' }
-        );
-        return await this.update(mobile, updateData);
+        try {
+            const updated = await this.update(mobile, updateData);
+            this.logger.log(`Buffer client ${mobile} status updated to ${status}`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
+                { parseMode: 'HTML' }
+            ).catch((error) => this.logger.error(`Failed to send buffer status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            return updated;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`,
+                { parseMode: 'HTML' }
+            ).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            throw error;
+        }
     }
 
     async setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument> {
@@ -602,7 +679,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             ...primaryClientMobiles,
         ]);
 
-        const query: Record<string, any> = {
+        const query: BufferClientQuery = {
             status: 'active',
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(excludedMobiles) },
@@ -652,7 +729,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason);
                 }
             } finally {
                 await this.safeUnregisterClient(doc.mobile);
@@ -699,26 +776,27 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         clientId: string,
         availableDate: string = ClientHelperUtils.getTodayDateString()
     ) {
-        const user = (await this.usersService.search({ mobile, expired: false }))[0];
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user) throw new BadRequestException('user not found');
 
-        const isExist = await this.findOne(mobile, false);
+        const isExist = await this.findOne(canonicalMobile, false);
         if (isExist) throw new ConflictException('BufferClient already exist');
 
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile)) throw new BadRequestException('Number is an Active Client');
+        if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile))) throw new BadRequestException('Number is an Active Client');
 
-        const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false });
+        const telegramClient = await connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
             // Only get channel info — no 2FA, no profile changes, no new session
-            const channels = await this.telegramService.getChannelInfo(mobile, true);
+            const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             const bufferClient: CreateBufferClientDto = {
                 tgId: user.tgId,
                 session: user.session, // Use old trusted session directly
-                mobile: user.mobile,
+                mobile: canonicalMobile,
                 availableDate,
                 channels: channels.ids.length,
                 clientId,
@@ -727,7 +805,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 lastUsed: null,
             };
             await this.bufferClientModel
-                .findOneAndUpdate({ mobile: user.mobile }, {
+                .findOneAndUpdate({ mobile: canonicalMobile }, {
                     $set: {
                         ...bufferClient,
                         warmupPhase: WarmupPhase.ENROLLED,
@@ -737,21 +815,21 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 }, { new: true, upsert: true })
                 .exec();
         } catch (error) {
-            const errorDetails = parseError(error, `Failed to set as Buffer Client ${mobile}`);
+            const errorDetails = parseError(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             // Retire permanently dead accounts at the source
             if (isPermanentError(errorDetails)) {
                 try { await this.usersService.update(user.tgId, { expired: true }); } catch { }
             }
             throw new HttpException(errorDetails.message, errorDetails.status);
         } finally {
-            await this.safeUnregisterClient(mobile);
+            await this.safeUnregisterClient(canonicalMobile);
         }
         return 'Client enrolled as buffer successfully';
     }
 
     // ---- Diagnostic: dry-run enrollment decision ----
 
-    async diagnoseEnrollmentDecision(): Promise<any> {
+    async diagnoseEnrollmentDecision(): Promise<Record<string, unknown>> {
         const clients = await this.clientService.findAll();
         const now = Date.now();
 
@@ -766,15 +844,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
         }
 
-        const perClientDecisions: any[] = [];
-        const clientsNeedingBufferClients: any[] = [];
+        const perClientDecisions: EnrollmentDecision[] = [];
+        const clientsNeedingBufferClients: ClientNeed[] = [];
 
         for (const client of clients) {
             const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
             const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
             const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
 
-            const decision: any = {
+            const decision: EnrollmentDecision = {
                 clientId: client.clientId,
                 healthyCount,
                 healthyCap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
@@ -814,7 +892,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Simulate global cap
         clientsNeedingBufferClients.sort((a, b) => a.priority - b.priority);
         let totalSlotsNeeded = 0;
-        const allocations: any[] = [];
+        const allocations: Allocation[] = [];
         for (const clientNeed of clientsNeedingBufferClients) {
             const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
             if (allocated > 0) {
@@ -863,7 +941,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     // ---- Diagnostic: dry-run warmup pipeline ----
 
-    async diagnoseWarmupPipeline(): Promise<any> {
+    async diagnoseWarmupPipeline(): Promise<Record<string, unknown>> {
         const clients = await this.clientService.findAll();
         const clientMap = new Map(clients.map((c) => [c.clientId, c]));
         const now = Date.now();
@@ -875,8 +953,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const phaseCounts: Record<string, number> = {};
         const actionCounts: Record<string, number> = {};
         const skippedReasons: Record<string, number> = {};
-        const wouldProcess: any[] = [];
-        const settlingDetails: any[] = [];
+        const wouldProcess: WarmupDiagnosticEntry[] = [];
+        const settlingDetails: WarmupDiagnosticEntry[] = [];
 
         for (const bc of allActive) {
             const warmupPhase = bc.warmupPhase || WarmupPhase.ENROLLED;
@@ -966,8 +1044,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         // Simulate processing loop with new MAX_UPDATES_PER_CYCLE
         let simUpdates = 0;
-        const simProcessed: any[] = [];
-        const simSkipped: any[] = [];
+        const simProcessed: WarmupSimulationEntry[] = [];
+        const simSkipped: WarmupSimulationSkip[] = [];
         for (const entry of wouldProcess) {
             if (simUpdates >= this.MAX_UPDATES_PER_CYCLE) {
                 simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
@@ -1157,8 +1235,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
-                const healthCheckPassed = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
-                if (!healthCheckPassed) continue;
+                const healthCheck = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
+                if (!healthCheck.passed) continue;
             }
             const processResult = await this.processClient(bufferClient, client);
             if (processResult.updateCount > 0) {
@@ -1283,7 +1361,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         const primaryClientMobiles = await this.getPrimaryClientMobiles(clientId);
         const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
-        const query: Record<string, any> = {
+        const query: BufferClientQuery = {
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
             status: 'active',
@@ -1336,7 +1414,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const errorDetails = parseError(error, `JoinChannelErr: ${mobile}`);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(mobile, reason);
+                    await this.deactivateClient(mobile, reason);
                 }
             } finally {
                 await this.safeUnregisterClient(mobile);
@@ -1366,9 +1444,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
      */
     private async isMobileEnrolledAnywhere(mobile: string): Promise<string | null> {
         const [bufferExists, promoteExists, clientExists] = await Promise.all([
-            this.bufferClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.existsByMobile(mobile),
             this.promoteClientService.existsByMobile(mobile),
-            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+            this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (bufferExists) return 'bufferClients';
         if (promoteExists) return 'promoteClients';
@@ -1404,11 +1482,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
+            if (!user?.session?.trim()) {
+                this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: source user/session missing`);
+                return false;
+            }
             const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
 
             const bufferClient: CreateBufferClientDto = {
                 tgId: document.tgId,
-                session: user?.session || '', // Use old trusted session
+                session: user.session, // Use old trusted session
                 mobile: document.mobile,
                 lastUsed: null,
                 availableDate: targetAvailableDate,
@@ -1452,7 +1534,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if (isPermanentError(errorDetails)) {
                 // Try to mark buffer doc inactive (may not exist yet)
-                try { await this.markAsInactive(document.mobile, errorDetails.message); } catch { }
+                await this.deactivateClient(document.mobile, errorDetails.message);
                 // Also retire the source user so it's not selected again
                 try { await this.usersService.update(document.tgId, { expired: true }); } catch { }
             }
@@ -1652,7 +1734,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Distribution stats ----
 
     async getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClientDocument[]> {
-        const filter: Record<string, any> = { clientId };
+        const filter: BufferClientQuery = { clientId };
         if (status) filter.status = status;
         return this.bufferClientModel.find(filter).exec();
     }
@@ -1699,7 +1781,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.bufferClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active', lastUsed: { $gte: last24Hours } } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
         ]);
 
-        const toMap = (arr: any[]) => new Map(arr.map((item: { _id: string; count: number }) => [item._id, item.count]));
+        const toMap = (arr: ClientCount[]) => new Map(arr.map((item) => [item._id, item.count]));
         const assignedCountMap = toMap(assignedCounts);
         const activeCountMap = toMap(activeCounts);
         const inactiveCountMap = toMap(inactiveCounts);

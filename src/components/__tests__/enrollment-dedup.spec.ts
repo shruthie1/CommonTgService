@@ -69,7 +69,7 @@ describe('Enrollment Deduplication', () => {
     let promoteService: PromoteClientService;
     let botsService: ReturnType<typeof mockBotsService>;
 
-    const mainClient = { clientId: 'main-client-1', mobile: '+15559990001' };
+    const mainClient = { clientId: 'main-client-1', mobile: '15559990001' };
 
     beforeAll(async () => {
         jest.setTimeout(120_000);
@@ -301,10 +301,10 @@ describe('Enrollment Deduplication', () => {
 
         it('promote: inactive promote clients are excluded from candidate pool', async () => {
             // Create a user
-            const user = await insertUser({ mobile: '+15550010001' });
+            const user = await insertUser({ mobile: '15550010001' });
 
             // Enroll them as an inactive promote client
-            await insertPromoteClient({ mobile: '+15550010001', status: 'inactive', clientId: 'main-client-1' });
+            await insertPromoteClient({ mobile: '15550010001', status: 'inactive', clientId: 'main-client-1' });
 
             // goodIds should include this mobile even though it's inactive
             // To test: call addNewUserstoPromoteClientsDynamic and verify
@@ -312,7 +312,7 @@ describe('Enrollment Deduplication', () => {
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
                 // Pass goodIds that includes the mobile (simulating what checkPromoteClients builds)
-                ['+15550010001'],
+                ['15550010001'],
                 [{ clientId: 'main-client-1', totalNeeded: 1, windowNeeds: [], totalActive: 0, totalNeededForCount: 1, calculationReason: 'test', priority: 1 }],
                 new Map(),
             );
@@ -322,12 +322,12 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: inactive buffer clients are excluded from candidate pool', async () => {
-            const user = await insertUser({ mobile: '+15550020001' });
-            await insertBufferClient({ mobile: '+15550020001', status: 'inactive', clientId: 'main-client-1' });
+            const user = await insertUser({ mobile: '15550020001' });
+            await insertBufferClient({ mobile: '15550020001', status: 'inactive', clientId: 'main-client-1' });
 
             const result = await (bufferService as any).addNewUserstoBufferClientsDynamic(
                 [],
-                ['+15550020001'],
+                ['15550020001'],
                 [{ clientId: 'main-client-1', totalNeeded: 1, windowNeeds: [], totalActive: 0, totalNeededForCount: 1, calculationReason: 'test', priority: 1 }],
                 new Map(),
             );
@@ -337,12 +337,12 @@ describe('Enrollment Deduplication', () => {
 
         it('promote: buffer client mobiles are excluded from promote candidate pool', async () => {
             // A user who is already a buffer client should not be picked as promote
-            const user = await insertUser({ mobile: '+15550030001' });
-            await insertBufferClient({ mobile: '+15550030001', status: 'active', clientId: 'main-client-1' });
+            const user = await insertUser({ mobile: '15550030001' });
+            await insertBufferClient({ mobile: '15550030001', status: 'active', clientId: 'main-client-1' });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
-                ['+15550030001'], // buffer mobile included in goodIds
+                ['15550030001'], // buffer mobile included in goodIds
                 [{ clientId: 'main-client-1', totalNeeded: 1, windowNeeds: [], totalActive: 0, totalNeededForCount: 1, calculationReason: 'test', priority: 1 }],
                 new Map(),
             );
@@ -365,7 +365,7 @@ describe('Enrollment Deduplication', () => {
 
         it('promote: eligible user not in any collection IS picked', async () => {
             // Create a user who is NOT in any collection — they should be enrolled
-            const user = await insertUser({ mobile: '+15550050001' });
+            const user = await insertUser({ mobile: '15550050001' });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
@@ -375,16 +375,16 @@ describe('Enrollment Deduplication', () => {
             );
 
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('+15550050001');
+            expect(result.createdEntries[0]).toContain('15550050001');
 
             // Verify the promote client doc was actually created
-            const doc = await PromoteClientModel.findOne({ mobile: '+15550050001' }).lean();
+            const doc = await PromoteClientModel.findOne({ mobile: '15550050001' }).lean();
             expect(doc).toBeTruthy();
             expect(doc!.clientId).toBe('main-client-1');
         });
 
         it('buffer: eligible user not in any collection IS picked', async () => {
-            const user = await insertUser({ mobile: '+15550060001' });
+            const user = await insertUser({ mobile: '15550060001' });
 
             const result = await (bufferService as any).addNewUserstoBufferClientsDynamic(
                 [],
@@ -394,9 +394,9 @@ describe('Enrollment Deduplication', () => {
             );
 
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('+15550060001');
+            expect(result.createdEntries[0]).toContain('15550060001');
 
-            const doc = await BufferClientModel.findOne({ mobile: '+15550060001' }).lean();
+            const doc = await BufferClientModel.findOne({ mobile: '15550060001' }).lean();
             expect(doc).toBeTruthy();
             expect(doc!.clientId).toBe('main-client-1');
         });
@@ -411,7 +411,7 @@ describe('Enrollment Deduplication', () => {
         it('promote: same mobile appearing twice in candidates is only enrolled once', async () => {
             // Create two users with the same mobile (simulating edge case where
             // executeQuery somehow returns duplicates)
-            const mobile = '+15550070001';
+            const mobile = '15550070001';
             await insertUser({ mobile });
 
             // Manually invoke the enrollment with a candidate list that has duplicates
@@ -432,7 +432,7 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: same mobile appearing twice in candidates is only enrolled once', async () => {
-            const mobile = '+15550080001';
+            const mobile = '15550080001';
             await insertUser({ mobile });
 
             const doc = { mobile, tgId: 'tg-dup-2' };
@@ -448,7 +448,7 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: batch enrollment of 5 users creates exactly 5 unique documents', async () => {
-            const mobiles = ['+15550090001', '+15550090002', '+15550090003', '+15550090004', '+15550090005'];
+            const mobiles = ['15550090001', '15550090002', '15550090003', '15550090004', '15550090005'];
             for (const mobile of mobiles) {
                 await insertUser({ mobile });
             }
@@ -469,7 +469,7 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: batch enrollment of 5 users creates exactly 5 unique documents', async () => {
-            const mobiles = ['+15550100001', '+15550100002', '+15550100003', '+15550100004', '+15550100005'];
+            const mobiles = ['15550100001', '15550100002', '15550100003', '15550100004', '15550100005'];
             for (const mobile of mobiles) {
                 await insertUser({ mobile });
             }
@@ -497,10 +497,10 @@ describe('Enrollment Deduplication', () => {
     describe('Layer 4: Cross-Collection Existence Check', () => {
 
         it('promote: skips mobile already in promoteClients collection', async () => {
-            await insertPromoteClient({ mobile: '+15550110001', clientId: 'main-client-1' });
+            await insertPromoteClient({ mobile: '15550110001', clientId: 'main-client-1' });
 
             const result = await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550110001', tgId: 'tg-cross-1' },
+                { mobile: '15550110001', tgId: 'tg-cross-1' },
                 'main-client-1',
             );
 
@@ -510,10 +510,10 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: skips mobile already in bufferClients collection', async () => {
-            await insertBufferClient({ mobile: '+15550120001', clientId: 'main-client-1' });
+            await insertBufferClient({ mobile: '15550120001', clientId: 'main-client-1' });
 
             const result = await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550120001', tgId: 'tg-cross-2' },
+                { mobile: '15550120001', tgId: 'tg-cross-2' },
                 'main-client-1',
             );
 
@@ -533,10 +533,10 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: skips mobile already in bufferClients collection', async () => {
-            await insertBufferClient({ mobile: '+15550140001', clientId: 'main-client-1' });
+            await insertBufferClient({ mobile: '15550140001', clientId: 'main-client-1' });
 
             const result = await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550140001', tgId: 'tg-cross-4' },
+                { mobile: '15550140001', tgId: 'tg-cross-4' },
                 'main-client-1',
             );
 
@@ -546,10 +546,10 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: skips mobile already in promoteClients collection', async () => {
-            await insertPromoteClient({ mobile: '+15550150001', clientId: 'main-client-1' });
+            await insertPromoteClient({ mobile: '15550150001', clientId: 'main-client-1' });
 
             const result = await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550150001', tgId: 'tg-cross-5' },
+                { mobile: '15550150001', tgId: 'tg-cross-5' },
                 'main-client-1',
             );
 
@@ -569,35 +569,35 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: enrolls mobile not present in any collection', async () => {
-            await insertUser({ mobile: '+15550170001' });
+            await insertUser({ mobile: '15550170001' });
 
             const result = await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550170001', tgId: 'tg-fresh-1' },
+                { mobile: '15550170001', tgId: 'tg-fresh-1' },
                 'main-client-1',
             );
 
             expect(result).toBe(true);
-            expect(mockGetClient).toHaveBeenCalledWith('+15550170001', { autoDisconnect: false });
+            expect(mockGetClient).toHaveBeenCalledWith('15550170001', { autoDisconnect: false });
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
 
-            const doc = await PromoteClientModel.findOne({ mobile: '+15550170001' }).lean();
+            const doc = await PromoteClientModel.findOne({ mobile: '15550170001' }).lean();
             expect(doc).toBeTruthy();
             expect(doc!.warmupPhase).toBe('enrolled');
         });
 
         it('buffer: enrolls mobile not present in any collection', async () => {
-            await insertUser({ mobile: '+15550180001' });
+            await insertUser({ mobile: '15550180001' });
 
             const result = await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550180001', tgId: 'tg-fresh-2' },
+                { mobile: '15550180001', tgId: 'tg-fresh-2' },
                 'main-client-1',
             );
 
             expect(result).toBe(true);
-            expect(mockGetClient).toHaveBeenCalledWith('+15550180001', { autoDisconnect: false });
+            expect(mockGetClient).toHaveBeenCalledWith('15550180001', { autoDisconnect: false });
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
 
-            const doc = await BufferClientModel.findOne({ mobile: '+15550180001' }).lean();
+            const doc = await BufferClientModel.findOne({ mobile: '15550180001' }).lean();
             expect(doc).toBeTruthy();
             expect(doc!.warmupPhase).toBe('enrolled');
         });
@@ -610,87 +610,87 @@ describe('Enrollment Deduplication', () => {
     describe('Cross-Service Scenarios', () => {
 
         it('mobile enrolled as buffer cannot be re-enrolled as promote', async () => {
-            await insertUser({ mobile: '+15550190001' });
+            await insertUser({ mobile: '15550190001' });
 
             // First: enroll as buffer
             const bufResult = await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550190001', tgId: 'tg-xsvc-1' },
+                { mobile: '15550190001', tgId: 'tg-xsvc-1' },
                 'main-client-1',
             );
             expect(bufResult).toBe(true);
 
             // Then: attempt to enroll as promote — must be rejected
             const promResult = await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550190001', tgId: 'tg-xsvc-1' },
+                { mobile: '15550190001', tgId: 'tg-xsvc-1' },
                 'main-client-1',
             );
             expect(promResult).toBe(false);
 
             // Only 1 buffer doc, 0 promote docs
-            expect(await BufferClientModel.countDocuments({ mobile: '+15550190001' })).toBe(1);
-            expect(await PromoteClientModel.countDocuments({ mobile: '+15550190001' })).toBe(0);
+            expect(await BufferClientModel.countDocuments({ mobile: '15550190001' })).toBe(1);
+            expect(await PromoteClientModel.countDocuments({ mobile: '15550190001' })).toBe(0);
 
             // Bot notified only once (for buffer enrollment)
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
         });
 
         it('mobile enrolled as promote cannot be re-enrolled as buffer', async () => {
-            await insertUser({ mobile: '+15550200001' });
+            await insertUser({ mobile: '15550200001' });
 
             const promResult = await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550200001', tgId: 'tg-xsvc-2' },
+                { mobile: '15550200001', tgId: 'tg-xsvc-2' },
                 'main-client-1',
             );
             expect(promResult).toBe(true);
 
             const bufResult = await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550200001', tgId: 'tg-xsvc-2' },
+                { mobile: '15550200001', tgId: 'tg-xsvc-2' },
                 'main-client-1',
             );
             expect(bufResult).toBe(false);
 
-            expect(await PromoteClientModel.countDocuments({ mobile: '+15550200001' })).toBe(1);
-            expect(await BufferClientModel.countDocuments({ mobile: '+15550200001' })).toBe(0);
+            expect(await PromoteClientModel.countDocuments({ mobile: '15550200001' })).toBe(1);
+            expect(await BufferClientModel.countDocuments({ mobile: '15550200001' })).toBe(0);
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
         });
 
         it('batch promote enrollment skips users already enrolled as buffer', async () => {
             // 3 users: first 2 are already buffer clients, third is fresh
-            await insertUser({ mobile: '+15550210001' });
-            await insertUser({ mobile: '+15550210002' });
-            await insertUser({ mobile: '+15550210003' });
-            await insertBufferClient({ mobile: '+15550210001', clientId: 'main-client-1' });
-            await insertBufferClient({ mobile: '+15550210002', clientId: 'main-client-1' });
+            await insertUser({ mobile: '15550210001' });
+            await insertUser({ mobile: '15550210002' });
+            await insertUser({ mobile: '15550210003' });
+            await insertBufferClient({ mobile: '15550210001', clientId: 'main-client-1' });
+            await insertBufferClient({ mobile: '15550210002', clientId: 'main-client-1' });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
                 // goodIds includes the buffer mobiles
-                ['+15550210001', '+15550210002'],
+                ['15550210001', '15550210002'],
                 [{ clientId: 'main-client-1', totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 }],
                 new Map(),
             );
 
             // Only 1 created (the fresh one)
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('+15550210003');
+            expect(result.createdEntries[0]).toContain('15550210003');
         });
 
         it('batch buffer enrollment skips users already enrolled as promote', async () => {
-            await insertUser({ mobile: '+15550220001' });
-            await insertUser({ mobile: '+15550220002' });
-            await insertUser({ mobile: '+15550220003' });
-            await insertPromoteClient({ mobile: '+15550220001', clientId: 'main-client-1' });
-            await insertPromoteClient({ mobile: '+15550220002', clientId: 'main-client-1' });
+            await insertUser({ mobile: '15550220001' });
+            await insertUser({ mobile: '15550220002' });
+            await insertUser({ mobile: '15550220003' });
+            await insertPromoteClient({ mobile: '15550220001', clientId: 'main-client-1' });
+            await insertPromoteClient({ mobile: '15550220002', clientId: 'main-client-1' });
 
             const result = await (bufferService as any).addNewUserstoBufferClientsDynamic(
                 [],
-                ['+15550220001', '+15550220002'],
+                ['15550220001', '15550220002'],
                 [{ clientId: 'main-client-1', totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 }],
                 new Map(),
             );
 
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('+15550220003');
+            expect(result.createdEntries[0]).toContain('15550220003');
         });
     });
 
@@ -701,31 +701,31 @@ describe('Enrollment Deduplication', () => {
     describe('existsByMobile', () => {
 
         it('promote: returns true when mobile exists', async () => {
-            await insertPromoteClient({ mobile: '+15550230001' });
-            expect(await promoteService.existsByMobile('+15550230001')).toBe(true);
+            await insertPromoteClient({ mobile: '15550230001' });
+            expect(await promoteService.existsByMobile('15550230001')).toBe(true);
         });
 
         it('promote: returns false when mobile does not exist', async () => {
-            expect(await promoteService.existsByMobile('+15550240001')).toBe(false);
+            expect(await promoteService.existsByMobile('15550240001')).toBe(false);
         });
 
         it('buffer: returns true when mobile exists', async () => {
-            await insertBufferClient({ mobile: '+15550250001' });
-            expect(await bufferService.existsByMobile('+15550250001')).toBe(true);
+            await insertBufferClient({ mobile: '15550250001' });
+            expect(await bufferService.existsByMobile('15550250001')).toBe(true);
         });
 
         it('buffer: returns false when mobile does not exist', async () => {
-            expect(await bufferService.existsByMobile('+15550260001')).toBe(false);
+            expect(await bufferService.existsByMobile('15550260001')).toBe(false);
         });
 
         it('promote: returns true for inactive promote client', async () => {
-            await insertPromoteClient({ mobile: '+15550270001', status: 'inactive' });
-            expect(await promoteService.existsByMobile('+15550270001')).toBe(true);
+            await insertPromoteClient({ mobile: '15550270001', status: 'inactive' });
+            expect(await promoteService.existsByMobile('15550270001')).toBe(true);
         });
 
         it('buffer: returns true for inactive buffer client', async () => {
-            await insertBufferClient({ mobile: '+15550280001', status: 'inactive' });
-            expect(await bufferService.existsByMobile('+15550280001')).toBe(true);
+            await insertBufferClient({ mobile: '15550280001', status: 'inactive' });
+            expect(await bufferService.existsByMobile('15550280001')).toBe(true);
         });
     });
 
@@ -736,10 +736,10 @@ describe('Enrollment Deduplication', () => {
     describe('Notification Guard', () => {
 
         it('promote: no bot notification when enrollment is skipped', async () => {
-            await insertPromoteClient({ mobile: '+15550290001', clientId: 'main-client-1' });
+            await insertPromoteClient({ mobile: '15550290001', clientId: 'main-client-1' });
 
             await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550290001', tgId: 'tg-notif-1' },
+                { mobile: '15550290001', tgId: 'tg-notif-1' },
                 'main-client-1',
             );
 
@@ -747,10 +747,10 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: no bot notification when enrollment is skipped', async () => {
-            await insertBufferClient({ mobile: '+15550300001', clientId: 'main-client-1' });
+            await insertBufferClient({ mobile: '15550300001', clientId: 'main-client-1' });
 
             await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550300001', tgId: 'tg-notif-2' },
+                { mobile: '15550300001', tgId: 'tg-notif-2' },
                 'main-client-1',
             );
 
@@ -759,15 +759,15 @@ describe('Enrollment Deduplication', () => {
 
         it('promote: single notification for single enrollment in batch of 3', async () => {
             // 2 already enrolled, 1 fresh
-            await insertUser({ mobile: '+15550310001' });
-            await insertUser({ mobile: '+15550310002' });
-            await insertUser({ mobile: '+15550310003' });
-            await insertPromoteClient({ mobile: '+15550310001', clientId: 'main-client-1' });
-            await insertBufferClient({ mobile: '+15550310002', clientId: 'main-client-1' });
+            await insertUser({ mobile: '15550310001' });
+            await insertUser({ mobile: '15550310002' });
+            await insertUser({ mobile: '15550310003' });
+            await insertPromoteClient({ mobile: '15550310001', clientId: 'main-client-1' });
+            await insertBufferClient({ mobile: '15550310002', clientId: 'main-client-1' });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
-                ['+15550310001', '+15550310002'],
+                ['15550310001', '15550310002'],
                 [{ clientId: 'main-client-1', totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 }],
                 new Map(),
             );
@@ -785,14 +785,14 @@ describe('Enrollment Deduplication', () => {
     describe('Enrollment Document Correctness', () => {
 
         it('promote: enrolled doc has correct warmup fields', async () => {
-            await insertUser({ mobile: '+15550320001', session: 'user-session-abc' });
+            await insertUser({ mobile: '15550320001', session: 'user-session-abc' });
 
             await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550320001', tgId: 'tg-doc-1' },
+                { mobile: '15550320001', tgId: 'tg-doc-1' },
                 'main-client-1',
             );
 
-            const doc = await PromoteClientModel.findOne({ mobile: '+15550320001' }).lean();
+            const doc = await PromoteClientModel.findOne({ mobile: '15550320001' }).lean();
             expect(doc).toBeTruthy();
             expect(doc!.warmupPhase).toBe('enrolled');
             expect(doc!.clientId).toBe('main-client-1');
@@ -803,14 +803,14 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('buffer: enrolled doc has correct warmup fields', async () => {
-            await insertUser({ mobile: '+15550330001', session: 'user-session-def' });
+            await insertUser({ mobile: '15550330001', session: 'user-session-def' });
 
             await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550330001', tgId: 'tg-doc-2' },
+                { mobile: '15550330001', tgId: 'tg-doc-2' },
                 'main-client-1',
             );
 
-            const doc = await BufferClientModel.findOne({ mobile: '+15550330001' }).lean();
+            const doc = await BufferClientModel.findOne({ mobile: '15550330001' }).lean();
             expect(doc).toBeTruthy();
             expect(doc!.warmupPhase).toBe('enrolled');
             expect(doc!.clientId).toBe('main-client-1');
@@ -834,12 +834,12 @@ describe('Enrollment Deduplication', () => {
             });
 
             const result = await (promoteService as any).createPromoteClientFromUser(
-                { mobile: '+15550340001', tgId: 'tg-edge-1' },
+                { mobile: '15550340001', tgId: 'tg-edge-1' },
                 'main-client-1',
             );
 
             expect(result).toBe(false);
-            expect(await PromoteClientModel.countDocuments({ mobile: '+15550340001' })).toBe(0);
+            expect(await PromoteClientModel.countDocuments({ mobile: '15550340001' })).toBe(0);
             expect(botsService.sendMessageByCategory).not.toHaveBeenCalled();
         });
 
@@ -850,17 +850,17 @@ describe('Enrollment Deduplication', () => {
             });
 
             const result = await (bufferService as any).createBufferClientFromUser(
-                { mobile: '+15550350001', tgId: 'tg-edge-2' },
+                { mobile: '15550350001', tgId: 'tg-edge-2' },
                 'main-client-1',
             );
 
             expect(result).toBe(false);
-            expect(await BufferClientModel.countDocuments({ mobile: '+15550350001' })).toBe(0);
+            expect(await BufferClientModel.countDocuments({ mobile: '15550350001' })).toBe(0);
             expect(botsService.sendMessageByCategory).not.toHaveBeenCalled();
         });
 
         it('promote: totalNeeded=0 results in no enrollments', async () => {
-            await insertUser({ mobile: '+15550360001' });
+            await insertUser({ mobile: '15550360001' });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
@@ -886,7 +886,7 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: users with twoFA=true are not eligible candidates', async () => {
-            await insertUser({ mobile: '+15550380001', twoFA: true });
+            await insertUser({ mobile: '15550380001', twoFA: true });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
@@ -899,7 +899,7 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: expired users are not eligible candidates', async () => {
-            await insertUser({ mobile: '+15550390001', expired: true });
+            await insertUser({ mobile: '15550390001', expired: true });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
@@ -913,7 +913,7 @@ describe('Enrollment Deduplication', () => {
 
         it('promote: recently active users are not eligible (lastActive filter)', async () => {
             // lastActive is recent — should be excluded by the 3-month cutoff
-            await insertUser({ mobile: '+15550400001', lastActive: '2026-04-30' });
+            await insertUser({ mobile: '15550400001', lastActive: '2026-04-30' });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],
@@ -926,7 +926,7 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: users with too few chats are not eligible', async () => {
-            await insertUser({ mobile: '+15550410001', totalChats: 50 }); // needs > 150
+            await insertUser({ mobile: '15550410001', totalChats: 50 }); // needs > 150
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],

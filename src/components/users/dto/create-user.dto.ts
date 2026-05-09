@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsBoolean, IsNumber, IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
+import { Transform, TransformFnParams, Type } from 'class-transformer';
+import { CANONICAL_MOBILE_REGEX, normalizeMobileInput } from '../../shared/mobile-utils';
 
 export class UserCallsDto {
   @ApiPropertyOptional({ description: 'Total calls', default: 0 })
@@ -31,7 +32,9 @@ export class UserCallsDto {
 
 export class CreateUserDto {
   @ApiProperty({ description: 'Mobile number' })
+  @Transform(({ value }: TransformFnParams) => typeof value === 'string' ? normalizeMobileInput(value) : value)
   @IsString()
+  @Matches(CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' })
   mobile: string;
 
   @ApiProperty({ description: 'Telegram session string' })

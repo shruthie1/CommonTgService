@@ -95,12 +95,12 @@ describe('Client API', () => {
 
     describe('create()', () => {
         it('creates a client with all required fields and correct defaults', async () => {
-            const data = makeClientData({ mobile: '+15550100001', clientId: 'create-test-1' });
+            const data = makeClientData({ mobile: '15550100001', clientId: 'create-test-1' });
             const result = await service.create(data);
 
             // Required fields preserved
             expect(result.clientId).toBe('create-test-1');
-            expect(result.mobile).toBe('+15550100001');
+            expect(result.mobile).toBe('15550100001');
             expect(result.name).toBe(data.name);
             expect(result.session).toBe(data.session);
             expect(result.channelLink).toBe(data.channelLink);
@@ -141,32 +141,32 @@ describe('Client API', () => {
         });
 
         it('rejects duplicate clientId', async () => {
-            const data = makeClientData({ clientId: 'dup-client', mobile: '+15550100002' });
+            const data = makeClientData({ clientId: 'dup-client', mobile: '15550100002' });
             await service.create(data);
 
             await expect(service.create(makeClientData({
                 clientId: 'dup-client',
-                mobile: '+15550100003',
+                mobile: '15550100003',
             }))).rejects.toThrow();
         });
 
         it('rejects duplicate mobile', async () => {
-            await service.create(makeClientData({ mobile: '+15550100004', clientId: 'client-a' }));
+            await service.create(makeClientData({ mobile: '15550100004', clientId: 'client-a' }));
 
             await expect(service.create(makeClientData({
-                mobile: '+15550100004',
+                mobile: '15550100004',
                 clientId: 'client-b',
             }))).rejects.toThrow();
         });
 
         it('populates cache after create — findOne returns without DB hit', async () => {
-            const data = makeClientData({ clientId: 'cache-create', mobile: '+15550100005' });
+            const data = makeClientData({ clientId: 'cache-create', mobile: '15550100005' });
             await service.create(data);
 
             const found = await service.findOne('cache-create');
             expect(found).toBeTruthy();
             expect(found.clientId).toBe('cache-create');
-            expect(found.mobile).toBe('+15550100005');
+            expect(found.mobile).toBe('15550100005');
         });
     });
 
@@ -174,13 +174,13 @@ describe('Client API', () => {
 
     describe('findOne()', () => {
         it('returns client by clientId with all fields', async () => {
-            const data = makeClientData({ clientId: 'find-one', mobile: '+15550200001' });
+            const data = makeClientData({ clientId: 'find-one', mobile: '15550200001' });
             await service.create(data);
 
             const found = await service.findOne('find-one');
             expect(found.clientId).toBe('find-one');
             expect(found.name).toBe(data.name);
-            expect(found.mobile).toBe('+15550200001');
+            expect(found.mobile).toBe('15550200001');
             expect(found.session).toBe(data.session);
         });
 
@@ -198,8 +198,8 @@ describe('Client API', () => {
 
     describe('findAll()', () => {
         it('returns all clients', async () => {
-            await service.create(makeClientData({ clientId: 'c1', mobile: '+15550300001' }));
-            await service.create(makeClientData({ clientId: 'c2', mobile: '+15550300002' }));
+            await service.create(makeClientData({ clientId: 'c1', mobile: '15550300001' }));
+            await service.create(makeClientData({ clientId: 'c2', mobile: '15550300002' }));
 
             const all = await service.findAll();
             expect(all).toHaveLength(2);
@@ -216,7 +216,7 @@ describe('Client API', () => {
 
     describe('findAllMasked()', () => {
         it('excludes session, mobile, password from response but keeps other fields', async () => {
-            await service.create(makeClientData({ clientId: 'masked-1', mobile: '+15550300003' }));
+            await service.create(makeClientData({ clientId: 'masked-1', mobile: '15550300003' }));
 
             const masked = await service.findAllMasked();
             expect(masked).toHaveLength(1);
@@ -238,17 +238,17 @@ describe('Client API', () => {
 
     describe('update()', () => {
         it('updates existing client fields', async () => {
-            const data = makeClientData({ clientId: 'upd-1', mobile: '+15550400001' });
+            const data = makeClientData({ clientId: 'upd-1', mobile: '15550400001' });
             await service.create(data);
 
             const updated = await service.update('upd-1', { name: 'Updated Name' });
             expect(updated.name).toBe('Updated Name');
             expect(updated.clientId).toBe('upd-1');
-            expect(updated.mobile).toBe('+15550400001');
+            expect(updated.mobile).toBe('15550400001');
         });
 
         it('updates persona pool arrays', async () => {
-            const data = makeClientData({ clientId: 'upd-2', mobile: '+15550400002' });
+            const data = makeClientData({ clientId: 'upd-2', mobile: '15550400002' });
             await service.create(data);
 
             const updated = await service.update('upd-2', {
@@ -276,7 +276,7 @@ describe('Client API', () => {
         });
 
         it('preserves fields not in the update', async () => {
-            const data = makeClientData({ clientId: 'upd-3', mobile: '+15550400003', name: 'Original' });
+            const data = makeClientData({ clientId: 'upd-3', mobile: '15550400003', name: 'Original' });
             await service.create(data);
 
             await service.update('upd-3', { product: 'new-product' });
@@ -286,7 +286,7 @@ describe('Client API', () => {
         });
 
         it('updates cache after update — subsequent findOne reflects change', async () => {
-            const data = makeClientData({ clientId: 'upd-cache', mobile: '+15550400004' });
+            const data = makeClientData({ clientId: 'upd-cache', mobile: '15550400004' });
             await service.create(data);
 
             await service.update('upd-cache', { name: 'Cached Update' });
@@ -296,7 +296,7 @@ describe('Client API', () => {
         });
 
         it('updates updatedAt timestamp', async () => {
-            const data = makeClientData({ clientId: 'upd-ts', mobile: '+15550400005' });
+            const data = makeClientData({ clientId: 'upd-ts', mobile: '15550400005' });
             const created = await service.create(data);
 
             await new Promise(r => setTimeout(r, 50));
@@ -312,12 +312,12 @@ describe('Client API', () => {
 
     describe('remove()', () => {
         it('deletes an existing client and returns the deleted doc', async () => {
-            const data = makeClientData({ clientId: 'del-1', mobile: '+15550500001' });
+            const data = makeClientData({ clientId: 'del-1', mobile: '15550500001' });
             await service.create(data);
 
             const deleted = await service.remove('del-1');
             expect(deleted.clientId).toBe('del-1');
-            expect(deleted.mobile).toBe('+15550500001');
+            expect(deleted.mobile).toBe('15550500001');
 
             // Verify gone from DB
             const doc = await ClientModel.findOne({ clientId: 'del-1' }).lean();
@@ -325,7 +325,7 @@ describe('Client API', () => {
         });
 
         it('removes from cache after delete — findOne throws NotFoundException', async () => {
-            const data = makeClientData({ clientId: 'del-cache', mobile: '+15550500002' });
+            const data = makeClientData({ clientId: 'del-cache', mobile: '15550500002' });
             await service.create(data);
 
             await service.remove('del-cache');
@@ -340,8 +340,8 @@ describe('Client API', () => {
         });
 
         it('does not affect other documents', async () => {
-            await service.create(makeClientData({ clientId: 'del-a', mobile: '+15550500003' }));
-            await service.create(makeClientData({ clientId: 'del-b', mobile: '+15550500004' }));
+            await service.create(makeClientData({ clientId: 'del-a', mobile: '15550500003' }));
+            await service.create(makeClientData({ clientId: 'del-b', mobile: '15550500004' }));
 
             await service.remove('del-a');
 
@@ -355,8 +355,8 @@ describe('Client API', () => {
 
     describe('search()', () => {
         it('searches by clientId', async () => {
-            await service.create(makeClientData({ clientId: 'search-a', mobile: '+15550600001' }));
-            await service.create(makeClientData({ clientId: 'search-b', mobile: '+15550600002' }));
+            await service.create(makeClientData({ clientId: 'search-a', mobile: '15550600001' }));
+            await service.create(makeClientData({ clientId: 'search-b', mobile: '15550600002' }));
 
             const results = await service.search({ clientId: 'search-a' } as any);
             expect(results).toHaveLength(1);
@@ -370,8 +370,8 @@ describe('Client API', () => {
         });
 
         it('supports regex search on name field', async () => {
-            await service.create(makeClientData({ clientId: 'regex-a', mobile: '+15550600003', name: 'Alpha Bot' }));
-            await service.create(makeClientData({ clientId: 'regex-b', mobile: '+15550600004', name: 'Beta Service' }));
+            await service.create(makeClientData({ clientId: 'regex-a', mobile: '15550600003', name: 'Alpha Bot' }));
+            await service.create(makeClientData({ clientId: 'regex-b', mobile: '15550600004', name: 'Beta Service' }));
 
             const results = await service.search({ name: 'Alpha' } as any);
             expect(results).toHaveLength(1);
@@ -383,8 +383,8 @@ describe('Client API', () => {
 
     describe('executeQuery()', () => {
         it('runs a raw MongoDB query', async () => {
-            await service.create(makeClientData({ clientId: 'q1', mobile: '+15550700001', product: 'alpha' }));
-            await service.create(makeClientData({ clientId: 'q2', mobile: '+15550700002', product: 'beta' }));
+            await service.create(makeClientData({ clientId: 'q1', mobile: '15550700001', product: 'alpha' }));
+            await service.create(makeClientData({ clientId: 'q2', mobile: '15550700002', product: 'beta' }));
 
             const results = await service.executeQuery({ product: 'alpha' });
             expect(results).toHaveLength(1);
@@ -392,9 +392,9 @@ describe('Client API', () => {
         });
 
         it('supports sort and limit', async () => {
-            await service.create(makeClientData({ clientId: 'q3', mobile: '+15550700003', name: 'C' }));
-            await service.create(makeClientData({ clientId: 'q4', mobile: '+15550700004', name: 'A' }));
-            await service.create(makeClientData({ clientId: 'q5', mobile: '+15550700005', name: 'B' }));
+            await service.create(makeClientData({ clientId: 'q3', mobile: '15550700003', name: 'C' }));
+            await service.create(makeClientData({ clientId: 'q4', mobile: '15550700004', name: 'A' }));
+            await service.create(makeClientData({ clientId: 'q5', mobile: '15550700005', name: 'B' }));
 
             const results = await service.executeQuery({}, { name: 1 }, 2);
             expect(results).toHaveLength(2);
@@ -457,17 +457,17 @@ describe('Client API', () => {
 
     describe('edge cases', () => {
         it('update with empty object does not corrupt doc', async () => {
-            const data = makeClientData({ clientId: 'edge-empty', mobile: '+15550800001' });
+            const data = makeClientData({ clientId: 'edge-empty', mobile: '15550800001' });
             await service.create(data);
 
             const updated = await service.update('edge-empty', {} as any);
             expect(updated.clientId).toBe('edge-empty');
             expect(updated.name).toBe(data.name);
-            expect(updated.mobile).toBe('+15550800001');
+            expect(updated.mobile).toBe('15550800001');
         });
 
         it('concurrent updates on same client do not create duplicates', async () => {
-            const data = makeClientData({ clientId: 'concurrent-test', mobile: '+15550800002' });
+            const data = makeClientData({ clientId: 'concurrent-test', mobile: '15550800002' });
             await service.create(data);
 
             await Promise.all([
@@ -484,8 +484,8 @@ describe('Client API', () => {
 
     describe('field isolation', () => {
         it('updating client A does not affect client B', async () => {
-            await service.create(makeClientData({ clientId: 'iso-a', mobile: '+15550900001', name: 'Client A' }));
-            await service.create(makeClientData({ clientId: 'iso-b', mobile: '+15550900002', name: 'Client B' }));
+            await service.create(makeClientData({ clientId: 'iso-a', mobile: '15550900001', name: 'Client A' }));
+            await service.create(makeClientData({ clientId: 'iso-b', mobile: '15550900002', name: 'Client B' }));
 
             await service.update('iso-a', { name: 'Modified A' });
 
@@ -494,8 +494,8 @@ describe('Client API', () => {
         });
 
         it('removing client A does not remove client B', async () => {
-            await service.create(makeClientData({ clientId: 'iso-rem-a', mobile: '+15550900003' }));
-            await service.create(makeClientData({ clientId: 'iso-rem-b', mobile: '+15550900004' }));
+            await service.create(makeClientData({ clientId: 'iso-rem-a', mobile: '15550900003' }));
+            await service.create(makeClientData({ clientId: 'iso-rem-b', mobile: '15550900004' }));
 
             await service.remove('iso-rem-a');
 

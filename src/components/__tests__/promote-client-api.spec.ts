@@ -52,7 +52,7 @@ describe('Promote Client API', () => {
             mockTelegramService() as any,
             mockUsersService() as any,
             mockActiveChannelsService() as any,
-            mockClientService([{ clientId: 'test-client-1', mobile: '+15559999999' }]) as any,
+            mockClientService([{ clientId: 'test-client-1', mobile: '15559999999' }]) as any,
             mockChannelsService() as any,
             { findAll: jest.fn().mockResolvedValue([]) } as any, // bufferClientService
             mockSessionService() as any,
@@ -72,11 +72,11 @@ describe('Promote Client API', () => {
 
     describe('create()', () => {
         it('creates with all defaults and returns full document', async () => {
-            const data = makePromoteClientData({ mobile: '+15550100001' });
+            const data = makePromoteClientData({ mobile: '15550100001' });
             const result = await service.create(data);
 
             // Input fields preserved
-            expect(result.mobile).toBe('+15550100001');
+            expect(result.mobile).toBe('15550100001');
             expect(result.tgId).toBe(data.tgId);
             expect(result.channels).toBe(data.channels);
             expect(result.clientId).toBe(data.clientId);
@@ -115,28 +115,28 @@ describe('Promote Client API', () => {
         });
 
         it('sends bot notification with correct content on create', async () => {
-            const data = makePromoteClientData({ mobile: '+15550100002', clientId: 'notif-test' });
+            const data = makePromoteClientData({ mobile: '15550100002', clientId: 'notif-test' });
             await service.create(data);
 
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
             const [category, message] = botsService.sendMessageByCategory.mock.calls[0];
             expect(category).toBe('ACCOUNT_NOTIFICATIONS');
             expect(message).toContain('Promote Client Created');
-            expect(message).toContain('+15550100002');
+            expect(message).toContain('15550100002');
             expect(message).toContain('notif-test');
         });
 
         it('rejects duplicate mobile with MongoServerError 11000', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15550100003' }));
+            await service.create(makePromoteClientData({ mobile: '15550100003' }));
 
             await expect(
-                service.create(makePromoteClientData({ mobile: '+15550100003', tgId: 'different' })),
+                service.create(makePromoteClientData({ mobile: '15550100003', tgId: 'different' })),
             ).rejects.toMatchObject({ code: 11000 });
         });
 
         it('preserves explicit non-default values', async () => {
             const data = makePromoteClientData({
-                mobile: '+15550100004',
+                mobile: '15550100004',
                 status: 'inactive',
                 message: 'custom msg',
                 channels: 0,
@@ -152,47 +152,61 @@ describe('Promote Client API', () => {
 
     describe('findOne()', () => {
         it('returns the exact document by mobile', async () => {
-            const data = makePromoteClientData({ mobile: '+15550200001' });
+            const data = makePromoteClientData({ mobile: '15550200001' });
             await service.create(data);
 
-            const found = await service.findOne('+15550200001');
-            expect(found.mobile).toBe('+15550200001');
+            const found = await service.findOne('15550200001');
+            expect(found.mobile).toBe('15550200001');
             expect(found.tgId).toBe(data.tgId);
             expect(found.channels).toBe(data.channels);
         });
 
         it('throws NotFoundException with descriptive message for unknown mobile', async () => {
-            await expect(service.findOne('+15559999999'))
+            await expect(service.findOne('15559999999'))
                 .rejects.toThrow(NotFoundException);
-            await expect(service.findOne('+15559999999'))
-                .rejects.toThrow('PromoteClient with mobile +15559999999 not found');
+            await expect(service.findOne('15559999999'))
+                .rejects.toThrow('PromoteClient with mobile 15559999999 not found');
         });
 
-        it('returns undefined (not null) with throwErr=false for unknown mobile', async () => {
-            const result = await service.findOne('+15559999999', false);
-            // Service uses ?.toJSON() which yields undefined for null mongoose result
-            expect(result).toBeUndefined();
+        it('returns null with throwErr=false for unknown mobile', async () => {
+            const result = await service.findOne('15559999999', false);
+            expect(result).toBeNull();
+        });
+
+        it('requires exact country-code mobile lookup', async () => {
+            await service.create(makePromoteClientData({
+                mobile: '917989706213',
+                tgId: 'tg-canonical-promote',
+                channels: 144,
+            }));
+
+            const found = await service.findOne('917989706213');
+
+            expect(found?.mobile).toBe('917989706213');
+            expect(found?.tgId).toBe('tg-canonical-promote');
+            expect(found?.channels).toBe(144);
+            await expect(service.findOne('7989706213')).rejects.toThrow('mobile must include country code');
         });
     });
 
     describe('findAll()', () => {
         it('returns all promote clients regardless of status', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15550300001', status: 'active' }));
-            await service.create(makePromoteClientData({ mobile: '+15550300002', status: 'inactive' }));
+            await service.create(makePromoteClientData({ mobile: '15550300001', status: 'active' }));
+            await service.create(makePromoteClientData({ mobile: '15550300002', status: 'inactive' }));
 
             const all = await service.findAll();
             expect(all).toHaveLength(2);
             const mobiles = all.map(c => c.mobile).sort();
-            expect(mobiles).toEqual(['+15550300001', '+15550300002']);
+            expect(mobiles).toEqual(['15550300001', '15550300002']);
         });
 
         it('filters by status=active — excludes inactive', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15550300003', status: 'active' }));
-            await service.create(makePromoteClientData({ mobile: '+15550300004', status: 'inactive' }));
+            await service.create(makePromoteClientData({ mobile: '15550300003', status: 'active' }));
+            await service.create(makePromoteClientData({ mobile: '15550300004', status: 'inactive' }));
 
             const active = await service.findAll('active');
             expect(active).toHaveLength(1);
-            expect(active[0].mobile).toBe('+15550300003');
+            expect(active[0].mobile).toBe('15550300003');
             expect(active[0].status).toBe('active');
         });
 
@@ -208,33 +222,33 @@ describe('Promote Client API', () => {
     describe('update()', () => {
         it('updates only the specified field — others unchanged', async () => {
             await service.create(makePromoteClientData({
-                mobile: '+15550400001', channels: 100, warmupPhase: null,
+                mobile: '15550400001', channels: 100, warmupPhase: null,
             }));
 
-            const updated = await service.update('+15550400001', { channels: 250 });
+            const updated = await service.update('15550400001', { channels: 250 });
             expect(updated.channels).toBe(250);
             // These must remain unchanged
-            expect(updated.mobile).toBe('+15550400001');
+            expect(updated.mobile).toBe('15550400001');
             expect(updated.warmupPhase).toBeNull();
             expect(updated.status).toBe('active');
             expect(updated.inUse).toBe(false);
         });
 
         it('updates warmupPhase through valid enum transitions', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15550400002' }));
+            await service.create(makePromoteClientData({ mobile: '15550400002' }));
 
             const phases = ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'] as const;
             for (const phase of phases) {
-                const updated = await service.update('+15550400002', { warmupPhase: phase });
+                const updated = await service.update('15550400002', { warmupPhase: phase });
                 expect(updated.warmupPhase).toBe(phase);
             }
         });
 
         it('updates multiple fields atomically', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15550400003' }));
+            await service.create(makePromoteClientData({ mobile: '15550400003' }));
             const now = new Date();
 
-            const updated = await service.update('+15550400003', {
+            const updated = await service.update('15550400003', {
                 warmupPhase: 'maturing',
                 channels: 200,
                 lastUpdateAttempt: now,
@@ -245,27 +259,27 @@ describe('Promote Client API', () => {
         });
 
         it('throws NotFoundException for unknown mobile', async () => {
-            await expect(service.update('+15559999999', { channels: 50 }))
+            await expect(service.update('15559999999', { channels: 50 }))
                 .rejects.toThrow(NotFoundException);
         });
 
         it('preserves fields not in the update', async () => {
             await service.create(makePromoteClientData({
-                mobile: '+15550400004', channels: 150,
+                mobile: '15550400004', channels: 150,
             }));
 
-            await service.update('+15550400004', { warmupPhase: 'settling' });
-            const found = await service.findOne('+15550400004');
+            await service.update('15550400004', { warmupPhase: 'settling' });
+            const found = await service.findOne('15550400004');
             expect(found.channels).toBe(150);
             expect(found.warmupPhase).toBe('settling');
         });
 
         it('updates updatedAt timestamp', async () => {
-            const created = await service.create(makePromoteClientData({ mobile: '+15550400005' }));
+            const created = await service.create(makePromoteClientData({ mobile: '15550400005' }));
             const originalUpdatedAt = created.updatedAt;
 
             await new Promise(r => setTimeout(r, 50));
-            const updated = await service.update('+15550400005', { channels: 999 });
+            const updated = await service.update('15550400005', { channels: 999 });
             expect(updated.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
         });
     });
@@ -274,26 +288,47 @@ describe('Promote Client API', () => {
 
     describe('createOrUpdate()', () => {
         it('creates a new doc when mobile does not exist and verifies defaults', async () => {
-            const data = makePromoteClientData({ mobile: '+15550500001' });
-            const result = await service.createOrUpdate('+15550500001', data);
+            const data = makePromoteClientData({ mobile: '15550500001' });
+            const result = await service.createOrUpdate('15550500001', data);
 
-            expect(result.mobile).toBe('+15550500001');
+            expect(result.mobile).toBe('15550500001');
             expect(result.status).toBe('active');
             expect(result.inUse).toBe(false);
-            const count = await PromoteClientModel.countDocuments({ mobile: '+15550500001' });
+            const count = await PromoteClientModel.countDocuments({ mobile: '15550500001' });
             expect(count).toBe(1);
         });
 
         it('updates existing doc without creating duplicate', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15550500002', channels: 50 }));
+            await service.create(makePromoteClientData({ mobile: '15550500002', channels: 50 }));
 
-            const updated = await service.createOrUpdate('+15550500002', makePromoteClientData({
-                mobile: '+15550500002', channels: 200,
+            const updated = await service.createOrUpdate('15550500002', makePromoteClientData({
+                mobile: '15550500002', channels: 200,
             }));
             expect(updated.channels).toBe(200);
 
-            const count = await PromoteClientModel.countDocuments({ mobile: '+15550500002' });
+            const count = await PromoteClientModel.countDocuments({ mobile: '15550500002' });
             expect(count).toBe(1);
+        });
+
+        it('does not update existing country-code doc from a short mobile', async () => {
+            await service.create(makePromoteClientData({
+                mobile: '917989706213',
+                channels: 50,
+                clientId: 'client-original',
+            }));
+
+            await expect(service.createOrUpdate('7989706213', makePromoteClientData({
+                mobile: '7989706213',
+                channels: 220,
+                clientId: 'client-updated',
+            }))).rejects.toThrow('mobile must include country code');
+
+            const existing = await service.findOne('917989706213');
+            expect(existing).toMatchObject({
+                channels: 50,
+                clientId: 'client-original',
+            });
+            await expect(PromoteClientModel.countDocuments()).resolves.toBe(1);
         });
     });
 
@@ -302,10 +337,10 @@ describe('Promote Client API', () => {
     describe('updateStatus()', () => {
         it('inactive: sets status, message, clears inUse, sends notification', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550600001', inUse: true, status: 'active',
+                mobile: '15550600001', inUse: true, status: 'active',
             }));
 
-            const updated = await service.updateStatus('+15550600001', 'inactive', 'banned by TG');
+            const updated = await service.updateStatus('15550600001', 'inactive', 'banned by TG');
             expect(updated.status).toBe('inactive');
             expect(updated.inUse).toBe(false);
             expect(updated.message).toBe('banned by TG');
@@ -313,7 +348,7 @@ describe('Promote Client API', () => {
             // Notification sent with correct details
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
                 'ACCOUNT_NOTIFICATIONS',
-                expect.stringContaining('+15550600001'),
+                expect.stringContaining('15550600001'),
                 expect.anything(),
             );
             const notifMsg = botsService.sendMessageByCategory.mock.calls[0][1];
@@ -323,10 +358,10 @@ describe('Promote Client API', () => {
 
         it('active: sets status, does NOT touch inUse', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550600002', inUse: false, status: 'inactive',
+                mobile: '15550600002', inUse: false, status: 'inactive',
             }));
 
-            const updated = await service.updateStatus('+15550600002', 'active', 'restored');
+            const updated = await service.updateStatus('15550600002', 'active', 'restored');
             expect(updated.status).toBe('active');
             // inUse must NOT be changed on activate — only cleared on deactivate
             expect(updated.inUse).toBe(false);
@@ -335,10 +370,10 @@ describe('Promote Client API', () => {
 
         it('active without message: preserves old message (service-level behavior)', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550600003', status: 'inactive', message: 'old reason',
+                mobile: '15550600003', status: 'inactive', message: 'old reason',
             }));
 
-            const updated = await service.updateStatus('+15550600003', 'active');
+            const updated = await service.updateStatus('15550600003', 'active');
             expect(updated.status).toBe('active');
             // No message passed → updateData has no message key → old value preserved
             expect(updated.message).toBe('old reason');
@@ -350,20 +385,20 @@ describe('Promote Client API', () => {
     describe('markAsActive()', () => {
         it('activates with default message "Account is functioning properly"', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550650001', status: 'inactive', message: 'old ban message',
+                mobile: '15550650001', status: 'inactive', message: 'old ban message',
             }));
 
-            const result = await service.markAsActive('+15550650001');
+            const result = await service.markAsActive('15550650001');
             expect(result.status).toBe('active');
             expect(result.message).toBe('Account is functioning properly');
         });
 
         it('activates with custom message', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550650002', status: 'inactive',
+                mobile: '15550650002', status: 'inactive',
             }));
 
-            const result = await service.markAsActive('+15550650002', 'manually restored');
+            const result = await service.markAsActive('15550650002', 'manually restored');
             expect(result.status).toBe('active');
             expect(result.message).toBe('manually restored');
         });
@@ -374,31 +409,31 @@ describe('Promote Client API', () => {
     describe('markAsInactive()', () => {
         it('sets inactive + inUse=false and passes reason as message', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550700001', inUse: true, status: 'active',
+                mobile: '15550700001', inUse: true, status: 'active',
             }));
 
-            const result = await service.markAsInactive('+15550700001', 'health check failed');
+            const result = await service.markAsInactive('15550700001', 'health check failed');
             expect(result.status).toBe('inactive');
             expect(result.inUse).toBe(false);
             expect(result.message).toBe('health check failed');
         });
 
         it('returns null (not throw) for unknown mobile — error swallowed', async () => {
-            const result = await service.markAsInactive('+15559999999', 'test');
+            const result = await service.markAsInactive('15559999999', 'test');
             expect(result).toBeNull();
         });
 
         it('does not affect other promote clients for same clientId', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550700002', clientId: 'shared', inUse: false, status: 'active',
+                mobile: '15550700002', clientId: 'shared', inUse: false, status: 'active',
             }));
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550700003', clientId: 'shared', inUse: true, status: 'active',
+                mobile: '15550700003', clientId: 'shared', inUse: true, status: 'active',
             }));
 
-            await service.markAsInactive('+15550700003', 'banned');
+            await service.markAsInactive('15550700003', 'banned');
 
-            const other = await PromoteClientModel.findOne({ mobile: '+15550700002' }).lean();
+            const other = await PromoteClientModel.findOne({ mobile: '15550700002' }).lean();
             expect(other.status).toBe('active');
             expect(other.inUse).toBe(false);
         });
@@ -410,10 +445,10 @@ describe('Promote Client API', () => {
         it('sets lastUsed to current time, does NOT change inUse or status', async () => {
             const beforeCall = new Date();
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550800001', inUse: false, status: 'active', lastUsed: null,
+                mobile: '15550800001', inUse: false, status: 'active', lastUsed: null,
             }));
 
-            const updated = await service.updateLastUsed('+15550800001');
+            const updated = await service.updateLastUsed('15550800001');
             expect(updated.lastUsed).toBeInstanceOf(Date);
             expect(updated.lastUsed.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime());
             expect(updated.lastUsed.getTime()).toBeLessThanOrEqual(Date.now());
@@ -428,14 +463,14 @@ describe('Promote Client API', () => {
     describe('resetFailures (via update)', () => {
         it('resets failure counters without touching other fields', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15550900001',
+                mobile: '15550900001',
                 failedUpdateAttempts: 5,
                 lastUpdateFailure: new Date('2026-04-01'),
                 warmupPhase: 'settling',
                 channels: 100,
             }));
 
-            const updated = await service.update('+15550900001', {
+            const updated = await service.update('15550900001', {
                 failedUpdateAttempts: 0,
                 lastUpdateFailure: null,
             });
@@ -451,31 +486,31 @@ describe('Promote Client API', () => {
 
     describe('remove()', () => {
         it('deletes doc from DB and returns void', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15551000001' }));
+            await service.create(makePromoteClientData({ mobile: '15551000001' }));
 
-            const result = await service.remove('+15551000001');
+            const result = await service.remove('15551000001');
             expect(result).toBeUndefined(); // remove returns void
 
-            const dbDoc = await PromoteClientModel.findOne({ mobile: '+15551000001' }).lean();
+            const dbDoc = await PromoteClientModel.findOne({ mobile: '15551000001' }).lean();
             expect(dbDoc).toBeNull();
         });
 
         it('throws NotFoundException for unknown mobile', async () => {
-            await expect(service.remove('+15559999999')).rejects.toThrow('not found');
+            await expect(service.remove('15559999999')).rejects.toThrow('not found');
             // Verify no accidental side-effect docs
             const count = await PromoteClientModel.countDocuments({});
             expect(count).toBe(0);
         });
 
         it('does not affect other documents', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15551000002' }));
-            await service.create(makePromoteClientData({ mobile: '+15551000003' }));
+            await service.create(makePromoteClientData({ mobile: '15551000002' }));
+            await service.create(makePromoteClientData({ mobile: '15551000003' }));
 
-            await service.remove('+15551000002');
+            await service.remove('15551000002');
 
             const remaining = await PromoteClientModel.find({}).lean();
             expect(remaining).toHaveLength(1);
-            expect(remaining[0].mobile).toBe('+15551000003');
+            expect(remaining[0].mobile).toBe('15551000003');
         });
     });
 
@@ -483,20 +518,20 @@ describe('Promote Client API', () => {
 
     describe('executeQuery()', () => {
         it('runs a MongoDB filter and returns matching docs only', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15551100001', channels: 50 }));
-            await service.create(makePromoteClientData({ mobile: '+15551100002', channels: 200 }));
-            await service.create(makePromoteClientData({ mobile: '+15551100003', channels: 150 }));
+            await service.create(makePromoteClientData({ mobile: '15551100001', channels: 50 }));
+            await service.create(makePromoteClientData({ mobile: '15551100002', channels: 200 }));
+            await service.create(makePromoteClientData({ mobile: '15551100003', channels: 150 }));
 
             const results = await service.executeQuery({ channels: { $gte: 150 } });
             expect(results).toHaveLength(2);
             const mobiles = results.map(r => r.mobile).sort();
-            expect(mobiles).toEqual(['+15551100002', '+15551100003']);
+            expect(mobiles).toEqual(['15551100002', '15551100003']);
         });
 
         it('supports sort and limit', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15551100004', channels: 300 }));
-            await service.create(makePromoteClientData({ mobile: '+15551100005', channels: 100 }));
-            await service.create(makePromoteClientData({ mobile: '+15551100006', channels: 200 }));
+            await service.create(makePromoteClientData({ mobile: '15551100004', channels: 300 }));
+            await service.create(makePromoteClientData({ mobile: '15551100005', channels: 100 }));
+            await service.create(makePromoteClientData({ mobile: '15551100006', channels: 200 }));
 
             const results = await service.executeQuery({}, { channels: 1 }, 2);
             expect(results).toHaveLength(2);
@@ -513,18 +548,18 @@ describe('Promote Client API', () => {
 
     describe('getPromoteClientsByStatus()', () => {
         it('returns only clients with matching status', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15551200001', status: 'active' }));
-            await service.create(makePromoteClientData({ mobile: '+15551200002', status: 'inactive' }));
-            await service.create(makePromoteClientData({ mobile: '+15551200003', status: 'active' }));
+            await service.create(makePromoteClientData({ mobile: '15551200001', status: 'active' }));
+            await service.create(makePromoteClientData({ mobile: '15551200002', status: 'inactive' }));
+            await service.create(makePromoteClientData({ mobile: '15551200003', status: 'active' }));
 
             const active = await service.getPromoteClientsByStatus('active');
             expect(active).toHaveLength(2);
             const mobiles = active.map(c => c.mobile).sort();
-            expect(mobiles).toEqual(['+15551200001', '+15551200003']);
+            expect(mobiles).toEqual(['15551200001', '15551200003']);
 
             const inactive = await service.getPromoteClientsByStatus('inactive');
             expect(inactive).toHaveLength(1);
-            expect(inactive[0].mobile).toBe('+15551200002');
+            expect(inactive[0].mobile).toBe('15551200002');
         });
     });
 
@@ -533,11 +568,11 @@ describe('Promote Client API', () => {
     describe('getPromoteClientsWithMessages()', () => {
         it('returns mobile, status, message, clientId, lastUsed for all clients', async () => {
             await service.create(makePromoteClientData({
-                mobile: '+15551300001',
+                mobile: '15551300001',
                 clientId: 'client-a',
             }));
             await service.create(makePromoteClientData({
-                mobile: '+15551300002',
+                mobile: '15551300002',
                 clientId: 'client-b',
                 status: 'inactive',
                 message: 'banned',
@@ -546,7 +581,7 @@ describe('Promote Client API', () => {
             const msgs = await service.getPromoteClientsWithMessages();
             expect(msgs).toHaveLength(2);
 
-            const banned = msgs.find((m: any) => m.mobile === '+15551300002');
+            const banned = msgs.find((m: any) => m.mobile === '15551300002');
             expect(banned?.status).toBe('inactive');
             expect(banned?.message).toBe('banned');
             expect(banned?.clientId).toBe('client-b');
@@ -579,26 +614,26 @@ describe('Promote Client API', () => {
 
     describe('field isolation', () => {
         it('updating doc A does not affect doc B', async () => {
-            await service.create(makePromoteClientData({ mobile: '+15551500001', channels: 100 }));
-            await service.create(makePromoteClientData({ mobile: '+15551500002', channels: 200 }));
+            await service.create(makePromoteClientData({ mobile: '15551500001', channels: 100 }));
+            await service.create(makePromoteClientData({ mobile: '15551500002', channels: 200 }));
 
-            await service.update('+15551500001', { channels: 999 });
+            await service.update('15551500001', { channels: 999 });
 
-            const docB = await PromoteClientModel.findOne({ mobile: '+15551500002' }).lean();
+            const docB = await PromoteClientModel.findOne({ mobile: '15551500002' }).lean();
             expect(docB.channels).toBe(200);
         });
 
         it('deactivating doc A does not deactivate doc B', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15551500003', clientId: 'client-iso-a', status: 'active', inUse: true,
+                mobile: '15551500003', clientId: 'client-iso-a', status: 'active', inUse: true,
             }));
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15551500004', clientId: 'client-iso-b', status: 'active', inUse: true,
+                mobile: '15551500004', clientId: 'client-iso-b', status: 'active', inUse: true,
             }));
 
-            await service.updateStatus('+15551500003', 'inactive', 'banned');
+            await service.updateStatus('15551500003', 'inactive', 'banned');
 
-            const docB = await PromoteClientModel.findOne({ mobile: '+15551500004' }).lean();
+            const docB = await PromoteClientModel.findOne({ mobile: '15551500004' }).lean();
             expect(docB.status).toBe('active');
             expect(docB.inUse).toBe(true);
         });
@@ -609,19 +644,19 @@ describe('Promote Client API', () => {
     describe('consistency with buffer client behavior', () => {
         it('inactive status clears inUse (same as buffer)', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15551600001', inUse: true, status: 'active',
+                mobile: '15551600001', inUse: true, status: 'active',
             }));
 
-            const updated = await service.updateStatus('+15551600001', 'inactive', 'test');
+            const updated = await service.updateStatus('15551600001', 'inactive', 'test');
             expect(updated.inUse).toBe(false);
         });
 
         it('markAsActive resets message to default (same as buffer activate)', async () => {
             await PromoteClientModel.create(makePromoteClientData({
-                mobile: '+15551600002', status: 'inactive', message: 'was banned',
+                mobile: '15551600002', status: 'inactive', message: 'was banned',
             }));
 
-            const updated = await service.markAsActive('+15551600002');
+            const updated = await service.markAsActive('15551600002');
             expect(updated.message).toBe('Account is functioning properly');
         });
     });

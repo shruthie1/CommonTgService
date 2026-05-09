@@ -27,11 +27,28 @@ interface PrivacyResult {
     readFailures: number;
     writeFailures: number;
     allConfirmed: boolean;
+    failureReasons: string[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (isRecord(error)) {
+        const errorMessage = error.errorMessage;
+        if (typeof errorMessage === 'string') return errorMessage;
+        const message = error.message;
+        if (typeof message === 'string') return message;
+    }
+    return String(error);
 }
 
 async function ensurePrivacy(ctx: TgContext, expectations: PrivacyExpectation[]): Promise<PrivacyResult> {
     let readFailures = 0;
     let writeFailures = 0;
+    const failureReasons: string[] = [];
 
     // Phase 1: sequential reads with human-like gaps
     const mismatches: PrivacyExpectation[] = [];
@@ -39,8 +56,8 @@ async function ensurePrivacy(ctx: TgContext, expectations: PrivacyExpectation[])
         const { key, label, desired } = expectation;
         try {
             const current = await ctx.client.invoke(new Api.account.GetPrivacy({ key }));
-            const hasAllowAll = current.rules.some((r: any) => r.className === 'PrivacyValueAllowAll');
-            const hasDisallowAll = current.rules.some((r: any) => r.className === 'PrivacyValueDisallowAll');
+            const hasAllowAll = current.rules.some((rule) => rule.className === 'PrivacyValueAllowAll');
+            const hasDisallowAll = current.rules.some((rule) => rule.className === 'PrivacyValueDisallowAll');
             const isCorrect = desired === 'allow' ? hasAllowAll : hasDisallowAll;
 
             if (isCorrect) {
@@ -49,15 +66,17 @@ async function ensurePrivacy(ctx: TgContext, expectations: PrivacyExpectation[])
                 ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: mismatch → need ${desired} (was ${hasAllowAll ? 'allow' : hasDisallowAll ? 'disallow' : 'other'})`);
                 mismatches.push(expectation);
             }
-        } catch (err: any) {
-            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${err.message}`);
+        } catch (err: unknown) {
+            const errorMessage = getErrorMessage(err);
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: read failed — ${errorMessage}`);
+            failureReasons.push(`${label} read: ${errorMessage}`);
             readFailures++;
         }
         await sleep(1000 + Math.random() * 2000);
     }
 
     if (mismatches.length === 0) {
-        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0 };
+        return { updated: 0, readFailures, writeFailures, allConfirmed: readFailures === 0, failureReasons };
     }
 
     // Phase 2: sequential writes with larger human-like delays
@@ -70,13 +89,15 @@ async function ensurePrivacy(ctx: TgContext, expectations: PrivacyExpectation[])
             await ctx.client.invoke(new Api.account.SetPrivacy({ key, rules }));
             ctx.logger.info(ctx.phoneNumber, `Privacy ${label}: fixed → ${desired}`);
             updated++;
-        } catch (err: any) {
-            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${err.message}`);
+        } catch (err: unknown) {
+            const errorMessage = getErrorMessage(err);
+            ctx.logger.warn(ctx.phoneNumber, `Privacy ${label}: write failed — ${errorMessage}`);
+            failureReasons.push(`${label} write: ${errorMessage}`);
             writeFailures++;
         }
         await sleep(3000 + Math.random() * 7000);
     }
-    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0 };
+    return { updated, readFailures, writeFailures, allConfirmed: readFailures === 0 && writeFailures === 0, failureReasons };
 }
 
 /**
@@ -114,7 +135,8 @@ const DEACTIVATE_PRIVACY: PrivacyExpectation[] = [
 export async function updatePrivacyforDeletedAccount(ctx: TgContext): Promise<void> {
     const result = await ensurePrivacy(ctx, DEACTIVATE_PRIVACY);
     if (!result.allConfirmed) {
-        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)`;
+        const details = result.failureReasons.slice(0, 5).join('; ');
+        const msg = `Privacy deactivate incomplete: ${result.readFailures} read failure(s), ${result.writeFailures} write failure(s)${details ? ` — ${details}` : ''}`;
         ctx.logger.warn(ctx.phoneNumber, msg);
         throw new Error(msg);
     }

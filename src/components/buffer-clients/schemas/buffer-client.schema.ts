@@ -3,6 +3,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { WarmupPhaseType } from '../../shared/warmup-phases';
 import { ClientStatusType } from '../../shared/base-client.service';
+import { canonicalizeMobile } from '../../shared/mobile-utils';
 
 export type BufferClientDocument = BufferClient & Document;
 @Schema({
@@ -19,7 +20,7 @@ export class BufferClient {
   tgId: string;
 
   @ApiProperty({ description: 'Unique mobile number for the Telegram account.'})
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, set: canonicalizeMobile })
   mobile: string;
 
   @ApiProperty({ description: 'Session string currently stored for this buffer client.'})

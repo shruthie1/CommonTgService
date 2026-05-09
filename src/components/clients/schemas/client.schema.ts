@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { Document } from 'mongoose';
+import { canonicalizeMobile } from '../../shared/mobile-utils';
 
 export type ClientDocument = Client & Document;
 
@@ -29,7 +30,7 @@ export class Client {
     name: string;
 
     @ApiProperty({ description: 'Mobile number' })
-    @Prop({ required: true, unique: true })
+    @Prop({ required: true, unique: true, set: canonicalizeMobile })
     mobile: string;
 
     @ApiProperty({ description: '2FA password' })

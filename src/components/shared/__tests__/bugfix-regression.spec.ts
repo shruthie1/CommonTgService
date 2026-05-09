@@ -28,7 +28,7 @@ describe('Mongoose spread bug — real MongoDB', () => {
 
     const makeClient = (overrides: Partial<BufferClient> = {}) => ({
         tgId: `tg-${Math.random().toString(36).slice(2, 10)}`,
-        mobile: `+1555${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`,
+        mobile: `1555${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`,
         session: `session-${Math.random().toString(36).slice(2, 12)}`,
         availableDate: '2026-04-11',
         channels: 50,
@@ -424,7 +424,7 @@ describe('Mongoose findOneAndUpdate returns usable doc for warmup', () => {
 
     const makeClient = (overrides: Partial<BufferClient> = {}) => ({
         tgId: `tg-${Math.random().toString(36).slice(2, 10)}`,
-        mobile: `+1555${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`,
+        mobile: `1555${Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0')}`,
         session: `session-${Math.random().toString(36).slice(2, 12)}`,
         availableDate: '2026-04-11',
         channels: 50,

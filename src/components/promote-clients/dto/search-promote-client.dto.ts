@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsString, IsOptional, IsNumber, IsEnum } from 'class-validator';
+import { Transform, TransformFnParams } from 'class-transformer';
+import { IsString, IsOptional, IsNumber, IsEnum, Matches } from 'class-validator';
 import { ClientStatus, ClientStatusType } from '../../shared/base-client.service';
+import { CANONICAL_MOBILE_REGEX, normalizeMobileInput } from '../../shared/mobile-utils';
 
 export class SearchPromoteClientDto {
   @ApiPropertyOptional({
@@ -13,7 +14,9 @@ export class SearchPromoteClientDto {
   @ApiPropertyOptional({
     description: 'Mobile number of the promote client.' })
   @IsOptional()
+  @Transform(({ value }: TransformFnParams) => typeof value === 'string' ? normalizeMobileInput(value) : value)
   @IsString()
+  @Matches(CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' })
   readonly mobile?: string;
 
   @ApiPropertyOptional({

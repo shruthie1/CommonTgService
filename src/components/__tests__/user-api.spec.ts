@@ -83,7 +83,7 @@ describe('Users API', () => {
         });
 
         it('should create with minimal required fields and apply defaults', async () => {
-            const data = { mobile: '+15559000001', session: 'sess-min', tgId: 'tg-min', firstName: 'Min' };
+            const data = { mobile: '15559000001', session: 'sess-min', tgId: 'tg-min', firstName: 'Min' };
             const result = await service.create(data as any);
             expect(result).toBeDefined();
             // twoFA has no Mongoose-level default — only a class-level default that applies when DTO is instantiated

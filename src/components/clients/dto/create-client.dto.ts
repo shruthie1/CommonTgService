@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, TransformFnParams, Type } from 'class-transformer';
 import { ArrayUnique, IsArray, IsBoolean, IsOptional, IsString, IsUrl, Matches } from 'class-validator';
+import { CANONICAL_MOBILE_REGEX, normalizeMobileInput } from '../../shared/mobile-utils';
 
 export class CreateClientDto {
     @ApiProperty({ description: 'Channel link' })
@@ -24,8 +25,8 @@ export class CreateClientDto {
     readonly name: string;
 
     @ApiProperty({ description: 'Mobile number' })
-    @Transform(({ value }: TransformFnParams) => value?.trim())
-    @Matches(/^\+?[0-9]{10,15}$/, { message: 'Invalid phone number format' })
+    @Transform(({ value }: TransformFnParams) => typeof value === 'string' ? normalizeMobileInput(value) : value)
+    @Matches(CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' })
     readonly mobile: string;
 
     @ApiProperty({ description: '2FA password' })

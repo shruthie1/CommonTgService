@@ -48,6 +48,9 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 
+type ClientCount = { _id: string; count: number };
+type PromoteClientQuery = Record<string, unknown>;
+
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
@@ -268,9 +271,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 );
                 if (hasAnyAssignment) {
                     // Read current TG profile state once (needed for lastName and bio checks)
-                    const fullUser = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
-                    const currentLastName: string = (fullUser as any)?.users?.[0]?.lastName || '';
-                    const currentBio: string = (fullUser as any)?.fullUser?.about || '';
+                    const fullUser: unknown = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
+                    const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
+                    const currentBio = this.readNestedString(fullUser, ['fullUser', 'about']);
 
                     // Check firstName mismatch
                     const firstNameWrong = assignment?.assignedFirstName != null
@@ -327,7 +330,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         } finally {
@@ -362,7 +365,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.markAsInactive(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason);
             }
             return 0;
         } finally {
@@ -373,8 +376,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     // ---- CRUD (promote-specific) ----
 
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
+        const canonicalMobile = this.canonicalMobile(promoteClient.mobile);
         const promoteClientData = {
             ...promoteClient,
+            mobile: canonicalMobile,
             status: promoteClient.status || 'active',
             message: promoteClient.message || 'Account is functioning properly',
         };
@@ -385,7 +390,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             [
                 '<b>Promote Client Created</b>',
                 '',
-                `<b>Mobile:</b> ${promoteClient.mobile}`,
+                `<b>Mobile:</b> ${canonicalMobile}`,
                 `<b>Client ID:</b> ${promoteClient.clientId || '-'}`,
                 `<b>Status:</b> ${result.status}`,
                 `<b>Available Date:</b> ${promoteClient.availableDate || '-'}`,
@@ -402,21 +407,32 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return this.promoteClientModel.find(filter).exec();
     }
 
-    async findOne(mobile: string, throwErr: boolean = true): Promise<PromoteClientDocument> {
-        const user = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
+    async findOne(mobile: string, throwErr: boolean = true): Promise<PromoteClientDocument | null> {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.promoteClientModel.findOne({ mobile: canonicalMobile }).exec())?.toJSON() || null;
         if (!user && throwErr) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
         }
-        return user as PromoteClientDocument;
+        return user as PromoteClientDocument | null;
     }
 
     async existsByMobile(mobile: string): Promise<boolean> {
-        return !!(await this.promoteClientModel.findOne({ mobile }, { _id: 1 }).lean().exec());
+        const canonicalMobile = this.canonicalMobile(mobile);
+        return !!(await this.promoteClientModel.findOne({ mobile: canonicalMobile }, { _id: 1 }).lean().exec());
     }
 
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument> {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
+        if (updateData.mobile !== undefined) {
+            const payloadMobile = this.canonicalMobile(updateData.mobile);
+            if (payloadMobile !== canonicalMobile) {
+                throw new BadRequestException('mobile in payload must match route mobile');
+            }
+            updateData.mobile = canonicalMobile;
+        }
         const updatedUser = await this.promoteClientModel
-            .findOneAndUpdate({ mobile }, { $set: updateClientDto }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
             .exec();
         if (!updatedUser) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -430,12 +446,25 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         if (status === 'inactive') {
             updateData.inUse = false;
         }
-        await this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
-            { parseMode: 'HTML' }
-        );
-        return this.update(mobile, updateData);
+        try {
+            const updated = await this.update(mobile, updateData);
+            this.logger.log(`Promote client ${mobile} status updated to ${status}`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
+                { parseMode: 'HTML' }
+            ).catch((error) => this.logger.error(`Failed to send promote status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            return updated;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to update promote client ${mobile} status to ${status}: ${errorMessage}`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>Promote Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`,
+                { parseMode: 'HTML' }
+            ).catch((notifyError) => this.logger.error(`Failed to send promote status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            throw error;
+        }
     }
 
     async refillJoinQueue(clientId?: string | null): Promise<number> {
@@ -444,7 +473,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
         this.resetDailyJoinCountersIfNeeded();
 
-        const query: Record<string, any> = {
+        const query: PromoteClientQuery = {
             status: 'active',
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
@@ -485,7 +514,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.markAsInactive(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason);
                 }
             } finally {
                 await this.safeUnregisterClient(doc.mobile);
@@ -530,11 +559,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     async createOrUpdate(mobile: string, createOrUpdateUserDto: CreatePromoteClientDto | UpdatePromoteClientDto): Promise<PromoteClient> {
-        const existingUser = (await this.promoteClientModel.findOne({ mobile }).exec())?.toJSON();
-        if (existingUser) {
-            return this.update(existingUser.mobile, createOrUpdateUserDto as UpdatePromoteClientDto);
+        const canonicalMobile = this.canonicalMobile(mobile);
+        if (await this.existsByMobile(canonicalMobile)) {
+            const updateDto: UpdatePromoteClientDto = {
+                ...createOrUpdateUserDto,
+                mobile: canonicalMobile,
+            };
+            return this.update(canonicalMobile, updateDto);
         } else {
-            return this.create(createOrUpdateUserDto as CreatePromoteClientDto);
+            return this.create({ ...createOrUpdateUserDto, mobile: canonicalMobile } as CreatePromoteClientDto);
         }
     }
 
@@ -553,8 +586,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     async search(filter: Partial<PromoteClient>): Promise<PromoteClient[]> {
-        const query: Record<string, any> = { ...filter };
-        const regexFields = ['mobile', 'clientId'];
+        const query: PromoteClientQuery = { ...filter };
+        if (typeof query.mobile === 'string' && query.mobile) {
+            query.mobile = this.canonicalMobile(query.mobile);
+        }
+        const regexFields = ['clientId'];
         for (const field of regexFields) {
             if (typeof query[field] === 'string' && query[field]) {
                 query[field] = { $regex: new RegExp(query[field].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
@@ -563,7 +599,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return this.promoteClientModel.find(query).exec();
     }
 
-    async executeQuery(query: Record<string, any>, sort?: Record<string, any>, limit?: number, skip?: number): Promise<PromoteClientDocument[]> {
+    async executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<PromoteClientDocument[]> {
         if (!query) throw new BadRequestException('Query is invalid.');
         try {
             const queryExec = this.promoteClientModel.find(query);
@@ -585,24 +621,25 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         clientId?: string,
         availableDate: string = ClientHelperUtils.getTodayDateString(),
     ) {
-        const user = (await this.usersService.search({ mobile, expired: false }))[0];
+        const canonicalMobile = this.canonicalMobile(mobile);
+        const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user) throw new BadRequestException('User not found');
 
-        const isExist = await this.findOne(mobile, false);
+        const isExist = await this.findOne(canonicalMobile, false);
         if (isExist) throw new ConflictException('PromoteClient already exists');
 
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.includes(mobile)) throw new BadRequestException('Number is an Active Client');
+        if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile))) throw new BadRequestException('Number is an Active Client');
 
         // Auto-assign clientId if not provided — pick the client with fewest promote clients
         let targetClientId = clientId;
         if (!targetClientId && clients.length > 0) {
-            const counts = await this.promoteClientModel.aggregate([
+            const counts = await this.promoteClientModel.aggregate<ClientCount>([
                 { $match: { clientId: { $exists: true, $ne: null }, status: 'active' } },
                 { $group: { _id: '$clientId', count: { $sum: 1 } } },
             ]);
-            const countMap = new Map(counts.map((c: any) => [c._id, c.count]));
+            const countMap = new Map(counts.map((count) => [count._id, count.count]));
             let minCount = Infinity;
             for (const c of clients) {
                 const count = countMap.get(c.clientId) || 0;
@@ -613,15 +650,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             }
         }
 
-        const telegramClient = await connectionManager.getClient(mobile, { autoDisconnect: false });
+        const telegramClient = await connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
             // Only get channel info — no 2FA, no profile changes, no new session
-            const channels = await this.telegramService.getChannelInfo(mobile, true);
+            const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
 
             const promoteClient = {
                 tgId: user.tgId,
                 lastActive: 'default',
-                mobile: user.mobile,
+                mobile: canonicalMobile,
                 session: user.session, // Use old trusted session
                 availableDate,
                 channels: channels.ids.length,
@@ -633,7 +670,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             await this.promoteClientModel
                 .findOneAndUpdate(
-                    { mobile: user.mobile },
+                    { mobile: canonicalMobile },
                     {
                         $set: {
                             ...promoteClient,
@@ -653,7 +690,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             }
             throw new HttpException(errorDetails.message, errorDetails.status);
         } finally {
-            await this.safeUnregisterClient(mobile);
+            await this.safeUnregisterClient(canonicalMobile);
         }
         return 'Client enrolled as promote successfully';
     }
@@ -749,7 +786,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     if (isPermanentError(errorDetails)) {
                         await sleep(1000);
                         const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                        await this.markAsInactive(mobile, reason);
+                        await this.deactivateClient(mobile, reason);
                     }
                 } finally {
                     await this.safeUnregisterClient(mobile);
@@ -894,8 +931,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
-                const healthCheckPassed = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
-                if (!healthCheckPassed) continue;
+                const healthCheck = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
+                if (!healthCheck.passed) continue;
             }
             const processResult = await this.processClient(promoteClient, client);
             if (processResult.updateCount > 0) {
@@ -984,9 +1021,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
      */
     private async isMobileEnrolledAnywhere(mobile: string): Promise<string | null> {
         const [promoteExists, bufferExists, clientExists] = await Promise.all([
-            this.promoteClientModel.findOne({ mobile }, { _id: 1 }).lean().exec(),
+            this.existsByMobile(mobile),
             this.bufferClientService.existsByMobile(mobile),
-            this.clientService.findAll().then((clients) => clients.some((c) => c.mobile === mobile)),
+            this.clientService.findAll().then((clients) => clients.some((c) => this.mobilesMatch(c.mobile, mobile))),
         ]);
         if (promoteExists) return 'promoteClients';
         if (bufferExists) return 'bufferClients';
@@ -1020,13 +1057,17 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 
             const user = (await this.usersService.search({ mobile: document.mobile }))[0];
+            if (!user?.session?.trim()) {
+                this.logger.warn(`Skipping promote enrollment for ${document.mobile}: source user/session missing`);
+                return false;
+            }
             const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
 
             const promoteClient: CreatePromoteClientDto = {
                 tgId: document.tgId,
                 lastActive: new Date().toISOString(),
                 mobile: document.mobile,
-                session: user?.session || '', // Use old trusted session
+                session: user.session, // Use old trusted session
                 availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
@@ -1069,7 +1110,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             if (isPermanentError(errorDetails)) {
                 // Try to mark promote doc inactive (may not exist yet)
-                try { await this.markAsInactive(document.mobile, errorDetails.message); } catch { }
+                await this.deactivateClient(document.mobile, errorDetails.message);
                 // Also retire the source user so it's not selected again
                 try { await this.usersService.update(document.tgId, { expired: true }); } catch { }
             }
@@ -1244,7 +1285,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.promoteClientModel.aggregate([{ $match: { clientId: { $exists: true, $ne: null }, status: 'active', lastUsed: { $gte: last24Hours } } }, { $group: { _id: '$clientId', count: { $sum: 1 } } }]),
         ]);
 
-        const toMap = (arr: any[]) => new Map(arr.map((item: { _id: string; count: number }) => [item._id, item.count]));
+        const toMap = (arr: ClientCount[]) => new Map(arr.map((item) => [item._id, item.count]));
         const assignedCountMap = toMap(assignedCounts);
         const activeCountMap = toMap(activeCounts);
         const inactiveCountMap = toMap(inactiveCounts);

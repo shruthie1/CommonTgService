@@ -25,6 +25,7 @@ jest.mock('../../../utils/logbots', () => ({
 class TestBaseService extends BaseClientService<BaseClientDocument> {
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
+    public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => null);
     public readonly telegramServiceMock: any;
     public readonly usersServiceMock: any;
     public readonly botsServiceMock: any;
@@ -87,7 +88,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     async findOne(): Promise<any> { return null; }
     async update(mobile: string, updateDto: any): Promise<any> { return this.updateMock(mobile, updateDto); }
     async markAsInactive(): Promise<any> { return null; }
-    async updateStatus(): Promise<any> { return null; }
+    async updateStatus(mobile: string, status: string, message?: string): Promise<any> { return this.updateStatusMock(mobile, status, message); }
     async refillJoinQueue(_clientId?: string | null): Promise<number> { return 0; }
 
     public effectiveCooldown(mobile: string, lastUpdateAttempt: number): number {
@@ -160,8 +161,8 @@ describe('Service flow reliability', () => {
         const service = new TestBaseService();
         const lastAttempt = new Date('2026-04-03T00:00:00.000Z').getTime();
 
-        const first = service.effectiveCooldown('9990001111', lastAttempt);
-        const second = service.effectiveCooldown('9990001111', lastAttempt);
+        const first = service.effectiveCooldown('919990001111', lastAttempt);
+        const second = service.effectiveCooldown('919990001111', lastAttempt);
 
         expect(first).toBe(second);
         expect(first).toBeGreaterThanOrEqual(90 * 60 * 1000);
@@ -172,7 +173,7 @@ describe('Service flow reliability', () => {
         const service = new TestBaseService();
         const now = new Date('2026-04-03T12:00:00.000Z').getTime();
         const doc = {
-            mobile: '9990002222',
+            mobile: '919990002222',
             warmupPhase: null,
             warmupJitter: 0,
             createdAt: null,
@@ -190,7 +191,7 @@ describe('Service flow reliability', () => {
         const repaired = await service.repair(doc, now);
 
         expect(service.updateMock).toHaveBeenCalledWith(
-            '9990002222',
+            '919990002222',
             expect.objectContaining({
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: expect.any(Date),
@@ -204,7 +205,7 @@ describe('Service flow reliability', () => {
         const service = new TestBaseService();
         const now = new Date('2026-04-03T12:00:00.000Z').getTime();
         const doc = {
-            mobile: '9990003333',
+            mobile: '919990003333',
             warmupPhase: WarmupPhase.ENROLLED,
             warmupJitter: 0,
             createdAt: new Date('2026-03-01T12:00:00.000Z'),
@@ -222,7 +223,7 @@ describe('Service flow reliability', () => {
         const repaired = await service.repair(doc, now);
 
         expect(service.updateMock).toHaveBeenCalledWith(
-            '9990003333',
+            '919990003333',
             expect.objectContaining({ warmupPhase: WarmupPhase.GROWING }),
         );
         expect(repaired.warmupPhase).toBe(WarmupPhase.GROWING);
@@ -233,7 +234,7 @@ describe('Service flow reliability', () => {
         const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-03T12:00:00.000Z').getTime());
         jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
         const doc = {
-            mobile: '9990004444',
+            mobile: '919990004444',
             warmupPhase: WarmupPhase.READY,
             enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
             createdAt: new Date('2026-03-01T12:00:00.000Z'),
@@ -241,16 +242,23 @@ describe('Service flow reliability', () => {
             lastUpdateFailure: null,
             lastUpdateAttempt: null,
             inUse: false,
+            privacyUpdatedAt: new Date('2026-03-02T12:00:00.000Z'),
+            twoFASetAt: new Date('2026-03-03T12:00:00.000Z'),
+            otherAuthsRemovedAt: new Date('2026-03-04T12:00:00.000Z'),
+            profilePicsDeletedAt: new Date('2026-03-05T12:00:00.000Z'),
+            nameBioUpdatedAt: new Date('2026-03-06T12:00:00.000Z'),
+            usernameUpdatedAt: new Date('2026-03-07T12:00:00.000Z'),
+            profilePicsUpdatedAt: new Date('2026-03-08T12:00:00.000Z'),
         } as any;
 
         await service.processClient(doc, { clientId: 'client-1' } as Client);
 
         expect(service.updateMock).toHaveBeenNthCalledWith(
             1,
-            '9990004444',
+            '919990004444',
             expect.objectContaining({ failedUpdateAttempts: 0, lastUpdateFailure: null }),
         );
-        expect(service.rotateSession).toHaveBeenCalledWith('9990004444');
+        expect(service.rotateSession).toHaveBeenCalledWith('919990004444');
         nowSpy.mockRestore();
     });
 
@@ -259,7 +267,7 @@ describe('Service flow reliability', () => {
         const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-03T12:00:00.000Z').getTime());
         jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
         const doc = {
-            mobile: '9990004445',
+            mobile: '919990004445',
             warmupPhase: WarmupPhase.READY,
             enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
             createdAt: new Date('2026-03-01T12:00:00.000Z'),
@@ -267,16 +275,23 @@ describe('Service flow reliability', () => {
             lastUpdateFailure: new Date('2026-04-02T11:00:00.000Z'),
             lastUpdateAttempt: null,
             inUse: false,
+            privacyUpdatedAt: new Date('2026-03-02T12:00:00.000Z'),
+            twoFASetAt: new Date('2026-03-03T12:00:00.000Z'),
+            otherAuthsRemovedAt: new Date('2026-03-04T12:00:00.000Z'),
+            profilePicsDeletedAt: new Date('2026-03-05T12:00:00.000Z'),
+            nameBioUpdatedAt: new Date('2026-03-06T12:00:00.000Z'),
+            usernameUpdatedAt: new Date('2026-03-07T12:00:00.000Z'),
+            profilePicsUpdatedAt: new Date('2026-03-08T12:00:00.000Z'),
         } as any;
 
         await service.processClient(doc, { clientId: 'client-1' } as Client);
 
         expect(service.updateMock).toHaveBeenNthCalledWith(
             1,
-            '9990004445',
+            '919990004445',
             expect.objectContaining({ failedUpdateAttempts: 0, lastUpdateFailure: null }),
         );
-        expect(service.rotateSession).toHaveBeenCalledWith('9990004445');
+        expect(service.rotateSession).toHaveBeenCalledWith('919990004445');
         nowSpy.mockRestore();
     });
 
@@ -284,20 +299,20 @@ describe('Service flow reliability', () => {
         const service = new TestBaseService();
         jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
         jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
-        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(true);
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue({ passed: true, performed: true });
         jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
         jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
         const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString');
 
         service.usersServiceMock.search
-            .mockResolvedValueOnce([{ tgId: 'tg-rotate-1', mobile: '9990090001', session: 'live-backup-session' }])
-            .mockResolvedValueOnce([{ tgId: 'tg-rotate-1', mobile: '9990090001', session: 'live-backup-session' }]);
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-1', mobile: '919990090001', session: 'live-backup-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-1', mobile: '919990090001', session: 'live-backup-session' }]);
 
-        const rotated = await service.rotateSession('9990090001');
+        const rotated = await service.rotateSession('919990090001');
 
         expect(rotated).toBe(true);
         expect(service.updateMock).toHaveBeenCalledWith(
-            '9990090001',
+            '919990090001',
             expect.objectContaining({
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
                 sessionRotatedAt: expect.any(Date),
@@ -306,8 +321,8 @@ describe('Service flow reliability', () => {
         expect(createDistinctSpy).not.toHaveBeenCalled();
         expect(service.usersServiceMock.update).not.toHaveBeenCalled();
         expect((service as any).verifySessionLive).toHaveBeenCalledTimes(1);
-        expect((service as any).verifySessionLive).toHaveBeenCalledWith('9990090001', 'live-backup-session');
-        expect((service as any).verifySessionAuthorizations).toHaveBeenCalledWith('9990090001', 'active-session', expect.anything());
+        expect((service as any).verifySessionLive).toHaveBeenCalledWith('919990090001', 'live-backup-session');
+        expect((service as any).verifySessionAuthorizations).toHaveBeenCalledWith('919990090001', 'active-session', expect.anything());
     });
 
     test('rotateSession creates and persists a new backup when the existing backup is stale', async () => {
@@ -321,16 +336,16 @@ describe('Service flow reliability', () => {
         const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString').mockResolvedValue('fresh-backup-session');
 
         service.usersServiceMock.search
-            .mockResolvedValueOnce([{ tgId: 'tg-rotate-2', mobile: '9990090002', session: 'dead-backup-session' }])
-            .mockResolvedValueOnce([{ tgId: 'tg-rotate-2', mobile: '9990090002', session: 'fresh-backup-session' }]);
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-2', mobile: '919990090002', session: 'dead-backup-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-2', mobile: '919990090002', session: 'fresh-backup-session' }]);
 
-        const rotated = await service.rotateSession('9990090002');
+        const rotated = await service.rotateSession('919990090002');
 
         expect(rotated).toBe(true);
-        expect(createDistinctSpy).toHaveBeenCalledWith('9990090002', ['active-session', 'dead-backup-session']);
+        expect(createDistinctSpy).toHaveBeenCalledWith('919990090002', ['active-session', 'dead-backup-session']);
         expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-rotate-2', { session: 'fresh-backup-session' });
         expect(service.updateMock).toHaveBeenCalledWith(
-            '9990090002',
+            '919990090002',
             expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
         );
     });
@@ -339,19 +354,19 @@ describe('Service flow reliability', () => {
         const service = new TestBaseService();
         jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
         jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
-        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(true);
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue({ passed: true, performed: true });
         jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
         jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
         const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString').mockResolvedValue('fresh-duplicate-replacement');
 
         service.usersServiceMock.search
-            .mockResolvedValueOnce([{ tgId: 'tg-rotate-dup', mobile: '9990090004', session: 'active-session' }])
-            .mockResolvedValueOnce([{ tgId: 'tg-rotate-dup', mobile: '9990090004', session: 'fresh-duplicate-replacement' }]);
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-dup', mobile: '919990090004', session: 'active-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-rotate-dup', mobile: '919990090004', session: 'fresh-duplicate-replacement' }]);
 
-        const rotated = await service.rotateSession('9990090004');
+        const rotated = await service.rotateSession('919990090004');
 
         expect(rotated).toBe(true);
-        expect(createDistinctSpy).toHaveBeenCalledWith('9990090004', ['active-session', 'active-session']);
+        expect(createDistinctSpy).toHaveBeenCalledWith('919990090004', ['active-session', 'active-session']);
         expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-rotate-dup', { session: 'fresh-duplicate-replacement' });
     });
 
@@ -362,7 +377,7 @@ describe('Service flow reliability', () => {
         jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
         const createDistinctSpy = jest.spyOn(service as any, 'createDistinctSessionString');
 
-        const rotated = await service.rotateSession('9990090003');
+        const rotated = await service.rotateSession('919990090003');
 
         expect(rotated).toBe(false);
         expect(createDistinctSpy).not.toHaveBeenCalled();
@@ -476,7 +491,7 @@ describe('Service flow reliability', () => {
         };
 
         const service = makePromoteService(promoteModel);
-        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         jest.spyOn(service as any, 'processClient').mockResolvedValue(1);
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
@@ -521,7 +536,7 @@ describe('Service flow reliability', () => {
         };
 
         const service = makePromoteService(promoteModel);
-        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
@@ -566,7 +581,7 @@ describe('Service flow reliability', () => {
         };
 
         const service = makePromoteService(promoteModel);
-        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'noop' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
@@ -631,7 +646,7 @@ describe('Service flow reliability', () => {
             { clientId: 'client-1', mobile: 'main-1' },
             { clientId: 'client-2', mobile: 'main-2' },
         ]);
-        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
@@ -768,7 +783,7 @@ describe('Service flow reliability', () => {
             { mobile: '929002', tgId: 'tg-2' },
             { mobile: '929003', tgId: 'tg-3' },
         ]);
-        const createSpy = jest.spyOn(service as any, 'createPromoteClientFromUser').mockResolvedValue(true);
+        const createSpy = jest.spyOn(service as any, 'createPromoteClientFromUser').mockResolvedValue({ passed: true, performed: true });
 
         const result = await (service as any).addNewUserstoPromoteClientsDynamic(
             [],
@@ -824,7 +839,7 @@ describe('Service flow reliability', () => {
             { clientId: 'client-1', mobile: 'main-1' },
             { clientId: 'client-2', mobile: 'main-2' },
         ]);
-        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
@@ -895,7 +910,7 @@ describe('Service flow reliability', () => {
             { clientId: 'client-1', mobile: 'main-1' },
             { clientId: 'client-2', mobile: 'main-2' },
         ]);
-        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue(true);
+        jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 1, updateSummary: 'rotate_session' });
         jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
             totalNeeded: 0,
@@ -1037,7 +1052,7 @@ describe('Service flow reliability', () => {
             { mobile: '919002', tgId: 'tg-2' },
             { mobile: '919003', tgId: 'tg-3' },
         ]);
-        const createSpy = jest.spyOn(service as any, 'createBufferClientFromUser').mockResolvedValue(true);
+        const createSpy = jest.spyOn(service as any, 'createBufferClientFromUser').mockResolvedValue({ passed: true, performed: true });
 
         const result = await (service as any).addNewUserstoBufferClientsDynamic(
             [],
@@ -1122,7 +1137,7 @@ describe('Service flow reliability', () => {
     });
 
     test('buffer refillJoinQueue uses fresh channel exclusions from live channelInfo', async () => {
-        const doc = { mobile: '9990011111', channels: 10, status: 'active' };
+        const doc = { mobile: '919990011111', channels: 10, status: 'active' };
         const bufferModel: any = {
             find: jest.fn(() => createQueryChain(() => [doc])),
         };
@@ -1143,11 +1158,11 @@ describe('Service flow reliability', () => {
 
         expect(added).toBe(1);
         expect(activeChannelsService.getActiveChannels).toHaveBeenCalledWith(20, 0, ['existing-1', 'existing-2']);
-        expect((service as any).joinChannelMap.get('9990011111')).toEqual([{ channelId: 'new-1', username: 'new-1' }]);
+        expect((service as any).joinChannelMap.get('919990011111')).toEqual([{ channelId: 'new-1', username: 'new-1' }]);
     });
 
     test('buffer refillJoinQueue queues leave work when live channelInfo says the mobile should leave', async () => {
-        const doc = { mobile: '9990012222', channels: 50, status: 'active' };
+        const doc = { mobile: '919990012222', channels: 50, status: 'active' };
         const bufferModel: any = {
             find: jest.fn(() => createQueryChain(() => [doc])),
         };
@@ -1166,7 +1181,7 @@ describe('Service flow reliability', () => {
         const added = await service.refillJoinQueue();
 
         expect(added).toBe(0);
-        expect((service as any).leaveChannelMap.get('9990012222')).toEqual(['leave-1', 'leave-2']);
+        expect((service as any).leaveChannelMap.get('919990012222')).toEqual(['leave-1', 'leave-2']);
         expect(timeoutSpy).toHaveBeenCalled();
     });
 
@@ -1174,7 +1189,7 @@ describe('Service flow reliability', () => {
         const updateOne = jest.fn().mockResolvedValue({});
         const service = new TestBaseService({ updateOne });
 
-        (service as any).leaveChannelMap.set('9990013333', ['stale-1']);
+        (service as any).leaveChannelMap.set('919990013333', ['stale-1']);
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
             leaveChannels: jest.fn().mockResolvedValue({
                 successCount: 0,
@@ -1187,13 +1202,13 @@ describe('Service flow reliability', () => {
         await (service as any).processLeaveChannelSequentially();
 
         expect(updateOne).not.toHaveBeenCalled();
-        expect((service as any).leaveChannelMap.has('9990013333')).toBe(false);
+        expect((service as any).leaveChannelMap.has('919990013333')).toBe(false);
     });
 
     test('operational selection self-heals legacy used accounts before querying session-rotated pool', async () => {
         let normalized = false;
         const legacyDoc = {
-            mobile: '9990005555',
+            mobile: '919990005555',
             clientId: 'client-1',
             status: 'active',
             session: 'active-9990005555',
@@ -1201,7 +1216,7 @@ describe('Service flow reliability', () => {
             createdAt: new Date('2025-01-01T12:00:00.000Z'),
         };
         const rotatedDoc = {
-            mobile: '9990005555',
+            mobile: '919990005555',
             clientId: 'client-1',
             status: 'active',
             warmupPhase: WarmupPhase.SESSION_ROTATED,
@@ -1240,14 +1255,14 @@ describe('Service flow reliability', () => {
 
         expect(selected).toEqual(rotatedDoc);
         expect(service.updateMock).toHaveBeenCalledWith(
-            '9990005555',
+            '919990005555',
             expect.objectContaining({
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
                 sessionRotatedAt: expect.any(Date),
                 enrolledAt: expect.any(Date),
             }),
         );
-        const backfillPayload = service.updateMock.mock.calls.find((call: any[]) => call[0] === '9990005555')?.[1];
+        const backfillPayload = service.updateMock.mock.calls.find((call: any[]) => call[0] === '919990005555')?.[1];
         expect(backfillPayload).not.toHaveProperty('twoFASetAt');
         expect(backfillPayload).not.toHaveProperty('otherAuthsRemovedAt');
     });
@@ -1255,7 +1270,7 @@ describe('Service flow reliability', () => {
     test('availability calculation self-heals legacy used accounts before counting ready pool', async () => {
         let normalized = false;
         const legacyDoc = {
-            mobile: '9990006666',
+            mobile: '919990006666',
             clientId: 'client-2',
             status: 'active',
             session: 'active-9990006666',
@@ -1298,7 +1313,7 @@ describe('Service flow reliability', () => {
 
         expect(result.totalActive).toBe(1);
         expect(service.updateMock).toHaveBeenCalledWith(
-            '9990006666',
+            '919990006666',
             expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
         );
     });
@@ -1318,7 +1333,7 @@ describe('Service flow reliability', () => {
         const today = new Date(now).toISOString().split('T')[0];
         const warmingDocs = [
             {
-                mobile: '9990007771',
+                mobile: '919990007771',
                 clientId: 'client-3',
                 status: 'active',
                 warmupPhase: WarmupPhase.ENROLLED,
@@ -1327,7 +1342,7 @@ describe('Service flow reliability', () => {
                 availableDate: today,
             },
             {
-                mobile: '9990007772',
+                mobile: '919990007772',
                 clientId: 'client-3',
                 status: 'active',
                 warmupPhase: WarmupPhase.SETTLING,
@@ -1379,7 +1394,7 @@ describe('Service flow reliability', () => {
         const today = new Date(now).toISOString().split('T')[0];
         const warmingDocs = [
             {
-                mobile: '9990008881',
+                mobile: '919990008881',
                 clientId: 'client-4',
                 status: 'active',
                 warmupPhase: WarmupPhase.SETTLING,
@@ -1439,7 +1454,7 @@ describe('Service flow reliability', () => {
     test('unused selection allows legacy session-rotated accounts with missing availableDate', async () => {
         let capturedQuery: Record<string, any> | undefined;
         const legacyReadyDoc = {
-            mobile: '9990009991',
+            mobile: '919990009991',
             clientId: 'client-6',
             status: 'active',
             warmupPhase: WarmupPhase.SESSION_ROTATED,
@@ -1587,14 +1602,14 @@ describe('Service flow reliability', () => {
     // These test processClient end-to-end for every scenario that could cause an account to get stuck.
 
     describe('Stuck scenario: zombie detection at 45 days', () => {
-        test('account in settling for 50 days with 3+ failures → markAsInactive', async () => {
+        test('account in settling for 50 days with 3+ failures → marks inactive', async () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+            const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
             const doc = {
-                mobile: '9990007771',
+                mobile: '919990007771',
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: new Date('2026-02-20T12:00:00.000Z'), // 50 days ago
                 createdAt: new Date('2026-02-20T12:00:00.000Z'),
@@ -1607,8 +1622,9 @@ describe('Service flow reliability', () => {
 
             await service.processClient(doc, { clientId: 'client-1' } as Client);
 
-            expect(markInactiveSpy).toHaveBeenCalledWith(
-                '9990007771',
+            expect(updateStatusSpy).toHaveBeenCalledWith(
+                '919990007771',
+                'inactive',
                 expect.stringContaining('Zombie'),
             );
         });
@@ -1617,13 +1633,13 @@ describe('Service flow reliability', () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const markInactiveSpy = jest.spyOn(service, 'markAsInactive').mockResolvedValue(null);
+            const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
             // Mock set2fa to succeed so processClient doesn't need real TG
             jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
 
             const doc = {
-                mobile: '9990007772',
+                mobile: '919990007772',
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: new Date('2026-03-12T12:00:00.000Z'), // 30 days ago
                 createdAt: new Date('2026-03-12T12:00:00.000Z'),
@@ -1637,10 +1653,10 @@ describe('Service flow reliability', () => {
             await service.processClient(doc, { clientId: 'client-1' } as Client);
 
             // Should NOT be marked inactive — only 30 days, not 45
-            expect(markInactiveSpy).not.toHaveBeenCalled();
+            expect(updateStatusSpy).not.toHaveBeenCalled();
             // Should reset failure count
             expect(service.updateMock).toHaveBeenCalledWith(
-                '9990007772',
+                '919990007772',
                 expect.objectContaining({ failedUpdateAttempts: 0 }),
             );
         });
@@ -1656,7 +1672,7 @@ describe('Service flow reliability', () => {
             jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
 
             const doc = {
-                mobile: '9990007773',
+                mobile: '919990007773',
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: new Date('2026-03-20T12:00:00.000Z'),
                 createdAt: new Date('2026-03-20T12:00:00.000Z'),
@@ -1681,7 +1697,7 @@ describe('Service flow reliability', () => {
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
 
             const doc = {
-                mobile: '9990007774',
+                mobile: '919990007774',
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
                 enrolledAt: new Date('2026-01-01T12:00:00.000Z'),
                 createdAt: new Date('2026-01-01T12:00:00.000Z'),
@@ -1695,6 +1711,36 @@ describe('Service flow reliability', () => {
 
             expect(result.updateSummary).toBe('backfill_timestamps');
         });
+
+        test('ready account with lastUsed → marks session_rotated and skips rotation', async () => {
+            const service = new TestBaseService();
+            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const rotateSpy = jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
+
+            const doc = {
+                mobile: '919990007778',
+                warmupPhase: WarmupPhase.READY,
+                enrolledAt: new Date('2026-01-01T12:00:00.000Z'),
+                createdAt: new Date('2026-01-01T12:00:00.000Z'),
+                lastUsed: new Date('2026-03-01T12:00:00.000Z'),
+                failedUpdateAttempts: 0,
+                lastUpdateAttempt: null,
+                inUse: false,
+            } as any;
+
+            const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
+
+            expect(result.updateSummary).toBe('mark_session_rotated_from_last_used');
+            expect(rotateSpy).not.toHaveBeenCalled();
+            expect(service.updateMock).toHaveBeenCalledWith(
+                '919990007778',
+                expect.objectContaining({
+                    warmupPhase: WarmupPhase.SESSION_ROTATED,
+                    sessionRotatedAt: expect.any(Date),
+                }),
+            );
+        });
     });
 
     describe('Stuck scenario: enrolledAt backfill', () => {
@@ -1704,7 +1750,7 @@ describe('Service flow reliability', () => {
             const createdDate = new Date('2026-03-01T12:00:00.000Z');
 
             const doc = {
-                mobile: '9990007775',
+                mobile: '919990007775',
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: undefined,
                 createdAt: createdDate,
@@ -1714,7 +1760,7 @@ describe('Service flow reliability', () => {
             await service.repair(doc, mockNow);
 
             expect(service.updateMock).toHaveBeenCalledWith(
-                '9990007775',
+                '919990007775',
                 expect.objectContaining({ enrolledAt: createdDate }),
             );
         });
@@ -1730,7 +1776,7 @@ describe('Service flow reliability', () => {
             jest.spyOn(service as any, 'updatePrivacySettings').mockResolvedValue(1);
 
             const doc = {
-                mobile: '9990007776',
+                mobile: '919990007776',
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: new Date('2026-03-15T12:00:00.000Z'),
                 createdAt: new Date('2026-03-15T12:00:00.000Z'),
@@ -1755,7 +1801,7 @@ describe('Service flow reliability', () => {
             jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
 
             const doc = {
-                mobile: '9990007777',
+                mobile: '919990007777',
                 warmupPhase: WarmupPhase.MATURING,
                 enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
                 createdAt: new Date('2026-03-01T12:00:00.000Z'),
@@ -1776,7 +1822,8 @@ describe('Service flow reliability', () => {
     describe('Stuck scenario: missing persona assets should not loop forever', () => {
         test('buffer updateNameAndBio with no persona pool marks the step done to unblock identity', async () => {
             const bufferModel = {
-                findOneAndUpdate: jest.fn(() => ({ exec: jest.fn().mockResolvedValue({ mobile: '9990008888' }) })),
+                findOne: jest.fn(() => ({ select: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue({ mobile: '919990008888' }) })),
+                findOneAndUpdate: jest.fn(() => ({ exec: jest.fn().mockResolvedValue({ mobile: '919990008888' }) })),
             };
             const service = makeBufferService(bufferModel);
             const unregisterSpy = jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -1789,7 +1836,7 @@ describe('Service flow reliability', () => {
 
             const updateResult = await service.updateNameAndBio(
                 {
-                    mobile: '9990008888',
+                    mobile: '919990008888',
                     clientId: 'client-1',
                     failedUpdateAttempts: 0,
                 } as any,
@@ -1805,7 +1852,7 @@ describe('Service flow reliability', () => {
 
             expect(updateResult).toBe(1);
             expect(bufferModel.findOneAndUpdate).toHaveBeenCalledWith(
-                { mobile: '9990008888' },
+                { mobile: '919990008888' },
                 expect.objectContaining({
                     $set: expect.objectContaining({
                         nameBioUpdatedAt: expect.any(Date),
@@ -1814,7 +1861,7 @@ describe('Service flow reliability', () => {
                 }),
                 { new: true, returnDocument: 'after' },
             );
-            expect(unregisterSpy).toHaveBeenCalledWith('9990008888');
+            expect(unregisterSpy).toHaveBeenCalledWith('919990008888');
         });
 
         test('updateProfilePhotos with no assigned profile pics marks the step done to unblock maturing', async () => {
@@ -1830,7 +1877,7 @@ describe('Service flow reliability', () => {
 
             const uploadedCount = await (service as any).updateProfilePhotos(
                 {
-                    mobile: '9990008889',
+                    mobile: '919990008889',
                     assignedProfilePics: [],
                     failedUpdateAttempts: 0,
                 },
@@ -1840,14 +1887,14 @@ describe('Service flow reliability', () => {
 
             expect(uploadedCount).toBe(1);
             expect(service.updateMock).toHaveBeenCalledWith(
-                '9990008889',
+                '919990008889',
                 expect.objectContaining({
                     profilePicsUpdatedAt: expect.any(Date),
                     lastUpdateAttempt: expect.any(Date),
                     failedUpdateAttempts: 0,
                 }),
             );
-            expect(unregisterSpy).toHaveBeenCalledWith('9990008889');
+            expect(unregisterSpy).toHaveBeenCalledWith('919990008889');
         });
     });
 });

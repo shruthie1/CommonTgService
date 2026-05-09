@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Document } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+import { canonicalizeMobile } from '../../shared/mobile-utils';
 
 export type UserDocument = User & Document;
 
@@ -15,7 +16,7 @@ export type UserDocument = User & Document;
 export class User {
   // --- Identity ---
   @ApiProperty({ description: 'Mobile number' })
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, set: canonicalizeMobile })
   mobile: string;
 
   @ApiProperty({ description: 'Telegram session string' })

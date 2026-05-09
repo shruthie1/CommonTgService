@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Transform, TransformFnParams } from 'class-transformer';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Matches } from 'class-validator';
 import { ClientStatus, ClientStatusType } from '../../shared/base-client.service';
+import { CANONICAL_MOBILE_REGEX, normalizeMobileInput } from '../../shared/mobile-utils';
 
 export class CreateBufferClientDto {
   @ApiProperty({
@@ -10,7 +12,9 @@ export class CreateBufferClientDto {
 
   @ApiProperty({
     description: 'Mobile number of the client' })
+  @Transform(({ value }: TransformFnParams) => typeof value === 'string' ? normalizeMobileInput(value) : value)
   @IsString()
+  @Matches(CANONICAL_MOBILE_REGEX, { message: 'mobile must include country code and contain 11-15 digits' })
   readonly mobile: string;
 
   @ApiProperty({
