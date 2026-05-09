@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
+exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
 exports.getWarmupPhaseAction = getWarmupPhaseAction;
 exports.isAccountReady = isAccountReady;
 exports.isAccountWarmingUp = isAccountWarmingUp;
@@ -17,11 +17,14 @@ exports.WarmupPhase = {
 exports.WARMUP_PHASE_THRESHOLDS = {
     settling: 1,
     identity: 4,
-    growing: 8,
-    maturing: 18,
-    ready: 20,
+    growing: 14,
+    maturing: 20,
+    ready: 24,
 };
 exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = 2;
+exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = 3;
+exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = 3;
+exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 exports.MIN_CHANNELS_FOR_MATURING = 200;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 function getWarmupPhaseAction(doc, now) {
@@ -58,7 +61,8 @@ function getWarmupPhaseAction(doc, now) {
             }
             return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'light' };
         }
-        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.identity + jitter) {
+        if (daysSince(doc.otherAuthsRemovedAt) >= exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY &&
+            daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.identity + jitter) {
             return { phase: exports.WarmupPhase.IDENTITY, action: 'delete_photos', organicIntensity: 'medium' };
         }
         return { phase: exports.WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'medium' };
@@ -77,12 +81,13 @@ function getWarmupPhaseAction(doc, now) {
             return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
         }
         if (!usernameDone) {
-            if (daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+            if (daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME) {
                 return { phase: exports.WarmupPhase.IDENTITY, action: 'update_username', organicIntensity: 'medium' };
             }
             return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
         }
-        if (daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.growing + jitter) {
+        if (daysSince(doc.usernameUpdatedAt) >= exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING &&
+            daysSinceEnrolled >= exports.WARMUP_PHASE_THRESHOLDS.growing + jitter) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         return { phase: exports.WarmupPhase.IDENTITY, action: 'organic_only', organicIntensity: 'light' };
@@ -109,6 +114,9 @@ function getWarmupPhaseAction(doc, now) {
         const photosDeleted = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) > 0;
         const nameBioDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) > 0;
         const usernameDone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) > 0;
+        if (daysSince(doc.otherAuthsRemovedAt) < exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY) {
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        }
         if (!photosDeleted)
             return { phase, action: 'delete_photos', organicIntensity: 'medium' };
         if (!nameBioDone && daysSince(doc.profilePicsDeletedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
@@ -116,11 +124,14 @@ function getWarmupPhaseAction(doc, now) {
         }
         if (!nameBioDone)
             return { phase, action: 'organic_only', organicIntensity: 'light' };
-        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
+        if (!usernameDone && daysSince(doc.nameBioUpdatedAt) >= exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME) {
             return { phase, action: 'update_username', organicIntensity: 'medium' };
         }
         if (!usernameDone)
             return { phase, action: 'organic_only', organicIntensity: 'light' };
+        if (daysSince(doc.usernameUpdatedAt) < exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING) {
+            return { phase, action: 'organic_only', organicIntensity: 'light' };
+        }
         return null;
     };
     if (phase === exports.WarmupPhase.GROWING) {

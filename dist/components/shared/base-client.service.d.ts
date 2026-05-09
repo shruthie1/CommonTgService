@@ -147,6 +147,10 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected isOnCooldown(mobile: string, lastUpdateAttempt: Date | string | null | undefined, now: number): boolean;
     protected inferWarmupPhaseFromProgress(doc: TDoc): WarmupPhaseType;
     protected getWarmupPhaseRank(phase: WarmupPhaseType | null | undefined): number;
+    protected getMissingPrerequisitePhase(doc: TDoc): {
+        phase: WarmupPhaseType;
+        missing: string[];
+    } | null;
     protected getRecoveryEnrolledAt(phase: WarmupPhaseType, jitter: number, now: number): Date;
     protected repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc>;
     constructor(telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, sessionService: SessionService, botsService: BotsService, loggerName: string);

