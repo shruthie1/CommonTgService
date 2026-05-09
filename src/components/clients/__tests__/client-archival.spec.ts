@@ -114,7 +114,7 @@ describe('Client Archival', () => {
 
     describe('Path B: Deactivation (archiveOld=false)', () => {
 
-        it('stores the permanent error reason as message on deactivated buffer client', async () => {
+        it('marks buffer inactive immediately for a permanent reason', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
@@ -128,15 +128,16 @@ describe('Client Archival', () => {
                 'AUTH_KEY_DUPLICATED',  // reason from tg-aut
             );
 
-            expect(bufferService.update).toHaveBeenCalledWith('80001', {
-                inUse: false,
-                lastUsed: expect.any(Date),
-                status: 'inactive',
-                message: 'AUTH_KEY_DUPLICATED',
-            });
+            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+                '80001',
+                'inactive',
+                'AUTH_KEY_DUPLICATED',
+            );
+            expect(bufferService.update).not.toHaveBeenCalled();
+            expect(bufferService.createOrUpdate).not.toHaveBeenCalled();
         });
 
-        it('stores USER_DEACTIVATED_BAN reason correctly', async () => {
+        it('marks USER_DEACTIVATED_BAN inactive with the exact reason', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
@@ -146,9 +147,12 @@ describe('Client Archival', () => {
                 'USER_DEACTIVATED_BAN',
             );
 
-            expect(bufferService.update).toHaveBeenCalledWith('80001', expect.objectContaining({
-                message: 'USER_DEACTIVATED_BAN',
-            }));
+            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+                '80001',
+                'inactive',
+                'USER_DEACTIVATED_BAN',
+            );
+            expect(bufferService.update).not.toHaveBeenCalled();
         });
 
         it('stores promotion health failure reason correctly', async () => {
@@ -229,7 +233,7 @@ describe('Client Archival', () => {
             expect(updateDto.lastUsed.getTime()).toBeGreaterThanOrEqual(beforeCall.getTime());
         });
 
-        it('marks buffer inactive when user not found in users collection', async () => {
+        it('marks buffer inactive with permanent reason when user not found in users collection', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([]); // no users
             const service = makeService({ bufferClientService: bufferService, usersService });
@@ -241,10 +245,31 @@ describe('Client Archival', () => {
             expect(bufferService.updateStatus).toHaveBeenCalledWith(
                 '80001',
                 'inactive',
-                expect.stringContaining('user document missing'),
+                'AUTH_KEY_DUPLICATED',
             );
+            expect(usersService.search).not.toHaveBeenCalled();
             expect(bufferService.update).not.toHaveBeenCalled();
             expect(bufferService.createOrUpdate).not.toHaveBeenCalled();
+        });
+
+        it('permanent reason overrides archive and formalities flags', async () => {
+            const bufferService = makeBufferClientService();
+            const telegramService = makeTelegramService();
+            const usersService = makeUsersService([existingUser]);
+            const service = makeService({ bufferClientService: bufferService, telegramService, usersService });
+
+            await (service as any).handleClientArchival(
+                existingClient, '80001', true, true, 10, 'FROZEN_METHOD_INVALID',
+            );
+
+            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+                '80001',
+                'inactive',
+                'FROZEN_METHOD_INVALID',
+            );
+            expect(telegramService.updatePrivacyforDeletedAccount).not.toHaveBeenCalled();
+            expect(bufferService.createOrUpdate).not.toHaveBeenCalled();
+            expect(bufferService.update).not.toHaveBeenCalled();
         });
     });
 
@@ -513,8 +538,12 @@ describe('Client Archival', () => {
                 existingClient, '80001', false, false, 0, 'AUTH_KEY_DUPLICATED',
             );
 
-            const msg = bufferService.update.mock.calls[0][1].message;
-            expect(msg).toBe('AUTH_KEY_DUPLICATED');
+            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+                '80001',
+                'inactive',
+                'AUTH_KEY_DUPLICATED',
+            );
+            expect(bufferService.update).not.toHaveBeenCalled();
         });
 
         it('SpamBot ban from tg-aut → buffer deactivated with FLOOD_WAIT reason', async () => {

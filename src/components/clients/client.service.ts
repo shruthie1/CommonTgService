@@ -695,6 +695,17 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     reason?: string,
   ) {
     try {
+      if (this.isPermanentArchivalReason(reason)) {
+        this.logger.warn(`[${existingClient.clientId}] Permanent archival reason received; marking old buffer inactive`, {
+          existingMobile,
+          reason,
+          archiveOld,
+          formalities,
+        });
+        await this.markBufferInactiveForArchival(existingMobile, reason);
+        return;
+      }
+
       const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
       if (!existingClientUser) {
         const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;
@@ -728,6 +739,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
       await this.notify(`Archival Failed\n\nOld Mobile: ${existingMobile}\nError: ${errorMessage?.substring(0, 200)}`);
     }
+  }
+
+  private isPermanentArchivalReason(reason?: string): reason is string {
+    return !!reason && isPermanentError({ message: reason });
   }
 
   private async markBufferInactiveForArchival(mobile: string, reason: string): Promise<void> {

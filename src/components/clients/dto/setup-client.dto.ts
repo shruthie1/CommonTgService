@@ -14,6 +14,7 @@ export class SetupClientQueryDto {
 
     @ApiPropertyOptional({ description: 'Archive the old client back to buffer pool', default: true })
     @IsOptional()
+    @Type(() => String)
     @Transform(toBoolean)
     @IsBoolean()
     archiveOld: boolean = true;
@@ -27,6 +28,7 @@ export class SetupClientQueryDto {
 
     @ApiPropertyOptional({ description: 'Run privacy/cleanup formalities on old account', default: true })
     @IsOptional()
+    @Type(() => String)
     @Transform(toBoolean)
     @IsBoolean()
     formalities: boolean = true;
