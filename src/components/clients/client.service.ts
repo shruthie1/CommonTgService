@@ -521,6 +521,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     );
     const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
     if (!newBufferClient) {
+      if (this.isPermanentArchivalReason(setupClientQueryDto.reason)) {
+        this.logger.warn(`[${clientId}] No replacement buffer available, but setup reason is permanent; marking existing mobile inactive`, {
+          existingMobile: existingClientMobile,
+          reason: setupClientQueryDto.reason,
+        });
+        await this.markBufferInactiveForArchival(existingClientMobile, setupClientQueryDto.reason);
+      }
       await this.notify(`Buffer Not Available\n\nClient: ${clientId}\nStatus: No safe buffer clients available for swap`);
       this.logger.log('Buffer Clients not safely available');
       return;
@@ -695,16 +702,6 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     reason?: string,
   ) {
     try {
-      if (this.isPermanentArchivalReason(reason)) {
-        this.logger.warn(`[${existingClient.clientId}] Permanent archival reason received; marking old buffer inactive`, {
-          existingMobile,
-          reason,
-          archiveOld,
-          formalities,
-        });
-        await this.markBufferInactiveForArchival(existingMobile, reason);
-        return;
-      }
 
       const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
       if (!existingClientUser) {
