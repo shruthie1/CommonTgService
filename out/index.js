@@ -11140,8 +11140,7 @@ async function getFilteredMedia(ctx, params) {
         ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
     const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
-    const query = {
-        limit: queryLimit,
+    const baseQuery = {
         ...(maxId ? { maxId } : {}),
         ...(minId ? { minId } : {}),
         ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
@@ -11152,14 +11151,62 @@ async function getFilteredMedia(ctx, params) {
         }),
     };
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(peer, query);
-    ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
-    const filteredMessages = messages.filter(message => {
-        if (!message.media)
-            return false;
-        const mediaType = (0, helpers_1.getMediaType)(message.media);
-        return typesToFetch.includes(mediaType);
-    });
+    const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
+    async function fetchWithPostFilter(type, fetchLimit) {
+        if (!NEEDS_POST_FILTER.has(type)) {
+            const messages = await ctx.client.getMessages(peer, {
+                ...baseQuery,
+                limit: fetchLimit,
+                filter: (0, helpers_1.getSearchFilter)(type),
+            });
+            return messages.filter((message) => {
+                if (!(message instanceof telegram_1.Api.Message) || !message.media)
+                    return false;
+                return (0, helpers_1.getMediaType)(message.media) === type;
+            });
+        }
+        const results = [];
+        let currentMaxId = maxId;
+        const maxIterations = 5;
+        const batchSize = Math.max(fetchLimit * 4, 100);
+        for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
+            const messages = await ctx.client.getMessages(peer, {
+                ...baseQuery,
+                limit: batchSize,
+                filter: (0, helpers_1.getSearchFilter)(type),
+                ...(currentMaxId ? { maxId: currentMaxId } : {}),
+            });
+            if (messages.length === 0)
+                break;
+            for (const message of messages) {
+                if (!(message instanceof telegram_1.Api.Message) || !message.media)
+                    continue;
+                if ((0, helpers_1.getMediaType)(message.media) === type) {
+                    results.push(message);
+                    if (results.length >= fetchLimit)
+                        break;
+                }
+            }
+            const lastMessage = messages[messages.length - 1];
+            currentMaxId = lastMessage instanceof telegram_1.Api.Message ? lastMessage.id : currentMaxId;
+            if (!currentMaxId || messages.length < batchSize)
+                break;
+        }
+        return results;
+    }
+    let filteredMessages;
+    if (typesToFetch.length === 1) {
+        filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
+    }
+    else if (typesToFetch.length > 1) {
+        const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
+        filteredMessages = hasAll
+            ? resultsPerType.flat()
+            : resultsPerType.flat().sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
+    }
+    else {
+        filteredMessages = [];
+    }
     ctx.logger.info(ctx.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
     const buildMediaItem = async (message, index) => {
         const mediaDetails = message.media instanceof telegram_1.Api.MessageMediaDocument
@@ -11213,7 +11260,7 @@ async function getFilteredMedia(ctx, params) {
             };
         });
         const totalItems = mediaData.length;
-        const overallHasMore = messages.length === queryLimit && messages.length > 0;
+        const overallHasMore = filteredMessages.length >= queryLimit && filteredMessages.length > 0;
         const overallFirstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const overallLastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
         return {
@@ -11229,7 +11276,8 @@ async function getFilteredMedia(ctx, params) {
     }
     else {
         const total = mediaData.length;
-        const hasMoreResult = messages.length === queryLimit && messages.length > 0;
+        const hasMoreResult = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length >= effectiveLimit)
+            && filteredMessages.length > 0;
         const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
         return {
@@ -38536,6 +38584,21 @@ let UsersController = class UsersController {
         const skipNum = skip ? parseInt(skip, 10) : 0;
         return this.usersService.aggregateSort(field, order, limitNum, skipNum);
     }
+    async aggregateSortQuery(requestBody) {
+        const { field, sortOrder, query = {}, limit, skip } = requestBody || {};
+        if (!field)
+            throw new common_1.BadRequestException('field is required');
+        const limitNum = limit !== undefined ? Number(limit) : 20;
+        const skipNum = skip !== undefined ? Number(skip) : 0;
+        if (!Number.isInteger(limitNum) || limitNum < 1) {
+            throw new common_1.BadRequestException('Limit must be a positive integer');
+        }
+        if (!Number.isInteger(skipNum) || skipNum < 0) {
+            throw new common_1.BadRequestException('Skip must be a non-negative integer');
+        }
+        const order = sortOrder === 'asc' ? 1 : -1;
+        return this.usersService.aggregateSort(field, order, limitNum, skipNum, query);
+    }
     async recomputeScore(mobile) {
         await this.usersService.computeRelationshipScore(mobile);
         return this.usersService.getUserRelationships(mobile);
@@ -38764,6 +38827,29 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "aggregateSort", null);
+__decorate([
+    (0, common_1.Post)('aggregate-sort/query'),
+    (0, swagger_1.ApiOperation)({ summary: 'Sort users by computed/nested fields with a MongoDB filter' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['field'],
+            properties: {
+                field: { type: 'string' },
+                sortOrder: { type: 'string', enum: ['asc', 'desc'] },
+                query: { type: 'object', additionalProperties: true },
+                limit: { type: 'number' },
+                skip: { type: 'number' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Unknown computed field or invalid pagination.' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "aggregateSortQuery", null);
 __decorate([
     (0, common_1.Post)('recompute-score/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Recompute relationship score (live Telegram connection)' }),
@@ -39051,9 +39137,7 @@ let UsersService = UsersService_1 = class UsersService {
             excludedMobiles = await this.telegramService.getOwnAccountMobiles();
         }
         catch { }
-        const matchStage = {};
-        if (excludedMobiles.length > 0)
-            matchStage.mobile = { $nin: excludedMobiles };
+        const matchStage = await this.getDefaultUserListQuery(excludedMobiles.length > 0 ? { mobile: { $nin: excludedMobiles } } : {});
         const isRecency = aspect === 'recency';
         const sortField = '_sortValue';
         const valueExpr = aspectDef.computed
@@ -39107,13 +39191,43 @@ let UsersService = UsersService_1 = class UsersService {
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
     }
-    async findAllSorted(limit = 100, skip = 0, sort) {
-        let excludedMobiles = [];
-        try {
-            excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    hasQueryConstraint(query, field) {
+        if (!query || typeof query !== 'object')
+            return false;
+        if (Object.prototype.hasOwnProperty.call(query, field))
+            return true;
+        for (const key of ['$and', '$or', '$nor']) {
+            const clauses = query[key];
+            if (Array.isArray(clauses) && clauses.some(clause => this.hasQueryConstraint(clause, field))) {
+                return true;
+            }
         }
-        catch { }
-        const filter = excludedMobiles.length > 0 ? { mobile: { $nin: excludedMobiles } } : {};
+        return false;
+    }
+    async getDefaultUserListQuery(query = {}) {
+        const clauses = [];
+        if (!this.hasQueryConstraint(query, 'expired')) {
+            clauses.push({ expired: { $ne: true } });
+        }
+        if (!this.hasQueryConstraint(query, 'mobile')) {
+            let excludedMobiles = [];
+            try {
+                excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+            }
+            catch { }
+            if (excludedMobiles.length > 0) {
+                clauses.push({ mobile: { $nin: excludedMobiles } });
+            }
+        }
+        if (clauses.length === 0)
+            return query;
+        if (!query || Object.keys(query).length === 0) {
+            return clauses.length === 1 ? clauses[0] : { $and: clauses };
+        }
+        return { $and: [...clauses, query] };
+    }
+    async findAllSorted(limit = 100, skip = 0, sort) {
+        const filter = await this.getDefaultUserListQuery();
         const query = this.userModel.find(filter).lean();
         if (sort)
             query.sort(sort);
@@ -39198,14 +39312,15 @@ let UsersService = UsersService_1 = class UsersService {
                 { tgId: q },
             ];
         }
-        const total = await this.userModel.countDocuments(query).exec();
+        const listQuery = await this.getDefaultUserListQuery(query);
+        const total = await this.userModel.countDocuments(listQuery).exec();
         const totalPages = Math.ceil(total / limitNum);
         if (total === 0) {
             return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
         }
         const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
         const users = await this.userModel
-            .find(query)
+            .find(listQuery)
             .select('-session -password')
             .sort(sort)
             .skip(skip)
@@ -39271,17 +39386,8 @@ let UsersService = UsersService_1 = class UsersService {
                 query[field] = { $regex: new RegExp(escapeRegex(query[field]), 'i') };
             }
         }
-        if (!filter.mobile) {
-            let excludedMobiles = [];
-            try {
-                excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-            }
-            catch { }
-            if (excludedMobiles.length > 0) {
-                query.mobile = { $nin: excludedMobiles };
-            }
-        }
-        return this.userModel.find(query).sort({ updatedAt: -1 }).limit(200).exec();
+        const listQuery = await this.getDefaultUserListQuery(query);
+        return this.userModel.find(listQuery).sort({ updatedAt: -1 }).limit(200).exec();
     }
     async computeRelationshipScore(mobile) {
         const canonicalMobile = this.canonicalMobile(mobile);
@@ -39608,7 +39714,7 @@ let UsersService = UsersService_1 = class UsersService {
             throw new common_1.BadRequestException(message);
         }
     }
-    async aggregateSort(computedField, sortOrder = -1, limit = 20, skip = 0) {
+    async aggregateSort(computedField, sortOrder = -1, limit = 20, skip = 0, query = {}) {
         const COMPUTED_FIELDS = {
             intimateTotal: {
                 $reduce: {
@@ -39671,11 +39777,125 @@ let UsersService = UsersService_1 = class UsersService {
             callPartners: {
                 $size: { $ifNull: ['$calls.chats', []] },
             },
+            totalPhotos: {
+                $let: {
+                    vars: {
+                        splitTotal: {
+                            $add: [
+                                { $ifNull: ['$ownPhotoCount', 0] },
+                                { $ifNull: ['$otherPhotoCount', 0] },
+                            ],
+                        },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: ['$$splitTotal', 0] },
+                            '$$splitTotal',
+                            { $ifNull: ['$photoCount', 0] },
+                        ],
+                    },
+                },
+            },
+            totalVideos: {
+                $let: {
+                    vars: {
+                        splitTotal: {
+                            $add: [
+                                { $ifNull: ['$ownVideoCount', 0] },
+                                { $ifNull: ['$otherVideoCount', 0] },
+                            ],
+                        },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: ['$$splitTotal', 0] },
+                            '$$splitTotal',
+                            { $ifNull: ['$videoCount', 0] },
+                        ],
+                    },
+                },
+            },
+            totalMedia: {
+                $add: [
+                    {
+                        $let: {
+                            vars: {
+                                splitTotal: {
+                                    $add: [
+                                        { $ifNull: ['$ownPhotoCount', 0] },
+                                        { $ifNull: ['$otherPhotoCount', 0] },
+                                    ],
+                                },
+                            },
+                            in: {
+                                $cond: [
+                                    { $gt: ['$$splitTotal', 0] },
+                                    '$$splitTotal',
+                                    { $ifNull: ['$photoCount', 0] },
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        $let: {
+                            vars: {
+                                splitTotal: {
+                                    $add: [
+                                        { $ifNull: ['$ownVideoCount', 0] },
+                                        { $ifNull: ['$otherVideoCount', 0] },
+                                    ],
+                                },
+                            },
+                            in: {
+                                $cond: [
+                                    { $gt: ['$$splitTotal', 0] },
+                                    '$$splitTotal',
+                                    { $ifNull: ['$videoCount', 0] },
+                                ],
+                            },
+                        },
+                    },
+                    { $ifNull: ['$movieCount', 0] },
+                ],
+            },
             totalCallDuration: {
                 $reduce: {
                     input: { $ifNull: ['$calls.chats', []] },
                     initialValue: 0,
                     in: { $add: ['$$value', { $ifNull: ['$$this.totalDuration', 0] }] },
+                },
+            },
+            avgCallDuration: {
+                $let: {
+                    vars: {
+                        durations: {
+                            $filter: {
+                                input: { $ifNull: ['$calls.chats', []] },
+                                as: 'call',
+                                cond: { $gt: [{ $ifNull: ['$$call.averageDuration', 0] }, 0] },
+                            },
+                        },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: [{ $size: '$$durations' }, 0] },
+                            {
+                                $round: [
+                                    {
+                                        $avg: {
+                                            $map: {
+                                                input: '$$durations',
+                                                as: 'call',
+                                                in: { $ifNull: ['$$call.averageDuration', 0] },
+                                            },
+                                        },
+                                    },
+                                    0,
+                                ],
+                            },
+                            0,
+                        ],
+                    },
                 },
             },
             longestCall: {
@@ -39704,15 +39924,8 @@ let UsersService = UsersService_1 = class UsersService {
         if (!fieldExpr) {
             throw new common_1.BadRequestException(`Unknown computed field: ${computedField}`);
         }
-        let excludedMobiles = [];
-        try {
-            excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-        }
-        catch { }
         const pipeline = [];
-        if (excludedMobiles.length > 0) {
-            pipeline.push({ $match: { mobile: { $nin: excludedMobiles } } });
-        }
+        pipeline.push({ $match: await this.getDefaultUserListQuery(query) });
         pipeline.push({ $addFields: { _computedSort: fieldExpr } }, { $sort: { _computedSort: sortOrder } }, { $skip: skip }, { $limit: limit }, { $project: { _computedSort: 0 } });
         return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
     }
@@ -39721,7 +39934,8 @@ let UsersService = UsersService_1 = class UsersService {
             throw new common_1.BadRequestException('Query is invalid.');
         }
         try {
-            const queryExec = this.userModel.find(query).lean();
+            const listQuery = await this.getDefaultUserListQuery(query);
+            const queryExec = this.userModel.find(listQuery).lean();
             if (sort)
                 queryExec.sort(sort);
             if (limit)

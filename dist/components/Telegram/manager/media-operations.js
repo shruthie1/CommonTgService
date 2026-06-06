@@ -636,8 +636,7 @@ async function getFilteredMedia(ctx, params) {
         ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
     const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
-    const query = {
-        limit: queryLimit,
+    const baseQuery = {
         ...(maxId ? { maxId } : {}),
         ...(minId ? { minId } : {}),
         ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
@@ -648,14 +647,62 @@ async function getFilteredMedia(ctx, params) {
         }),
     };
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(peer, query);
-    ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
-    const filteredMessages = messages.filter(message => {
-        if (!message.media)
-            return false;
-        const mediaType = (0, helpers_1.getMediaType)(message.media);
-        return typesToFetch.includes(mediaType);
-    });
+    const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
+    async function fetchWithPostFilter(type, fetchLimit) {
+        if (!NEEDS_POST_FILTER.has(type)) {
+            const messages = await ctx.client.getMessages(peer, {
+                ...baseQuery,
+                limit: fetchLimit,
+                filter: (0, helpers_1.getSearchFilter)(type),
+            });
+            return messages.filter((message) => {
+                if (!(message instanceof telegram_1.Api.Message) || !message.media)
+                    return false;
+                return (0, helpers_1.getMediaType)(message.media) === type;
+            });
+        }
+        const results = [];
+        let currentMaxId = maxId;
+        const maxIterations = 5;
+        const batchSize = Math.max(fetchLimit * 4, 100);
+        for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
+            const messages = await ctx.client.getMessages(peer, {
+                ...baseQuery,
+                limit: batchSize,
+                filter: (0, helpers_1.getSearchFilter)(type),
+                ...(currentMaxId ? { maxId: currentMaxId } : {}),
+            });
+            if (messages.length === 0)
+                break;
+            for (const message of messages) {
+                if (!(message instanceof telegram_1.Api.Message) || !message.media)
+                    continue;
+                if ((0, helpers_1.getMediaType)(message.media) === type) {
+                    results.push(message);
+                    if (results.length >= fetchLimit)
+                        break;
+                }
+            }
+            const lastMessage = messages[messages.length - 1];
+            currentMaxId = lastMessage instanceof telegram_1.Api.Message ? lastMessage.id : currentMaxId;
+            if (!currentMaxId || messages.length < batchSize)
+                break;
+        }
+        return results;
+    }
+    let filteredMessages;
+    if (typesToFetch.length === 1) {
+        filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
+    }
+    else if (typesToFetch.length > 1) {
+        const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
+        filteredMessages = hasAll
+            ? resultsPerType.flat()
+            : resultsPerType.flat().sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
+    }
+    else {
+        filteredMessages = [];
+    }
     ctx.logger.info(ctx.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
     const buildMediaItem = async (message, index) => {
         const mediaDetails = message.media instanceof telegram_1.Api.MessageMediaDocument
@@ -709,7 +756,7 @@ async function getFilteredMedia(ctx, params) {
             };
         });
         const totalItems = mediaData.length;
-        const overallHasMore = messages.length === queryLimit && messages.length > 0;
+        const overallHasMore = filteredMessages.length >= queryLimit && filteredMessages.length > 0;
         const overallFirstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const overallLastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
         return {
@@ -725,7 +772,8 @@ async function getFilteredMedia(ctx, params) {
     }
     else {
         const total = mediaData.length;
-        const hasMoreResult = messages.length === queryLimit && messages.length > 0;
+        const hasMoreResult = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length >= effectiveLimit)
+            && filteredMessages.length > 0;
         const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
         return {
