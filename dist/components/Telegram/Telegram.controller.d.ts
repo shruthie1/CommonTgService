@@ -93,7 +93,7 @@ export declare class TelegramController {
     getChatMediaCounts(mobile: string, chatId: string): Promise<import("./dto").ChatMediaCounts>;
     getChatCallHistory(mobile: string, chatId: string, limit?: number, includeCalls?: string): Promise<import("./dto").ChatCallHistory>;
     getChatStatistics(mobile: string, chatId: string, period?: 'day' | 'week' | 'month'): Promise<ChatStatistics>;
-    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.Message | import("telegram").Api.TypeUpdates>;
+    scheduleMessage(mobile: string, schedule: ScheduleMessageDto): Promise<import("telegram").Api.TypeUpdates | import("telegram").Api.Message>;
     getScheduledMessages(mobile: string, chatId: string): Promise<import("./dto").ScheduledMessageItem[]>;
     sendVoiceMessage(mobile: string, voice: {
         chatId: string;
