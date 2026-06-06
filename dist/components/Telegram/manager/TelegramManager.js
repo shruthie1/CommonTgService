@@ -233,7 +233,7 @@ class TelegramManager {
     async getMediaFileDownloadInfo(messageId, chatId = 'me') {
         return mediaOps.getMediaFileDownloadInfo(this.ctx, messageId, chatId);
     }
-    async *streamMediaFile(fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 512 * 1024, fileSize, dcId) {
+    async *streamMediaFile(fileLocation, offset = (0, big_integer_1.default)(0), limit, requestSize = 512 * 1024, fileSize, dcId) {
         yield* mediaOps.streamMediaFile(this.ctx, fileLocation, offset, limit, requestSize, fileSize, dcId);
     }
     async getMediaMetadata(params) {

@@ -5,6 +5,7 @@ export declare class CreateChannelDto {
     participantsCount: number;
     restricted?: boolean;
     sendMessages?: boolean;
+    sendPlain?: boolean;
     title: string;
     username?: string;
     private: boolean;
@@ -15,6 +16,7 @@ export declare class CreateChannelDto {
     dMRestriction?: number;
     availableMsgs?: string[];
     banned?: boolean;
+    bannedAt?: number | null;
     starred?: boolean;
     score?: number;
 }

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.THUMBNAIL_BATCH_DELAY_MS = exports.THUMBNAIL_CONCURRENCY_LIMIT = exports.TEMP_FILE_CLEANUP_DELAY = exports.FILE_DOWNLOAD_TIMEOUT = exports.MAX_FILE_SIZE = void 0;
+exports.ByteLimitedLruCache = exports.MISSING_THUMBNAIL_CACHE_TTL_MS = exports.THUMBNAIL_CACHE_TTL_MS = exports.THUMBNAIL_CACHE_MAX_BYTES = exports.THUMBNAIL_CACHE_MAX_ENTRIES = exports.INLINE_THUMBNAIL_MAX_LIMIT = exports.INLINE_THUMBNAIL_DEFAULT_LIMIT = exports.MEDIA_MAX_QUERY_LIMIT = exports.MEDIA_MAX_LIMIT = exports.MEDIA_DEFAULT_LIMIT = exports.THUMBNAIL_BATCH_DELAY_MS = exports.THUMBNAIL_CONCURRENCY_LIMIT = exports.TEMP_FILE_CLEANUP_DELAY = exports.FILE_DOWNLOAD_TIMEOUT = exports.MAX_FILE_SIZE = void 0;
 exports.getSearchFilter = getSearchFilter;
 exports.getMediaType = getMediaType;
 exports.getMessageDate = getMessageDate;
@@ -34,6 +34,84 @@ exports.FILE_DOWNLOAD_TIMEOUT = 60000;
 exports.TEMP_FILE_CLEANUP_DELAY = 3600000;
 exports.THUMBNAIL_CONCURRENCY_LIMIT = 3;
 exports.THUMBNAIL_BATCH_DELAY_MS = 100;
+exports.MEDIA_DEFAULT_LIMIT = 50;
+exports.MEDIA_MAX_LIMIT = 200;
+exports.MEDIA_MAX_QUERY_LIMIT = 500;
+exports.INLINE_THUMBNAIL_DEFAULT_LIMIT = 25;
+exports.INLINE_THUMBNAIL_MAX_LIMIT = 50;
+function readPositiveIntEnv(name, fallback) {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+exports.THUMBNAIL_CACHE_MAX_ENTRIES = readPositiveIntEnv('TG_MEDIA_THUMB_CACHE_ENTRIES', 750);
+exports.THUMBNAIL_CACHE_MAX_BYTES = readPositiveIntEnv('TG_MEDIA_THUMB_CACHE_BYTES', 32 * 1024 * 1024);
+exports.THUMBNAIL_CACHE_TTL_MS = readPositiveIntEnv('TG_MEDIA_THUMB_CACHE_TTL_MS', 30 * 60 * 1000);
+exports.MISSING_THUMBNAIL_CACHE_TTL_MS = readPositiveIntEnv('TG_MEDIA_MISSING_THUMB_CACHE_TTL_MS', 15 * 60 * 1000);
+class ByteLimitedLruCache {
+    constructor(options) {
+        this.options = options;
+        this.entries = new Map();
+        this.totalBytes = 0;
+    }
+    get(key) {
+        const entry = this.entries.get(key);
+        if (!entry)
+            return undefined;
+        if (entry.expiresAt <= Date.now()) {
+            this.delete(key);
+            return undefined;
+        }
+        this.entries.delete(key);
+        this.entries.set(key, entry);
+        return entry.value;
+    }
+    set(key, value, size, ttlMs = this.options.ttlMs) {
+        const safeSize = Math.max(1, size || 1);
+        if (safeSize > this.options.maxBytes)
+            return;
+        this.delete(key);
+        this.entries.set(key, {
+            value,
+            size: safeSize,
+            expiresAt: Date.now() + ttlMs,
+        });
+        this.totalBytes += safeSize;
+        this.evictExpired();
+        this.evictOverflow();
+    }
+    delete(key) {
+        const entry = this.entries.get(key);
+        if (!entry)
+            return;
+        this.totalBytes -= entry.size;
+        this.entries.delete(key);
+    }
+    stats() {
+        this.evictExpired();
+        return {
+            entries: this.entries.size,
+            totalBytes: this.totalBytes,
+            maxBytes: this.options.maxBytes,
+        };
+    }
+    evictExpired() {
+        const now = Date.now();
+        for (const [key, entry] of this.entries) {
+            if (entry.expiresAt <= now)
+                this.delete(key);
+        }
+    }
+    evictOverflow() {
+        while (this.entries.size > this.options.maxEntries ||
+            this.totalBytes > this.options.maxBytes) {
+            const oldestKey = this.entries.keys().next().value;
+            if (!oldestKey)
+                break;
+            this.delete(oldestKey);
+        }
+    }
+}
+exports.ByteLimitedLruCache = ByteLimitedLruCache;
 function getSearchFilter(filter) {
     switch (filter) {
         case 'photo': return new telegram_1.Api.InputMessagesFilterPhotos();
@@ -103,11 +181,15 @@ function extractMediaMetaFromMessage(message, chatId, mediaType) {
     let width;
     let height;
     let duration;
+    let downloadable = false;
+    let thumbnailAvailable = false;
     if (message.media instanceof telegram_1.Api.MessageMediaPhoto) {
+        downloadable = true;
         const photo = message.photo;
         mimeType = 'image/jpeg';
         filename = 'photo.jpg';
         if (photo?.sizes && photo.sizes.length > 0) {
+            thumbnailAvailable = true;
             const largestSize = photo.sizes[photo.sizes.length - 1];
             if (largestSize && 'size' in largestSize)
                 fileSize = largestSize.size;
@@ -120,8 +202,10 @@ function extractMediaMetaFromMessage(message, chatId, mediaType) {
     else if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
         const doc = message.media.document;
         if (doc instanceof telegram_1.Api.Document) {
+            downloadable = true;
             fileSize = typeof doc.size === 'number' ? doc.size : (doc.size ? Number(doc.size.toString()) : undefined);
             mimeType = doc.mimeType;
+            thumbnailAvailable = Boolean((doc.thumbs?.length || 0) > 0 || (doc.videoThumbs?.length || 0) > 0);
             const fileNameAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeFilename);
             filename = fileNameAttr?.fileName;
             const videoAttr = doc.attributes?.find(attr => attr instanceof telegram_1.Api.DocumentAttributeVideo);
@@ -147,6 +231,8 @@ function extractMediaMetaFromMessage(message, chatId, mediaType) {
         width,
         height,
         duration,
+        downloadable,
+        thumbnailAvailable,
     };
 }
 function getMediaDetails(media) {
@@ -252,17 +338,26 @@ async function downloadFileFromUrl(url, maxSize = exports.MAX_FILE_SIZE) {
     }
 }
 async function downloadWithTimeout(promise, timeout) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Download timeout')), timeout)),
-    ]);
+    let timeoutId;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('Download timeout')), timeout);
+            }),
+        ]);
+    }
+    finally {
+        if (timeoutId)
+            clearTimeout(timeoutId);
+    }
 }
 async function processWithConcurrencyLimit(items, processor, concurrencyLimit = exports.THUMBNAIL_CONCURRENCY_LIMIT, batchDelay = exports.THUMBNAIL_BATCH_DELAY_MS) {
     const results = [];
     const errors = [];
     for (let i = 0; i < items.length; i += concurrencyLimit) {
         const batch = items.slice(i, i + concurrencyLimit);
-        const batchResults = await Promise.allSettled(batch.map(item => processor(item)));
+        const batchResults = await Promise.allSettled(batch.map((item, batchIndex) => processor(item, i + batchIndex)));
         for (const result of batchResults) {
             if (result.status === 'fulfilled') {
                 results.push(result.value);

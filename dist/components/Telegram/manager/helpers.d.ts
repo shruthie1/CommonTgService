@@ -5,6 +5,35 @@ export declare const FILE_DOWNLOAD_TIMEOUT = 60000;
 export declare const TEMP_FILE_CLEANUP_DELAY = 3600000;
 export declare const THUMBNAIL_CONCURRENCY_LIMIT = 3;
 export declare const THUMBNAIL_BATCH_DELAY_MS = 100;
+export declare const MEDIA_DEFAULT_LIMIT = 50;
+export declare const MEDIA_MAX_LIMIT = 200;
+export declare const MEDIA_MAX_QUERY_LIMIT = 500;
+export declare const INLINE_THUMBNAIL_DEFAULT_LIMIT = 25;
+export declare const INLINE_THUMBNAIL_MAX_LIMIT = 50;
+export declare const THUMBNAIL_CACHE_MAX_ENTRIES: number;
+export declare const THUMBNAIL_CACHE_MAX_BYTES: number;
+export declare const THUMBNAIL_CACHE_TTL_MS: number;
+export declare const MISSING_THUMBNAIL_CACHE_TTL_MS: number;
+export declare class ByteLimitedLruCache<T> {
+    private readonly options;
+    private entries;
+    private totalBytes;
+    constructor(options: {
+        maxEntries: number;
+        maxBytes: number;
+        ttlMs: number;
+    });
+    get(key: string): T | undefined;
+    set(key: string, value: T, size: number, ttlMs?: number): void;
+    delete(key: string): void;
+    stats(): {
+        entries: number;
+        totalBytes: number;
+        maxBytes: number;
+    };
+    private evictExpired;
+    private evictOverflow;
+}
 export declare function getSearchFilter(filter: string): Api.TypeMessagesFilter;
 export declare function getMediaType(media: Api.TypeMessageMedia): string;
 export declare function getMessageDate(message: Api.Message): number;
@@ -15,7 +44,7 @@ import bigInt from 'big-integer';
 export declare function generateETag(messageId: number, chatId: string, fileId: bigInt.BigInteger | string | number): string;
 export declare function downloadFileFromUrl(url: string, maxSize?: number): Promise<Buffer>;
 export declare function downloadWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T>;
-export declare function processWithConcurrencyLimit<T, R>(items: T[], processor: (item: T) => Promise<R>, concurrencyLimit?: number, batchDelay?: number): Promise<R[]>;
+export declare function processWithConcurrencyLimit<T, R>(items: T[], processor: (item: T, index: number) => Promise<R>, concurrencyLimit?: number, batchDelay?: number): Promise<R[]>;
 export declare function getMimeType(type: string): string;
 export declare function getMediaExtension(mediaOrType: string | Api.TypeMessageMedia): string;
 export declare function getMediaAttributes(item: {

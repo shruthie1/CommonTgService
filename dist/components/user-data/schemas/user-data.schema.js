@@ -98,6 +98,18 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, default: [] }),
     __metadata("design:type", Array)
 ], UserData.prototype, "videos", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [String], required: false, default: undefined }),
+    __metadata("design:type", Array)
+], UserData.prototype, "promotionChannels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: undefined }),
+    __metadata("design:type", String)
+], UserData.prototype, "attributionMethod", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, required: false, default: undefined }),
+    __metadata("design:type", Number)
+], UserData.prototype, "attributedAt", void 0);
 exports.UserData = UserData = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'userData', versionKey: false, autoIndex: true, timestamps: true,

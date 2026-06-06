@@ -24,6 +24,7 @@ __exportStar(require("./session-manager"), exports);
 __exportStar(require("./stats"), exports);
 __exportStar(require("./stats2"), exports);
 __exportStar(require("./promote-stats"), exports);
+__exportStar(require("./collection-insights"), exports);
 __exportStar(require("./promote-clients"), exports);
 __exportStar(require("./promote-msgs"), exports);
 __exportStar(require("./user-data"), exports);

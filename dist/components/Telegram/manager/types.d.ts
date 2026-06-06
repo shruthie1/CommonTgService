@@ -46,9 +46,13 @@ export interface MediaMetadataItem {
     width?: number;
     height?: number;
     duration?: number;
+    downloadable?: boolean;
+    thumbnailAvailable?: boolean;
 }
 export interface FilteredMediaItem extends MediaMetadataItem {
     thumbnail?: string;
+    thumbnailUrl?: string;
+    thumbnailMode?: 'url' | 'base64' | 'none';
     mediaDetails?: DocumentMediaDetails;
 }
 export interface DocumentMediaDetails {
@@ -346,6 +350,10 @@ export interface MediaQueryParams {
     limit?: number;
     maxId?: number;
     minId?: number;
+    thumbnailMode?: 'url' | 'base64' | 'none';
+    inlineThumbnailLimit?: number;
+    thumbnailApiKey?: string;
+    thumbnailBaseUrl?: string;
 }
 export interface CleanupOptions {
     chatId: string;

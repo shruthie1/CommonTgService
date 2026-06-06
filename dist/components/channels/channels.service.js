@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ChannelsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChannelsService = void 0;
 const common_1 = require("@nestjs/common");
@@ -19,37 +20,67 @@ const mongoose_2 = require("mongoose");
 const channel_schema_1 = require("./schemas/channel.schema");
 const bots_1 = require("../bots");
 const utils_1 = require("../../utils");
-let ChannelsService = class ChannelsService {
+let ChannelsService = ChannelsService_1 = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
+        this.logger = new common_1.Logger(ChannelsService_1.name);
+        this.legacySendabilityRepaired = false;
+    }
+    async onModuleInit() {
+        try {
+            await this.repairLegacySendabilityFlags();
+        }
+        catch (error) {
+            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
+        }
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);
         return createdChannel.save();
     }
     async createMultiple(createChannelDtos) {
+        if (!createChannelDtos?.length) {
+            throw new common_1.BadRequestException('At least one channel DTO is required');
+        }
         const bulkOps = createChannelDtos.map((dto) => {
+            if (!dto.channelId) {
+                throw new common_1.BadRequestException('Channel ID is required for all DTOs');
+            }
             const setFields = {};
-            if (dto.title != null)
-                setFields.title = dto.title;
-            if (dto.username != null)
-                setFields.username = dto.username;
-            if (dto.participantsCount != null)
-                setFields.participantsCount = dto.participantsCount;
-            if (dto.megagroup !== undefined)
-                setFields.megagroup = dto.megagroup;
+            this.copyDefinedFields(dto, setFields, [
+                'title',
+                'username',
+                'participantsCount',
+                'megagroup',
+                'broadcast',
+                'canSendMsgs',
+                'restricted',
+                'sendMessages',
+                'sendPlain',
+                'private',
+                'forbidden',
+                'banned',
+                'bannedAt',
+                'reactRestricted',
+                'wordRestriction',
+                'dMRestriction',
+                'starred',
+                'score',
+            ]);
             const defaults = {
                 channelId: dto.channelId,
                 broadcast: false,
                 canSendMsgs: true,
                 participantsCount: 0,
                 restricted: false,
-                sendMessages: true,
+                sendMessages: false,
+                sendPlain: false,
                 reactRestricted: false,
                 wordRestriction: 0,
                 dMRestriction: 0,
                 availableMsgs: [],
                 banned: false,
+                bannedAt: null,
                 megagroup: true,
                 private: false,
             };
@@ -118,9 +149,10 @@ let ChannelsService = class ChannelsService {
                     username: { $not: { $regex: notPattern } }
                 },
                 {
-                    sendMessages: false,
-                    broadcast: false,
-                    restricted: false
+                    sendMessages: { $ne: true },
+                    sendPlain: { $ne: true },
+                    broadcast: { $ne: true },
+                    restricted: { $ne: true }
                 }
             ]
         };
@@ -153,6 +185,7 @@ let ChannelsService = class ChannelsService {
         }
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+        await this.repairLegacySendabilityFlags();
         const query = {
             '$and': [
                 {
@@ -178,7 +211,12 @@ let ChannelsService = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
-                    restricted: false,
+                    sendMessages: { $ne: true },
+                    sendPlain: { $ne: true },
+                    banned: { $ne: true },
+                    restricted: { $ne: true },
+                    forbidden: { $ne: true },
+                    private: { $ne: true }
                 }
             ]
         };
@@ -199,9 +237,35 @@ let ChannelsService = class ChannelsService {
             return [];
         }
     }
+    copyDefinedFields(source, target, fields) {
+        for (const field of fields) {
+            if (source[field] !== undefined) {
+                target[field] = source[field];
+            }
+        }
+    }
+    async repairLegacySendabilityFlags() {
+        if (this.legacySendabilityRepaired)
+            return;
+        this.legacySendabilityRepaired = true;
+        await this.ChannelModel.updateMany({
+            canSendMsgs: true,
+            $or: [{ sendMessages: true }, { sendPlain: true }],
+            banned: { $ne: true },
+            forbidden: { $ne: true },
+            private: { $ne: true },
+            restricted: { $ne: true },
+        }, {
+            $set: {
+                sendMessages: false,
+                sendPlain: false,
+                updatedAt: new Date(),
+            },
+        }).exec();
+    }
 };
 exports.ChannelsService = ChannelsService;
-exports.ChannelsService = ChannelsService = __decorate([
+exports.ChannelsService = ChannelsService = ChannelsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(channel_schema_1.Channel.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])

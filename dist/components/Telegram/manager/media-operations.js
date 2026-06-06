@@ -54,6 +54,88 @@ const big_integer_1 = __importDefault(require("big-integer"));
 const helpers_1 = require("./helpers");
 const Helpers_1 = require("telegram/Helpers");
 const chat_operations_1 = require("./chat-operations");
+const thumbnailCache = new helpers_1.ByteLimitedLruCache({
+    maxEntries: helpers_1.THUMBNAIL_CACHE_MAX_ENTRIES,
+    maxBytes: helpers_1.THUMBNAIL_CACHE_MAX_BYTES,
+    ttlMs: helpers_1.THUMBNAIL_CACHE_TTL_MS,
+});
+const missingThumbnailCache = new helpers_1.ByteLimitedLruCache({
+    maxEntries: helpers_1.THUMBNAIL_CACHE_MAX_ENTRIES * 2,
+    maxBytes: 64 * 1024,
+    ttlMs: helpers_1.MISSING_THUMBNAIL_CACHE_TTL_MS,
+});
+function normalizeMediaLimit(limit) {
+    const numericLimit = Number(limit);
+    if (!Number.isFinite(numericLimit) || numericLimit <= 0)
+        return helpers_1.MEDIA_DEFAULT_LIMIT;
+    return Math.min(Math.floor(numericLimit), helpers_1.MEDIA_MAX_LIMIT);
+}
+function normalizeQueryLimit(limit, typeCount, hasAll) {
+    const requested = hasAll ? limit * Math.max(typeCount, 1) : limit;
+    return Math.min(requested, helpers_1.MEDIA_MAX_QUERY_LIMIT);
+}
+function normalizeInlineThumbnailLimit(limit) {
+    const numericLimit = Number(limit);
+    if (!Number.isFinite(numericLimit) || numericLimit < 0)
+        return helpers_1.INLINE_THUMBNAIL_DEFAULT_LIMIT;
+    return Math.min(Math.floor(numericLimit), helpers_1.INLINE_THUMBNAIL_MAX_LIMIT);
+}
+function buildThumbnailCacheKey(ctx, chatId, messageId, quality) {
+    return `${ctx.phoneNumber}:${chatId}:${messageId}:${quality}`;
+}
+function appendQueryParam(params, name, value) {
+    if (value === undefined || value === null || value === '')
+        return;
+    params.push(`${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`);
+}
+function buildThumbnailUrl(ctx, chatId, messageId, quality, apiKey, baseUrl) {
+    const params = [];
+    appendQueryParam(params, 'chatId', chatId);
+    appendQueryParam(params, 'messageId', messageId);
+    appendQueryParam(params, 'quality', quality);
+    appendQueryParam(params, 'apiKey', apiKey);
+    const prefix = baseUrl ? baseUrl.replace(/\/$/, '') : '';
+    return `${prefix}/telegram/media/thumbnail/${encodeURIComponent(ctx.phoneNumber)}?${params.join('&')}`;
+}
+async function getThumbnailResultFromMessage(ctx, message, chatId, quality = 'low') {
+    const cacheKey = buildThumbnailCacheKey(ctx, chatId, message.id, quality);
+    const cached = thumbnailCache.get(cacheKey);
+    if (cached)
+        return cached;
+    if (missingThumbnailCache.get(cacheKey))
+        return null;
+    const thumbBuffer = await getThumbnailBuffer(ctx, message, quality);
+    if (!thumbBuffer) {
+        missingThumbnailCache.set(cacheKey, true, 1);
+        return null;
+    }
+    const etag = (0, helpers_1.generateETag)(message.id, chatId, `thumb-${quality}-${message.id}`);
+    let contentType = 'image/jpeg';
+    let ext = 'jpg';
+    if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
+        const doc = message.document;
+        if (doc && doc instanceof telegram_1.Api.Document) {
+            const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
+            const isGif = isAnimatedGif(doc);
+            if (isSticker) {
+                contentType = 'image/webp';
+                ext = 'webp';
+            }
+            else if (isGif) {
+                contentType = doc.mimeType || 'video/mp4';
+                ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';
+            }
+        }
+    }
+    const result = {
+        buffer: thumbBuffer,
+        etag,
+        contentType,
+        filename: `thumbnail_${message.id}.${ext}`,
+    };
+    thumbnailCache.set(cacheKey, result, thumbBuffer.length);
+    return result;
+}
 function isDownloadableSize(s) {
     return !(s instanceof telegram_1.Api.PhotoStrippedSize) &&
         !(s instanceof telegram_1.Api.PhotoCachedSize) &&
@@ -299,35 +381,19 @@ async function getMediaMessages(ctx) {
     return result;
 }
 async function getThumbnail(ctx, messageId, chatId = 'me', quality = 'low') {
-    const message = await getMessageWithMedia(ctx, messageId, chatId);
-    const thumbBuffer = await getThumbnailBuffer(ctx, message, quality);
-    if (!thumbBuffer) {
+    const cacheKey = buildThumbnailCacheKey(ctx, chatId, messageId, quality);
+    const cached = thumbnailCache.get(cacheKey);
+    if (cached)
+        return cached;
+    if (missingThumbnailCache.get(cacheKey)) {
         throw new Error('Thumbnail not available for this media');
     }
-    const etag = (0, helpers_1.generateETag)(messageId, chatId, `thumb-${quality}-${messageId}`);
-    let contentType = 'image/jpeg';
-    let ext = 'jpg';
-    if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-        const doc = message.document;
-        if (doc && doc instanceof telegram_1.Api.Document) {
-            const isSticker = doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker);
-            const isGif = isAnimatedGif(doc);
-            if (isSticker) {
-                contentType = 'image/webp';
-                ext = 'webp';
-            }
-            else if (isGif) {
-                contentType = doc.mimeType || 'video/mp4';
-                ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';
-            }
-        }
+    const message = await getMessageWithMedia(ctx, messageId, chatId);
+    const thumbnail = await getThumbnailResultFromMessage(ctx, message, chatId, quality);
+    if (!thumbnail) {
+        throw new Error('Thumbnail not available for this media');
     }
-    return {
-        buffer: thumbBuffer,
-        etag,
-        contentType,
-        filename: `thumbnail_${messageId}.${ext}`,
-    };
+    return thumbnail;
 }
 async function getMediaFileDownloadInfo(ctx, messageId, chatId = 'me') {
     const message = await getMessageWithMedia(ctx, messageId, chatId);
@@ -338,11 +404,11 @@ async function getMediaFileDownloadInfo(ctx, messageId, chatId = 'me') {
     const etag = (0, helpers_1.generateETag)(messageId, chatId, fileId);
     return { ...fileInfo, etag };
 }
-async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.default)(0), limit = 5 * 1024 * 1024, requestSize = 512 * 1024, fileSize, dcId) {
+async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.default)(0), limit, requestSize = 512 * 1024, fileSize, dcId) {
     for await (const chunk of ctx.client.iterDownload({
         file: fileLocation,
         offset,
-        limit,
+        ...(limit !== undefined ? { limit } : {}),
         requestSize,
         ...(fileSize ? { fileSize: (0, big_integer_1.default)(fileSize) } : {}),
         ...(dcId ? { dcId } : {}),
@@ -353,14 +419,15 @@ async function* streamMediaFile(ctx, fileLocation, offset = (0, big_integer_1.de
 async function getMediaMetadata(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit, maxId, minId } = params;
+    const effectiveLimit = normalizeMediaLimit(limit);
     const peer = await resolveEntity(ctx, chatId);
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
         ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
-    const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
+    const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
     const baseQuery = {
         ...(maxId ? { maxId } : {}),
         ...(minId ? { minId } : {}),
@@ -419,12 +486,12 @@ async function getMediaMetadata(ctx, params) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     }
     else if (typesToFetch.length > 1) {
-        const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, limit)));
+        const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
         if (hasAll) {
             filteredMessages = resultsPerType.flat();
         }
         else {
-            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, limit);
+            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
         }
     }
     else {
@@ -438,9 +505,9 @@ async function getMediaMetadata(ctx, params) {
             return acc;
         }, {});
         const groups = typesToFetch.map(mediaType => {
-            const items = (grouped[mediaType] || []).slice(0, limit);
+            const items = (grouped[mediaType] || []).slice(0, effectiveLimit);
             const typeTotal = items.length;
-            const typeHasMore = (grouped[mediaType]?.length ?? 0) > limit;
+            const typeHasMore = (grouped[mediaType]?.length ?? 0) > effectiveLimit;
             const typeFirstMessageId = items.length > 0 ? items[0].messageId : undefined;
             const typeLastMessageId = items.length > 0 ? items[items.length - 1].messageId : undefined;
             return {
@@ -448,7 +515,7 @@ async function getMediaMetadata(ctx, params) {
                 count: typeTotal,
                 items,
                 pagination: {
-                    page: 1, limit, total: typeTotal,
+                    page: 1, limit: effectiveLimit, total: typeTotal,
                     totalPages: typeHasMore ? -1 : 1,
                     hasMore: typeHasMore,
                     nextMaxId: typeHasMore ? typeLastMessageId : undefined,
@@ -463,7 +530,7 @@ async function getMediaMetadata(ctx, params) {
         const overallLastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
         return {
             groups, pagination: {
-                page: 1, limit, total: totalItems,
+                page: 1, limit: effectiveLimit, total: totalItems,
                 totalPages: overallHasMore ? -1 : 1,
                 hasMore: overallHasMore,
                 nextMaxId: overallHasMore ? overallLastMessageId : undefined,
@@ -476,12 +543,12 @@ async function getMediaMetadata(ctx, params) {
     }
     else {
         const total = filteredMessages.length;
-        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === limit) && filteredMessages.length > 0;
+        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === effectiveLimit) && filteredMessages.length > 0;
         const firstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
         const lastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
         return {
             data: filteredMessages, pagination: {
-                page: 1, limit, total,
+                page: 1, limit: effectiveLimit, total,
                 totalPages: hasMore ? -1 : 1,
                 hasMore,
                 nextMaxId: hasMore ? lastMessageId : undefined,
@@ -558,14 +625,17 @@ async function getAllMediaMetaData(ctx, params) {
 async function getFilteredMedia(ctx, params) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit, maxId, minId } = params;
+    const effectiveLimit = normalizeMediaLimit(limit);
+    const thumbnailMode = params.thumbnailMode || 'url';
+    const inlineThumbnailLimit = normalizeInlineThumbnailLimit(params.inlineThumbnailLimit);
     const peer = await resolveEntity(ctx, chatId);
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
     const hasAll = types.includes('all');
     const typesToFetch = hasAll
         ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
-    const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
+    const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
     const query = {
         limit: queryLimit,
         ...(maxId ? { maxId } : {}),
@@ -587,30 +657,34 @@ async function getFilteredMedia(ctx, params) {
         return typesToFetch.includes(mediaType);
     });
     ctx.logger.info(ctx.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
-    const mediaData = await (0, helpers_1.processWithConcurrencyLimit)(filteredMessages, async (message) => {
-        const thumbBuffer = await getThumbnailBuffer(ctx, message);
-        const mediaDetails = (0, helpers_1.getMediaDetails)(message.media);
-        const baseMeta = (0, helpers_1.extractMediaMetaFromMessage)(message, chatId, (0, helpers_1.getMediaType)(message.media));
+    const buildMediaItem = async (message, index) => {
+        const mediaDetails = message.media instanceof telegram_1.Api.MessageMediaDocument
+            ? (0, helpers_1.getMediaDetails)(message.media)
+            : null;
         const mediaType = (0, helpers_1.getMediaType)(message.media);
-        let thumbMime = 'image/jpeg';
-        if (message.media instanceof telegram_1.Api.MessageMediaDocument) {
-            const doc = message.document;
-            if (doc instanceof telegram_1.Api.Document) {
-                if (isAnimatedGif(doc)) {
-                    thumbMime = doc.mimeType || 'video/mp4';
-                }
-                else if (doc.attributes?.some(attr => attr instanceof telegram_1.Api.DocumentAttributeSticker)) {
-                    thumbMime = 'image/webp';
-                }
-            }
+        const baseMeta = (0, helpers_1.extractMediaMetaFromMessage)(message, chatId, mediaType);
+        const thumbnailUrl = thumbnailMode === 'none' || !baseMeta.thumbnailAvailable
+            ? undefined
+            : buildThumbnailUrl(ctx, chatId, message.id, 'low', params.thumbnailApiKey, params.thumbnailBaseUrl);
+        let thumbnail = thumbnailUrl;
+        if (thumbnailMode === 'base64' && thumbnailUrl && index < inlineThumbnailLimit) {
+            const thumbnailResult = await getThumbnailResultFromMessage(ctx, message, chatId, 'low');
+            thumbnail = thumbnailResult
+                ? `data:${thumbnailResult.contentType};base64,${thumbnailResult.buffer.toString('base64')}`
+                : thumbnailUrl;
         }
         return {
             ...baseMeta,
             type: mediaType,
-            thumbnail: thumbBuffer ? `data:${thumbMime};base64,${thumbBuffer.toString('base64')}` : undefined,
+            thumbnail,
+            thumbnailUrl,
+            thumbnailMode,
             mediaDetails: mediaDetails || undefined,
         };
-    }, helpers_1.THUMBNAIL_CONCURRENCY_LIMIT, helpers_1.THUMBNAIL_BATCH_DELAY_MS);
+    };
+    const mediaData = thumbnailMode === 'base64'
+        ? await (0, helpers_1.processWithConcurrencyLimit)(filteredMessages, buildMediaItem, helpers_1.THUMBNAIL_CONCURRENCY_LIMIT, helpers_1.THUMBNAIL_BATCH_DELAY_MS)
+        : await Promise.all(filteredMessages.map(buildMediaItem));
     if (hasAll) {
         const grouped = mediaData.reduce((acc, item) => {
             if (!acc[item.type])
@@ -619,15 +693,15 @@ async function getFilteredMedia(ctx, params) {
             return acc;
         }, {});
         const groups = typesToFetch.map(mediaType => {
-            const items = (grouped[mediaType] || []).slice(0, limit);
+            const items = (grouped[mediaType] || []).slice(0, effectiveLimit);
             const typeTotal = items.length;
-            const typeHasMore = (grouped[mediaType]?.length ?? 0) > limit;
+            const typeHasMore = (grouped[mediaType]?.length ?? 0) > effectiveLimit;
             const typeFirstMessageId = items.length > 0 ? items[0].messageId : undefined;
             const typeLastMessageId = items.length > 0 ? items[items.length - 1].messageId : undefined;
             return {
                 type: mediaType, count: typeTotal, items,
                 pagination: {
-                    page: 1, limit, total: typeTotal,
+                    page: 1, limit: effectiveLimit, total: typeTotal,
                     totalPages: typeHasMore ? -1 : 1, hasMore: typeHasMore,
                     nextMaxId: typeHasMore ? typeLastMessageId : undefined,
                     firstMessageId: typeFirstMessageId, lastMessageId: typeLastMessageId,
@@ -640,7 +714,7 @@ async function getFilteredMedia(ctx, params) {
         const overallLastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
         return {
             groups, pagination: {
-                page: 1, limit, total: totalItems,
+                page: 1, limit: effectiveLimit, total: totalItems,
                 totalPages: overallHasMore ? -1 : 1, hasMore: overallHasMore,
                 nextMaxId: overallHasMore ? overallLastMessageId : undefined,
                 prevMaxId: maxId && mediaData.length > 0 ? overallFirstMessageId : undefined,
@@ -656,7 +730,7 @@ async function getFilteredMedia(ctx, params) {
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
         return {
             data: mediaData, pagination: {
-                page: 1, limit, total,
+                page: 1, limit: effectiveLimit, total,
                 totalPages: hasMoreResult ? -1 : 1, hasMore: hasMoreResult,
                 nextMaxId: hasMoreResult ? lastMessageId : undefined,
                 prevMaxId: maxId && mediaData.length > 0 ? firstMessageId : undefined,

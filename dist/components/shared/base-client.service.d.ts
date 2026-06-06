@@ -186,6 +186,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     private extractConfigValue;
     protected buildPermanentAccountReason(baseReason: string, telegramClient?: TelegramManager | null): Promise<string>;
     protected safeSetJoinChannelMap(mobile: string, channels: (Channel | ActiveChannel)[]): boolean;
+    protected isJoinableChannelCandidate(channel?: Channel | ActiveChannel | null): boolean;
     protected safeSetLeaveChannelMap(mobile: string, channels: string[]): boolean;
     removeFromJoinMap(key: string): void;
     removeFromLeaveMap(key: string): void;

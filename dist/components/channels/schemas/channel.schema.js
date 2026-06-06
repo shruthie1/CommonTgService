@@ -80,6 +80,11 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Channel.prototype, "sendMessages", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "sendPlain", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ required: true }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -129,6 +134,11 @@ __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, required: false, nullable: true, default: null }),
+    (0, mongoose_1.Prop)({ type: Number, default: null }),
+    __metadata("design:type", Number)
+], Channel.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),

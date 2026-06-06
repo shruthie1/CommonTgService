@@ -8,12 +8,16 @@ export declare class ActiveChannel {
     restricted: boolean;
     broadcast: boolean;
     sendMessages: boolean;
+    sendPlain: boolean;
     canSendMsgs: boolean;
     megagroup?: boolean;
     wordRestriction?: number;
     dMRestriction?: number;
+    recentUniqueUsers?: number;
+    lastUniqueUserCheckAt?: number;
     availableMsgs?: string[];
     banned?: boolean;
+    bannedAt?: number | null;
     forbidden?: boolean;
     reactRestricted?: boolean;
     private?: boolean;
@@ -107,6 +111,15 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
     }, "id"> & {
         id: string;
     }>;
+    sendPlain?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
     canSendMsgs?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
@@ -143,6 +156,24 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
     }, "id"> & {
         id: string;
     }>;
+    recentUniqueUsers?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    lastUniqueUserCheckAt?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
     availableMsgs?: import("mongoose").SchemaDefinitionProperty<string[], ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
@@ -153,6 +184,15 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
         id: string;
     }>;
     banned?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    bannedAt?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;

@@ -52,6 +52,11 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "sendMessages", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "sendPlain", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ default: true }),
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
@@ -72,6 +77,16 @@ __decorate([
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "dMRestriction", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "recentUniqueUsers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "lastUniqueUserCheckAt", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ type: [String], default: utils_1.defaultMessages }),
     (0, mongoose_1.Prop)({ type: [String], default: utils_1.defaultMessages }),
     __metadata("design:type", Array)
@@ -81,6 +96,11 @@ __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, required: false, nullable: true, default: null }),
+    (0, mongoose_1.Prop)({ type: Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),

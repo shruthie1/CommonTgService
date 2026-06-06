@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import { SendMediaDto, GroupSettingsDto, GroupMemberOperationDto, AdminOperationDto, ChatCleanupDto, PrivacySettingsDto, ProfilePhotoDto, ScheduleMessageDto, BatchProcessDto, ForwardBatchDto, ContactExportImportDto, ContactBlockListDto, AddContactsDto, createGroupDto, ViewOnceMediaDto, CreateTgBotDto } from './dto';
 import { CreateChatFolderDto } from './dto/create-chat-folder.dto';
@@ -13,6 +13,19 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 export declare class TelegramController {
     private readonly telegramService;
     constructor(telegramService: TelegramService);
+    private parseIntegerQuery;
+    private parseBooleanQuery;
+    private parseThumbnailMode;
+    private sanitizeFilename;
+    private getRequestBaseUrl;
+    private getRequestApiKey;
+    private parseRangeHeader;
+    private sendRangeNotSatisfiable;
+    private waitForDrainOrClose;
+    private writeResponseChunk;
+    private isNotFoundMediaError;
+    private isUnsupportedMediaError;
+    private isUnavailableThumbnailError;
     connect(mobile: string, autoDisconnect?: boolean, handler?: boolean): Promise<{
         message: string;
     }>;
@@ -71,11 +84,11 @@ export declare class TelegramController {
     addContactsBulk(mobile: string, contactsDto: AddContactsDto): Promise<void>;
     getContacts(mobile: string): Promise<import("telegram").Api.contacts.TypeContacts>;
     sendMedia(mobile: string, sendMediaDto: SendMediaDto): Promise<void>;
-    downloadMedia(mobile: string, chatId: string, messageId: number, res: Response): Promise<Response<any, Record<string, any>>>;
-    getThumbnail(mobile: string, chatId: string, messageId: number, quality: string, res: Response): Promise<Response<any, Record<string, any>>>;
+    downloadMedia(mobile: string, chatId: string, messageId: unknown, res: Response): Promise<Response<any, Record<string, any>>>;
+    getThumbnail(mobile: string, chatId: string, messageId: unknown, quality: string, res: Response): Promise<Response<any, Record<string, any>>>;
     sendMediaAlbum(mobile: string, albumDto: MediaAlbumOptions): Promise<import("./dto").AlbumSendResult>;
-    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./dto").MediaListResponse>;
-    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: number, maxId?: number, minId?: number): Promise<import("./dto").FilteredMediaListResponse>;
+    getMediaMetadata(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: unknown, maxId?: unknown, minId?: unknown): Promise<import("./dto").MediaListResponse>;
+    getFilteredMedia(mobile: string, chatId: string, types?: string | string[], startDate?: string, endDate?: string, limit?: unknown, maxId?: unknown, minId?: unknown, thumbnailMode?: unknown, inlineThumbnailLimit?: unknown, includeThumbnails?: unknown, apiKey?: string, req?: Request): Promise<import("./dto").FilteredMediaListResponse>;
     getGroupMembers(mobile: string, groupId: string, offset?: number, limit?: number): Promise<import("./dto").PaginatedGroupMembers>;
     blockChat(mobile: string, chatId: string): Promise<void>;
     deleteChatHistory(mobile: string, deleteHistoryDto: DeleteHistoryDto): Promise<void>;

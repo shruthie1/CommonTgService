@@ -17,7 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 var BufferClientService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BufferClientService = void 0;
-const channels_service_1 = require("./../channels/channels.service");
+const channels_service_1 = require("../channels/channels.service");
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
