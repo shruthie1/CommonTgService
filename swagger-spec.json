@@ -1704,15 +1704,6 @@
             }
           },
           {
-            "name": "messageId",
-            "required": true,
-            "in": "query",
-            "description": "Message ID containing the media (must be a positive number)",
-            "schema": {
-              "type": "number"
-            }
-          },
-          {
             "name": "quality",
             "required": false,
             "in": "query",
@@ -1723,6 +1714,15 @@
                 "high"
               ],
               "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "required": true,
+            "in": "query",
+            "description": "Message ID containing the media (must be a positive number)",
+            "schema": {
+              "type": "number"
             }
           }
         ],
@@ -1872,10 +1872,10 @@
             }
           },
           {
-            "name": "limit",
+            "name": "minId",
             "required": false,
             "in": "query",
-            "description": "Maximum number of messages to fetch (default: 50, max: 1000)",
+            "description": "Minimum message ID to include",
             "schema": {
               "type": "number"
             }
@@ -1890,10 +1890,10 @@
             }
           },
           {
-            "name": "minId",
+            "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Minimum message ID to include",
+            "description": "Maximum number of messages to fetch (default: 50, max: 200)",
             "schema": {
               "type": "number"
             }
@@ -1941,7 +1941,7 @@
     },
     "/telegram/media/filter/{mobile}": {
       "get": {
-        "description": "Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).",
+        "description": "Get filtered list of media messages with detailed metadata. Returns thumbnail URLs by default; inline base64 thumbnails are opt-in and capped. Use maxId for pagination (get messages with ID less than maxId).",
         "operationId": "TelegramController_getFilteredMedia",
         "parameters": [
           {
@@ -1981,10 +1981,50 @@
             }
           },
           {
-            "name": "limit",
+            "name": "apiKey",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "includeThumbnails",
             "required": false,
             "in": "query",
-            "description": "Maximum number of media items to fetch (default: 50, max: 1000)",
+            "description": "Compatibility flag. false maps thumbnailMode to none; true maps unset thumbnailMode to url.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "inlineThumbnailLimit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of inline base64 thumbnails when thumbnailMode=base64 (default: 25, max: 50)",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "thumbnailMode",
+            "required": false,
+            "in": "query",
+            "description": "Thumbnail response mode. url is default and avoids inline media memory growth; base64 is capped by inlineThumbnailLimit.",
+            "schema": {
+              "enum": [
+                "url",
+                "base64",
+                "none"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "minId",
+            "required": false,
+            "in": "query",
+            "description": "Minimum message ID to include",
             "schema": {
               "type": "number"
             }
@@ -1999,10 +2039,10 @@
             }
           },
           {
-            "name": "minId",
+            "name": "limit",
             "required": false,
             "in": "query",
-            "description": "Minimum message ID to include",
+            "description": "Maximum number of media items to fetch (default: 50, max: 200)",
             "schema": {
               "type": "number"
             }
@@ -11860,6 +11900,243 @@
         ]
       }
     },
+    "/collections": {
+      "get": {
+        "operationId": "CollectionInsightsController_listCollections",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "summary": "List Mongo collections available for read/analytics endpoints",
+        "tags": [
+          "Collections"
+        ]
+      }
+    },
+    "/collections/{collection}": {
+      "get": {
+        "operationId": "CollectionInsightsController_readCollection",
+        "parameters": [
+          {
+            "name": "collection",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filter",
+            "required": false,
+            "in": "query",
+            "description": "JSON object filter",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          },
+          {
+            "name": "projection",
+            "required": false,
+            "in": "query",
+            "description": "JSON object projection",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "JSON object sort",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Single field to sort by when sort is not provided.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "description": "Sort direction for sortBy.",
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum documents to return. Capped server-side.",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "skip",
+            "required": false,
+            "in": "query",
+            "description": "Documents to skip.",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read documents from a collection",
+        "tags": [
+          "Collections"
+        ]
+      }
+    },
+    "/collections/{collection}/query": {
+      "post": {
+        "operationId": "CollectionInsightsController_queryCollection",
+        "parameters": [
+          {
+            "name": "collection",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionQueryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "summary": "Read documents from a collection with a JSON request body",
+        "tags": [
+          "Collections"
+        ]
+      }
+    },
+    "/collections/{collection}/stats": {
+      "get": {
+        "operationId": "CollectionInsightsController_getStats",
+        "parameters": [
+          {
+            "name": "collection",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get collection storage/index/count stats",
+        "tags": [
+          "Collections"
+        ]
+      }
+    },
+    "/collections/{collection}/analytics": {
+      "get": {
+        "operationId": "CollectionInsightsController_getAnalytics",
+        "parameters": [
+          {
+            "name": "collection",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sampleSize",
+            "required": false,
+            "in": "query",
+            "description": "Sample size for field analytics. Capped server-side.",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get generic field coverage/type/numeric analytics for a collection sample",
+        "tags": [
+          "Collections"
+        ]
+      }
+    },
     "/": {
       "get": {
         "operationId": "AppController_getHello",
@@ -13516,7 +13793,11 @@
           },
           "sendMessages": {
             "type": "boolean",
-            "default": true
+            "default": false
+          },
+          "sendPlain": {
+            "type": "boolean",
+            "default": false
           },
           "reactRestricted": {
             "type": "boolean",
@@ -13536,6 +13817,14 @@
             "type": "number",
             "default": 0
           },
+          "recentUniqueUsers": {
+            "type": "number",
+            "default": 0
+          },
+          "lastUniqueUserCheckAt": {
+            "type": "number",
+            "default": 0
+          },
           "availableMsgs": {
             "type": "array",
             "items": {
@@ -13545,6 +13834,11 @@
           "banned": {
             "type": "boolean",
             "default": false
+          },
+          "bannedAt": {
+            "type": "number",
+            "nullable": true,
+            "default": null
           },
           "megagroup": {
             "type": "boolean",
@@ -13576,6 +13870,7 @@
           "participantsCount",
           "restricted",
           "sendMessages",
+          "sendPlain",
           "reactRestricted",
           "title",
           "username",
@@ -13609,7 +13904,11 @@
           },
           "sendMessages": {
             "type": "boolean",
-            "default": true
+            "default": false
+          },
+          "sendPlain": {
+            "type": "boolean",
+            "default": false
           },
           "reactRestricted": {
             "type": "boolean",
@@ -13629,6 +13928,14 @@
             "type": "number",
             "default": 0
           },
+          "recentUniqueUsers": {
+            "type": "number",
+            "default": 0
+          },
+          "lastUniqueUserCheckAt": {
+            "type": "number",
+            "default": 0
+          },
           "availableMsgs": {
             "type": "array",
             "items": {
@@ -13638,6 +13945,11 @@
           "banned": {
             "type": "boolean",
             "default": false
+          },
+          "bannedAt": {
+            "type": "number",
+            "nullable": true,
+            "default": null
           },
           "megagroup": {
             "type": "boolean",
@@ -15645,6 +15957,10 @@
             "type": "boolean",
             "description": "Whether the channel can send messages"
           },
+          "sendPlain": {
+            "type": "boolean",
+            "description": "Whether plain text messages are banned by default rights"
+          },
           "title": {
             "type": "string",
             "description": "Title of the channel"
@@ -15692,6 +16008,12 @@
             "type": "boolean",
             "description": "Whether the channel is banned",
             "default": false
+          },
+          "bannedAt": {
+            "type": "number",
+            "description": "Timestamp when the channel was marked banned",
+            "nullable": true,
+            "default": null
           },
           "starred": {
             "type": "boolean",
@@ -15738,6 +16060,10 @@
             "type": "boolean",
             "description": "Whether the channel can send messages"
           },
+          "sendPlain": {
+            "type": "boolean",
+            "description": "Whether plain text messages are banned by default rights"
+          },
           "title": {
             "type": "string",
             "description": "Title of the channel"
@@ -15785,6 +16111,12 @@
             "type": "boolean",
             "description": "Whether the channel is banned",
             "default": false
+          },
+          "bannedAt": {
+            "type": "number",
+            "description": "Timestamp when the channel was marked banned",
+            "nullable": true,
+            "default": null
           },
           "starred": {
             "type": "boolean",
@@ -16785,6 +17117,43 @@
         "required": [
           "value"
         ]
+      },
+      "CollectionQueryDto": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "object",
+            "description": "Mongo filter object. Query-string callers may pass JSON."
+          },
+          "projection": {
+            "type": "object",
+            "description": "Mongo projection object. Query-string callers may pass JSON."
+          },
+          "sort": {
+            "type": "object",
+            "description": "Mongo sort object. Query-string callers may pass JSON."
+          },
+          "sortBy": {
+            "type": "string",
+            "description": "Single field to sort by when sort is not provided."
+          },
+          "sortOrder": {
+            "type": "string",
+            "description": "Sort direction for sortBy.",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "limit": {
+            "type": "object",
+            "description": "Maximum documents to return. Capped server-side."
+          },
+          "skip": {
+            "type": "object",
+            "description": "Documents to skip."
+          }
+        }
       },
       "ExecuteRequestDto": {
         "type": "object",

@@ -290,6 +290,48 @@ export class UsersController {
     return this.usersService.aggregateSort(field, order as 1 | -1, limitNum, skipNum);
   }
 
+  @Post('aggregate-sort/query')
+  @ApiOperation({ summary: 'Sort users by computed/nested fields with a MongoDB filter' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['field'],
+      properties: {
+        field: { type: 'string' },
+        sortOrder: { type: 'string', enum: ['asc', 'desc'] },
+        query: { type: 'object', additionalProperties: true },
+        limit: { type: 'number' },
+        skip: { type: 'number' },
+      },
+    },
+  })
+  @ApiOkResponse({ type: [User] })
+  @ApiBadRequestResponse({ description: 'Unknown computed field or invalid pagination.' })
+  async aggregateSortQuery(
+    @Body() requestBody: {
+      field?: string;
+      sortOrder?: string;
+      query?: Record<string, unknown>;
+      limit?: number;
+      skip?: number;
+    },
+  ) {
+    const { field, sortOrder, query = {}, limit, skip } = requestBody || {};
+    if (!field) throw new BadRequestException('field is required');
+
+    const limitNum = limit !== undefined ? Number(limit) : 20;
+    const skipNum = skip !== undefined ? Number(skip) : 0;
+    if (!Number.isInteger(limitNum) || limitNum < 1) {
+      throw new BadRequestException('Limit must be a positive integer');
+    }
+    if (!Number.isInteger(skipNum) || skipNum < 0) {
+      throw new BadRequestException('Skip must be a non-negative integer');
+    }
+
+    const order = sortOrder === 'asc' ? 1 : -1;
+    return this.usersService.aggregateSort(field, order as 1 | -1, limitNum, skipNum, query as any);
+  }
+
   @Post('recompute-score/:mobile')
   @ApiOperation({ summary: 'Recompute relationship score (live Telegram connection)' })
   @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })

@@ -199,8 +199,9 @@ export class UsersService {
       excludedMobiles = await this.telegramService.getOwnAccountMobiles();
     } catch { }
 
-    const matchStage: any = {};
-    if (excludedMobiles.length > 0) matchStage.mobile = { $nin: excludedMobiles };
+    const matchStage: any = await this.getDefaultUserListQuery(
+      excludedMobiles.length > 0 ? ({ mobile: { $nin: excludedMobiles } } as QueryFilter<UserDocument>) : {},
+    );
 
     // For recency, sort by lastActive descending (string comparison works for ISO dates)
     const isRecency = aspect === 'recency';
@@ -266,13 +267,47 @@ export class UsersService {
     return this.userModel.find().limit(limit).skip(skip).exec();
   }
 
-  async findAllSorted(limit: number = 100, skip: number = 0, sort?: Record<string, 1 | -1>): Promise<User[]> {
-    let excludedMobiles: string[] = [];
-    try {
-      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-    } catch { }
+  private hasQueryConstraint(query: any, field: string): boolean {
+    if (!query || typeof query !== 'object') return false;
+    if (Object.prototype.hasOwnProperty.call(query, field)) return true;
 
-    const filter = excludedMobiles.length > 0 ? { mobile: { $nin: excludedMobiles } } : {};
+    for (const key of ['$and', '$or', '$nor']) {
+      const clauses = query[key];
+      if (Array.isArray(clauses) && clauses.some(clause => this.hasQueryConstraint(clause, field))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private async getDefaultUserListQuery(query: QueryFilter<UserDocument> = {}): Promise<QueryFilter<UserDocument>> {
+    const clauses: QueryFilter<UserDocument>[] = [];
+
+    if (!this.hasQueryConstraint(query, 'expired')) {
+      clauses.push({ expired: { $ne: true } } as QueryFilter<UserDocument>);
+    }
+
+    if (!this.hasQueryConstraint(query, 'mobile')) {
+      let excludedMobiles: string[] = [];
+      try {
+        excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+      } catch { }
+      if (excludedMobiles.length > 0) {
+        clauses.push({ mobile: { $nin: excludedMobiles } } as QueryFilter<UserDocument>);
+      }
+    }
+
+    if (clauses.length === 0) return query;
+    if (!query || Object.keys(query).length === 0) {
+      return clauses.length === 1 ? clauses[0] : ({ $and: clauses } as QueryFilter<UserDocument>);
+    }
+
+    return { $and: [...clauses, query] } as QueryFilter<UserDocument>;
+  }
+
+  async findAllSorted(limit: number = 100, skip: number = 0, sort?: Record<string, 1 | -1>): Promise<User[]> {
+    const filter = await this.getDefaultUserListQuery();
     const query = this.userModel.find(filter).lean();
     if (sort) query.sort(sort);
     return query.skip(skip).limit(limit).allowDiskUse(true).exec();
@@ -385,7 +420,8 @@ export class UsersService {
       ];
     }
 
-    const total = await this.userModel.countDocuments(query).exec();
+    const listQuery = await this.getDefaultUserListQuery(query);
+    const total = await this.userModel.countDocuments(listQuery).exec();
     const totalPages = Math.ceil(total / limitNum);
 
     if (total === 0) {
@@ -395,7 +431,7 @@ export class UsersService {
     const sort: Record<string, 1 | -1> = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
 
     const users = await this.userModel
-      .find(query)
+      .find(listQuery)
       .select('-session -password')
       .sort(sort)
       .skip(skip)
@@ -472,17 +508,9 @@ export class UsersService {
       }
     }
 
-    if (!filter.mobile) {
-      let excludedMobiles: string[] = [];
-      try {
-        excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-      } catch { }
-      if (excludedMobiles.length > 0) {
-        query.mobile = { $nin: excludedMobiles } as any;
-      }
-    }
+    const listQuery = await this.getDefaultUserListQuery(query);
 
-    return this.userModel.find(query).sort({ updatedAt: -1 }).limit(200).exec();
+    return this.userModel.find(listQuery).sort({ updatedAt: -1 }).limit(200).exec();
   }
 
   async computeRelationshipScore(mobile: string): Promise<void> {
@@ -857,6 +885,7 @@ export class UsersService {
     sortOrder: 1 | -1 = -1,
     limit: number = 20,
     skip: number = 0,
+    query: QueryFilter<UserDocument> = {},
   ): Promise<any[]> {
     const COMPUTED_FIELDS: Record<string, any> = {
       intimateTotal: {
@@ -920,11 +949,125 @@ export class UsersService {
       callPartners: {
         $size: { $ifNull: ['$calls.chats', []] },
       },
+      totalPhotos: {
+        $let: {
+          vars: {
+            splitTotal: {
+              $add: [
+                { $ifNull: ['$ownPhotoCount', 0] },
+                { $ifNull: ['$otherPhotoCount', 0] },
+              ],
+            },
+          },
+          in: {
+            $cond: [
+              { $gt: ['$$splitTotal', 0] },
+              '$$splitTotal',
+              { $ifNull: ['$photoCount', 0] },
+            ],
+          },
+        },
+      },
+      totalVideos: {
+        $let: {
+          vars: {
+            splitTotal: {
+              $add: [
+                { $ifNull: ['$ownVideoCount', 0] },
+                { $ifNull: ['$otherVideoCount', 0] },
+              ],
+            },
+          },
+          in: {
+            $cond: [
+              { $gt: ['$$splitTotal', 0] },
+              '$$splitTotal',
+              { $ifNull: ['$videoCount', 0] },
+            ],
+          },
+        },
+      },
+      totalMedia: {
+        $add: [
+          {
+            $let: {
+              vars: {
+                splitTotal: {
+                  $add: [
+                    { $ifNull: ['$ownPhotoCount', 0] },
+                    { $ifNull: ['$otherPhotoCount', 0] },
+                  ],
+                },
+              },
+              in: {
+                $cond: [
+                  { $gt: ['$$splitTotal', 0] },
+                  '$$splitTotal',
+                  { $ifNull: ['$photoCount', 0] },
+                ],
+              },
+            },
+          },
+          {
+            $let: {
+              vars: {
+                splitTotal: {
+                  $add: [
+                    { $ifNull: ['$ownVideoCount', 0] },
+                    { $ifNull: ['$otherVideoCount', 0] },
+                  ],
+                },
+              },
+              in: {
+                $cond: [
+                  { $gt: ['$$splitTotal', 0] },
+                  '$$splitTotal',
+                  { $ifNull: ['$videoCount', 0] },
+                ],
+              },
+            },
+          },
+          { $ifNull: ['$movieCount', 0] },
+        ],
+      },
       totalCallDuration: {
         $reduce: {
           input: { $ifNull: ['$calls.chats', []] },
           initialValue: 0,
           in: { $add: ['$$value', { $ifNull: ['$$this.totalDuration', 0] }] },
+        },
+      },
+      avgCallDuration: {
+        $let: {
+          vars: {
+            durations: {
+              $filter: {
+                input: { $ifNull: ['$calls.chats', []] },
+                as: 'call',
+                cond: { $gt: [{ $ifNull: ['$$call.averageDuration', 0] }, 0] },
+              },
+            },
+          },
+          in: {
+            $cond: [
+              { $gt: [{ $size: '$$durations' }, 0] },
+              {
+                $round: [
+                  {
+                    $avg: {
+                      $map: {
+                        input: '$$durations',
+                        as: 'call',
+                        in: { $ifNull: ['$$call.averageDuration', 0] },
+                      },
+                    },
+                  },
+                  0,
+                ],
+              },
+              0,
+            ],
+          },
         },
       },
       longestCall: {
@@ -955,15 +1098,8 @@ export class UsersService {
       throw new BadRequestException(`Unknown computed field: ${computedField}`);
     }
 
-    let excludedMobiles: string[] = [];
-    try {
-      excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-    } catch { }
-
     const pipeline: any[] = [];
-    if (excludedMobiles.length > 0) {
-      pipeline.push({ $match: { mobile: { $nin: excludedMobiles } } });
-    }
+    pipeline.push({ $match: await this.getDefaultUserListQuery(query) });
     pipeline.push(
       { $addFields: { _computedSort: fieldExpr } },
       { $sort: { _computedSort: sortOrder } },
@@ -986,7 +1122,8 @@ export class UsersService {
     }
 
     try {
-      const queryExec = this.userModel.find(query).lean();
+      const listQuery = await this.getDefaultUserListQuery(query);
+      const queryExec = this.userModel.find(listQuery).lean();
 
       if (sort) queryExec.sort(sort);
       if (limit) queryExec.limit(limit);

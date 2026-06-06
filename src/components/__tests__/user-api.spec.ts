@@ -186,6 +186,16 @@ describe('Users API', () => {
             expect(result).toHaveLength(1);
             expect(result[0].mobile).toBe(other.mobile);
         });
+
+        it('should exclude expired users from sorted lists by default', async () => {
+            const active = makeUserData({ msgs: 10 });
+            const expired = makeUserData({ msgs: 999, expired: true });
+            await service.create(active);
+            await service.create(expired);
+            const result = await service.findAllSorted(100, 0, { msgs: -1 });
+            expect(result).toHaveLength(1);
+            expect(result[0].mobile).toBe(active.mobile);
+        });
     });
 
     // ─── UPDATE ──────────────────────────────────────────────────────────────
@@ -341,6 +351,21 @@ describe('Users API', () => {
             const results = await service.search({ mobile: own.mobile });
             expect(results).toHaveLength(1);
         });
+
+        it('should exclude expired users by default', async () => {
+            await service.create(makeUserData({ firstName: 'Alex Active' }));
+            await service.create(makeUserData({ firstName: 'Alex Expired', expired: true }));
+            const results = await service.search({ firstName: 'Alex' });
+            expect(results).toHaveLength(1);
+            expect(results[0].expired).toBe(false);
+        });
+
+        it('should allow explicitly searching expired users', async () => {
+            await service.create(makeUserData({ firstName: 'Expired User', expired: true }));
+            const results = await service.search({ expired: true });
+            expect(results).toHaveLength(1);
+            expect(results[0].expired).toBe(true);
+        });
     });
 
     // ─── EXECUTE QUERY ───────────────────────────────────────────────────────
@@ -367,6 +392,25 @@ describe('Users API', () => {
             for (let i = 0; i < 5; i++) await service.create(makeUserData());
             const results = await service.executeQuery({}, undefined, 2, 1);
             expect(results).toHaveLength(2);
+        });
+
+        it('should exclude expired users by default', async () => {
+            const active = makeUserData({ channels: 200 });
+            const expired = makeUserData({ channels: 300, expired: true });
+            await service.create(active);
+            await service.create(expired);
+            const results = await service.executeQuery({ channels: { $gte: 100 } }, { channels: -1 });
+            expect(results).toHaveLength(1);
+            expect(results[0].mobile).toBe(active.mobile);
+        });
+
+        it('should allow explicit expired queries', async () => {
+            const expired = makeUserData({ expired: true });
+            await service.create(makeUserData());
+            await service.create(expired);
+            const results = await service.executeQuery({ expired: true });
+            expect(results).toHaveLength(1);
+            expect(results[0].mobile).toBe(expired.mobile);
         });
     });
 
@@ -513,6 +557,42 @@ describe('Users API', () => {
         });
     });
 
+    // ─── PAGINATED / LEADERBOARD ────────────────────────────────────────────
+
+    describe('paginated', () => {
+        it('should exclude expired users by default', async () => {
+            const active = makeUserData({ msgs: 10 });
+            const expired = makeUserData({ msgs: 1000, expired: true });
+            await service.create(active);
+            await service.create(expired);
+            const result = await service.paginated({ page: 1, limit: 20, sortBy: 'msgs' });
+            expect(result.users).toHaveLength(1);
+            expect(result.total).toBe(1);
+            expect(result.users[0].mobile).toBe(active.mobile);
+        });
+
+        it('should allow the explicit expired filter', async () => {
+            const expired = makeUserData({ expired: true });
+            await service.create(makeUserData());
+            await service.create(expired);
+            const result = await service.paginated({ filter: 'expired' });
+            expect(result.users).toHaveLength(1);
+            expect(result.users[0].mobile).toBe(expired.mobile);
+        });
+    });
+
+    describe('leaderboard', () => {
+        it('should exclude expired users by default', async () => {
+            const active = makeUserData({ msgs: 50 });
+            const expired = makeUserData({ msgs: 5000, expired: true });
+            await service.create(active);
+            await service.create(expired);
+            const result = await service.leaderboard({ aspect: 'msgs', limit: 10 });
+            expect(result.ranked).toHaveLength(1);
+            expect(result.ranked[0].mobile).toBe(active.mobile);
+        });
+    });
+
     // ─── AGGREGATE SORT ──────────────────────────────────────────────────────
 
     describe('aggregateSort', () => {
@@ -541,6 +621,36 @@ describe('Users API', () => {
             for (let i = 0; i < 5; i++) await service.create(makeUserData());
             const result = await service.aggregateSort('intimateTotal', -1, 2, 1);
             expect(result).toHaveLength(2);
+        });
+
+        it('should exclude expired users from aggregate sorts by default', async () => {
+            const active = makeUserData();
+            const expired = makeUserData({ expired: true });
+            await service.create(active);
+            await service.create(expired);
+            await userModel.updateOne({ tgId: active.tgId }, {
+                $set: { 'relationships.top': [{ intimateMessageCount: 10 }] },
+            });
+            await userModel.updateOne({ tgId: expired.tgId }, {
+                $set: { 'relationships.top': [{ intimateMessageCount: 1000 }] },
+            });
+            const result = await service.aggregateSort('intimateTotal', -1, 10, 0);
+            expect(result).toHaveLength(1);
+            expect(result[0].tgId).toBe(active.tgId);
+        });
+
+        it('should support average call duration aggregate sorting', async () => {
+            const low = makeUserData({
+                calls: { chats: [{ averageDuration: 10 }, { averageDuration: 30 }] } as any,
+            });
+            const high = makeUserData({
+                calls: { chats: [{ averageDuration: 90 }, { averageDuration: 120 }] } as any,
+            });
+            await service.create(low);
+            await service.create(high);
+            const result = await service.aggregateSort('avgCallDuration', -1, 10, 0);
+            expect(result).toHaveLength(2);
+            expect(result[0].tgId).toBe(high.tgId);
         });
     });
 

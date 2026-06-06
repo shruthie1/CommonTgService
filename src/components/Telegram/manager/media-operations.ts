@@ -699,8 +699,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
 
     const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
 
-    const query: Partial<IterMessagesParams> = {
-        limit: queryLimit,
+    const baseQuery: Partial<IterMessagesParams> = {
         ...(maxId ? { maxId } : {}),
         ...(minId ? { minId } : {}),
         ...(startDate && startDate instanceof Date && !isNaN(startDate.getTime()) && {
@@ -712,14 +711,65 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
     };
 
     ctx.logger.info(ctx.phoneNumber, 'getFilteredMedia', params);
-    const messages = await ctx.client.getMessages(peer, query);
-    ctx.logger.info(ctx.phoneNumber, `Fetched ${messages.length} messages`);
 
-    const filteredMessages = messages.filter(message => {
-        if (!message.media) return false;
-        const mediaType = getMediaType(message.media);
-        return typesToFetch.includes(mediaType);
-    });
+    const NEEDS_POST_FILTER = new Set(['sticker', 'animation']);
+
+    async function fetchWithPostFilter(type: string, fetchLimit: number): Promise<Api.Message[]> {
+        if (!NEEDS_POST_FILTER.has(type)) {
+            const messages = await ctx.client.getMessages(peer, {
+                ...baseQuery,
+                limit: fetchLimit,
+                filter: getSearchFilter(type),
+            });
+            return messages.filter((message): message is Api.Message => {
+                if (!(message instanceof Api.Message) || !message.media) return false;
+                return getMediaType(message.media) === type;
+            });
+        }
+
+        const results: Api.Message[] = [];
+        let currentMaxId = maxId;
+        const maxIterations = 5;
+        const batchSize = Math.max(fetchLimit * 4, 100);
+
+        for (let i = 0; i < maxIterations && results.length < fetchLimit; i++) {
+            const messages = await ctx.client.getMessages(peer, {
+                ...baseQuery,
+                limit: batchSize,
+                filter: getSearchFilter(type),
+                ...(currentMaxId ? { maxId: currentMaxId } : {}),
+            });
+            if (messages.length === 0) break;
+
+            for (const message of messages) {
+                if (!(message instanceof Api.Message) || !message.media) continue;
+                if (getMediaType(message.media) === type) {
+                    results.push(message);
+                    if (results.length >= fetchLimit) break;
+                }
+            }
+
+            const lastMessage = messages[messages.length - 1];
+            currentMaxId = lastMessage instanceof Api.Message ? lastMessage.id : currentMaxId;
+            if (!currentMaxId || messages.length < batchSize) break;
+        }
+
+        return results;
+    }
+
+    let filteredMessages: Api.Message[];
+    if (typesToFetch.length === 1) {
+        filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
+    } else if (typesToFetch.length > 1) {
+        const resultsPerType = await Promise.all(
+            typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit))
+        );
+        filteredMessages = hasAll
+            ? resultsPerType.flat()
+            : resultsPerType.flat().sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
+    } else {
+        filteredMessages = [];
+    }
 
     ctx.logger.info(ctx.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
 
@@ -786,7 +836,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
         });
 
         const totalItems = mediaData.length;
-        const overallHasMore = messages.length === queryLimit && messages.length > 0;
+        const overallHasMore = filteredMessages.length >= queryLimit && filteredMessages.length > 0;
         const overallFirstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const overallLastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
 
@@ -802,7 +852,8 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
         };
     } else {
         const total = mediaData.length;
-        const hasMoreResult = messages.length === queryLimit && messages.length > 0;
+        const hasMoreResult = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length >= effectiveLimit)
+            && filteredMessages.length > 0;
         const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
 
