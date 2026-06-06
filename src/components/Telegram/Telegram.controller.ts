@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Delete, Put, UseInterceptors, UploadedFile, Patch, ParseArrayPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, BadRequestException, Res, Req, Delete, Put, UseInterceptors, UploadedFile, Patch, ParseArrayPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiBody, ApiResponse, ApiConsumes } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { TelegramService } from './Telegram.service';
 import {
     SendMediaDto,
@@ -42,10 +42,166 @@ import { SendTgMessageDto } from './dto/send-message.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import bigInt from 'big-integer';
 
+type ThumbnailMode = 'url' | 'base64' | 'none';
+type ParsedByteRange = { start: number; end: number; length: number };
+
+const MEDIA_HTTP_MAX_LIMIT = 200;
+const INLINE_THUMBNAIL_HTTP_MAX_LIMIT = 50;
+
 @Controller('telegram')
 @ApiTags('Telegram')
 export class TelegramController {
     constructor(private readonly telegramService: TelegramService) {}
+
+    private parseIntegerQuery(
+        value: unknown,
+        name: string,
+        options: { required?: boolean; min?: number; max?: number } = {}
+    ): number | undefined {
+        const { required = false, min = 1, max = Number.MAX_SAFE_INTEGER } = options;
+        const rawValue = Array.isArray(value) ? value[0] : value;
+
+        if (rawValue === undefined || rawValue === null || rawValue === '') {
+            if (required) throw new BadRequestException(`${name} is required`);
+            return undefined;
+        }
+
+        const valueText = String(rawValue).trim();
+        if (!/^\d+$/.test(valueText)) {
+            throw new BadRequestException(`${name} must be an integer`);
+        }
+
+        const parsed = Number(valueText);
+        if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+            throw new BadRequestException(`${name} must be between ${min} and ${max}`);
+        }
+
+        return parsed;
+    }
+
+    private parseBooleanQuery(value: unknown, name: string): boolean | undefined {
+        const rawValue = Array.isArray(value) ? value[0] : value;
+        if (rawValue === undefined || rawValue === null || rawValue === '') return undefined;
+
+        const valueText = String(rawValue).trim().toLowerCase();
+        if (['true', '1', 'yes'].includes(valueText)) return true;
+        if (['false', '0', 'no'].includes(valueText)) return false;
+        throw new BadRequestException(`${name} must be a boolean`);
+    }
+
+    private parseThumbnailMode(value: unknown): ThumbnailMode {
+        const rawValue = Array.isArray(value) ? value[0] : value;
+        if (rawValue === undefined || rawValue === null || rawValue === '') return 'url';
+
+        const mode = String(rawValue).trim().toLowerCase();
+        if (mode === 'url' || mode === 'base64' || mode === 'none') return mode;
+        throw new BadRequestException('thumbnailMode must be one of: url, base64, none');
+    }
+
+    private sanitizeFilename(filename: string): string {
+        const sanitized = (filename || 'media.bin').replace(/[\r\n"]/g, '_').trim();
+        return (sanitized || 'media.bin').slice(0, 180);
+    }
+
+    private getRequestBaseUrl(req: Request): string {
+        const forwardedProto = req.headers['x-forwarded-proto'];
+        const forwardedHost = req.headers['x-forwarded-host'];
+        const proto = Array.isArray(forwardedProto)
+            ? forwardedProto[0]
+            : forwardedProto || req.protocol || 'http';
+        const host = Array.isArray(forwardedHost)
+            ? forwardedHost[0]
+            : forwardedHost || req.get('host');
+
+        return host ? `${proto}://${host}` : '';
+    }
+
+    private getRequestApiKey(req: Request, queryApiKey?: string): string | undefined {
+        const headerApiKey = req.headers['x-api-key'];
+        return queryApiKey
+            || (Array.isArray(headerApiKey) ? headerApiKey[0] : headerApiKey)
+            || undefined;
+    }
+
+    private parseRangeHeader(range: string, fileSize: number): ParsedByteRange | null {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+        if (!match || fileSize <= 0) return null;
+
+        const [, startText, endText] = match;
+        if (!startText && !endText) return null;
+
+        let start: number;
+        let end: number;
+
+        if (!startText) {
+            const suffixLength = Number(endText);
+            if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+            start = Math.max(fileSize - suffixLength, 0);
+            end = fileSize - 1;
+        } else {
+            start = Number(startText);
+            end = endText ? Number(endText) : fileSize - 1;
+            if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return null;
+        }
+
+        if (start < 0 || end < 0 || start > end || start >= fileSize || end >= fileSize) {
+            return null;
+        }
+
+        return { start, end, length: end - start + 1 };
+    }
+
+    private sendRangeNotSatisfiable(res: Response, fileSize: number) {
+        res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+        return res.end();
+    }
+
+    private waitForDrainOrClose(res: Response): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const cleanup = () => {
+                res.off('drain', onDrain);
+                res.off('close', onClose);
+                res.off('error', onError);
+            };
+            const onDrain = () => {
+                cleanup();
+                resolve();
+            };
+            const onClose = () => {
+                cleanup();
+                resolve();
+            };
+            const onError = (error: Error) => {
+                cleanup();
+                reject(error);
+            };
+            res.once('drain', onDrain);
+            res.once('close', onClose);
+            res.once('error', onError);
+        });
+    }
+
+    private async writeResponseChunk(res: Response, chunk: Buffer): Promise<boolean> {
+        if (res.destroyed) return false;
+        if (!chunk.length) return true;
+        if (res.write(chunk)) return true;
+        await this.waitForDrainOrClose(res);
+        return !res.destroyed;
+    }
+
+    private isNotFoundMediaError(error: any): boolean {
+        const message = String(error?.message || error || '');
+        return message.includes('FILE_REFERENCE_EXPIRED') || message.toLowerCase().includes('not found');
+    }
+
+    private isUnsupportedMediaError(error: any): boolean {
+        return String(error?.message || error || '').toLowerCase().includes('unsupported media type');
+    }
+
+    private isUnavailableThumbnailError(error: any): boolean {
+        const message = String(error?.message || error || '').toLowerCase();
+        return this.isNotFoundMediaError(error) || message.includes('not available');
+    }
 
     @Get('connect/:mobile')
     @ApiOperation({ summary: 'Connect to Telegram' })
@@ -462,13 +618,10 @@ export class TelegramController {
     async downloadMedia(
         @Param('mobile') mobile: string, 
         @Query('chatId') chatId: string, 
-        @Query('messageId') messageId: number, 
+        @Query('messageId') messageId: unknown, 
         @Res() res: Response
     ) {
-        // Validate messageId
-        if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
-            throw new BadRequestException('Message ID must be a positive integer');
-        }
+        const parsedMessageId = this.parseIntegerQuery(messageId, 'messageId', { required: true })!;
         
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
@@ -476,7 +629,8 @@ export class TelegramController {
         }
         
         try {
-            const fileInfo = await this.telegramService.getMediaFileDownloadInfo(mobile, messageId, chatId);
+            const fileInfo = await this.telegramService.getMediaFileDownloadInfo(mobile, parsedMessageId, chatId);
+            const safeFilename = this.sanitizeFilename(fileInfo.filename);
             
             // Check If-None-Match header for 304 Not Modified
             if (res.req.headers['if-none-match'] === fileInfo.etag) {
@@ -487,27 +641,21 @@ export class TelegramController {
             const range = res.req.headers.range;
             const ifRange = res.req.headers['if-range'];
             const chunkSize = 512 * 1024; // 512 KB (GramJS MAX_CHUNK_SIZE)
-            const rangeValid = range && fileInfo.fileSize > 0 && (!ifRange || ifRange === fileInfo.etag);
+            const rangeRequested = Boolean(range && fileInfo.fileSize > 0 && (!ifRange || ifRange === fileInfo.etag));
+            const parsedRange = rangeRequested ? this.parseRangeHeader(String(range), fileInfo.fileSize) : null;
 
-            if (rangeValid) {
-                // Parse Range header: "bytes=start-end"
-                const parts = range.replace(/bytes=/, "").split("-");
-                const start = parseInt(parts[0], 10);
-                const end = parts[1] ? parseInt(parts[1], 10) : fileInfo.fileSize - 1;
-                const chunksize = (end - start) + 1;
+            if (rangeRequested && !parsedRange) {
+                return this.sendRangeNotSatisfiable(res, fileInfo.fileSize);
+            }
 
-                // Validate range
-                if (start >= fileInfo.fileSize || end >= fileInfo.fileSize || start > end) {
-                    res.status(416).setHeader('Content-Range', `bytes */${fileInfo.fileSize}`);
-                    return res.end();
-                }
-
+            if (parsedRange) {
+                const { start, end, length } = parsedRange;
                 res.status(206); // Partial Content
                 res.setHeader('Content-Range', `bytes ${start}-${end}/${fileInfo.fileSize}`);
                 res.setHeader('Accept-Ranges', 'bytes');
-                res.setHeader('Content-Length', chunksize);
+                res.setHeader('Content-Length', length);
                 res.setHeader('Content-Type', fileInfo.contentType);
-                res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
+                res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
                 res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 
@@ -519,8 +667,9 @@ export class TelegramController {
                 // Align offset to Telegram's chunk boundary
                 const alignedStart = Math.floor(start / chunkSize) * chunkSize;
                 const skipBytes = start - alignedStart;
-                const fetchLimit = chunksize + skipBytes;
+                const fetchLimit = length + skipBytes;
                 let skipped = 0;
+                let remaining = length;
 
                 for await (const chunk of this.telegramService.streamMediaFile(
                     mobile,
@@ -538,12 +687,20 @@ export class TelegramController {
                         data = data.subarray(toSkip);
                         skipped += toSkip;
                     }
-                    if (data.length > 0) res.write(data);
+                    if (data.length > remaining) {
+                        data = data.subarray(0, remaining);
+                    }
+                    if (data.length > 0) {
+                        const canContinue = await this.writeResponseChunk(res, data);
+                        if (!canContinue) return;
+                        remaining -= data.length;
+                    }
+                    if (remaining <= 0) break;
                 }
             } else {
                 // Full file download
                 res.setHeader('Content-Type', fileInfo.contentType);
-                res.setHeader('Content-Disposition', `inline; filename="${fileInfo.filename}"`);
+                res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
                 res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
@@ -561,24 +718,33 @@ export class TelegramController {
                     mobile,
                     fileInfo.fileLocation,
                     bigInt(0),
-                    5 * 1024 * 1024,
+                    fileInfo.fileSize > 0 ? fileInfo.fileSize : undefined,
                     chunkSize,
                     fileInfo.fileSize || undefined,
                     fileInfo.dcId,
                 )) {
                     if (res.destroyed) break;
-                    res.write(chunk);
+                    const canContinue = await this.writeResponseChunk(res, chunk as Buffer);
+                    if (!canContinue) return;
                 }
             }
-            res.end();
+            if (!res.destroyed) res.end();
         } catch (error) {
-            console.error(`[Download] Error messageId=${messageId} chatId=${chatId}:`, error.message || error, error.stack?.split('\n')[1]);
-            if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found')) {
+            if (res.headersSent) {
+                console.error(`[Download] Stream failed messageId=${parsedMessageId} chatId=${chatId}:`, error.message || error, error.stack?.split('\n')[1]);
+                if (!res.destroyed) res.destroy(error);
+                return;
+            }
+            if (this.isNotFoundMediaError(error)) {
+                console.warn(`[Download] Media unavailable messageId=${parsedMessageId} chatId=${chatId}:`, error.message || error);
                 return res.status(404).send(error.message || 'File reference expired');
             }
-            if (!res.headersSent) {
-                res.status(500).send(`Error downloading media: ${error.message || 'Unknown error'}`);
+            if (this.isUnsupportedMediaError(error)) {
+                console.warn(`[Download] Unsupported media messageId=${parsedMessageId} chatId=${chatId}:`, error.message || error);
+                return res.status(415).send(error.message || 'Unsupported media type');
             }
+            console.error(`[Download] Error messageId=${parsedMessageId} chatId=${chatId}:`, error.message || error, error.stack?.split('\n')[1]);
+            res.status(500).send(`Error downloading media: ${error.message || 'Unknown error'}`);
         }
     }
 
@@ -624,14 +790,11 @@ export class TelegramController {
     async getThumbnail(
         @Param('mobile') mobile: string,
         @Query('chatId') chatId: string,
-        @Query('messageId') messageId: number,
+        @Query('messageId') messageId: unknown,
         @Query('quality') quality: string,
         @Res() res: Response
     ) {
-        // Validate messageId
-        if (!messageId || messageId <= 0 || !Number.isInteger(messageId)) {
-            throw new BadRequestException('Message ID must be a positive integer');
-        }
+        const parsedMessageId = this.parseIntegerQuery(messageId, 'messageId', { required: true })!;
 
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
@@ -641,7 +804,7 @@ export class TelegramController {
         const q: 'low' | 'high' = quality === 'high' ? 'high' : 'low';
 
         try {
-            const thumbnail = await this.telegramService.getThumbnail(mobile, messageId, chatId, q);
+            const thumbnail = await this.telegramService.getThumbnail(mobile, parsedMessageId, chatId, q);
 
             // Check If-None-Match header for 304 Not Modified
             if (res.req.headers['if-none-match'] === thumbnail.etag) {
@@ -650,14 +813,14 @@ export class TelegramController {
 
             // Set response headers
             res.setHeader('Content-Type', thumbnail.contentType);
-            res.setHeader('Content-Disposition', `inline; filename="${thumbnail.filename}"`);
+            res.setHeader('Content-Disposition', `inline; filename="${this.sanitizeFilename(thumbnail.filename)}"`);
             res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
 
             return res.send(thumbnail.buffer);
         } catch (error) {
-            if (error.message?.includes('FILE_REFERENCE_EXPIRED') || error.message?.includes('not found') || error.message?.includes('not available')) {
+            if (this.isUnavailableThumbnailError(error)) {
                 return res.status(404).send(error.message || 'Thumbnail not available');
             }
             if (!res.headersSent) {
@@ -743,7 +906,7 @@ export class TelegramController {
         description: 'End date for filtering (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)'})
     @ApiQuery({ 
         name: 'limit', 
-        description: 'Maximum number of messages to fetch (default: 50, max: 1000)', 
+        description: 'Maximum number of messages to fetch (default: 50, max: 200)', 
         required: false, 
         type: Number})
     @ApiQuery({ 
@@ -771,19 +934,18 @@ export class TelegramController {
         @Query('types', new ParseArrayPipe({ items: String, separator: ',', optional: true })) types?: string | string[],
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
-        @Query('limit') limit?: number,
-        @Query('maxId') maxId?: number,
-        @Query('minId') minId?: number
+        @Query('limit') limit?: unknown,
+        @Query('maxId') maxId?: unknown,
+        @Query('minId') minId?: unknown
     ) {
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
             throw new BadRequestException('Chat ID is required and cannot be empty');
         }
         
-        // Validate limit
-        if (limit !== undefined && (limit <= 0 || limit > 1000)) {
-            throw new BadRequestException('Limit must be between 1 and 1000');
-        }
+        const parsedLimit = this.parseIntegerQuery(limit, 'limit', { required: false, max: MEDIA_HTTP_MAX_LIMIT });
+        const parsedMaxId = this.parseIntegerQuery(maxId, 'maxId', { required: false });
+        const parsedMinId = this.parseIntegerQuery(minId, 'minId', { required: false });
         
         // Parse types array - handle both string and array formats
         let parsedTypes: string[] | undefined;
@@ -791,8 +953,8 @@ export class TelegramController {
             const typesArray = Array.isArray(types) ? types : [types];
             const validTypes = ['photo', 'video', 'document', 'voice', 'audio', 'gif', 'roundVideo', 'sticker', 'all'];
             parsedTypes = typesArray
-                .filter(t => validTypes.includes(t.toLowerCase()) || validTypes.includes(t))
-                .map(t => t);
+                .map(t => validTypes.find(validType => validType.toLowerCase() === String(t).trim().toLowerCase()))
+                .filter((t): t is string => Boolean(t));
             
             if (parsedTypes.length === 0) {
                 throw new BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
@@ -827,16 +989,16 @@ export class TelegramController {
             types: parsedTypes,
             startDate: parsedStartDate,
             endDate: parsedEndDate,
-            limit,
-            maxId,
-            minId
+            limit: parsedLimit,
+            maxId: parsedMaxId,
+            minId: parsedMinId
         });
     }
 
     @Get('media/filter/:mobile')
     @ApiOperation({ 
         summary: 'Get filtered media messages from a chat',
-        description: 'Get filtered list of media messages with detailed metadata including thumbnails. Returns standardized paginated response. Use maxId for pagination (get messages with ID less than maxId).'
+        description: 'Get filtered list of media messages with detailed metadata. Returns thumbnail URLs by default; inline base64 thumbnails are opt-in and capped. Use maxId for pagination (get messages with ID less than maxId).'
     })
     @ApiParam({ name: 'mobile', description: 'Mobile number of the Telegram account', required: true})
     @ApiQuery({ 
@@ -861,7 +1023,7 @@ export class TelegramController {
         name: 'limit', 
         required: false, 
         type: Number, 
-        description: 'Maximum number of media items to fetch (default: 50, max: 1000)'})
+        description: 'Maximum number of media items to fetch (default: 50, max: 200)'})
     @ApiQuery({ 
         name: 'maxId', 
         required: false, 
@@ -872,6 +1034,21 @@ export class TelegramController {
         required: false, 
         type: Number, 
         description: 'Minimum message ID to include'})
+    @ApiQuery({
+        name: 'thumbnailMode',
+        required: false,
+        enum: ['url', 'base64', 'none'],
+        description: 'Thumbnail response mode. url is default and avoids inline media memory growth; base64 is capped by inlineThumbnailLimit.'})
+    @ApiQuery({
+        name: 'inlineThumbnailLimit',
+        required: false,
+        type: Number,
+        description: 'Maximum number of inline base64 thumbnails when thumbnailMode=base64 (default: 25, max: 50)'})
+    @ApiQuery({
+        name: 'includeThumbnails',
+        required: false,
+        type: Boolean,
+        description: 'Compatibility flag. false maps thumbnailMode to none; true maps unset thumbnailMode to url.'})
     @ApiResponse({ 
         status: 200,
         description: 'Paginated media response with standardized format',
@@ -887,18 +1064,32 @@ export class TelegramController {
         @Query('types', new ParseArrayPipe({ items: String, separator: ',', optional: true })) types?: string | string[],
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
-        @Query('limit') limit?: number,
-        @Query('maxId') maxId?: number,
-        @Query('minId') minId?: number
+        @Query('limit') limit?: unknown,
+        @Query('maxId') maxId?: unknown,
+        @Query('minId') minId?: unknown,
+        @Query('thumbnailMode') thumbnailMode?: unknown,
+        @Query('inlineThumbnailLimit') inlineThumbnailLimit?: unknown,
+        @Query('includeThumbnails') includeThumbnails?: unknown,
+        @Query('apiKey') apiKey?: string,
+        @Req() req?: Request
     ) {
         // Validate chatId
         if (!chatId || chatId.trim().length === 0) {
             throw new BadRequestException('Chat ID is required and cannot be empty');
         }
         
-        // Validate limit
-        if (limit !== undefined && (limit <= 0 || limit > 1000)) {
-            throw new BadRequestException('Limit must be between 1 and 1000');
+        const parsedLimit = this.parseIntegerQuery(limit, 'limit', { required: false, max: MEDIA_HTTP_MAX_LIMIT });
+        const parsedMaxId = this.parseIntegerQuery(maxId, 'maxId', { required: false });
+        const parsedMinId = this.parseIntegerQuery(minId, 'minId', { required: false });
+        const parsedInlineThumbnailLimit = this.parseIntegerQuery(inlineThumbnailLimit, 'inlineThumbnailLimit', {
+            required: false,
+            min: 0,
+            max: INLINE_THUMBNAIL_HTTP_MAX_LIMIT,
+        });
+        const parsedIncludeThumbnails = this.parseBooleanQuery(includeThumbnails, 'includeThumbnails');
+        let parsedThumbnailMode = this.parseThumbnailMode(thumbnailMode);
+        if (parsedIncludeThumbnails === false) {
+            parsedThumbnailMode = 'none';
         }
         
         // Parse types array - handle both string and array formats
@@ -907,8 +1098,8 @@ export class TelegramController {
             const typesArray = Array.isArray(types) ? types : [types];
             const validTypes = ['photo', 'video', 'document', 'voice', 'audio', 'gif', 'roundVideo', 'sticker', 'all'];
             parsedTypes = typesArray
-                .filter(t => validTypes.includes(t.toLowerCase()) || validTypes.includes(t))
-                .map(t => t);
+                .map(t => validTypes.find(validType => validType.toLowerCase() === String(t).trim().toLowerCase()))
+                .filter((t): t is string => Boolean(t));
             
             if (parsedTypes.length === 0) {
                 throw new BadRequestException(`Invalid types. Must be one or more of: ${validTypes.join(', ')}`);
@@ -943,9 +1134,13 @@ export class TelegramController {
             types: parsedTypes,
             startDate: parsedStartDate,
             endDate: parsedEndDate,
-            limit,
-            maxId,
-            minId
+            limit: parsedLimit,
+            maxId: parsedMaxId,
+            minId: parsedMinId,
+            thumbnailMode: parsedThumbnailMode,
+            inlineThumbnailLimit: parsedInlineThumbnailLimit,
+            thumbnailApiKey: req ? this.getRequestApiKey(req, typeof apiKey === 'string' ? apiKey : undefined) : undefined,
+            thumbnailBaseUrl: req ? this.getRequestBaseUrl(req) : undefined,
         });
     }
 

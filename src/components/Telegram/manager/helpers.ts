@@ -8,6 +8,97 @@ export const FILE_DOWNLOAD_TIMEOUT = 60000; // 60 seconds
 export const TEMP_FILE_CLEANUP_DELAY = 3600000; // 1 hour
 export const THUMBNAIL_CONCURRENCY_LIMIT = 3;
 export const THUMBNAIL_BATCH_DELAY_MS = 100;
+export const MEDIA_DEFAULT_LIMIT = 50;
+export const MEDIA_MAX_LIMIT = 200;
+export const MEDIA_MAX_QUERY_LIMIT = 500;
+export const INLINE_THUMBNAIL_DEFAULT_LIMIT = 25;
+export const INLINE_THUMBNAIL_MAX_LIMIT = 50;
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+export const THUMBNAIL_CACHE_MAX_ENTRIES = readPositiveIntEnv('TG_MEDIA_THUMB_CACHE_ENTRIES', 750);
+export const THUMBNAIL_CACHE_MAX_BYTES = readPositiveIntEnv('TG_MEDIA_THUMB_CACHE_BYTES', 32 * 1024 * 1024);
+export const THUMBNAIL_CACHE_TTL_MS = readPositiveIntEnv('TG_MEDIA_THUMB_CACHE_TTL_MS', 30 * 60 * 1000);
+export const MISSING_THUMBNAIL_CACHE_TTL_MS = readPositiveIntEnv('TG_MEDIA_MISSING_THUMB_CACHE_TTL_MS', 15 * 60 * 1000);
+
+export class ByteLimitedLruCache<T> {
+    private entries = new Map<string, { value: T; size: number; expiresAt: number }>();
+    private totalBytes = 0;
+
+    constructor(
+        private readonly options: {
+            maxEntries: number;
+            maxBytes: number;
+            ttlMs: number;
+        }
+    ) {}
+
+    get(key: string): T | undefined {
+        const entry = this.entries.get(key);
+        if (!entry) return undefined;
+
+        if (entry.expiresAt <= Date.now()) {
+            this.delete(key);
+            return undefined;
+        }
+
+        this.entries.delete(key);
+        this.entries.set(key, entry);
+        return entry.value;
+    }
+
+    set(key: string, value: T, size: number, ttlMs: number = this.options.ttlMs): void {
+        const safeSize = Math.max(1, size || 1);
+        if (safeSize > this.options.maxBytes) return;
+
+        this.delete(key);
+        this.entries.set(key, {
+            value,
+            size: safeSize,
+            expiresAt: Date.now() + ttlMs,
+        });
+        this.totalBytes += safeSize;
+        this.evictExpired();
+        this.evictOverflow();
+    }
+
+    delete(key: string): void {
+        const entry = this.entries.get(key);
+        if (!entry) return;
+        this.totalBytes -= entry.size;
+        this.entries.delete(key);
+    }
+
+    stats(): { entries: number; totalBytes: number; maxBytes: number } {
+        this.evictExpired();
+        return {
+            entries: this.entries.size,
+            totalBytes: this.totalBytes,
+            maxBytes: this.options.maxBytes,
+        };
+    }
+
+    private evictExpired(): void {
+        const now = Date.now();
+        for (const [key, entry] of this.entries) {
+            if (entry.expiresAt <= now) this.delete(key);
+        }
+    }
+
+    private evictOverflow(): void {
+        while (
+            this.entries.size > this.options.maxEntries ||
+            this.totalBytes > this.options.maxBytes
+        ) {
+            const oldestKey = this.entries.keys().next().value;
+            if (!oldestKey) break;
+            this.delete(oldestKey);
+        }
+    }
+}
 
 // ---- Search filter mapping ----
 
@@ -93,12 +184,16 @@ export function extractMediaMetaFromMessage(
     let width: number | undefined;
     let height: number | undefined;
     let duration: number | undefined;
+    let downloadable = false;
+    let thumbnailAvailable = false;
 
     if (message.media instanceof Api.MessageMediaPhoto) {
+        downloadable = true;
         const photo = message.photo as Api.Photo;
         mimeType = 'image/jpeg';
         filename = 'photo.jpg';
         if (photo?.sizes && photo.sizes.length > 0) {
+            thumbnailAvailable = true;
             const largestSize = photo.sizes[photo.sizes.length - 1];
             if (largestSize && 'size' in largestSize) fileSize = (largestSize as Api.PhotoSize).size;
             if (largestSize && 'w' in largestSize) width = (largestSize as Api.PhotoSize).w;
@@ -107,8 +202,10 @@ export function extractMediaMetaFromMessage(
     } else if (message.media instanceof Api.MessageMediaDocument) {
         const doc = message.media.document;
         if (doc instanceof Api.Document) {
+            downloadable = true;
             fileSize = typeof doc.size === 'number' ? doc.size : (doc.size ? Number(doc.size.toString()) : undefined);
             mimeType = doc.mimeType;
+            thumbnailAvailable = Boolean((doc.thumbs?.length || 0) > 0 || (doc.videoThumbs?.length || 0) > 0);
             const fileNameAttr = doc.attributes?.find(attr => attr instanceof Api.DocumentAttributeFilename) as Api.DocumentAttributeFilename;
             filename = fileNameAttr?.fileName;
             const videoAttr = doc.attributes?.find(attr => attr instanceof Api.DocumentAttributeVideo) as Api.DocumentAttributeVideo;
@@ -134,6 +231,8 @@ export function extractMediaMetaFromMessage(
         width,
         height,
         duration,
+        downloadable,
+        thumbnailAvailable,
     };
 }
 
@@ -265,19 +364,24 @@ export async function downloadFileFromUrl(url: string, maxSize: number = MAX_FIL
 // ---- Timeout wrapper ----
 
 export async function downloadWithTimeout<T>(promise: Promise<T>, timeout: number): Promise<T> {
-    return Promise.race([
-        promise,
-        new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error('Download timeout')), timeout)
-        ),
-    ]);
+    let timeoutId: NodeJS.Timeout | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('Download timeout')), timeout);
+            }),
+        ]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
 }
 
 // ---- Concurrency limiter ----
 
 export async function processWithConcurrencyLimit<T, R>(
     items: T[],
-    processor: (item: T) => Promise<R>,
+    processor: (item: T, index: number) => Promise<R>,
     concurrencyLimit: number = THUMBNAIL_CONCURRENCY_LIMIT,
     batchDelay: number = THUMBNAIL_BATCH_DELAY_MS
 ): Promise<R[]> {
@@ -287,7 +391,7 @@ export async function processWithConcurrencyLimit<T, R>(
     for (let i = 0; i < items.length; i += concurrencyLimit) {
         const batch = items.slice(i, i + concurrencyLimit);
         const batchResults = await Promise.allSettled(
-            batch.map(item => processor(item))
+            batch.map((item, batchIndex) => processor(item, i + batchIndex))
         );
 
         for (const result of batchResults) {

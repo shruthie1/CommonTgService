@@ -473,7 +473,12 @@ export class TelegramService implements OnModuleDestroy {
             this.logger.info(mobile, 'Get media file download info', { messageId, chatId });
             return await telegramClient.getMediaFileDownloadInfo(messageId, chatId);
         } catch (error) {
-            this.logger.error(mobile, 'Error getting media file download info:', error);
+            const message = String(error?.message || error || '').toLowerCase();
+            if (message.includes('unsupported media type') || message.includes('not found') || message.includes('file_reference_expired')) {
+                this.logger.warn(mobile, 'Media file unavailable:', error?.message || error);
+            } else {
+                this.logger.error(mobile, 'Error getting media file download info:', error);
+            }
             throw error;
         }
     }
@@ -489,7 +494,12 @@ export class TelegramService implements OnModuleDestroy {
             this.logger.info(mobile, 'Get thumbnail', { messageId, chatId, quality });
             return await telegramClient.getThumbnail(messageId, chatId, quality);
         } catch (error) {
-            this.logger.error(mobile, 'Error getting thumbnail:', error);
+            const message = String(error?.message || error || '').toLowerCase();
+            if (message.includes('not available') || message.includes('not found') || message.includes('file_reference_expired')) {
+                this.logger.warn(mobile, 'Thumbnail unavailable:', error?.message || error);
+            } else {
+                this.logger.error(mobile, 'Error getting thumbnail:', error);
+            }
             throw error;
         }
     }
@@ -797,6 +807,10 @@ export class TelegramService implements OnModuleDestroy {
             limit?: number;
             maxId?: number;
             minId?: number;
+            thumbnailMode?: 'url' | 'base64' | 'none';
+            inlineThumbnailLimit?: number;
+            thumbnailApiKey?: string;
+            thumbnailBaseUrl?: string;
         }
     ) {
         const telegramClient = await connectionManager.getClient(mobile);

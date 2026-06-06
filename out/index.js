@@ -639,6 +639,7 @@ const guards_1 = __webpack_require__(/*! ./guards */ "./src/guards/index.ts");
 const components_1 = __webpack_require__(/*! ./components */ "./src/components/index.ts");
 const interceptors_1 = __webpack_require__(/*! ./interceptors */ "./src/interceptors/index.ts");
 const event_manager_module_1 = __webpack_require__(/*! ./components/event-manager/event-manager.module */ "./src/components/event-manager/event-manager.module.ts");
+const collection_insights_module_1 = __webpack_require__(/*! ./components/collection-insights/collection-insights.module */ "./src/components/collection-insights/collection-insights.module.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -673,6 +674,7 @@ exports.AppModule = AppModule = __decorate([
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
             event_manager_module_1.EventManagerModule,
+            collection_insights_module_1.CollectionInsightsModule,
         ],
         providers: [
             {
@@ -698,6 +700,7 @@ exports.AppModule = AppModule = __decorate([
             transaction_module_1.TransactionModule,
             timestamp_module_1.TimestampModule,
             event_manager_module_1.EventManagerModule,
+            collection_insights_module_1.CollectionInsightsModule,
         ]
     })
 ], AppModule);
@@ -3681,6 +3684,7 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
+const channel_live_facts_1 = __webpack_require__(/*! ../../utils/telegram-utils/channel-live-facts */ "./src/utils/telegram-utils/channel-live-facts.ts");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService, bufferClientService, promoteClientService) {
         this.usersService = usersService;
@@ -3858,32 +3862,36 @@ let TelegramService = TelegramService_1 = class TelegramService {
             for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
                 dialogs.push(dialog);
             }
-            const channels = dialogs
-                .filter(chat => chat.isChannel || chat.isGroup)
-                .map(chat => {
+            const channels = [];
+            for (const chat of dialogs.filter(chat => chat.isChannel || chat.isGroup)) {
                 const chatEntity = chat.entity;
-                const cannotSendMsgs = chatEntity.defaultBannedRights?.sendMessages;
-                if (!chatEntity.broadcast &&
-                    !cannotSendMsgs &&
-                    chatEntity.participantsCount > 50 &&
+                const liveFacts = await (0, channel_live_facts_1.getTelegramChannelLiveFacts)(telegramClient.client, {
+                    channelId: chatEntity.id?.toString(),
+                    entity: chatEntity,
+                    resolveParticipantsCount: () => chatEntity.participantsCount,
+                });
+                if (!liveFacts)
+                    continue;
+                const participantsCount = liveFacts.participantsCount || 0;
+                if (liveFacts.canSendMsgs &&
+                    participantsCount > 50 &&
                     (0, utils_1.shouldMatch)(chatEntity)) {
-                    return {
+                    channels.push({
                         channelId: chatEntity.id.toString(),
-                        canSendMsgs: true,
-                        participantsCount: chatEntity.participantsCount,
+                        canSendMsgs: liveFacts.canSendMsgs,
+                        participantsCount,
                         private: false,
-                        title: chatEntity.title,
-                        broadcast: chatEntity.broadcast,
-                        megagroup: chatEntity.megagroup,
-                        restricted: chatEntity.restricted,
-                        sendMessages: true,
-                        username: chatEntity.username,
+                        title: liveFacts.title || "",
+                        broadcast: liveFacts.broadcast === true,
+                        megagroup: liveFacts.megagroup === true,
+                        restricted: liveFacts.restricted === true,
+                        sendMessages: liveFacts.sendMessages === true,
+                        sendPlain: liveFacts.sendPlain === true,
+                        username: liveFacts.username || "",
                         forbidden: false
-                    };
+                    });
                 }
-                return null;
-            })
-                .filter((channel) => Boolean(channel));
+            }
             await connection_manager_1.connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
@@ -11820,7 +11828,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const withTimeout_1 = __webpack_require__(/*! ../../../utils/withTimeout */ "./src/utils/withTimeout.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
-const bots_service_1 = __webpack_require__(/*! ../../../components/bots/bots.service */ "./src/components/bots/bots.service.ts");
+const bots_service_1 = __webpack_require__(/*! ../../bots/bots.service */ "./src/components/bots/bots.service.ts");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 class ConnectionManager {
     constructor() {
@@ -14073,9 +14081,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ActiveChannelsService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ActiveChannelsService = void 0;
-const promote_msgs_service_1 = __webpack_require__(/*! ./../promote-msgs/promote-msgs.service */ "./src/components/promote-msgs/promote-msgs.service.ts");
+const promote_msgs_service_1 = __webpack_require__(/*! ../promote-msgs/promote-msgs.service */ "./src/components/promote-msgs/promote-msgs.service.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
@@ -14085,13 +14094,23 @@ const fetchWithTimeout_1 = __webpack_require__(/*! ../../utils/fetchWithTimeout 
 const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/logbots.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
-let ActiveChannelsService = class ActiveChannelsService {
+let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsService {
     constructor(activeChannelModel, promoteMsgsService) {
         this.activeChannelModel = activeChannelModel;
         this.promoteMsgsService = promoteMsgsService;
         this.DEFAULT_LIMIT = 50;
         this.DEFAULT_SKIP = 0;
         this.MIN_PARTICIPANTS_COUNT = 600;
+        this.logger = new common_1.Logger(ActiveChannelsService_1.name);
+        this.legacySendabilityRepaired = false;
+    }
+    async onModuleInit() {
+        try {
+            await this.repairLegacySendabilityFlags();
+        }
+        catch (error) {
+            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
+        }
     }
     async create(createActiveChannelDto) {
         try {
@@ -14120,26 +14139,44 @@ let ActiveChannelsService = class ActiveChannelsService {
                     throw new common_1.BadRequestException('Channel ID is required for all DTOs');
                 }
                 const setFields = { updatedAt: new Date() };
-                if (dto.title != null)
-                    setFields.title = dto.title;
-                if (dto.username != null)
-                    setFields.username = dto.username;
-                if (dto.participantsCount != null)
-                    setFields.participantsCount = dto.participantsCount;
-                if (dto.megagroup !== undefined)
-                    setFields.megagroup = dto.megagroup;
+                this.copyDefinedFields(dto, setFields, [
+                    'title',
+                    'username',
+                    'participantsCount',
+                    'megagroup',
+                    'broadcast',
+                    'canSendMsgs',
+                    'restricted',
+                    'sendMessages',
+                    'sendPlain',
+                    'private',
+                    'forbidden',
+                    'banned',
+                    'bannedAt',
+                    'reactRestricted',
+                    'wordRestriction',
+                    'dMRestriction',
+                    'recentUniqueUsers',
+                    'lastUniqueUserCheckAt',
+                    'starred',
+                    'score',
+                ]);
                 const defaults = {
                     channelId: dto.channelId,
                     broadcast: false,
                     canSendMsgs: true,
                     participantsCount: 0,
                     restricted: false,
-                    sendMessages: true,
+                    sendMessages: false,
+                    sendPlain: false,
                     reactRestricted: false,
                     wordRestriction: 0,
                     dMRestriction: 0,
+                    recentUniqueUsers: 0,
+                    lastUniqueUserCheckAt: 0,
                     availableMsgs: [],
                     banned: false,
+                    bannedAt: null,
                     megagroup: true,
                     private: false,
                     createdAt: new Date(),
@@ -14257,6 +14294,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
     async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds = []) {
         try {
+            await this.repairLegacySendabilityFlags();
             const positiveKeywords = [
                 'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
                 'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video',
@@ -14309,9 +14347,13 @@ let ActiveChannelsService = class ActiveChannelsService {
                         username: { $ne: null },
                         deletedCount: { $lte: 30 },
                         canSendMsgs: true,
-                        restricted: false,
-                        banned: false,
-                        forbidden: false,
+                        sendMessages: { $ne: true },
+                        sendPlain: { $ne: true },
+                        restricted: { $ne: true },
+                        banned: { $ne: true },
+                        forbidden: { $ne: true },
+                        private: { $ne: true },
+                        tempBan: { $ne: true },
                     },
                 ],
             };
@@ -14328,6 +14370,32 @@ let ActiveChannelsService = class ActiveChannelsService {
         catch (error) {
             throw this.handleError(error, 'Failed to fetch active channels');
         }
+    }
+    copyDefinedFields(source, target, fields) {
+        for (const field of fields) {
+            if (source[field] !== undefined) {
+                target[field] = source[field];
+            }
+        }
+    }
+    async repairLegacySendabilityFlags() {
+        if (this.legacySendabilityRepaired)
+            return;
+        this.legacySendabilityRepaired = true;
+        await this.activeChannelModel.updateMany({
+            canSendMsgs: true,
+            $or: [{ sendMessages: true }, { sendPlain: true }],
+            banned: { $ne: true },
+            forbidden: { $ne: true },
+            private: { $ne: true },
+            restricted: { $ne: true },
+        }, {
+            $set: {
+                sendMessages: false,
+                sendPlain: false,
+                updatedAt: new Date(),
+            },
+        }).exec();
     }
     async analytics() {
         const [result] = await this.activeChannelModel.aggregate([
@@ -14624,7 +14692,6 @@ let ActiveChannelsService = class ActiveChannelsService {
                 $set: {
                     wordRestriction: 0,
                     dMRestriction: 0,
-                    banned: false,
                     availableMsgs,
                     updatedAt: new Date(),
                 },
@@ -14641,8 +14708,6 @@ let ActiveChannelsService = class ActiveChannelsService {
                 $set: {
                     wordRestriction: 0,
                     dMRestriction: 0,
-                    banned: false,
-                    private: false,
                     updatedAt: new Date(),
                 },
             });
@@ -14669,7 +14734,7 @@ let ActiveChannelsService = class ActiveChannelsService {
     }
 };
 exports.ActiveChannelsService = ActiveChannelsService;
-exports.ActiveChannelsService = ActiveChannelsService = __decorate([
+exports.ActiveChannelsService = ActiveChannelsService = ActiveChannelsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(active_channel_schema_1.ActiveChannel.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_msgs_service_1.PromoteMsgsService))),
@@ -14701,10 +14766,14 @@ exports.CreateActiveChannelDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 class CreateActiveChannelDto {
     constructor() {
+        this.sendPlain = false;
         this.reactRestricted = false;
         this.wordRestriction = 0;
         this.dMRestriction = 0;
+        this.recentUniqueUsers = 0;
+        this.lastUniqueUserCheckAt = 0;
         this.banned = false;
+        this.bannedAt = null;
         this.private = false;
         this.starred = false;
         this.score = 0;
@@ -14732,9 +14801,13 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "restricted", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "sendMessages", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    __metadata("design:type", Boolean)
+], CreateActiveChannelDto.prototype, "sendPlain", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
@@ -14756,6 +14829,14 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateActiveChannelDto.prototype, "dMRestriction", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "recentUniqueUsers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "lastUniqueUserCheckAt", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ type: [String] }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "availableMsgs", void 0);
@@ -14763,6 +14844,10 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, required: false, nullable: true, default: null }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: true, required: false }),
     __metadata("design:type", Boolean)
@@ -14931,6 +15016,11 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "sendMessages", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], ActiveChannel.prototype, "sendPlain", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ default: true }),
     (0, mongoose_1.Prop)({ default: true }),
     __metadata("design:type", Boolean)
@@ -14951,6 +15041,16 @@ __decorate([
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "dMRestriction", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "recentUniqueUsers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "lastUniqueUserCheckAt", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ type: [String], default: utils_1.defaultMessages }),
     (0, mongoose_1.Prop)({ type: [String], default: utils_1.defaultMessages }),
     __metadata("design:type", Array)
@@ -14960,6 +15060,11 @@ __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, required: false, nullable: true, default: null }),
+    (0, mongoose_1.Prop)({ type: Number, default: null }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -17687,7 +17792,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 var BufferClientService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BufferClientService = void 0;
-const channels_service_1 = __webpack_require__(/*! ./../channels/channels.service */ "./src/components/channels/channels.service.ts");
+const channels_service_1 = __webpack_require__(/*! ../channels/channels.service */ "./src/components/channels/channels.service.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
@@ -20230,6 +20335,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ChannelsService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ChannelsService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -20238,37 +20344,67 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./src/components/channels/schemas/channel.schema.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-let ChannelsService = class ChannelsService {
+let ChannelsService = ChannelsService_1 = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
+        this.logger = new common_1.Logger(ChannelsService_1.name);
+        this.legacySendabilityRepaired = false;
+    }
+    async onModuleInit() {
+        try {
+            await this.repairLegacySendabilityFlags();
+        }
+        catch (error) {
+            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
+        }
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);
         return createdChannel.save();
     }
     async createMultiple(createChannelDtos) {
+        if (!createChannelDtos?.length) {
+            throw new common_1.BadRequestException('At least one channel DTO is required');
+        }
         const bulkOps = createChannelDtos.map((dto) => {
+            if (!dto.channelId) {
+                throw new common_1.BadRequestException('Channel ID is required for all DTOs');
+            }
             const setFields = {};
-            if (dto.title != null)
-                setFields.title = dto.title;
-            if (dto.username != null)
-                setFields.username = dto.username;
-            if (dto.participantsCount != null)
-                setFields.participantsCount = dto.participantsCount;
-            if (dto.megagroup !== undefined)
-                setFields.megagroup = dto.megagroup;
+            this.copyDefinedFields(dto, setFields, [
+                'title',
+                'username',
+                'participantsCount',
+                'megagroup',
+                'broadcast',
+                'canSendMsgs',
+                'restricted',
+                'sendMessages',
+                'sendPlain',
+                'private',
+                'forbidden',
+                'banned',
+                'bannedAt',
+                'reactRestricted',
+                'wordRestriction',
+                'dMRestriction',
+                'starred',
+                'score',
+            ]);
             const defaults = {
                 channelId: dto.channelId,
                 broadcast: false,
                 canSendMsgs: true,
                 participantsCount: 0,
                 restricted: false,
-                sendMessages: true,
+                sendMessages: false,
+                sendPlain: false,
                 reactRestricted: false,
                 wordRestriction: 0,
                 dMRestriction: 0,
                 availableMsgs: [],
                 banned: false,
+                bannedAt: null,
                 megagroup: true,
                 private: false,
             };
@@ -20337,9 +20473,10 @@ let ChannelsService = class ChannelsService {
                     username: { $not: { $regex: notPattern } }
                 },
                 {
-                    sendMessages: false,
-                    broadcast: false,
-                    restricted: false
+                    sendMessages: { $ne: true },
+                    sendPlain: { $ne: true },
+                    broadcast: { $ne: true },
+                    restricted: { $ne: true }
                 }
             ]
         };
@@ -20372,6 +20509,7 @@ let ChannelsService = class ChannelsService {
         }
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+        await this.repairLegacySendabilityFlags();
         const query = {
             '$and': [
                 {
@@ -20397,7 +20535,12 @@ let ChannelsService = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
-                    restricted: false,
+                    sendMessages: { $ne: true },
+                    sendPlain: { $ne: true },
+                    banned: { $ne: true },
+                    restricted: { $ne: true },
+                    forbidden: { $ne: true },
+                    private: { $ne: true }
                 }
             ]
         };
@@ -20418,9 +20561,35 @@ let ChannelsService = class ChannelsService {
             return [];
         }
     }
+    copyDefinedFields(source, target, fields) {
+        for (const field of fields) {
+            if (source[field] !== undefined) {
+                target[field] = source[field];
+            }
+        }
+    }
+    async repairLegacySendabilityFlags() {
+        if (this.legacySendabilityRepaired)
+            return;
+        this.legacySendabilityRepaired = true;
+        await this.ChannelModel.updateMany({
+            canSendMsgs: true,
+            $or: [{ sendMessages: true }, { sendPlain: true }],
+            banned: { $ne: true },
+            forbidden: { $ne: true },
+            private: { $ne: true },
+            restricted: { $ne: true },
+        }, {
+            $set: {
+                sendMessages: false,
+                sendPlain: false,
+                updatedAt: new Date(),
+            },
+        }).exec();
+    }
 };
 exports.ChannelsService = ChannelsService;
-exports.ChannelsService = ChannelsService = __decorate([
+exports.ChannelsService = ChannelsService = ChannelsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(channel_schema_1.Channel.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])
@@ -20456,6 +20625,7 @@ class CreateChannelDto {
         this.wordRestriction = 0;
         this.dMRestriction = 0;
         this.banned = false;
+        this.bannedAt = null;
         this.starred = false;
         this.score = 0;
     }
@@ -20500,6 +20670,13 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "sendMessages", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether plain text messages are banned by default rights',
+        required: false
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "sendPlain", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Title of the channel'
@@ -20559,6 +20736,10 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Whether the channel is banned', default: false, required: false }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Timestamp when the channel was marked banned', type: Number, required: false, nullable: true, default: null }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
     __metadata("design:type", Boolean)
@@ -20805,6 +20986,11 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Channel.prototype, "sendMessages", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
+    __metadata("design:type", Boolean)
+], Channel.prototype, "sendPlain", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ required: true }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -20854,6 +21040,11 @@ __decorate([
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, required: false, nullable: true, default: null }),
+    (0, mongoose_1.Prop)({ type: Number, default: null }),
+    __metadata("design:type", Number)
+], Channel.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -21798,6 +21989,10 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason) {
         try {
+            if (this.isPermanentArchivalReason(reason)) {
+                await this.markBufferInactiveForArchival(existingMobile, reason);
+                return;
+            }
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             if (!existingClientUser) {
                 const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;
@@ -22949,6 +23144,619 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 __exportStar(__webpack_require__(/*! ./client.schema */ "./src/components/clients/schemas/client.schema.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/collection-insights/collection-insights.controller.ts"
+/*!******************************************************************************!*\
+  !*** ./src/components/collection-insights/collection-insights.controller.ts ***!
+  \******************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CollectionInsightsController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const collection_query_dto_1 = __webpack_require__(/*! ./dto/collection-query.dto */ "./src/components/collection-insights/dto/collection-query.dto.ts");
+const collection_insights_service_1 = __webpack_require__(/*! ./collection-insights.service */ "./src/components/collection-insights/collection-insights.service.ts");
+let CollectionInsightsController = class CollectionInsightsController {
+    constructor(collectionInsightsService) {
+        this.collectionInsightsService = collectionInsightsService;
+    }
+    listCollections() {
+        return this.collectionInsightsService.listCollections();
+    }
+    readCollection(collection, query) {
+        return this.collectionInsightsService.readCollection(collection, query);
+    }
+    queryCollection(collection, body = {}) {
+        return this.collectionInsightsService.readCollection(collection, body);
+    }
+    getStats(collection) {
+        return this.collectionInsightsService.getCollectionStats(collection);
+    }
+    getAnalytics(collection, query) {
+        return this.collectionInsightsService.getCollectionAnalytics(collection, query.sampleSize);
+    }
+};
+exports.CollectionInsightsController = CollectionInsightsController;
+__decorate([
+    (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'List Mongo collections available for read/analytics endpoints' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], CollectionInsightsController.prototype, "listCollections", null);
+__decorate([
+    (0, common_1.Get)(':collection'),
+    (0, swagger_1.ApiOperation)({ summary: 'Read documents from a collection' }),
+    (0, swagger_1.ApiParam)({ name: 'collection' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, description: 'JSON object filter' }),
+    (0, swagger_1.ApiQuery)({ name: 'projection', required: false, description: 'JSON object projection' }),
+    (0, swagger_1.ApiQuery)({ name: 'sort', required: false, description: 'JSON object sort' }),
+    (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] }),
+    (0, swagger_1.ApiQuery)({ name: 'limit', required: false, type: Number }),
+    (0, swagger_1.ApiQuery)({ name: 'skip', required: false, type: Number }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __param(0, (0, common_1.Param)('collection')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, collection_query_dto_1.CollectionQueryDto]),
+    __metadata("design:returntype", void 0)
+], CollectionInsightsController.prototype, "readCollection", null);
+__decorate([
+    (0, common_1.Post)(':collection/query'),
+    (0, swagger_1.ApiOperation)({ summary: 'Read documents from a collection with a JSON request body' }),
+    (0, swagger_1.ApiParam)({ name: 'collection' }),
+    (0, swagger_1.ApiBody)({ type: collection_query_dto_1.CollectionQueryDto }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __param(0, (0, common_1.Param)('collection')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, collection_query_dto_1.CollectionQueryDto]),
+    __metadata("design:returntype", void 0)
+], CollectionInsightsController.prototype, "queryCollection", null);
+__decorate([
+    (0, common_1.Get)(':collection/stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get collection storage/index/count stats' }),
+    (0, swagger_1.ApiParam)({ name: 'collection' }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __param(0, (0, common_1.Param)('collection')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], CollectionInsightsController.prototype, "getStats", null);
+__decorate([
+    (0, common_1.Get)(':collection/analytics'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get generic field coverage/type/numeric analytics for a collection sample' }),
+    (0, swagger_1.ApiParam)({ name: 'collection' }),
+    (0, swagger_1.ApiQuery)({ name: 'sampleSize', required: false, type: Number }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __param(0, (0, common_1.Param)('collection')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, collection_query_dto_1.CollectionAnalyticsQueryDto]),
+    __metadata("design:returntype", void 0)
+], CollectionInsightsController.prototype, "getAnalytics", null);
+exports.CollectionInsightsController = CollectionInsightsController = __decorate([
+    (0, swagger_1.ApiTags)('Collections'),
+    (0, common_1.Controller)('collections'),
+    __metadata("design:paramtypes", [collection_insights_service_1.CollectionInsightsService])
+], CollectionInsightsController);
+
+
+/***/ },
+
+/***/ "./src/components/collection-insights/collection-insights.module.ts"
+/*!**************************************************************************!*\
+  !*** ./src/components/collection-insights/collection-insights.module.ts ***!
+  \**************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CollectionInsightsModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
+const collection_insights_controller_1 = __webpack_require__(/*! ./collection-insights.controller */ "./src/components/collection-insights/collection-insights.controller.ts");
+const collection_insights_service_1 = __webpack_require__(/*! ./collection-insights.service */ "./src/components/collection-insights/collection-insights.service.ts");
+let CollectionInsightsModule = class CollectionInsightsModule {
+};
+exports.CollectionInsightsModule = CollectionInsightsModule;
+exports.CollectionInsightsModule = CollectionInsightsModule = __decorate([
+    (0, common_1.Module)({
+        imports: [init_module_1.InitModule],
+        controllers: [collection_insights_controller_1.CollectionInsightsController],
+        providers: [collection_insights_service_1.CollectionInsightsService],
+        exports: [collection_insights_service_1.CollectionInsightsService],
+    })
+], CollectionInsightsModule);
+
+
+/***/ },
+
+/***/ "./src/components/collection-insights/collection-insights.service.ts"
+/*!***************************************************************************!*\
+  !*** ./src/components/collection-insights/collection-insights.service.ts ***!
+  \***************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CollectionInsightsService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 500;
+const DEFAULT_ANALYTICS_SAMPLE_SIZE = 500;
+const MAX_ANALYTICS_SAMPLE_SIZE = 1000;
+const SAFE_OPERATORS = new Set([
+    '$and',
+    '$or',
+    '$nor',
+    '$eq',
+    '$ne',
+    '$gt',
+    '$gte',
+    '$lt',
+    '$lte',
+    '$in',
+    '$nin',
+    '$exists',
+    '$regex',
+    '$options',
+    '$elemMatch',
+]);
+let CollectionInsightsService = class CollectionInsightsService {
+    constructor(connection) {
+        this.connection = connection;
+    }
+    async listCollections() {
+        const names = await this.getCollectionNames();
+        const collections = await Promise.all(names.map(async (name) => ({
+            name,
+            estimatedCount: await this.safeEstimatedCount(name),
+        })));
+        return { collections };
+    }
+    async readCollection(collectionName, options = {}) {
+        const collection = await this.getCollection(collectionName);
+        const filter = this.normalizeFilter(options.filter);
+        const projection = this.normalizeProjection(options.projection);
+        const sort = this.normalizeSort(options.sort, options.sortBy, options.sortOrder);
+        const limit = this.normalizePositiveInt(options.limit, DEFAULT_LIMIT, MAX_LIMIT);
+        const skip = this.normalizeNonNegativeInt(options.skip, 0);
+        const cursor = collection.find(filter, projection ? { projection } : undefined);
+        if (Object.keys(sort).length > 0)
+            cursor.sort(sort);
+        if (skip > 0)
+            cursor.skip(skip);
+        cursor.limit(limit);
+        const documents = await cursor.toArray();
+        return {
+            collection: collection.collectionName,
+            filter,
+            sort,
+            limit,
+            skip,
+            returned: documents.length,
+            documents,
+        };
+    }
+    async getCollectionStats(collectionName) {
+        const collection = await this.getCollection(collectionName);
+        const [estimatedCount, indexes, collStats] = await Promise.all([
+            this.safeEstimatedCount(collection.collectionName),
+            collection.indexes().catch(() => []),
+            this.safeCollStats(collection.collectionName),
+        ]);
+        return {
+            collection: collection.collectionName,
+            estimatedCount,
+            indexes,
+            storage: collStats ? {
+                count: collStats.count,
+                size: collStats.size,
+                avgObjSize: collStats.avgObjSize,
+                storageSize: collStats.storageSize,
+                totalIndexSize: collStats.totalIndexSize,
+            } : null,
+        };
+    }
+    async getCollectionAnalytics(collectionName, sampleSizeInput) {
+        const collection = await this.getCollection(collectionName);
+        const sampleSize = this.normalizePositiveInt(sampleSizeInput, DEFAULT_ANALYTICS_SAMPLE_SIZE, MAX_ANALYTICS_SAMPLE_SIZE);
+        const [estimatedCount, sample] = await Promise.all([
+            this.safeEstimatedCount(collection.collectionName),
+            collection.find({}).limit(sampleSize).toArray(),
+        ]);
+        return {
+            collection: collection.collectionName,
+            estimatedCount,
+            sampleSize: sample.length,
+            fields: this.computeFieldAnalytics(sample),
+        };
+    }
+    async getCollection(collectionName) {
+        const name = this.normalizeCollectionName(collectionName);
+        const names = await this.getCollectionNames();
+        if (!names.includes(name)) {
+            throw new common_1.NotFoundException(`Collection "${name}" not found`);
+        }
+        return this.connection.db.collection(name);
+    }
+    async getCollectionNames() {
+        if (!this.connection.db)
+            throw new common_1.BadRequestException('MongoDB connection is not ready');
+        const collections = await this.connection.db.listCollections({}, { nameOnly: true }).toArray();
+        return collections
+            .map((item) => item.name)
+            .filter((name) => typeof name === 'string' && name.length > 0 && !name.startsWith('system.'))
+            .sort((a, b) => a.localeCompare(b));
+    }
+    normalizeCollectionName(input) {
+        const name = String(input || '').trim();
+        if (!/^[A-Za-z0-9_.-]+$/.test(name) || name.startsWith('system.')) {
+            throw new common_1.BadRequestException('Invalid collection name');
+        }
+        return name;
+    }
+    normalizeFilter(input) {
+        const filter = this.parseObject(input, 'filter');
+        this.assertSafeQueryObject(filter);
+        return filter;
+    }
+    normalizeProjection(input) {
+        const projection = this.parseObject(input, 'projection');
+        if (Object.keys(projection).length === 0)
+            return null;
+        for (const [key, value] of Object.entries(projection)) {
+            this.assertSafeFieldName(key, 'projection');
+            if (![0, 1, true, false].includes(value)) {
+                throw new common_1.BadRequestException('projection values must be 0, 1, true, or false');
+            }
+        }
+        return projection;
+    }
+    normalizeSort(sortInput, sortByInput, sortOrderInput) {
+        const sort = this.parseObject(sortInput, 'sort');
+        if (Object.keys(sort).length > 0) {
+            const normalized = {};
+            for (const [key, value] of Object.entries(sort)) {
+                this.assertSafeFieldName(key, 'sort');
+                normalized[key] = value === -1 || value === 'desc' ? -1 : 1;
+            }
+            return normalized;
+        }
+        if (sortByInput === undefined || sortByInput === null || String(sortByInput).trim() === '')
+            return {};
+        const sortBy = String(sortByInput).trim();
+        this.assertSafeFieldName(sortBy, 'sortBy');
+        return { [sortBy]: sortOrderInput === 'asc' ? 1 : -1 };
+    }
+    parseObject(input, field) {
+        if (input === undefined || input === null || input === '')
+            return {};
+        if (typeof input === 'string') {
+            try {
+                const parsed = JSON.parse(input);
+                if (this.isPlainObject(parsed))
+                    return parsed;
+            }
+            catch {
+                throw new common_1.BadRequestException(`${field} must be valid JSON`);
+            }
+            throw new common_1.BadRequestException(`${field} must be an object`);
+        }
+        if (this.isPlainObject(input))
+            return input;
+        throw new common_1.BadRequestException(`${field} must be an object`);
+    }
+    assertSafeQueryObject(input) {
+        if (Array.isArray(input)) {
+            input.forEach((item) => this.assertSafeQueryObject(item));
+            return;
+        }
+        if (!this.isPlainObject(input))
+            return;
+        for (const [key, value] of Object.entries(input)) {
+            if (key.startsWith('$') && !SAFE_OPERATORS.has(key)) {
+                throw new common_1.BadRequestException(`Unsupported query operator: ${key}`);
+            }
+            if (!key.startsWith('$')) {
+                this.assertSafeFieldName(key, 'filter');
+            }
+            this.assertSafeQueryObject(value);
+        }
+    }
+    assertSafeFieldName(field, context) {
+        if (!field || field.includes('\0') || field.includes('$') || !/^[A-Za-z0-9_.-]+$/.test(field)) {
+            throw new common_1.BadRequestException(`Invalid ${context} field: ${field}`);
+        }
+    }
+    normalizePositiveInt(input, fallback, max) {
+        const parsed = Number(input);
+        if (!Number.isFinite(parsed) || parsed <= 0)
+            return fallback;
+        return Math.min(Math.floor(parsed), max);
+    }
+    normalizeNonNegativeInt(input, fallback) {
+        const parsed = Number(input);
+        if (!Number.isFinite(parsed) || parsed < 0)
+            return fallback;
+        return Math.floor(parsed);
+    }
+    async safeEstimatedCount(collectionName) {
+        try {
+            return await this.connection.db.collection(collectionName).estimatedDocumentCount();
+        }
+        catch {
+            return null;
+        }
+    }
+    async safeCollStats(collectionName) {
+        try {
+            return await this.connection.db.command({ collStats: collectionName });
+        }
+        catch {
+            return null;
+        }
+    }
+    computeFieldAnalytics(documents) {
+        const fields = new Map();
+        for (const document of documents) {
+            const flattened = this.flattenDocument(document);
+            for (const [field, value] of Object.entries(flattened)) {
+                if (field === '_id')
+                    continue;
+                const stats = fields.get(field) ?? this.createEmptyFieldStats(field);
+                fields.set(field, stats);
+                stats.present += 1;
+                const type = this.valueType(value);
+                stats.types[type] = (stats.types[type] ?? 0) + 1;
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                    stats.numeric.count += 1;
+                    stats.numeric.min = stats.numeric.min === null ? value : Math.min(stats.numeric.min, value);
+                    stats.numeric.max = stats.numeric.max === null ? value : Math.max(stats.numeric.max, value);
+                    stats.numeric.sum += value;
+                }
+                else if (typeof value === 'boolean') {
+                    if (value)
+                        stats.boolean.true += 1;
+                    else
+                        stats.boolean.false += 1;
+                }
+                else if (Array.isArray(value)) {
+                    stats.array.count += 1;
+                    stats.array.totalLength += value.length;
+                }
+            }
+        }
+        return Array.from(fields.values())
+            .map((stats) => ({
+            field: stats.field,
+            present: stats.present,
+            coverage: documents.length > 0 ? stats.present / documents.length : 0,
+            types: stats.types,
+            numeric: stats.numeric.count > 0 ? {
+                count: stats.numeric.count,
+                min: stats.numeric.min,
+                max: stats.numeric.max,
+                avg: stats.numeric.sum / stats.numeric.count,
+            } : undefined,
+            boolean: stats.boolean.true + stats.boolean.false > 0 ? stats.boolean : undefined,
+            array: stats.array.count > 0 ? {
+                count: stats.array.count,
+                avgLength: stats.array.totalLength / stats.array.count,
+            } : undefined,
+        }))
+            .sort((a, b) => b.present - a.present || a.field.localeCompare(b.field));
+    }
+    createEmptyFieldStats(field) {
+        return {
+            field,
+            present: 0,
+            types: {},
+            numeric: { count: 0, min: null, max: null, sum: 0 },
+            boolean: { true: 0, false: 0 },
+            array: { count: 0, totalLength: 0 },
+        };
+    }
+    flattenDocument(document, prefix = '', output = {}) {
+        for (const [key, value] of Object.entries(document)) {
+            const path = prefix ? `${prefix}.${key}` : key;
+            if (this.isPlainObject(value) && !(value instanceof Date)) {
+                this.flattenDocument(value, path, output);
+            }
+            else {
+                output[path] = value;
+            }
+        }
+        return output;
+    }
+    valueType(value) {
+        if (value === null)
+            return 'null';
+        if (Array.isArray(value))
+            return 'array';
+        if (value instanceof Date)
+            return 'date';
+        return typeof value;
+    }
+    isPlainObject(input) {
+        return input !== null && typeof input === 'object' && !Array.isArray(input) && !(input instanceof Date);
+    }
+};
+exports.CollectionInsightsService = CollectionInsightsService;
+exports.CollectionInsightsService = CollectionInsightsService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectConnection)()),
+    __metadata("design:paramtypes", [mongoose_2.Connection])
+], CollectionInsightsService);
+
+
+/***/ },
+
+/***/ "./src/components/collection-insights/dto/collection-query.dto.ts"
+/*!************************************************************************!*\
+  !*** ./src/components/collection-insights/dto/collection-query.dto.ts ***!
+  \************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CollectionAnalyticsQueryDto = exports.CollectionQueryDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CollectionQueryDto {
+}
+exports.CollectionQueryDto = CollectionQueryDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mongo filter object. Query-string callers may pass JSON.' }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CollectionQueryDto.prototype, "filter", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mongo projection object. Query-string callers may pass JSON.' }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CollectionQueryDto.prototype, "projection", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Mongo sort object. Query-string callers may pass JSON.' }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CollectionQueryDto.prototype, "sort", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Single field to sort by when sort is not provided.' }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], CollectionQueryDto.prototype, "sortBy", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sort direction for sortBy.', enum: ['asc', 'desc'] }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(['asc', 'desc']),
+    __metadata("design:type", String)
+], CollectionQueryDto.prototype, "sortOrder", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Maximum documents to return. Capped server-side.' }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CollectionQueryDto.prototype, "limit", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Documents to skip.' }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CollectionQueryDto.prototype, "skip", void 0);
+class CollectionAnalyticsQueryDto {
+}
+exports.CollectionAnalyticsQueryDto = CollectionAnalyticsQueryDto;
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Sample size for field analytics. Capped server-side.' }),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Object)
+], CollectionAnalyticsQueryDto.prototype, "sampleSize", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/collection-insights/dto/index.ts"
+/*!*********************************************************!*\
+  !*** ./src/components/collection-insights/dto/index.ts ***!
+  \*********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./collection-query.dto */ "./src/components/collection-insights/dto/collection-query.dto.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/collection-insights/index.ts"
+/*!*****************************************************!*\
+  !*** ./src/components/collection-insights/index.ts ***!
+  \*****************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./collection-insights.controller */ "./src/components/collection-insights/collection-insights.controller.ts"), exports);
+__exportStar(__webpack_require__(/*! ./collection-insights.module */ "./src/components/collection-insights/collection-insights.module.ts"), exports);
+__exportStar(__webpack_require__(/*! ./collection-insights.service */ "./src/components/collection-insights/collection-insights.service.ts"), exports);
+__exportStar(__webpack_require__(/*! ./dto */ "./src/components/collection-insights/dto/index.ts"), exports);
 
 
 /***/ },
@@ -24303,6 +25111,7 @@ __exportStar(__webpack_require__(/*! ./session-manager */ "./src/components/sess
 __exportStar(__webpack_require__(/*! ./stats */ "./src/components/stats/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./stats2 */ "./src/components/stats2/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./promote-stats */ "./src/components/promote-stats/index.ts"), exports);
+__exportStar(__webpack_require__(/*! ./collection-insights */ "./src/components/collection-insights/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./promote-clients */ "./src/components/promote-clients/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./promote-msgs */ "./src/components/promote-msgs/index.ts"), exports);
 __exportStar(__webpack_require__(/*! ./user-data */ "./src/components/user-data/index.ts"), exports);
@@ -28187,7 +28996,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PromoteStatModule = void 0;
-const init_module_1 = __webpack_require__(/*! ./../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
+const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const promote_stat_service_1 = __webpack_require__(/*! ./promote-stat.service */ "./src/components/promote-stats/promote-stat.service.ts");
@@ -30864,7 +31673,41 @@ class BaseClientService {
             this.logger.warn(`Join channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
             return false;
         }
-        this.joinChannelMap.set(mobile, channels);
+        const joinableChannels = channels.filter((channel) => this.isJoinableChannelCandidate(channel));
+        const dropped = channels.length - joinableChannels.length;
+        if (dropped > 0) {
+            this.logger.debug(`Dropped ${dropped}/${channels.length} unsafe join candidates for ${mobile}`);
+        }
+        if (joinableChannels.length === 0) {
+            this.joinChannelMap.delete(mobile);
+            return false;
+        }
+        this.joinChannelMap.set(mobile, joinableChannels);
+        return true;
+    }
+    isJoinableChannelCandidate(channel) {
+        if (!channel)
+            return false;
+        if (!channel.channelId || !channel.username)
+            return false;
+        if (channel.canSendMsgs !== true)
+            return false;
+        if ('sendMessages' in channel && channel.sendMessages === true)
+            return false;
+        if ('sendPlain' in channel && channel.sendPlain === true)
+            return false;
+        if (channel.restricted === true)
+            return false;
+        if (channel.banned === true)
+            return false;
+        if (channel.forbidden === true)
+            return false;
+        if (channel.private === true)
+            return false;
+        if ('tempBan' in channel && channel.tempBan === true)
+            return false;
+        if ('deletedCount' in channel && channel.deletedCount != null && channel.deletedCount > 30)
+            return false;
         return true;
     }
     safeSetLeaveChannelMap(mobile, channels) {
@@ -31607,13 +32450,18 @@ class BaseClientService {
                         break;
                     this.joinChannelMap.set(mobile, channels);
                     this.logger.debug(`${mobile} joining @${currentChannel.username} (${channels.length} remaining)`);
+                    if (!this.isJoinableChannelCandidate(currentChannel)) {
+                        this.logger.debug(`Skipping unsafe join candidate ${currentChannel.channelId || currentChannel.username || 'unknown'}`);
+                        await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
+                        continue;
+                    }
                     let activeChannel = null;
                     try {
                         activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                     }
                     catch { }
-                    if (activeChannel && (activeChannel.banned === true || (activeChannel.deletedCount && activeChannel.deletedCount > 0))) {
-                        this.logger.debug(`Skipping banned/deleted channel ${currentChannel.channelId}`);
+                    if (activeChannel && !this.isJoinableChannelCandidate(activeChannel)) {
+                        this.logger.debug(`Skipping unsafe active channel ${currentChannel.channelId}`);
                         await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
                         continue;
                     }
@@ -35914,6 +36762,18 @@ __decorate([
     (0, mongoose_1.Prop)({ required: false, default: [] }),
     __metadata("design:type", Array)
 ], UserData.prototype, "videos", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [String], required: false, default: undefined }),
+    __metadata("design:type", Array)
+], UserData.prototype, "promotionChannels", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: false, default: undefined }),
+    __metadata("design:type", String)
+], UserData.prototype, "attributionMethod", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, required: false, default: undefined }),
+    __metadata("design:type", Number)
+], UserData.prototype, "attributedAt", void 0);
 exports.UserData = UserData = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'userData', versionKey: false, autoIndex: true, timestamps: true,
@@ -37679,7 +38539,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 var UsersService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.UsersService = void 0;
-const Telegram_service_1 = __webpack_require__(/*! ./../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
+const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
@@ -37693,6 +38553,7 @@ const tl_1 = __webpack_require__(/*! telegram/tl */ "telegram/tl");
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const mobile_utils_1 = __webpack_require__(/*! ../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
+const common_chats_1 = __webpack_require__(/*! ../../utils/telegram-utils/common-chats */ "./src/utils/telegram-utils/common-chats.ts");
 let UsersService = UsersService_1 = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
@@ -38232,12 +39093,12 @@ let UsersService = UsersService_1 = class UsersService {
                     catch { }
                     let commonChats = 0;
                     try {
-                        const common = await telegramClient.client.invoke(new tl_1.Api.messages.GetCommonChats({
+                        const commonChatIds = await (0, common_chats_1.getTelegramCommonChatIds)(telegramClient.client, {
                             userId: candidate.id,
                             maxId: (0, big_integer_1.default)(0),
                             limit: 100,
-                        }));
-                        commonChats = common?.chats?.length ?? 0;
+                        });
+                        commonChats = commonChatIds.length;
                     }
                     catch { }
                     let intimateMessageCount = 0;
@@ -41298,6 +42159,9 @@ const DEFAULT_ERROR_CONFIG = {
     defaultMessage: 'An unknown error occurred',
     defaultError: 'UnknownError'
 };
+function shouldLogDiagnostics() {
+    return "development" !== 'test';
+}
 function safeStringify(data, depth = 0, maxDepth = 3) {
     if (depth > maxDepth) {
         return '[Max Depth Reached]';
@@ -41378,10 +42242,11 @@ function extractMessage(data, path = '', depth = 0, maxDepth = 5) {
         return `Error extracting message: ${error instanceof Error ? error.message : String(error)}`;
     }
 }
-async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notificationTimeout) {
+async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notificationTimeout, logFailures = true) {
     try {
         if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-            console.error("Invalid notification URL:", url);
+            if (logFailures && shouldLogDiagnostics())
+                console.error("Invalid notification URL:", url);
             return undefined;
         }
         return await axios_1.default.get(url, {
@@ -41390,7 +42255,9 @@ async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notification
         });
     }
     catch (error) {
-        console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+        if (logFailures && shouldLogDiagnostics()) {
+            console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+        }
         return undefined;
     }
 }
@@ -41465,21 +42332,21 @@ function parseError(err, prefix, sendErr = true, config = {}) {
             extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
         }
         const fullMessage = `${prefixStr} :: ${extractedMessage}`;
-        console.error("parsedErr: ", fullMessage);
+        if (shouldLogDiagnostics())
+            console.error("parsedErr: ", fullMessage);
         const response = {
             status,
             message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),
             error,
             raw: err
         };
-        if (sendErr) {
+        if (sendErr && "development" !== 'test') {
             try {
                 const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
                 if (!ignoreError) {
                     const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
                     const notifUrl = `${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
-                    sendNotification(notifUrl, fullConfig.notificationTimeout)
-                        .catch(e => console.error("Failed to send error notification:", e));
+                    sendNotification(notifUrl, fullConfig.notificationTimeout, false).catch(() => undefined);
                 }
             }
             catch (notificationError) {
@@ -41489,7 +42356,8 @@ function parseError(err, prefix, sendErr = true, config = {}) {
         return response;
     }
     catch (fatalError) {
-        console.error("Fatal error in parseError:", fatalError);
+        if (shouldLogDiagnostics())
+            console.error("Fatal error in parseError:", fatalError);
         return {
             status: fullConfig.defaultStatus,
             message: "Error in error handling",
@@ -41839,6 +42707,89 @@ RedisClient.instance = null;
 
 /***/ },
 
+/***/ "./src/utils/telegram-utils/channel-live-facts.ts"
+/*!********************************************************!*\
+  !*** ./src/utils/telegram-utils/channel-live-facts.ts ***!
+  \********************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getTelegramChannelLiveFacts = getTelegramChannelLiveFacts;
+exports.normalizeTelegramChannelId = normalizeTelegramChannelId;
+async function getTelegramChannelLiveFacts(client, input) {
+    const channelId = normalizeTelegramChannelId(input.channelId);
+    if (!channelId)
+        return null;
+    const entity = input.entity ?? await client.getEntity(input.peer ?? `-100${channelId}`);
+    if (!isRecord(entity))
+        return null;
+    const forbiddenEntity = isForbiddenEntity(entity);
+    const sendMessages = readBoolean(entity.defaultBannedRights, 'sendMessages') || readBoolean(entity, 'sendMessages');
+    const sendPlain = readBoolean(entity.defaultBannedRights, 'sendPlain') || readBoolean(entity, 'sendPlain');
+    const facts = {
+        channelId,
+        title: readString(entity, 'title'),
+        username: readString(entity, 'username'),
+        participantsCount: await resolveParticipantsCount(entity, channelId, input.resolveParticipantsCount),
+        broadcast: readBoolean(entity, 'broadcast'),
+        restricted: readBoolean(entity, 'restricted'),
+        left: readBoolean(entity, 'left'),
+        private: readBoolean(entity, 'private') || forbiddenEntity,
+        forbidden: readBoolean(entity, 'forbidden') || forbiddenEntity,
+        megagroup: readBoolean(entity, 'megagroup'),
+        sendMessages,
+        sendPlain,
+        canSendMsgs: false,
+    };
+    facts.canSendMsgs = !facts.broadcast
+        && !facts.restricted
+        && !facts.left
+        && !facts.private
+        && !facts.forbidden
+        && !facts.sendMessages
+        && !facts.sendPlain;
+    return facts;
+}
+function normalizeTelegramChannelId(input) {
+    const normalized = String(input ?? '').trim().replace(/^-100/, '').replace(/^-/, '');
+    return /^\d+$/.test(normalized) && normalized !== '0' ? normalized : '';
+}
+async function resolveParticipantsCount(entity, channelId, resolver) {
+    const resolved = resolver ? await resolver(entity, channelId) : undefined;
+    return normalizeNonNegativeInteger(resolved) ?? normalizeNonNegativeInteger(entity.participantsCount);
+}
+function normalizeNonNegativeInteger(input) {
+    if (typeof input === 'number' && Number.isFinite(input) && input >= 0)
+        return Math.floor(input);
+    if (typeof input === 'string' && input.trim()) {
+        const parsed = Number(input);
+        if (Number.isFinite(parsed) && parsed >= 0)
+            return Math.floor(parsed);
+    }
+    return null;
+}
+function readBoolean(source, key) {
+    return isRecord(source) && source[key] === true;
+}
+function readString(source, key) {
+    const value = source[key];
+    if (value === null || value === undefined)
+        return null;
+    const normalized = String(value).trim();
+    return normalized || null;
+}
+function isForbiddenEntity(entity) {
+    const className = readString(entity, 'className') || entity.constructor?.name || '';
+    return className === 'ChannelForbidden' || className === 'ChatForbidden';
+}
+function isRecord(input) {
+    return input !== null && typeof input === 'object';
+}
+
+
+/***/ },
+
 /***/ "./src/utils/telegram-utils/channelinfo.ts"
 /*!*************************************************!*\
   !*** ./src/utils/telegram-utils/channelinfo.ts ***!
@@ -41848,9 +42799,9 @@ RedisClient.instance = null;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.channelInfo = channelInfo;
-const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const parseError_1 = __webpack_require__(/*! ../parseError */ "./src/utils/parseError.ts");
 const dialog_chat_utils_1 = __webpack_require__(/*! ./dialog-chat-utils */ "./src/utils/telegram-utils/dialog-chat-utils.ts");
+const channel_live_facts_1 = __webpack_require__(/*! ./channel-live-facts */ "./src/utils/telegram-utils/channel-live-facts.ts");
 async function channelInfo(client, sendIds = false) {
     if (!client)
         throw new Error('Client is not initialized');
@@ -41866,11 +42817,13 @@ async function channelInfo(client, sendIds = false) {
                 if (!(0, dialog_chat_utils_1.isChannelOrGroupEntity)(entity)) {
                     continue;
                 }
-                const broadcast = entity instanceof telegram_1.Api.Channel ? entity.broadcast : false;
-                const defaultBannedRights = 'defaultBannedRights' in entity ? entity.defaultBannedRights : undefined;
                 const id = (0, dialog_chat_utils_1.normalizeChatId)(entity.id.toString());
                 totalCount++;
-                if (!broadcast && !defaultBannedRights?.sendMessages) {
+                const liveFacts = await (0, channel_live_facts_1.getTelegramChannelLiveFacts)(client, {
+                    channelId: id,
+                    entity,
+                });
+                if (liveFacts?.canSendMsgs === true) {
                     canSendTrueCount++;
                     channelArray.push(id);
                 }
@@ -41892,6 +42845,61 @@ async function channelInfo(client, sendIds = false) {
         ids: sendIds ? channelArray : [],
         canSendFalseChats
     };
+}
+
+
+/***/ },
+
+/***/ "./src/utils/telegram-utils/common-chats.ts"
+/*!**************************************************!*\
+  !*** ./src/utils/telegram-utils/common-chats.ts ***!
+  \**************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getTelegramCommonChatIds = getTelegramCommonChatIds;
+const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
+const tl_1 = __webpack_require__(/*! telegram/tl */ "telegram/tl");
+const channel_live_facts_1 = __webpack_require__(/*! ./channel-live-facts */ "./src/utils/telegram-utils/channel-live-facts.ts");
+async function getTelegramCommonChatIds(client, input) {
+    if (!client || typeof client.invoke !== 'function') {
+        throw new Error('Telegram client with invoke is required');
+    }
+    const result = await client.invoke(new tl_1.Api.messages.GetCommonChats({
+        userId: input.userId,
+        maxId: normalizeMaxId(input.maxId),
+        limit: normalizeLimit(input.limit),
+    }));
+    const seen = new Set();
+    const ids = [];
+    for (const chat of Array.isArray(result?.chats) ? result.chats : []) {
+        const channelId = (0, channel_live_facts_1.normalizeTelegramChannelId)(chat?.id);
+        if (!channelId || seen.has(channelId))
+            continue;
+        seen.add(channelId);
+        ids.push(channelId);
+    }
+    return ids;
+}
+function normalizeLimit(input) {
+    if (typeof input === 'number' && Number.isFinite(input) && input > 0) {
+        return Math.min(Math.floor(input), 500);
+    }
+    return 100;
+}
+function normalizeMaxId(input) {
+    if (typeof input === 'number' && Number.isFinite(input) && input >= 0)
+        return (0, big_integer_1.default)(input);
+    if (typeof input === 'string' && input.trim())
+        return (0, big_integer_1.default)(input);
+    if (input && typeof input === 'object' && typeof input.toString === 'function') {
+        return (0, big_integer_1.default)(input.toString());
+    }
+    return (0, big_integer_1.default)(0);
 }
 
 

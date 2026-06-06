@@ -280,7 +280,7 @@ import { Dialog } from 'telegram/tl/custom/dialog';
         async *streamMediaFile(
             fileLocation: Api.TypeInputFileLocation,
             offset: bigInt.BigInteger = bigInt(0),
-            limit: number = 5 * 1024 * 1024,
+            limit?: number,
             requestSize: number = 512 * 1024,
             fileSize?: number,
             dcId?: number,

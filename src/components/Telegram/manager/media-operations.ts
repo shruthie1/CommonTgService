@@ -11,11 +11,124 @@ import {
     processWithConcurrencyLimit,
     FILE_DOWNLOAD_TIMEOUT, MAX_FILE_SIZE, TEMP_FILE_CLEANUP_DELAY,
     THUMBNAIL_CONCURRENCY_LIMIT, THUMBNAIL_BATCH_DELAY_MS,
+    ByteLimitedLruCache,
+    INLINE_THUMBNAIL_DEFAULT_LIMIT,
+    INLINE_THUMBNAIL_MAX_LIMIT,
+    MEDIA_DEFAULT_LIMIT,
+    MEDIA_MAX_LIMIT,
+    MEDIA_MAX_QUERY_LIMIT,
+    MISSING_THUMBNAIL_CACHE_TTL_MS,
+    THUMBNAIL_CACHE_MAX_BYTES,
+    THUMBNAIL_CACHE_MAX_ENTRIES,
+    THUMBNAIL_CACHE_TTL_MS,
 } from './helpers';
 import { sleep } from 'telegram/Helpers';
 import { safeGetEntityById } from './chat-operations';
 
 // ---- Thumbnail ----
+
+const thumbnailCache = new ByteLimitedLruCache<ThumbnailResult>({
+    maxEntries: THUMBNAIL_CACHE_MAX_ENTRIES,
+    maxBytes: THUMBNAIL_CACHE_MAX_BYTES,
+    ttlMs: THUMBNAIL_CACHE_TTL_MS,
+});
+
+const missingThumbnailCache = new ByteLimitedLruCache<true>({
+    maxEntries: THUMBNAIL_CACHE_MAX_ENTRIES * 2,
+    maxBytes: 64 * 1024,
+    ttlMs: MISSING_THUMBNAIL_CACHE_TTL_MS,
+});
+
+function normalizeMediaLimit(limit?: number): number {
+    const numericLimit = Number(limit);
+    if (!Number.isFinite(numericLimit) || numericLimit <= 0) return MEDIA_DEFAULT_LIMIT;
+    return Math.min(Math.floor(numericLimit), MEDIA_MAX_LIMIT);
+}
+
+function normalizeQueryLimit(limit: number, typeCount: number, hasAll: boolean): number {
+    const requested = hasAll ? limit * Math.max(typeCount, 1) : limit;
+    return Math.min(requested, MEDIA_MAX_QUERY_LIMIT);
+}
+
+function normalizeInlineThumbnailLimit(limit?: number): number {
+    const numericLimit = Number(limit);
+    if (!Number.isFinite(numericLimit) || numericLimit < 0) return INLINE_THUMBNAIL_DEFAULT_LIMIT;
+    return Math.min(Math.floor(numericLimit), INLINE_THUMBNAIL_MAX_LIMIT);
+}
+
+function buildThumbnailCacheKey(ctx: TgContext, chatId: string, messageId: number, quality: 'low' | 'high'): string {
+    return `${ctx.phoneNumber}:${chatId}:${messageId}:${quality}`;
+}
+
+function appendQueryParam(params: string[], name: string, value: string | number | undefined): void {
+    if (value === undefined || value === null || value === '') return;
+    params.push(`${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`);
+}
+
+function buildThumbnailUrl(
+    ctx: TgContext,
+    chatId: string,
+    messageId: number,
+    quality: 'low' | 'high',
+    apiKey?: string,
+    baseUrl?: string,
+): string {
+    const params: string[] = [];
+    appendQueryParam(params, 'chatId', chatId);
+    appendQueryParam(params, 'messageId', messageId);
+    appendQueryParam(params, 'quality', quality);
+    appendQueryParam(params, 'apiKey', apiKey);
+    const prefix = baseUrl ? baseUrl.replace(/\/$/, '') : '';
+    return `${prefix}/telegram/media/thumbnail/${encodeURIComponent(ctx.phoneNumber)}?${params.join('&')}`;
+}
+
+async function getThumbnailResultFromMessage(
+    ctx: TgContext,
+    message: Api.Message,
+    chatId: string,
+    quality: 'low' | 'high' = 'low',
+): Promise<ThumbnailResult | null> {
+    const cacheKey = buildThumbnailCacheKey(ctx, chatId, message.id, quality);
+    const cached = thumbnailCache.get(cacheKey);
+    if (cached) return cached;
+
+    if (missingThumbnailCache.get(cacheKey)) return null;
+
+    const thumbBuffer = await getThumbnailBuffer(ctx, message, quality);
+    if (!thumbBuffer) {
+        missingThumbnailCache.set(cacheKey, true, 1);
+        return null;
+    }
+
+    const etag = generateETag(message.id, chatId, `thumb-${quality}-${message.id}`);
+
+    let contentType = 'image/jpeg';
+    let ext = 'jpg';
+    if (message.media instanceof Api.MessageMediaDocument) {
+        const doc = message.document;
+        if (doc && doc instanceof Api.Document) {
+            const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
+            const isGif = isAnimatedGif(doc);
+
+            if (isSticker) {
+                contentType = 'image/webp';
+                ext = 'webp';
+            } else if (isGif) {
+                contentType = doc.mimeType || 'video/mp4';
+                ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';
+            }
+        }
+    }
+
+    const result = {
+        buffer: thumbBuffer,
+        etag,
+        contentType,
+        filename: `thumbnail_${message.id}.${ext}`,
+    };
+    thumbnailCache.set(cacheKey, result, thumbBuffer.length);
+    return result;
+}
 
 function isDownloadableSize(s: Api.TypePhotoSize): boolean {
     return !(s instanceof Api.PhotoStrippedSize) &&
@@ -299,39 +412,22 @@ export async function getMediaMessages(ctx: TgContext): Promise<Api.messages.Mes
 }
 
 export async function getThumbnail(ctx: TgContext, messageId: number, chatId: string = 'me', quality: 'low' | 'high' = 'low'): Promise<ThumbnailResult> {
-    const message = await getMessageWithMedia(ctx, messageId, chatId);
-    const thumbBuffer = await getThumbnailBuffer(ctx, message, quality);
+    const cacheKey = buildThumbnailCacheKey(ctx, chatId, messageId, quality);
+    const cached = thumbnailCache.get(cacheKey);
+    if (cached) return cached;
 
-    if (!thumbBuffer) {
+    if (missingThumbnailCache.get(cacheKey)) {
         throw new Error('Thumbnail not available for this media');
     }
 
-    const etag = generateETag(messageId, chatId, `thumb-${quality}-${messageId}`);
+    const message = await getMessageWithMedia(ctx, messageId, chatId);
+    const thumbnail = await getThumbnailResultFromMessage(ctx, message, chatId, quality);
 
-    let contentType = 'image/jpeg';
-    let ext = 'jpg';
-    if (message.media instanceof Api.MessageMediaDocument) {
-        const doc = message.document;
-        if (doc && doc instanceof Api.Document) {
-            const isSticker = doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker);
-            const isGif = isAnimatedGif(doc);
-
-            if (isSticker) {
-                contentType = 'image/webp';
-                ext = 'webp';
-            } else if (isGif) {
-                contentType = doc.mimeType || 'video/mp4';
-                ext = doc.mimeType === 'image/gif' ? 'gif' : 'mp4';
-            }
-        }
+    if (!thumbnail) {
+        throw new Error('Thumbnail not available for this media');
     }
 
-    return {
-        buffer: thumbBuffer,
-        etag,
-        contentType,
-        filename: `thumbnail_${messageId}.${ext}`,
-    };
+    return thumbnail;
 }
 
 export async function getMediaFileDownloadInfo(ctx: TgContext, messageId: number, chatId: string = 'me'): Promise<MediaFileDownloadInfo> {
@@ -350,7 +446,7 @@ export async function* streamMediaFile(
     ctx: TgContext,
     fileLocation: Api.TypeInputFileLocation,
     offset: bigInt.BigInteger = bigInt(0),
-    limit: number = 5 * 1024 * 1024,
+    limit?: number,
     requestSize: number = 512 * 1024,
     fileSize?: number,
     dcId?: number,
@@ -358,7 +454,7 @@ export async function* streamMediaFile(
     for await (const chunk of ctx.client.iterDownload({
         file: fileLocation,
         offset,
-        limit,
+        ...(limit !== undefined ? { limit } : {}),
         requestSize,
         ...(fileSize ? { fileSize: bigInt(fileSize) } : {}),
         ...(dcId ? { dcId } : {}),
@@ -370,7 +466,8 @@ export async function* streamMediaFile(
 export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams): Promise<MediaListResponse> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit, maxId, minId } = params;
+    const effectiveLimit = normalizeMediaLimit(limit);
     const peer = await resolveEntity(ctx, chatId);
 
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
@@ -379,7 +476,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
 
-    const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
+    const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
     const baseQuery: Partial<IterMessagesParams> = {
         ...(maxId ? { maxId } : {}),
         ...(minId ? { minId } : {}),
@@ -443,12 +540,12 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     } else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(
-            typesToFetch.map(type => fetchWithPostFilter(type, limit))
+            typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit))
         );
         if (hasAll) {
             filteredMessages = resultsPerType.flat();
         } else {
-            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, limit);
+            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
         }
     } else {
         filteredMessages = [];
@@ -462,9 +559,9 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         }, {} as Record<string, MediaMetadataItem[]>);
 
         const groups = typesToFetch.map(mediaType => {
-            const items = (grouped[mediaType] || []).slice(0, limit);
+            const items = (grouped[mediaType] || []).slice(0, effectiveLimit);
             const typeTotal = items.length;
-            const typeHasMore = (grouped[mediaType]?.length ?? 0) > limit;
+            const typeHasMore = (grouped[mediaType]?.length ?? 0) > effectiveLimit;
             const typeFirstMessageId = items.length > 0 ? items[0].messageId : undefined;
             const typeLastMessageId = items.length > 0 ? items[items.length - 1].messageId : undefined;
 
@@ -473,7 +570,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
                 count: typeTotal,
                 items,
                 pagination: {
-                    page: 1, limit, total: typeTotal,
+                    page: 1, limit: effectiveLimit, total: typeTotal,
                     totalPages: typeHasMore ? -1 : 1,
                     hasMore: typeHasMore,
                     nextMaxId: typeHasMore ? typeLastMessageId : undefined,
@@ -490,7 +587,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
 
         return {
             groups, pagination: {
-                page: 1, limit, total: totalItems,
+                page: 1, limit: effectiveLimit, total: totalItems,
                 totalPages: overallHasMore ? -1 : 1,
                 hasMore: overallHasMore,
                 nextMaxId: overallHasMore ? overallLastMessageId : undefined,
@@ -502,13 +599,13 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         };
     } else {
         const total = filteredMessages.length;
-        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === limit) && filteredMessages.length > 0;
+        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === effectiveLimit) && filteredMessages.length > 0;
         const firstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
         const lastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
 
         return {
             data: filteredMessages, pagination: {
-                page: 1, limit, total,
+                page: 1, limit: effectiveLimit, total,
                 totalPages: hasMore ? -1 : 1,
                 hasMore,
                 nextMaxId: hasMore ? lastMessageId : undefined,
@@ -588,7 +685,10 @@ export async function getAllMediaMetaData(ctx: TgContext, params: MediaQueryPara
 export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams): Promise<FilteredMediaListResponse> {
     if (!ctx.client) throw new Error('Client not initialized');
 
-    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit = 50, maxId, minId } = params;
+    const { chatId, types = ['photo', 'video', 'document'], startDate, endDate, limit, maxId, minId } = params;
+    const effectiveLimit = normalizeMediaLimit(limit);
+    const thumbnailMode = params.thumbnailMode || 'url';
+    const inlineThumbnailLimit = normalizeInlineThumbnailLimit(params.inlineThumbnailLimit);
     const peer = await resolveEntity(ctx, chatId);
 
     const ALL_MEDIA_TYPES = ['photo', 'video', 'document', 'voice', 'gif', 'audio', 'roundVideo', 'sticker'];
@@ -597,7 +697,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
         ? ALL_MEDIA_TYPES
         : types.filter(t => t !== 'all');
 
-    const queryLimit = hasAll ? (limit || 50) * typesToFetch.length : (limit || 50);
+    const queryLimit = normalizeQueryLimit(effectiveLimit, typesToFetch.length, hasAll);
 
     const query: Partial<IterMessagesParams> = {
         limit: queryLimit,
@@ -623,36 +723,42 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
 
     ctx.logger.info(ctx.phoneNumber, `Filtered down to ${filteredMessages.length} messages`);
 
-    const mediaData: FilteredMediaItem[] = await processWithConcurrencyLimit(
-        filteredMessages,
-        async (message: Api.Message) => {
-            const thumbBuffer = await getThumbnailBuffer(ctx, message);
-            const mediaDetails = getMediaDetails(message.media as Api.MessageMediaDocument);
-            const baseMeta = extractMediaMetaFromMessage(message, chatId, getMediaType(message.media));
-            const mediaType = getMediaType(message.media);
+    const buildMediaItem = async (message: Api.Message, index: number): Promise<FilteredMediaItem> => {
+        const mediaDetails = message.media instanceof Api.MessageMediaDocument
+            ? getMediaDetails(message.media)
+            : null;
+        const mediaType = getMediaType(message.media);
+        const baseMeta = extractMediaMetaFromMessage(message, chatId, mediaType);
+        const thumbnailUrl = thumbnailMode === 'none' || !baseMeta.thumbnailAvailable
+            ? undefined
+            : buildThumbnailUrl(ctx, chatId, message.id, 'low', params.thumbnailApiKey, params.thumbnailBaseUrl);
+        let thumbnail = thumbnailUrl;
 
-            let thumbMime = 'image/jpeg';
-            if (message.media instanceof Api.MessageMediaDocument) {
-                const doc = message.document;
-                if (doc instanceof Api.Document) {
-                    if (isAnimatedGif(doc)) {
-                        thumbMime = doc.mimeType || 'video/mp4';
-                    } else if (doc.attributes?.some(attr => attr instanceof Api.DocumentAttributeSticker)) {
-                        thumbMime = 'image/webp';
-                    }
-                }
-            }
+        if (thumbnailMode === 'base64' && thumbnailUrl && index < inlineThumbnailLimit) {
+            const thumbnailResult = await getThumbnailResultFromMessage(ctx, message, chatId, 'low');
+            thumbnail = thumbnailResult
+                ? `data:${thumbnailResult.contentType};base64,${thumbnailResult.buffer.toString('base64')}`
+                : thumbnailUrl;
+        }
 
-            return {
-                ...baseMeta,
-                type: mediaType,
-                thumbnail: thumbBuffer ? `data:${thumbMime};base64,${thumbBuffer.toString('base64')}` : undefined,
-                mediaDetails: mediaDetails || undefined,
-            };
-        },
-        THUMBNAIL_CONCURRENCY_LIMIT,
-        THUMBNAIL_BATCH_DELAY_MS
-    );
+        return {
+            ...baseMeta,
+            type: mediaType,
+            thumbnail,
+            thumbnailUrl,
+            thumbnailMode,
+            mediaDetails: mediaDetails || undefined,
+        };
+    };
+
+    const mediaData: FilteredMediaItem[] = thumbnailMode === 'base64'
+        ? await processWithConcurrencyLimit(
+            filteredMessages,
+            buildMediaItem,
+            THUMBNAIL_CONCURRENCY_LIMIT,
+            THUMBNAIL_BATCH_DELAY_MS
+        )
+        : await Promise.all(filteredMessages.map(buildMediaItem));
 
     if (hasAll) {
         const grouped = mediaData.reduce((acc, item) => {
@@ -662,16 +768,16 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
         }, {} as Record<string, FilteredMediaItem[]>);
 
         const groups = typesToFetch.map(mediaType => {
-            const items = (grouped[mediaType] || []).slice(0, limit);
+            const items = (grouped[mediaType] || []).slice(0, effectiveLimit);
             const typeTotal = items.length;
-            const typeHasMore = (grouped[mediaType]?.length ?? 0) > limit;
+            const typeHasMore = (grouped[mediaType]?.length ?? 0) > effectiveLimit;
             const typeFirstMessageId = items.length > 0 ? items[0].messageId : undefined;
             const typeLastMessageId = items.length > 0 ? items[items.length - 1].messageId : undefined;
 
             return {
                 type: mediaType, count: typeTotal, items,
                 pagination: {
-                    page: 1, limit, total: typeTotal,
+                    page: 1, limit: effectiveLimit, total: typeTotal,
                     totalPages: typeHasMore ? -1 : 1, hasMore: typeHasMore,
                     nextMaxId: typeHasMore ? typeLastMessageId : undefined,
                     firstMessageId: typeFirstMessageId, lastMessageId: typeLastMessageId,
@@ -686,7 +792,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
 
         return {
             groups, pagination: {
-                page: 1, limit, total: totalItems,
+                page: 1, limit: effectiveLimit, total: totalItems,
                 totalPages: overallHasMore ? -1 : 1, hasMore: overallHasMore,
                 nextMaxId: overallHasMore ? overallLastMessageId : undefined,
                 prevMaxId: maxId && mediaData.length > 0 ? overallFirstMessageId : undefined,
@@ -702,7 +808,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
 
         return {
             data: mediaData, pagination: {
-                page: 1, limit, total,
+                page: 1, limit: effectiveLimit, total,
                 totalPages: hasMoreResult ? -1 : 1, hasMore: hasMoreResult,
                 nextMaxId: hasMoreResult ? lastMessageId : undefined,
                 prevMaxId: maxId && mediaData.length > 0 ? firstMessageId : undefined,
