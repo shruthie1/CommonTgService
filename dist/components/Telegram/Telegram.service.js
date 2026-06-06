@@ -69,6 +69,7 @@ const logbots_1 = require("../../utils/logbots");
 const telegram_1 = require("telegram");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
+const channel_live_facts_1 = require("../../utils/telegram-utils/channel-live-facts");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService, bufferClientService, promoteClientService) {
         this.usersService = usersService;
@@ -246,32 +247,36 @@ let TelegramService = TelegramService_1 = class TelegramService {
             for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
                 dialogs.push(dialog);
             }
-            const channels = dialogs
-                .filter(chat => chat.isChannel || chat.isGroup)
-                .map(chat => {
+            const channels = [];
+            for (const chat of dialogs.filter(chat => chat.isChannel || chat.isGroup)) {
                 const chatEntity = chat.entity;
-                const cannotSendMsgs = chatEntity.defaultBannedRights?.sendMessages;
-                if (!chatEntity.broadcast &&
-                    !cannotSendMsgs &&
-                    chatEntity.participantsCount > 50 &&
+                const liveFacts = await (0, channel_live_facts_1.getTelegramChannelLiveFacts)(telegramClient.client, {
+                    channelId: chatEntity.id?.toString(),
+                    entity: chatEntity,
+                    resolveParticipantsCount: () => chatEntity.participantsCount,
+                });
+                if (!liveFacts)
+                    continue;
+                const participantsCount = liveFacts.participantsCount || 0;
+                if (liveFacts.canSendMsgs &&
+                    participantsCount > 50 &&
                     (0, utils_1.shouldMatch)(chatEntity)) {
-                    return {
+                    channels.push({
                         channelId: chatEntity.id.toString(),
-                        canSendMsgs: true,
-                        participantsCount: chatEntity.participantsCount,
+                        canSendMsgs: liveFacts.canSendMsgs,
+                        participantsCount,
                         private: false,
-                        title: chatEntity.title,
-                        broadcast: chatEntity.broadcast,
-                        megagroup: chatEntity.megagroup,
-                        restricted: chatEntity.restricted,
-                        sendMessages: true,
-                        username: chatEntity.username,
+                        title: liveFacts.title || "",
+                        broadcast: liveFacts.broadcast === true,
+                        megagroup: liveFacts.megagroup === true,
+                        restricted: liveFacts.restricted === true,
+                        sendMessages: liveFacts.sendMessages === true,
+                        sendPlain: liveFacts.sendPlain === true,
+                        username: liveFacts.username || "",
                         forbidden: false
-                    };
+                    });
                 }
-                return null;
-            })
-                .filter((channel) => Boolean(channel));
+            }
             await connection_manager_1.connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
@@ -430,7 +435,13 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return await telegramClient.getMediaFileDownloadInfo(messageId, chatId);
         }
         catch (error) {
-            this.logger.error(mobile, 'Error getting media file download info:', error);
+            const message = String(error?.message || error || '').toLowerCase();
+            if (message.includes('unsupported media type') || message.includes('not found') || message.includes('file_reference_expired')) {
+                this.logger.warn(mobile, 'Media file unavailable:', error?.message || error);
+            }
+            else {
+                this.logger.error(mobile, 'Error getting media file download info:', error);
+            }
             throw error;
         }
     }
@@ -445,7 +456,13 @@ let TelegramService = TelegramService_1 = class TelegramService {
             return await telegramClient.getThumbnail(messageId, chatId, quality);
         }
         catch (error) {
-            this.logger.error(mobile, 'Error getting thumbnail:', error);
+            const message = String(error?.message || error || '').toLowerCase();
+            if (message.includes('not available') || message.includes('not found') || message.includes('file_reference_expired')) {
+                this.logger.warn(mobile, 'Thumbnail unavailable:', error?.message || error);
+            }
+            else {
+                this.logger.error(mobile, 'Error getting thumbnail:', error);
+            }
             throw error;
         }
     }

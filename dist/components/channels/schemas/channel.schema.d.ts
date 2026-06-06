@@ -8,6 +8,7 @@ export declare class Channel {
     participantsCount: number;
     restricted: boolean;
     sendMessages: boolean;
+    sendPlain: boolean;
     title: string;
     username: string;
     private: boolean;
@@ -18,6 +19,7 @@ export declare class Channel {
     dMRestriction: number;
     availableMsgs: any[];
     banned: boolean;
+    bannedAt?: number | null;
     starred: boolean;
     score: number;
 }
@@ -86,6 +88,15 @@ export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Chan
         id: string;
     }>;
     sendMessages?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    sendPlain?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
         _id: mongoose.Types.ObjectId;
@@ -176,6 +187,15 @@ export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Chan
         id: string;
     }>;
     banned?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    bannedAt?: mongoose.SchemaDefinitionProperty<number, Channel, Document<unknown, {}, Channel, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
         _id: mongoose.Types.ObjectId;

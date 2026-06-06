@@ -1,15 +1,18 @@
-import { PromoteMsgsService } from './../promote-msgs/promote-msgs.service';
+import { PromoteMsgsService } from '../promote-msgs/promote-msgs.service';
+import { OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
-export declare class ActiveChannelsService {
+export declare class ActiveChannelsService implements OnModuleInit {
     private activeChannelModel;
     private promoteMsgsService;
     private readonly DEFAULT_LIMIT;
     private readonly DEFAULT_SKIP;
     private readonly MIN_PARTICIPANTS_COUNT;
+    private readonly logger;
     constructor(activeChannelModel: Model<ActiveChannelDocument>, promoteMsgsService: PromoteMsgsService);
+    onModuleInit(): Promise<void>;
     create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel>;
     createMultiple(createChannelDtos: Partial<CreateActiveChannelDto>[]): Promise<string>;
     findAll(): Promise<ActiveChannel[]>;
@@ -20,6 +23,9 @@ export declare class ActiveChannelsService {
     remove(channelId: string): Promise<void>;
     search(filter: any): Promise<ActiveChannel[]>;
     getActiveChannels(limit?: number, skip?: number, notIds?: string[]): Promise<ActiveChannel[]>;
+    private copyDefinedFields;
+    private legacySendabilityRepaired;
+    private repairLegacySendabilityFlags;
     analytics(): Promise<Record<string, any>>;
     paginated(options: {
         page?: number;

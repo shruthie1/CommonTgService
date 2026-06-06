@@ -13,10 +13,14 @@ exports.CreateActiveChannelDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 class CreateActiveChannelDto {
     constructor() {
+        this.sendPlain = false;
         this.reactRestricted = false;
         this.wordRestriction = 0;
         this.dMRestriction = 0;
+        this.recentUniqueUsers = 0;
+        this.lastUniqueUserCheckAt = 0;
         this.banned = false;
+        this.bannedAt = null;
         this.private = false;
         this.starred = false;
         this.score = 0;
@@ -44,9 +48,13 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "restricted", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "sendMessages", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: false }),
+    __metadata("design:type", Boolean)
+], CreateActiveChannelDto.prototype, "sendPlain", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
@@ -68,6 +76,14 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateActiveChannelDto.prototype, "dMRestriction", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "recentUniqueUsers", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: 0, required: false }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "lastUniqueUserCheckAt", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ type: [String] }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "availableMsgs", void 0);
@@ -75,6 +91,10 @@ __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ type: Number, required: false, nullable: true, default: null }),
+    __metadata("design:type", Number)
+], CreateActiveChannelDto.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: true, required: false }),
     __metadata("design:type", Boolean)

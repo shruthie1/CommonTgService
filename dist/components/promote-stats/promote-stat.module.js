@@ -7,7 +7,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromoteStatModule = void 0;
-const init_module_1 = require("./../ConfigurationInit/init.module");
+const init_module_1 = require("../ConfigurationInit/init.module");
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const promote_stat_service_1 = require("./promote-stat.service");

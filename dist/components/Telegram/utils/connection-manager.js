@@ -12,7 +12,7 @@ const common_1 = require("@nestjs/common");
 const withTimeout_1 = require("../../../utils/withTimeout");
 const Helpers_1 = require("telegram/Helpers");
 const utils_1 = require("../../../utils");
-const bots_service_1 = require("../../../components/bots/bots.service");
+const bots_service_1 = require("../../bots/bots.service");
 const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentError"));
 class ConnectionManager {
     constructor() {

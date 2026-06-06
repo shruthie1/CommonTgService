@@ -23,6 +23,9 @@ const DEFAULT_ERROR_CONFIG = {
     defaultMessage: 'An unknown error occurred',
     defaultError: 'UnknownError'
 };
+function shouldLogDiagnostics() {
+    return process.env.NODE_ENV !== 'test';
+}
 function safeStringify(data, depth = 0, maxDepth = 3) {
     if (depth > maxDepth) {
         return '[Max Depth Reached]';
@@ -103,10 +106,11 @@ function extractMessage(data, path = '', depth = 0, maxDepth = 5) {
         return `Error extracting message: ${error instanceof Error ? error.message : String(error)}`;
     }
 }
-async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notificationTimeout) {
+async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notificationTimeout, logFailures = true) {
     try {
         if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-            console.error("Invalid notification URL:", url);
+            if (logFailures && shouldLogDiagnostics())
+                console.error("Invalid notification URL:", url);
             return undefined;
         }
         return await axios_1.default.get(url, {
@@ -115,7 +119,9 @@ async function sendNotification(url, timeout = DEFAULT_ERROR_CONFIG.notification
         });
     }
     catch (error) {
-        console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+        if (logFailures && shouldLogDiagnostics()) {
+            console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+        }
         return undefined;
     }
 }
@@ -190,21 +196,21 @@ function parseError(err, prefix, sendErr = true, config = {}) {
             extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
         }
         const fullMessage = `${prefixStr} :: ${extractedMessage}`;
-        console.error("parsedErr: ", fullMessage);
+        if (shouldLogDiagnostics())
+            console.error("parsedErr: ", fullMessage);
         const response = {
             status,
             message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),
             error,
             raw: err
         };
-        if (sendErr) {
+        if (sendErr && process.env.NODE_ENV !== 'test') {
             try {
                 const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
                 if (!ignoreError) {
                     const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
                     const notifUrl = `${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
-                    sendNotification(notifUrl, fullConfig.notificationTimeout)
-                        .catch(e => console.error("Failed to send error notification:", e));
+                    sendNotification(notifUrl, fullConfig.notificationTimeout, false).catch(() => undefined);
                 }
             }
             catch (notificationError) {
@@ -214,7 +220,8 @@ function parseError(err, prefix, sendErr = true, config = {}) {
         return response;
     }
     catch (fatalError) {
-        console.error("Fatal error in parseError:", fatalError);
+        if (shouldLogDiagnostics())
+            console.error("Fatal error in parseError:", fatalError);
         return {
             status: fullConfig.defaultStatus,
             message: "Error in error handling",

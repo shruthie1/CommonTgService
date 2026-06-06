@@ -1,4 +1,4 @@
-import { TelegramService } from './../Telegram/Telegram.service';
+import { TelegramService } from '../Telegram/Telegram.service';
 import { Model, QueryFilter } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import { SearchUserDto } from './dto/search-user.dto';

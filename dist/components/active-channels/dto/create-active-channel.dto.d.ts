@@ -5,13 +5,17 @@ export declare class CreateActiveChannelDto {
     participantsCount: number;
     restricted: boolean;
     sendMessages: boolean;
+    sendPlain?: boolean;
     reactRestricted?: boolean;
     title: string;
     username: string;
     wordRestriction?: number;
     dMRestriction?: number;
+    recentUniqueUsers?: number;
+    lastUniqueUserCheckAt?: number;
     availableMsgs?: string[];
     banned?: boolean;
+    bannedAt?: number | null;
     megagroup?: boolean;
     forbidden?: boolean;
     private: boolean;

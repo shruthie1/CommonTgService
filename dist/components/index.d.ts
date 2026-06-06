@@ -8,6 +8,7 @@ export * from './session-manager';
 export * from './stats';
 export * from './stats2';
 export * from './promote-stats';
+export * from './collection-insights';
 export * from './promote-clients';
 export * from './promote-msgs';
 export * from './user-data';

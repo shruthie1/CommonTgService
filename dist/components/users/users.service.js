@@ -17,7 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 var UsersService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
-const Telegram_service_1 = require("./../Telegram/Telegram.service");
+const Telegram_service_1 = require("../Telegram/Telegram.service");
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
@@ -31,6 +31,7 @@ const tl_1 = require("telegram/tl");
 const big_integer_1 = __importDefault(require("big-integer"));
 const parseError_1 = require("../../utils/parseError");
 const mobile_utils_1 = require("../shared/mobile-utils");
+const common_chats_1 = require("../../utils/telegram-utils/common-chats");
 let UsersService = UsersService_1 = class UsersService {
     constructor(userModel, telegramService, clientsService, botsService) {
         this.userModel = userModel;
@@ -570,12 +571,12 @@ let UsersService = UsersService_1 = class UsersService {
                     catch { }
                     let commonChats = 0;
                     try {
-                        const common = await telegramClient.client.invoke(new tl_1.Api.messages.GetCommonChats({
+                        const commonChatIds = await (0, common_chats_1.getTelegramCommonChatIds)(telegramClient.client, {
                             userId: candidate.id,
                             maxId: (0, big_integer_1.default)(0),
                             limit: 100,
-                        }));
-                        commonChats = common?.chats?.length ?? 0;
+                        });
+                        commonChats = commonChatIds.length;
                     }
                     catch { }
                     let intimateMessageCount = 0;

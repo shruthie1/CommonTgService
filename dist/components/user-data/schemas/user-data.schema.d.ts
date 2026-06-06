@@ -22,6 +22,9 @@ export declare class UserData {
     cheatCount: number;
     callTime: number;
     videos: number[];
+    promotionChannels?: string[];
+    attributionMethod?: string;
+    attributedAt?: number;
 }
 export declare const UserDataSchema: import("mongoose").Schema<UserData, import("mongoose").Model<UserData, any, any, any, (Document<unknown, any, UserData, any, import("mongoose").DefaultSchemaOptions> & UserData & {
     _id: import("mongoose").Types.ObjectId;
@@ -223,6 +226,33 @@ export declare const UserDataSchema: import("mongoose").Schema<UserData, import(
         id: string;
     }>;
     videos?: import("mongoose").SchemaDefinitionProperty<number[], UserData, Document<unknown, {}, UserData, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<UserData & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    promotionChannels?: import("mongoose").SchemaDefinitionProperty<string[], UserData, Document<unknown, {}, UserData, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<UserData & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    attributionMethod?: import("mongoose").SchemaDefinitionProperty<string, UserData, Document<unknown, {}, UserData, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<UserData & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    attributedAt?: import("mongoose").SchemaDefinitionProperty<number, UserData, Document<unknown, {}, UserData, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<UserData & {
         _id: import("mongoose").Types.ObjectId;

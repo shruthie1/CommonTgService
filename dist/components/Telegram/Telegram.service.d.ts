@@ -167,6 +167,10 @@ export declare class TelegramService implements OnModuleDestroy {
         limit?: number;
         maxId?: number;
         minId?: number;
+        thumbnailMode?: 'url' | 'base64' | 'none';
+        inlineThumbnailLimit?: number;
+        thumbnailApiKey?: string;
+        thumbnailBaseUrl?: string;
     }): Promise<import("./TelegramManager").FilteredMediaListResponse>;
     exportContacts(mobile: string, format: 'vcard' | 'csv', includeBlocked?: boolean): Promise<string>;
     importContacts(mobile: string, contacts: {

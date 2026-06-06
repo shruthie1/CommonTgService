@@ -1,4 +1,4 @@
-import { ChannelsService } from './../channels/channels.service';
+import { ChannelsService } from '../channels/channels.service';
 import { Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import { BufferClient, BufferClientDocument } from './schemas/buffer-client.schema';

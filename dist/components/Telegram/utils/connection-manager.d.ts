@@ -1,5 +1,5 @@
 import TelegramManager from '../TelegramManager';
-import { UsersService } from '../../../components/users/users.service';
+import { UsersService } from '../../users/users.service';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
 interface GetClientOptions {
     autoDisconnect?: boolean;

@@ -19,6 +19,7 @@ class CreateChannelDto {
         this.wordRestriction = 0;
         this.dMRestriction = 0;
         this.banned = false;
+        this.bannedAt = null;
         this.starred = false;
         this.score = 0;
     }
@@ -63,6 +64,13 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "sendMessages", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        description: 'Whether plain text messages are banned by default rights',
+        required: false
+    }),
+    __metadata("design:type", Boolean)
+], CreateChannelDto.prototype, "sendPlain", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Title of the channel'
@@ -122,6 +130,10 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Whether the channel is banned', default: false, required: false }),
     __metadata("design:type", Boolean)
 ], CreateChannelDto.prototype, "banned", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Timestamp when the channel was marked banned', type: Number, required: false, nullable: true, default: null }),
+    __metadata("design:type", Number)
+], CreateChannelDto.prototype, "bannedAt", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
     __metadata("design:type", Boolean)

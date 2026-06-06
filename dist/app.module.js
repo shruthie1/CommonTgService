@@ -37,6 +37,7 @@ const guards_1 = require("./guards");
 const components_1 = require("./components");
 const interceptors_1 = require("./interceptors");
 const event_manager_module_1 = require("./components/event-manager/event-manager.module");
+const collection_insights_module_1 = require("./components/collection-insights/collection-insights.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -71,6 +72,7 @@ exports.AppModule = AppModule = __decorate([
             timestamp_module_1.TimestampModule,
             dynamic_data_module_1.DynamicDataModule,
             event_manager_module_1.EventManagerModule,
+            collection_insights_module_1.CollectionInsightsModule,
         ],
         providers: [
             {
@@ -96,6 +98,7 @@ exports.AppModule = AppModule = __decorate([
             transaction_module_1.TransactionModule,
             timestamp_module_1.TimestampModule,
             event_manager_module_1.EventManagerModule,
+            collection_insights_module_1.CollectionInsightsModule,
         ]
     })
 ], AppModule);

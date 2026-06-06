@@ -619,6 +619,10 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason) {
         try {
+            if (this.isPermanentArchivalReason(reason)) {
+                await this.markBufferInactiveForArchival(existingMobile, reason);
+                return;
+            }
             const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
             if (!existingClientUser) {
                 const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;

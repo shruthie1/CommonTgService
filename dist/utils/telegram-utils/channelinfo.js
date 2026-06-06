@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.channelInfo = channelInfo;
-const telegram_1 = require("telegram");
 const parseError_1 = require("../parseError");
 const dialog_chat_utils_1 = require("./dialog-chat-utils");
+const channel_live_facts_1 = require("./channel-live-facts");
 async function channelInfo(client, sendIds = false) {
     if (!client)
         throw new Error('Client is not initialized');
@@ -19,11 +19,13 @@ async function channelInfo(client, sendIds = false) {
                 if (!(0, dialog_chat_utils_1.isChannelOrGroupEntity)(entity)) {
                     continue;
                 }
-                const broadcast = entity instanceof telegram_1.Api.Channel ? entity.broadcast : false;
-                const defaultBannedRights = 'defaultBannedRights' in entity ? entity.defaultBannedRights : undefined;
                 const id = (0, dialog_chat_utils_1.normalizeChatId)(entity.id.toString());
                 totalCount++;
-                if (!broadcast && !defaultBannedRights?.sendMessages) {
+                const liveFacts = await (0, channel_live_facts_1.getTelegramChannelLiveFacts)(client, {
+                    channelId: id,
+                    entity,
+                });
+                if (liveFacts?.canSendMsgs === true) {
                     canSendTrueCount++;
                     channelArray.push(id);
                 }
