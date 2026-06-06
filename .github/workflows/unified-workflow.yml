@@ -56,7 +56,8 @@ jobs:
           git pull origin ${{ steps.branch_name.outputs.branch }}
           git diff --quiet || (git add . && git commit -m "chore: commit pre-bump changes")
           npm version patch -m "Bump version to %s [skip ci]"
-          git add src dist package.json
+          git add src package.json
+          git add -f dist
           git commit -m "Build and deploy dist files" || echo "No changes to commit"
           git push origin HEAD:${{ steps.branch_name.outputs.branch }}
 
@@ -67,7 +68,8 @@ jobs:
           git checkout master
           git pull origin master
           git checkout ${{ steps.branch_name.outputs.branch }} -- src dist
-          git add src dist package.json
+          git add src package.json
+          git add -f dist
           git commit -m "Update dist and src from ${{ steps.branch_name.outputs.branch }}" || echo "No changes to commit"
           git push origin master -f
 
