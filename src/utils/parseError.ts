@@ -38,6 +38,10 @@ const DEFAULT_ERROR_CONFIG: ErrorHandlingConfig = {
   defaultError: 'UnknownError'
 };
 
+function shouldLogDiagnostics(): boolean {
+  return process.env.NODE_ENV !== 'test';
+}
+
 /**
  * Safely stringifies objects of any depth
  * @param data - Data to stringify
@@ -160,11 +164,15 @@ export function extractMessage(data: any, path = '', depth = 0, maxDepth = 5): s
  * @param timeout - Request timeout in ms
  * @returns Promise resolving to response or undefined on error
  */
-async function sendNotification(url: string, timeout = DEFAULT_ERROR_CONFIG.notificationTimeout): Promise<AxiosResponse | undefined> {
+async function sendNotification(
+  url: string,
+  timeout = DEFAULT_ERROR_CONFIG.notificationTimeout,
+  logFailures = true,
+): Promise<AxiosResponse | undefined> {
   try {
     // Validate URL before sending
     if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-      console.error("Invalid notification URL:", url);
+      if (logFailures && shouldLogDiagnostics()) console.error("Invalid notification URL:", url);
       return undefined;
     }
 
@@ -173,7 +181,9 @@ async function sendNotification(url: string, timeout = DEFAULT_ERROR_CONFIG.noti
       validateStatus: status => status < 500 // Consider 4xx as "successful" notifications
     });
   } catch (error) {
-    console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+    if (logFailures && shouldLogDiagnostics()) {
+      console.error("Failed to send notification:", error instanceof Error ? error.message : String(error));
+    }
     return undefined;
   }
 }
@@ -307,7 +317,7 @@ export function parseError(
 
     // Prepare the full message for logging
     const fullMessage = `${prefixStr} :: ${extractedMessage}`;
-    console.error("parsedErr: ", fullMessage);
+    if (shouldLogDiagnostics()) console.error("parsedErr: ", fullMessage);
 
     // Prepare response object
     const response: ErrorResponse = {
@@ -318,7 +328,7 @@ export function parseError(
     };
 
     // Send notification if requested and applicable
-    if (sendErr) {
+    if (sendErr && process.env.NODE_ENV !== 'test') {
       try {
         const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
 
@@ -327,8 +337,7 @@ export function parseError(
           const notifUrl = `${notifbot()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
 
           // Use Promise but don't await to avoid delaying the response
-          sendNotification(notifUrl, fullConfig.notificationTimeout)
-            .catch(e => console.error("Failed to send error notification:", e));
+          sendNotification(notifUrl, fullConfig.notificationTimeout, false).catch(() => undefined);
         }
       } catch (notificationError) {
         console.error('Failed to prepare error notification:', notificationError);
@@ -337,7 +346,7 @@ export function parseError(
 
     return response;
   } catch (fatalError) {
-    console.error("Fatal error in parseError:", fatalError);
+    if (shouldLogDiagnostics()) console.error("Fatal error in parseError:", fatalError);
     return {
       status: fullConfig.defaultStatus,
       message: "Error in error handling",

@@ -16,8 +16,11 @@ export class CreateActiveChannelDto {
   @ApiProperty({ default: false })
   restricted: boolean;
 
-  @ApiProperty({ default: true })
+  @ApiProperty({ default: false })
   sendMessages: boolean;
+
+  @ApiProperty({ default: false })
+  sendPlain?: boolean = false;
 
   @ApiProperty({ default: false })
   reactRestricted?: boolean = false;
@@ -34,11 +37,20 @@ export class CreateActiveChannelDto {
   @ApiProperty({ default: 0 })
   dMRestriction?: number = 0;
 
+  @ApiProperty({ default: 0, required: false })
+  recentUniqueUsers?: number = 0;
+
+  @ApiProperty({ default: 0, required: false })
+  lastUniqueUserCheckAt?: number = 0;
+
   @ApiProperty({ type: [String] })
   availableMsgs?: string[];
 
   @ApiProperty({ default: false })
   banned?: boolean = false;
+
+  @ApiProperty({ type: Number, required: false, nullable: true, default: null })
+  bannedAt?: number | null = null;
 
   @ApiProperty({ default: true, required: false })
   megagroup?: boolean;

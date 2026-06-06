@@ -44,6 +44,10 @@ export class ActiveChannel {
   @Prop({ default: false })
   sendMessages: boolean;
 
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  sendPlain: boolean;
+
   @ApiProperty({ default: true })
   @Prop({ default: true })
   canSendMsgs: boolean;
@@ -60,6 +64,14 @@ export class ActiveChannel {
   @Prop({ type: Number, default: 0 })
   dMRestriction?: number;
 
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  recentUniqueUsers?: number;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  lastUniqueUserCheckAt?: number;
+
   @ApiProperty({ type: [String], default: defaultMessages })
   @Prop({ type: [String], default: defaultMessages })
   availableMsgs?: string[];
@@ -67,6 +79,10 @@ export class ActiveChannel {
   @ApiProperty({ default: false })
   @Prop({ default: false })
   banned?: boolean;
+
+  @ApiProperty({ type: Number, required: false, nullable: true, default: null })
+  @Prop({ type: Number, default: null })
+  bannedAt?: number | null;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })

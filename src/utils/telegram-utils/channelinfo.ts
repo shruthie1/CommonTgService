@@ -1,6 +1,7 @@
-import { Api, TelegramClient } from "telegram";
+import { TelegramClient } from "telegram";
 import { parseError } from "../parseError";
 import { isChannelOrGroupEntity, normalizeChatId } from "./dialog-chat-utils";
+import { getTelegramChannelLiveFacts } from "./channel-live-facts";
 
 export async function channelInfo(client: TelegramClient, sendIds = false): Promise<{ chatsArrayLength: number; canSendTrueCount: number; canSendFalseCount: number; ids: string[], canSendFalseChats: string[] }> {
     if (!client) throw new Error('Client is not initialized');
@@ -20,12 +21,14 @@ export async function channelInfo(client: TelegramClient, sendIds = false): Prom
                     continue;
                 }
 
-                const broadcast = entity instanceof Api.Channel ? entity.broadcast : false;
-                const defaultBannedRights = 'defaultBannedRights' in entity ? entity.defaultBannedRights : undefined;
                 const id = normalizeChatId(entity.id.toString());
                 totalCount++;
+                const liveFacts = await getTelegramChannelLiveFacts(client, {
+                    channelId: id,
+                    entity,
+                });
 
-                if (!broadcast && !defaultBannedRights?.sendMessages) {
+                if (liveFacts?.canSendMsgs === true) {
                     canSendTrueCount++;
                     channelArray.push(id);
                 } else {

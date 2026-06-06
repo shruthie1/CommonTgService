@@ -36,6 +36,10 @@ export class Channel {
   @Prop({ default: false })
   sendMessages: boolean;
 
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
+  sendPlain: boolean;
+
   @ApiProperty({ required: true })
   @Prop({ required: true })
   title: string;
@@ -75,6 +79,10 @@ export class Channel {
   @ApiProperty({ default: false })
   @Prop({ default: false })
   banned: boolean;
+
+  @ApiProperty({ type: Number, required: false, nullable: true, default: null })
+  @Prop({ type: Number, default: null })
+  bannedAt?: number | null;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })

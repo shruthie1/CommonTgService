@@ -73,6 +73,15 @@ export class UserData {
 
     @Prop({ required: false, default:[] })
     videos: number[];
+
+    @Prop({ type: [String], required: false, default: undefined })
+    promotionChannels?: string[];
+
+    @Prop({ required: false, default: undefined })
+    attributionMethod?: string;
+
+    @Prop({ type: Number, required: false, default: undefined })
+    attributedAt?: number;
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);

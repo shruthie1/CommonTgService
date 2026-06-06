@@ -29,6 +29,7 @@ import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import isPermanentError from '../../utils/isPermanentError';
 import { SendTgMessageDto } from './dto/send-message.dto';
 import { getDialogs } from 'telegram/client/dialogs';
+import { getTelegramChannelLiveFacts } from '../../utils/telegram-utils/channel-live-facts';
 
 @Injectable()
 export class TelegramService implements OnModuleDestroy {
@@ -254,34 +255,37 @@ export class TelegramService implements OnModuleDestroy {
                 dialogs.push(dialog);
             }
             
-            const channels = dialogs
-                .filter(chat => chat.isChannel || chat.isGroup)
-                .map(chat => {
+            const channels = [];
+            for (const chat of dialogs.filter(chat => chat.isChannel || chat.isGroup)) {
                     const chatEntity = chat.entity as Api.Channel;
-                    const cannotSendMsgs = chatEntity.defaultBannedRights?.sendMessages;
+                    const liveFacts = await getTelegramChannelLiveFacts(telegramClient.client, {
+                        channelId: chatEntity.id?.toString(),
+                        entity: chatEntity,
+                        resolveParticipantsCount: () => chatEntity.participantsCount,
+                    });
+                    if (!liveFacts) continue;
+                    const participantsCount = liveFacts.participantsCount || 0;
 
-                    if (!chatEntity.broadcast &&
-                        !cannotSendMsgs &&
-                        chatEntity.participantsCount > 50 &&
+                    if (liveFacts.canSendMsgs &&
+                        participantsCount > 50 &&
                         shouldMatch(chatEntity)) {
 
-                        return {
+                        channels.push({
                             channelId: chatEntity.id.toString(),
-                            canSendMsgs: true,
-                            participantsCount: chatEntity.participantsCount,
+                            canSendMsgs: liveFacts.canSendMsgs,
+                            participantsCount,
                             private: false,
-                            title: chatEntity.title,
-                            broadcast: chatEntity.broadcast,
-                            megagroup: chatEntity.megagroup,
-                            restricted: chatEntity.restricted,
-                            sendMessages: true,
-                            username: chatEntity.username,
+                            title: liveFacts.title || "",
+                            broadcast: liveFacts.broadcast === true,
+                            megagroup: liveFacts.megagroup === true,
+                            restricted: liveFacts.restricted === true,
+                            sendMessages: liveFacts.sendMessages === true,
+                            sendPlain: liveFacts.sendPlain === true,
+                            username: liveFacts.username || "",
                             forbidden: false
-                        };
+                        });
                     }
-                    return null;
-                })
-                .filter((channel): channel is NonNullable<typeof channel> => Boolean(channel));
+            }
 
             await connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);

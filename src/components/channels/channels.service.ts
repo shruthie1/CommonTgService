@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateChannelDto } from './dto/create-channel.dto';
@@ -9,10 +9,20 @@ import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
 
 @Injectable()
-export class ChannelsService {
+export class ChannelsService implements OnModuleInit {
+  private readonly logger = new Logger(ChannelsService.name);
+
   constructor(
     @InjectModel(Channel.name) private ChannelModel: Model<ChannelDocument>,
   ) {
+  }
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.repairLegacySendabilityFlags();
+    } catch (error) {
+      this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
+    }
   }
 
   async create(createChannelDto: CreateChannelDto): Promise<Channel> {
@@ -22,12 +32,36 @@ export class ChannelsService {
 
 
   async createMultiple(createChannelDtos: Partial<CreateChannelDto>[]): Promise<string> {
+    if (!createChannelDtos?.length) {
+      throw new BadRequestException('At least one channel DTO is required');
+    }
+
     const bulkOps = createChannelDtos.map((dto) => {
+      if (!dto.channelId) {
+        throw new BadRequestException('Channel ID is required for all DTOs');
+      }
+
       const setFields: Record<string, unknown> = {};
-      if (dto.title != null) setFields.title = dto.title;
-      if (dto.username != null) setFields.username = dto.username;
-      if (dto.participantsCount != null) setFields.participantsCount = dto.participantsCount;
-      if (dto.megagroup !== undefined) setFields.megagroup = dto.megagroup;
+      this.copyDefinedFields(dto, setFields, [
+        'title',
+        'username',
+        'participantsCount',
+        'megagroup',
+        'broadcast',
+        'canSendMsgs',
+        'restricted',
+        'sendMessages',
+        'sendPlain',
+        'private',
+        'forbidden',
+        'banned',
+        'bannedAt',
+        'reactRestricted',
+        'wordRestriction',
+        'dMRestriction',
+        'starred',
+        'score',
+      ]);
 
       const defaults: Record<string, unknown> = {
         channelId: dto.channelId,
@@ -35,12 +69,14 @@ export class ChannelsService {
         canSendMsgs: true,
         participantsCount: 0,
         restricted: false,
-        sendMessages: true,
+        sendMessages: false,
+        sendPlain: false,
         reactRestricted: false,
         wordRestriction: 0,
         dMRestriction: 0,
         availableMsgs: [],
         banned: false,
+        bannedAt: null,
         megagroup: true,
         private: false,
       };
@@ -101,6 +137,7 @@ export class ChannelsService {
   }
 
   async getChannels(limit = 50, skip = 0, keywords = [], notIds = []) {
+
     const pattern = new RegExp(keywords.join('|'), 'i');
     const notPattern = new RegExp('online|board|class|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser', "i")
     const query = {
@@ -126,9 +163,10 @@ export class ChannelsService {
           username: { $not: { $regex: notPattern } }
         },
         {
-          sendMessages: false,
-          broadcast: false,
-          restricted: false
+          sendMessages: { $ne: true },
+          sendPlain: { $ne: true },
+          broadcast: { $ne: true },
+          restricted: { $ne: true }
         }
       ]
     };
@@ -164,6 +202,8 @@ export class ChannelsService {
   }
 
   async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+    await this.repairLegacySendabilityFlags();
+
     const query = {
       '$and':
         [
@@ -198,9 +238,12 @@ export class ChannelsService {
             participantsCount: { $gt: 1000 },
             username: { $ne: null },
             canSendMsgs: true,
-            // banned: false,
-            restricted: false,
-            // forbidden: false
+            sendMessages: { $ne: true },
+            sendPlain: { $ne: true },
+            banned: { $ne: true },
+            restricted: { $ne: true },
+            forbidden: { $ne: true },
+            private: { $ne: true }
           }
         ]
     }
@@ -222,5 +265,41 @@ export class ChannelsService {
       return [];
     }
 
+  }
+
+  private copyDefinedFields(
+    source: Partial<CreateChannelDto>,
+    target: Record<string, unknown>,
+    fields: Array<keyof CreateChannelDto>,
+  ): void {
+    for (const field of fields) {
+      if (source[field] !== undefined) {
+        target[field] = source[field];
+      }
+    }
+  }
+
+  private legacySendabilityRepaired = false;
+
+  private async repairLegacySendabilityFlags(): Promise<void> {
+    if (this.legacySendabilityRepaired) return;
+    this.legacySendabilityRepaired = true;
+    await this.ChannelModel.updateMany(
+      {
+        canSendMsgs: true,
+        $or: [{ sendMessages: true }, { sendPlain: true }],
+        banned: { $ne: true },
+        forbidden: { $ne: true },
+        private: { $ne: true },
+        restricted: { $ne: true },
+      },
+      {
+        $set: {
+          sendMessages: false,
+          sendPlain: false,
+          updatedAt: new Date(),
+        },
+      },
+    ).exec();
   }
 }

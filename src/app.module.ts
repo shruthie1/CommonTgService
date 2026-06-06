@@ -28,6 +28,7 @@ import { AuthGuard } from './guards';
 import { BotsModule } from './components';
 import { ExceptionsFilter } from './interceptors';
 import { EventManagerModule } from './components/event-manager/event-manager.module';
+import { CollectionInsightsModule } from './components/collection-insights/collection-insights.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { EventManagerModule } from './components/event-manager/event-manager.mod
     TimestampModule,
     DynamicDataModule,
     EventManagerModule,
+    CollectionInsightsModule,
   ],
   providers: [
     {
@@ -81,6 +83,7 @@ import { EventManagerModule } from './components/event-manager/event-manager.mod
     TransactionModule,
     TimestampModule,
     EventManagerModule,
+    CollectionInsightsModule,
   ]
 })
 export class AppModule implements NestModule {

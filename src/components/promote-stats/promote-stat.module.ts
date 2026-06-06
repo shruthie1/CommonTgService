@@ -1,4 +1,4 @@
-import { InitModule } from './../ConfigurationInit/init.module';
+import { InitModule } from '../ConfigurationInit/init.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PromoteStatService } from './promote-stat.service';

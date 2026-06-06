@@ -29,6 +29,11 @@ export class CreateChannelDto {
   sendMessages?: boolean;
 
   @ApiProperty({
+    description: 'Whether plain text messages are banned by default rights',
+    required: false })
+  sendPlain?: boolean;
+
+  @ApiProperty({
     description: 'Title of the channel' })
   title: string;
 
@@ -70,6 +75,9 @@ export class CreateChannelDto {
 
   @ApiProperty({ description: 'Whether the channel is banned', default: false, required: false })
   banned?: boolean = false;
+
+  @ApiProperty({ description: 'Timestamp when the channel was marked banned', type: Number, required: false, nullable: true, default: null })
+  bannedAt?: number | null = null;
 
   @ApiProperty({ description: 'Starred status', default: false, required: false })
   starred?: boolean = false;

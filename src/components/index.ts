@@ -11,6 +11,7 @@ export * from './session-manager';
 export * from './stats';
 export * from './stats2';
 export * from './promote-stats';
+export * from './collection-insights';
 
 // Promotion components
 export * from './promote-clients';

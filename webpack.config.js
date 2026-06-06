@@ -35,7 +35,8 @@ const config = {
             // see https://webpack.js.org/configuration/resolve/#resolvefallback
             // for the list of Node.js core module polyfills.
         },
-        modules: ['node_modules']
+        modules: ['node_modules'],
+        symlinks: false
     },
     module: {
         rules: [

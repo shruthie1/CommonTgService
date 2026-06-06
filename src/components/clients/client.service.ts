@@ -702,6 +702,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     reason?: string,
   ) {
     try {
+      if (this.isPermanentArchivalReason(reason)) {
+        await this.markBufferInactiveForArchival(existingMobile, reason);
+        return;
+      }
 
       const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
       if (!existingClientUser) {

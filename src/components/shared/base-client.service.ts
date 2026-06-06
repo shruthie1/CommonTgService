@@ -625,7 +625,31 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.warn(`Join channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
             return false;
         }
-        this.joinChannelMap.set(mobile, channels);
+        const joinableChannels = channels.filter((channel) => this.isJoinableChannelCandidate(channel));
+        const dropped = channels.length - joinableChannels.length;
+        if (dropped > 0) {
+            this.logger.debug(`Dropped ${dropped}/${channels.length} unsafe join candidates for ${mobile}`);
+        }
+        if (joinableChannels.length === 0) {
+            this.joinChannelMap.delete(mobile);
+            return false;
+        }
+        this.joinChannelMap.set(mobile, joinableChannels);
+        return true;
+    }
+
+    protected isJoinableChannelCandidate(channel?: Channel | ActiveChannel | null): boolean {
+        if (!channel) return false;
+        if (!channel.channelId || !channel.username) return false;
+        if (channel.canSendMsgs !== true) return false;
+        if ('sendMessages' in channel && channel.sendMessages === true) return false;
+        if ('sendPlain' in channel && channel.sendPlain === true) return false;
+        if (channel.restricted === true) return false;
+        if (channel.banned === true) return false;
+        if (channel.forbidden === true) return false;
+        if (channel.private === true) return false;
+        if ('tempBan' in channel && channel.tempBan === true) return false;
+        if ('deletedCount' in channel && channel.deletedCount != null && channel.deletedCount > 30) return false;
         return true;
     }
 
@@ -1554,14 +1578,20 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.joinChannelMap.set(mobile, channels);
                     this.logger.debug(`${mobile} joining @${currentChannel.username} (${channels.length} remaining)`);
 
+                    if (!this.isJoinableChannelCandidate(currentChannel)) {
+                        this.logger.debug(`Skipping unsafe join candidate ${currentChannel.channelId || currentChannel.username || 'unknown'}`);
+                        await sleep(5000 + Math.random() * 3000);
+                        continue;
+                    }
+
                     // Check if channel is banned
                     let activeChannel: ActiveChannel | null = null;
                     try {
                         activeChannel = await this.activeChannelsService.findOne(currentChannel.channelId);
                     } catch { /* ignore */ }
 
-                    if (activeChannel && (activeChannel.banned === true || (activeChannel.deletedCount && activeChannel.deletedCount > 0))) {
-                        this.logger.debug(`Skipping banned/deleted channel ${currentChannel.channelId}`);
+                    if (activeChannel && !this.isJoinableChannelCandidate(activeChannel)) {
+                        this.logger.debug(`Skipping unsafe active channel ${currentChannel.channelId}`);
                         await sleep(5000 + Math.random() * 3000);
                         continue;
                     }

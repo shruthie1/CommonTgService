@@ -1,4 +1,4 @@
-import { ChannelsService } from './../channels/channels.service';
+import { ChannelsService } from '../channels/channels.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import {

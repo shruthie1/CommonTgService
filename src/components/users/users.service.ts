@@ -1,4 +1,4 @@
-import { TelegramService } from './../Telegram/Telegram.service';
+import { TelegramService } from '../Telegram/Telegram.service';
 import {
   BadRequestException,
   Inject,
@@ -23,6 +23,7 @@ import { Api } from 'telegram/tl';
 import bigInt from 'big-integer';
 import { parseError } from '../../utils/parseError';
 import { canonicalizeMobile } from '../shared/mobile-utils';
+import { getTelegramCommonChatIds } from '../../utils/telegram-utils/common-chats';
 
 @Injectable()
 export class UsersService {
@@ -689,14 +690,12 @@ export class UsersService {
           // Common chats
           let commonChats = 0;
           try {
-            const common = await telegramClient.client.invoke(
-              new Api.messages.GetCommonChats({
-                userId: candidate.id,
-                maxId: bigInt(0),
-                limit: 100,
-              }),
-            );
-            commonChats = (common as any)?.chats?.length ?? 0;
+            const commonChatIds = await getTelegramCommonChatIds(telegramClient.client, {
+              userId: candidate.id,
+              maxId: bigInt(0),
+              limit: 100,
+            });
+            commonChats = commonChatIds.length;
           } catch { }
 
           // Keyword search — intimate (positive) + movie/piracy (negative)

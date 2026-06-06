@@ -1143,7 +1143,7 @@ describe('Service flow reliability', () => {
         };
 
         const service = makeBufferService(bufferModel);
-        const activeChannelsService = { getActiveChannels: jest.fn().mockResolvedValue([{ channelId: 'new-1', username: 'new-1' }]) };
+        const activeChannelsService = { getActiveChannels: jest.fn().mockResolvedValue([{ channelId: 'new-1', username: 'new-1', canSendMsgs: true }]) };
         (service as any).activeChannelsService = activeChannelsService;
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -1158,7 +1158,7 @@ describe('Service flow reliability', () => {
 
         expect(added).toBe(1);
         expect(activeChannelsService.getActiveChannels).toHaveBeenCalledWith(20, 0, ['existing-1', 'existing-2']);
-        expect((service as any).joinChannelMap.get('919990011111')).toEqual([{ channelId: 'new-1', username: 'new-1' }]);
+        expect((service as any).joinChannelMap.get('919990011111')).toEqual([{ channelId: 'new-1', username: 'new-1', canSendMsgs: true }]);
     });
 
     test('buffer refillJoinQueue queues leave work when live channelInfo says the mobile should leave', async () => {
@@ -1512,14 +1512,14 @@ describe('Service flow reliability', () => {
         (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null) };
 
         (service as any).joinChannelMap.set('mobile-A', [
-            { channelId: 'a1', username: 'a1' }, { channelId: 'a2', username: 'a2' },
-            { channelId: 'a3', username: 'a3' }, { channelId: 'a4', username: 'a4' },
-            { channelId: 'a5', username: 'a5' },
+            { channelId: 'a1', username: 'a1', canSendMsgs: true }, { channelId: 'a2', username: 'a2', canSendMsgs: true },
+            { channelId: 'a3', username: 'a3', canSendMsgs: true }, { channelId: 'a4', username: 'a4', canSendMsgs: true },
+            { channelId: 'a5', username: 'a5', canSendMsgs: true },
         ]);
         (service as any).joinChannelMap.set('mobile-B', [
-            { channelId: 'b1', username: 'b1' }, { channelId: 'b2', username: 'b2' },
-            { channelId: 'b3', username: 'b3' }, { channelId: 'b4', username: 'b4' },
-            { channelId: 'b5', username: 'b5' },
+            { channelId: 'b1', username: 'b1', canSendMsgs: true }, { channelId: 'b2', username: 'b2', canSendMsgs: true },
+            { channelId: 'b3', username: 'b3', canSendMsgs: true }, { channelId: 'b4', username: 'b4', canSendMsgs: true },
+            { channelId: 'b5', username: 'b5', canSendMsgs: true },
         ]);
 
         await (service as any).processJoinChannelSequentially();
@@ -1551,11 +1551,11 @@ describe('Service flow reliability', () => {
         (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null) };
 
         (service as any).joinChannelMap.set('capped-mobile', [
-            { channelId: 'c1', username: 'c1' }, { channelId: 'c2', username: 'c2' },
-            { channelId: 'c3', username: 'c3' },
+            { channelId: 'c1', username: 'c1', canSendMsgs: true }, { channelId: 'c2', username: 'c2', canSendMsgs: true },
+            { channelId: 'c3', username: 'c3', canSendMsgs: true },
         ]);
         (service as any).joinChannelMap.set('fresh-mobile', [
-            { channelId: 'f1', username: 'f1' }, { channelId: 'f2', username: 'f2' },
+            { channelId: 'f1', username: 'f1', canSendMsgs: true }, { channelId: 'f2', username: 'f2', canSendMsgs: true },
         ]);
 
         (service as any).dailyJoinCounts.set('capped-mobile', 2);
@@ -1567,6 +1567,77 @@ describe('Service flow reliability', () => {
         expect((service as any).joinChannelMap.has('capped-mobile')).toBe(false);
     });
 
+    test('safeSetJoinChannelMap drops unsafe channel candidates before queueing joins', () => {
+        const service = new TestBaseService();
+
+        jest.spyOn(service, 'config', 'get').mockReturnValue({
+            ...service.config,
+            maxMapSize: 100,
+        });
+
+        const queued = (service as any).safeSetJoinChannelMap('mobile-safe-filter', [
+            { channelId: 'ok-1', username: 'ok_1', canSendMsgs: true, banned: false, restricted: false, forbidden: false, private: false },
+            { channelId: 'banned-1', username: 'banned_1', canSendMsgs: true, banned: true },
+            { channelId: 'private-1', username: 'private_1', canSendMsgs: true, private: true },
+            { channelId: 'nosend-1', username: 'nosend_1', canSendMsgs: false },
+            { channelId: 'missing-sendability', username: 'missing_sendability' },
+            { channelId: 'missing-username', canSendMsgs: true },
+        ]);
+
+        expect(queued).toBe(true);
+        expect((service as any).joinChannelMap.get('mobile-safe-filter')).toEqual([
+            { channelId: 'ok-1', username: 'ok_1', canSendMsgs: true, banned: false, restricted: false, forbidden: false, private: false },
+        ]);
+    });
+
+    test('safeSetJoinChannelMap returns false when every channel candidate is unsafe', () => {
+        const service = new TestBaseService();
+
+        const queued = (service as any).safeSetJoinChannelMap('mobile-all-unsafe', [
+            { channelId: 'banned-1', username: 'banned_1', canSendMsgs: true, banned: true },
+            { channelId: 'nosend-1', username: 'nosend_1', canSendMsgs: false },
+        ]);
+
+        expect(queued).toBe(false);
+        expect((service as any).joinChannelMap.has('mobile-all-unsafe')).toBe(false);
+    });
+
+    test('processJoinChannelSequentially re-checks DB state and skips channels marked unsafe after queueing', async () => {
+        const mockModel = { find: jest.fn(() => createQueryChain(() => [])), updateOne: jest.fn().mockResolvedValue({}) };
+        const service = new TestBaseService(mockModel);
+
+        jest.spyOn(service, 'config', 'get').mockReturnValue({
+            ...service.config,
+            maxJoinsPerSession: 2,
+            joinsPerMobilePerRound: 2,
+            maxMapSize: 100,
+        });
+
+        const tryJoiningChannel = jest.fn();
+        (service as any).telegramService = {
+            tryJoiningChannel,
+            getChannelInfo: jest.fn(),
+        };
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        (service as any).activeChannelsService = {
+            findOne: jest.fn(async (channelId: string) => (
+                channelId === 'stale-banned'
+                    ? { channelId, username: 'stale_banned', canSendMsgs: true, banned: true }
+                    : null
+            )),
+        };
+
+        (service as any).joinChannelMap.set('mobile-stale', [
+            { channelId: 'stale-banned', username: 'stale_banned', canSendMsgs: true, banned: false },
+            { channelId: 'fresh-ok', username: 'fresh_ok', canSendMsgs: true, banned: false },
+        ]);
+
+        await (service as any).processJoinChannelSequentially();
+
+        expect(tryJoiningChannel).toHaveBeenCalledTimes(1);
+        expect(tryJoiningChannel).toHaveBeenCalledWith('mobile-stale', { channelId: 'fresh-ok', username: 'fresh_ok', canSendMsgs: true, banned: false });
+    });
+
     test('scheduleNextJoinRound calls refillJoinQueue when map is empty and continues if refill adds mobiles', async () => {
         const mockModel = { find: jest.fn(() => createQueryChain(() => [])) };
         const service = new TestBaseService(mockModel);
@@ -1574,7 +1645,7 @@ describe('Service flow reliability', () => {
         let refillCalled = false;
         jest.spyOn(service, 'refillJoinQueue').mockImplementation(async () => {
             refillCalled = true;
-            (service as any).joinChannelMap.set('refilled-mobile', [{ channelId: 'r1', username: 'r1' }]);
+            (service as any).joinChannelMap.set('refilled-mobile', [{ channelId: 'r1', username: 'r1', canSendMsgs: true }]);
             return 1;
         });
 

@@ -2,12 +2,12 @@ import TelegramManager from '../TelegramManager';
 import { parseError } from '../../../utils/parseError';
 import { TelegramLogger } from './telegram-logger';
 import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
-import { UsersService } from '../../../components/users/users.service';
+import { UsersService } from '../../users/users.service';
 import { ConnectionStatusDto } from '../dto/connection-management.dto';
 import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
 import { getBotsServiceInstance } from '../../../utils';
-import { ChannelCategory } from '../../../components/bots/bots.service';
+import { ChannelCategory } from '../../bots/bots.service';
 import isPermanentError from '../../../utils/isPermanentError';
 
 interface User {

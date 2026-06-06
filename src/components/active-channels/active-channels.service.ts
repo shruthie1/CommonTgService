@@ -1,5 +1,5 @@
-import { PromoteMsgsService } from './../promote-msgs/promote-msgs.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, forwardRef } from '@nestjs/common';
+import { PromoteMsgsService } from '../promote-msgs/promote-msgs.service';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
@@ -12,16 +12,25 @@ import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
 
 @Injectable()
-export class ActiveChannelsService {
+export class ActiveChannelsService implements OnModuleInit {
   private readonly DEFAULT_LIMIT = 50;
   private readonly DEFAULT_SKIP = 0;
   private readonly MIN_PARTICIPANTS_COUNT = 600;
+  private readonly logger = new Logger(ActiveChannelsService.name);
 
   constructor(
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
     @Inject(forwardRef(() => PromoteMsgsService))
     private promoteMsgsService: PromoteMsgsService,
   ) { }
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.repairLegacySendabilityFlags();
+    } catch (error) {
+      this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
+    }
+  }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
     try {
@@ -54,10 +63,28 @@ export class ActiveChannelsService {
         }
 
         const setFields: Record<string, unknown> = { updatedAt: new Date() };
-        if (dto.title != null) setFields.title = dto.title;
-        if (dto.username != null) setFields.username = dto.username;
-        if (dto.participantsCount != null) setFields.participantsCount = dto.participantsCount;
-        if (dto.megagroup !== undefined) setFields.megagroup = dto.megagroup;
+        this.copyDefinedFields(dto, setFields, [
+          'title',
+          'username',
+          'participantsCount',
+          'megagroup',
+          'broadcast',
+          'canSendMsgs',
+          'restricted',
+          'sendMessages',
+          'sendPlain',
+          'private',
+          'forbidden',
+          'banned',
+          'bannedAt',
+          'reactRestricted',
+          'wordRestriction',
+          'dMRestriction',
+          'recentUniqueUsers',
+          'lastUniqueUserCheckAt',
+          'starred',
+          'score',
+        ]);
 
         const defaults: Record<string, unknown> = {
           channelId: dto.channelId,
@@ -65,12 +92,16 @@ export class ActiveChannelsService {
           canSendMsgs: true,
           participantsCount: 0,
           restricted: false,
-          sendMessages: true,
+          sendMessages: false,
+          sendPlain: false,
           reactRestricted: false,
           wordRestriction: 0,
           dMRestriction: 0,
+          recentUniqueUsers: 0,
+          lastUniqueUserCheckAt: 0,
           availableMsgs: [],
           banned: false,
+          bannedAt: null,
           megagroup: true,
           private: false,
           createdAt: new Date(),
@@ -218,6 +249,8 @@ export class ActiveChannelsService {
 
   async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds: string[] = []): Promise<ActiveChannel[]> {
     try {
+      await this.repairLegacySendabilityFlags();
+
       const positiveKeywords = [
         'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
         'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video',
@@ -272,9 +305,13 @@ export class ActiveChannelsService {
             username: { $ne: null },
             deletedCount: { $lte: 30 },
             canSendMsgs: true,
-            restricted: false,
-            banned: false,
-            forbidden: false,
+            sendMessages: { $ne: true },
+            sendPlain: { $ne: true },
+            restricted: { $ne: true },
+            banned: { $ne: true },
+            forbidden: { $ne: true },
+            private: { $ne: true },
+            tempBan: { $ne: true },
           },
         ],
       };
@@ -292,6 +329,42 @@ export class ActiveChannelsService {
     } catch (error) {
       throw this.handleError(error, 'Failed to fetch active channels');
     }
+  }
+
+  private copyDefinedFields(
+    source: Partial<CreateActiveChannelDto>,
+    target: Record<string, unknown>,
+    fields: Array<keyof CreateActiveChannelDto>,
+  ): void {
+    for (const field of fields) {
+      if (source[field] !== undefined) {
+        target[field] = source[field];
+      }
+    }
+  }
+
+  private legacySendabilityRepaired = false;
+
+  private async repairLegacySendabilityFlags(): Promise<void> {
+    if (this.legacySendabilityRepaired) return;
+    this.legacySendabilityRepaired = true;
+    await this.activeChannelModel.updateMany(
+      {
+        canSendMsgs: true,
+        $or: [{ sendMessages: true }, { sendPlain: true }],
+        banned: { $ne: true },
+        forbidden: { $ne: true },
+        private: { $ne: true },
+        restricted: { $ne: true },
+      },
+      {
+        $set: {
+          sendMessages: false,
+          sendPlain: false,
+          updatedAt: new Date(),
+        },
+      },
+    ).exec();
   }
 
   async analytics(): Promise<Record<string, any>> {
@@ -629,7 +702,6 @@ export class ActiveChannelsService {
           $set: {
             wordRestriction: 0,
             dMRestriction: 0,
-            banned: false,
             availableMsgs,
             updatedAt: new Date(),
           },
@@ -649,8 +721,6 @@ export class ActiveChannelsService {
           $set: {
             wordRestriction: 0,
             dMRestriction: 0,
-            banned: false,
-            private: false,
             updatedAt: new Date(),
           },
         }
