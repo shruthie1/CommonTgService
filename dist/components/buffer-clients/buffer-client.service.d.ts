@@ -27,6 +27,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     get config(): ClientConfig;
     updateNameAndBio(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number>;
     updateUsername(doc: BufferClientDocument, client: Client, failedAttempts: number): Promise<number>;
+    private normalizeSessionForWrite;
     create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument>;
     findAll(status?: ClientStatusType): Promise<BufferClientDocument[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<BufferClientDocument | null>;

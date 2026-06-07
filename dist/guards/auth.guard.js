@@ -67,14 +67,16 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const path = request.path;
         const url = request.url;
         const originalUrl = request.originalUrl;
+        const safeOriginalUrl = this.redactQuerySecret(originalUrl || url || path);
         if (this.isIgnoredPath(path, url, originalUrl)) {
+            this.sanitizeQuery(request);
             return true;
         }
         const apiKey = request.headers['x-api-key']?.toString() ||
             request.query['apiKey']?.toString();
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
-        this.logger.debug(`Request Received: ${originalUrl}`);
+        this.logger.debug(`Request Received: ${safeOriginalUrl}`);
         let passedReason = null;
         if (apiKey && apiKey.toLowerCase() === 'santoor') {
             passedReason = 'API key valid';
@@ -86,11 +88,30 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             passedReason = 'Origin allowed';
         }
         if (passedReason) {
+            this.sanitizeQuery(request);
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
-        this.notifyUnauthorized(clientIp, origin, originalUrl);
+        this.notifyUnauthorized(clientIp, origin, safeOriginalUrl);
         throw new common_1.UnauthorizedException('Access denied');
+    }
+    sanitizeQuery(request) {
+        const query = request.query;
+        if (!query)
+            return;
+        const sanitizedQuery = { ...query };
+        delete sanitizedQuery.apiKey;
+        delete sanitizedQuery.apikey;
+        delete sanitizedQuery.api_key;
+        Object.defineProperty(request, 'query', {
+            value: sanitizedQuery,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+        });
+    }
+    redactQuerySecret(url) {
+        return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
     }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {
