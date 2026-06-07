@@ -47,6 +47,16 @@ let BufferClientController = class BufferClientController {
         this.clientService.checkBufferClients();
         return 'initiated Checking';
     }
+    async refreshBufferSessions(body = {}) {
+        const mobile = typeof body?.mobile === 'string' && body.mobile.trim() ? body.mobile.trim() : undefined;
+        if (body?.apply !== true) {
+            return this.clientService.updateAllClientSessions({ dryRun: true, mobile });
+        }
+        this.clientService.updateAllClientSessions({ dryRun: false, mobile }).catch((error) => {
+            console.error('Error refreshing buffer client sessions:', error);
+        });
+        return { initiated: true, dryRun: false, mobile: mobile || null };
+    }
     async diagnoseWarmup() {
         return this.clientService.diagnoseWarmupPipeline();
     }
@@ -185,6 +195,28 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "checkbufferClients", null);
+__decorate([
+    (0, common_1.Post)('sessions/refresh'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Refresh buffer client sessions explicitly',
+        description: 'Dry-runs by default. Pass apply=true to start session rotation for ready/session_rotated buffer clients.',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                apply: { type: 'boolean', default: false },
+                mobile: { type: 'string', description: 'Optional single mobile to refresh' },
+            },
+        },
+        required: false,
+    }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "refreshBufferSessions", null);
 __decorate([
     (0, common_1.Get)('diagnoseWarmup'),
     (0, swagger_1.ApiOperation)({ summary: 'Dry-run warmup diagnosis', description: 'Returns what would happen to each active buffer client without executing anything.' }),

@@ -36,7 +36,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "broadcast", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([

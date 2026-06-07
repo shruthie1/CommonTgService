@@ -72,7 +72,25 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
         attemptedCount: number;
         createdEntries: string[];
     }>;
-    updateAllClientSessions(): Promise<void>;
+    updateAllClientSessions(options?: {
+        dryRun?: boolean;
+        mobile?: string;
+    }): Promise<{
+        dryRun: boolean;
+        candidateCount: number;
+        protectedPrimaryClientCount: number;
+        skippedPrimary: number;
+        recoveredMissingSessions: number;
+        rotated: number;
+        deactivated: number;
+        failed: number;
+        candidates: {
+            mobile: string;
+            warmupPhase: import("..").WarmupPhaseType;
+            hasSession: boolean;
+            protectedPrimary: boolean;
+        }[];
+    }>;
     getBufferClientsByClientId(clientId: string, status?: string): Promise<BufferClientDocument[]>;
     getBufferClientDistribution(): Promise<{
         totalBufferClients: number;

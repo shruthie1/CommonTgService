@@ -1543,10 +1543,22 @@ let TelegramController = class TelegramController {
         return host ? `${proto}://${host}` : '';
     }
     getRequestApiKey(req, queryApiKey) {
-        const headerApiKey = req.headers['x-api-key'];
-        return queryApiKey
-            || (Array.isArray(headerApiKey) ? headerApiKey[0] : headerApiKey)
-            || undefined;
+        if (queryApiKey)
+            return queryApiKey;
+        const authQueryApiKey = req.authQueryApiKey;
+        if (authQueryApiKey)
+            return authQueryApiKey;
+        const originalUrl = req.originalUrl || req.url || '';
+        try {
+            const parsed = new URL(originalUrl, 'http://internal.local');
+            return parsed.searchParams.get('apiKey')
+                || parsed.searchParams.get('apikey')
+                || parsed.searchParams.get('api_key')
+                || undefined;
+        }
+        catch {
+            return undefined;
+        }
     }
     parseRangeHeader(range, fileSize) {
         const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
@@ -1804,7 +1816,7 @@ let TelegramController = class TelegramController {
                 res.setHeader('Content-Length', length);
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+                res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('X-Content-Type-Options', 'nosniff');
                 res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1839,7 +1851,7 @@ let TelegramController = class TelegramController {
             else {
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+                res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
                 res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -1891,7 +1903,7 @@ let TelegramController = class TelegramController {
             }
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${this.sanitizeFilename(thumbnail.filename)}"`);
-            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+            res.setHeader('Cache-Control', 'private, max-age=604800, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
             return res.send(thumbnail.buffer);
@@ -14583,7 +14595,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 const defaults = {
                     channelId: dto.channelId,
                     broadcast: false,
-                    canSendMsgs: true,
+                    canSendMsgs: false,
                     participantsCount: 0,
                     restricted: false,
                     sendMessages: false,
@@ -15141,6 +15153,9 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             return Object.keys(data || {});
         }
         catch (error) {
+            if (error instanceof common_1.NotFoundException || error?.status === 404) {
+                return [];
+            }
             throw this.handleError(error, 'Failed to fetch available messages');
         }
     }
@@ -15208,7 +15223,7 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "broadcast", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
+    (0, swagger_1.ApiProperty)({ default: false }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([
@@ -15440,8 +15455,8 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "sendPlain", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "canSendMsgs", void 0);
 __decorate([
@@ -17743,6 +17758,16 @@ let BufferClientController = class BufferClientController {
         this.clientService.checkBufferClients();
         return 'initiated Checking';
     }
+    async refreshBufferSessions(body = {}) {
+        const mobile = typeof body?.mobile === 'string' && body.mobile.trim() ? body.mobile.trim() : undefined;
+        if (body?.apply !== true) {
+            return this.clientService.updateAllClientSessions({ dryRun: true, mobile });
+        }
+        this.clientService.updateAllClientSessions({ dryRun: false, mobile }).catch((error) => {
+            console.error('Error refreshing buffer client sessions:', error);
+        });
+        return { initiated: true, dryRun: false, mobile: mobile || null };
+    }
     async diagnoseWarmup() {
         return this.clientService.diagnoseWarmupPipeline();
     }
@@ -17881,6 +17906,28 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "checkbufferClients", null);
+__decorate([
+    (0, common_1.Post)('sessions/refresh'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Refresh buffer client sessions explicitly',
+        description: 'Dry-runs by default. Pass apply=true to start session rotation for ready/session_rotated buffer clients.',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                apply: { type: 'boolean', default: false },
+                mobile: { type: 'string', description: 'Optional single mobile to refresh' },
+            },
+        },
+        required: false,
+    }),
+    (0, swagger_1.ApiOkResponse)({ schema: { type: 'object', additionalProperties: true } }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], BufferClientController.prototype, "refreshBufferSessions", null);
 __decorate([
     (0, common_1.Get)('diagnoseWarmup'),
     (0, swagger_1.ApiOperation)({ summary: 'Dry-run warmup diagnosis', description: 'Returns what would happen to each active buffer client without executing anything.' }),
@@ -18628,12 +18675,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        if (filter.tgId === "refresh") {
-            this.updateAllClientSessions().catch((error) => {
-                this.logger.error('Error updating all client sessions:', error);
-            });
-            return [];
-        }
         const query = { ...filter };
         if (typeof query.mobile === 'string' && query.mobile) {
             query.mobile = this.canonicalMobile(query.mobile);
@@ -19564,24 +19605,74 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
         return { createdCount, attemptedCount, createdEntries };
     }
-    async updateAllClientSessions() {
+    async updateAllClientSessions(options = {}) {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
-        const bufferClients = await this.bufferClientModel.find({
+        const filter = {
             status: 'active',
             warmupPhase: { $in: ['ready', 'session_rotated'] },
-        }).exec();
+        };
+        if (options.mobile) {
+            filter.mobile = this.canonicalMobile(options.mobile);
+        }
+        const bufferClients = await this.bufferClientModel.find(filter).exec();
+        const result = {
+            dryRun: options.dryRun === true,
+            candidateCount: bufferClients.length,
+            protectedPrimaryClientCount: primaryClientMobiles.size,
+            skippedPrimary: 0,
+            recoveredMissingSessions: 0,
+            rotated: 0,
+            deactivated: 0,
+            failed: 0,
+            candidates: options.dryRun === true
+                ? bufferClients.map((client) => ({
+                    mobile: client.mobile,
+                    warmupPhase: client.warmupPhase,
+                    hasSession: Boolean(client.session?.trim()),
+                    protectedPrimary: this.isPrimaryClientMobile(client.mobile, primaryClientMobiles),
+                }))
+                : undefined,
+        };
         this.logger.info('Starting bulk buffer session rotation', {
             candidateCount: bufferClients.length,
             protectedPrimaryClientCount: primaryClientMobiles.size,
+            dryRun: result.dryRun,
+            mobile: options.mobile || null,
         });
+        if (result.dryRun) {
+            return result;
+        }
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
             if (this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)) {
                 this.logger.debug(`Skipping session rotation for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                result.skippedPrimary++;
                 continue;
             }
             try {
                 this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
+                let activeSession = bufferClient.session?.trim() || '';
+                if (!activeSession) {
+                    let recoveredActiveClient = null;
+                    try {
+                        const recovered = await this.resolveActiveSessionForRotation(bufferClient.mobile);
+                        recoveredActiveClient = recovered?.activeClient || null;
+                        if (!recovered?.activeSession) {
+                            throw new Error(`No verified users session available for ${bufferClient.mobile}`);
+                        }
+                        activeSession = recovered.activeSession;
+                        result.recoveredMissingSessions++;
+                    }
+                    finally {
+                        if (recoveredActiveClient) {
+                            try {
+                                await recoveredActiveClient.destroy();
+                            }
+                            catch {
+                            }
+                        }
+                    }
+                }
                 const client = await connection_manager_1.connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });
                 try {
                     const hasPassword = await client.hasPassword();
@@ -19591,7 +19682,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     }
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
-                    if (!newSession || newSession === bufferClient.session) {
+                    if (!newSession || newSession === activeSession) {
                         throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
                     }
                     const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(bufferClient.mobile, newSession);
@@ -19605,6 +19696,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                         warmupPhase: base_client_service_1.WarmupPhase.SESSION_ROTATED,
                         sessionRotatedAt: new Date(),
                     });
+                    result.rotated++;
                 }
                 catch (error) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
@@ -19613,6 +19705,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                             status: 'inactive',
                             message: `Session update failed: ${errorDetails.message}`,
                         });
+                        result.deactivated++;
+                    }
+                    else {
+                        result.failed++;
                     }
                 }
                 finally {
@@ -19624,10 +19720,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
             catch (error) {
                 this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
+                result.failed++;
                 if (i < bufferClients.length - 1)
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             }
         }
+        return result;
     }
     async getBufferClientsByClientId(clientId, status) {
         const filter = { clientId };
@@ -31016,6 +31114,25 @@ class SessionManager {
     getCredentials(mobile) {
         return (0, tg_config_1.getTelegramCredentialsForMobile)(mobile);
     }
+    normalizeMobileNumber(value) {
+        return (value || '').replace(/[^\d]/g, '');
+    }
+    async withTelegramTimeout(operation, timeoutMs, label) {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`));
+            }, timeoutMs);
+            timer.unref?.();
+        });
+        try {
+            return await Promise.race([operation(), timeoutPromise]);
+        }
+        finally {
+            if (timer)
+                clearTimeout(timer);
+        }
+    }
     static getInstance() {
         if (!SessionManager.instance) {
             SessionManager.instance = new SessionManager();
@@ -31141,21 +31258,20 @@ class SessionManager {
         let tempClient = null;
         try {
             tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getCredentials(mobile).apiId, this.getCredentials(mobile).apiHash, { connectionRetries: 1 });
-            await tempClient.connect();
-            const userInfo = await tempClient.getMe();
-            if (!userInfo || userInfo.phone !== mobile) {
+            await this.withTelegramTimeout(() => tempClient.connect(), 30000, 'Session validation connect');
+            const userInfo = await this.withTelegramTimeout(() => tempClient.getMe(), 15000, 'Session validation getMe');
+            if (!userInfo || this.normalizeMobileNumber(userInfo.phone || '') !== this.normalizeMobileNumber(mobile)) {
                 return { isValid: false, error: 'Phone number mismatch or invalid user info' };
             }
             this.logger.info(mobile, 'Session validation successful');
-            await this.cleanupClient(tempClient, mobile);
             return { isValid: true, userInfo };
         }
         catch (error) {
             this.logger.error(mobile, 'Session validation failed', error);
-            await this.cleanupClient(tempClient, mobile);
             return { isValid: false, error: error.message || error.toString() || error.errorMessage };
         }
         finally {
+            await this.cleanupClient(tempClient, mobile, false);
         }
     }
     async performSessionCreation(oldSessionString, mobile, password, attempt) {
@@ -31225,7 +31341,7 @@ class SessionManager {
         }
         return null;
     }
-    async cleanupClient(client, mobile) {
+    async cleanupClient(client, mobile, unregisterManagedClient = true) {
         if (!client)
             return;
         try {
@@ -31237,7 +31353,9 @@ class SessionManager {
             if (client._eventBuilders) {
                 client._eventBuilders = [];
             }
-            connection_manager_1.connectionManager.unregisterClient(mobile);
+            if (unregisterManagedClient) {
+                connection_manager_1.connectionManager.unregisterClient(mobile);
+            }
             await (0, utils_1.sleep)(1000);
         }
         catch (error) {
@@ -31346,6 +31464,15 @@ let SessionService = class SessionService {
         }
         currentLimit.count++;
         return { allowed: true };
+    }
+    isPermanentSessionValidationError(error) {
+        const message = (error || '').toLowerCase();
+        return message.includes('phone number mismatch')
+            || message.includes('auth_key_unregistered')
+            || message.includes('session_revoked')
+            || message.includes('session expired')
+            || message.includes('user_deactivated')
+            || message.includes('unauthorized');
     }
     async extractMobileFromSession(sessionString) {
         let lastError = 'Unable to extract phone number from session';
@@ -31690,9 +31817,19 @@ let SessionService = class SessionService {
                 this.logger.info(mobile, 'No valid sessions found (all sessions are invalid or empty)');
                 return { success: false, error: 'No valid sessions found' };
             }
-            const oldestSession = validSessions[0];
-            this.logger.info(mobile, `Found oldest valid session created at ${oldestSession.createdAt}`);
-            return { success: true, session: oldestSession };
+            for (const candidate of validSessions) {
+                this.logger.info(mobile, `Validating candidate session created at ${candidate.createdAt}`);
+                const validationResult = await this.sessionManager.validateSession(candidate.sessionString, mobile);
+                if (validationResult.isValid) {
+                    this.logger.info(mobile, `Found oldest live session created at ${candidate.createdAt}`);
+                    return { success: true, session: candidate };
+                }
+                this.logger.warn(mobile, `Candidate audit session failed live validation: ${validationResult.error || 'validation failed'}`);
+                if (this.isPermanentSessionValidationError(validationResult.error)) {
+                    await this.sessionAuditService.revokeSession(candidate.mobile, candidate.sessionString, `Validation failed during oldest-session lookup: ${validationResult.error || 'unknown error'}`);
+                }
+            }
+            return { success: false, error: 'No live sessions found after validation' };
         }
         catch (error) {
             this.logger.error(mobile, 'Error finding oldest valid session', error);
@@ -33792,9 +33929,36 @@ class BaseClientService {
             const mobile = doc.mobile;
             const session = doc.session;
             if (!session?.trim()) {
-                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — skipping`);
-                results.skipped++;
-                continue;
+                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — attempting users-session recovery`);
+                let recoveredActiveClient = null;
+                try {
+                    const recovered = await this.resolveActiveSessionForRotation(mobile);
+                    recoveredActiveClient = recovered?.activeClient || null;
+                    if (recovered?.activeSession) {
+                        results.healed++;
+                        this.logger.warn(`[HealSessions] ${mobile}: recovered missing active session from users record`);
+                        await (0, Helpers_1.sleep)(2000);
+                        continue;
+                    }
+                    this.logger.warn(`[HealSessions] ${mobile}: no verified users session available — skipping`);
+                    results.skipped++;
+                    continue;
+                }
+                catch (error) {
+                    const errorDetails = (0, parseError_1.parseError)(error, `healSessionMissing:${mobile}`);
+                    results.errors.push({ mobile, error: errorDetails.message, action: 'recover_missing_session' });
+                    results.skipped++;
+                    continue;
+                }
+                finally {
+                    if (recoveredActiveClient) {
+                        try {
+                            await recoveredActiveClient.destroy();
+                        }
+                        catch {
+                        }
+                    }
+                }
             }
             let isAlive = false;
             let livenessError = '';
@@ -40861,12 +41025,15 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const url = request.url;
         const originalUrl = request.originalUrl;
         const safeOriginalUrl = this.redactQuerySecret(originalUrl || url || path);
+        const queryApiKey = request.query['apiKey']?.toString() ||
+            request.query['apikey']?.toString() ||
+            request.query['api_key']?.toString();
         if (this.isIgnoredPath(path, url, originalUrl)) {
-            this.sanitizeQuery(request);
+            this.sanitizeQuery(request, queryApiKey);
             return true;
         }
         const apiKey = request.headers['x-api-key']?.toString() ||
-            request.query['apiKey']?.toString();
+            queryApiKey;
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
         this.logger.debug(`Request Received: ${safeOriginalUrl}`);
@@ -40881,23 +41048,44 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             passedReason = 'Origin allowed';
         }
         if (passedReason) {
-            this.sanitizeQuery(request);
+            this.sanitizeQuery(request, queryApiKey);
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
         this.notifyUnauthorized(clientIp, origin, safeOriginalUrl);
         throw new common_1.UnauthorizedException('Access denied');
     }
-    sanitizeQuery(request) {
+    sanitizeQuery(request, queryApiKey) {
+        if (queryApiKey) {
+            Object.defineProperty(request, 'authQueryApiKey', {
+                value: queryApiKey,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        }
         const query = request.query;
-        if (!query)
+        if (query) {
+            const sanitizedQuery = { ...query };
+            delete sanitizedQuery.apiKey;
+            delete sanitizedQuery.apikey;
+            delete sanitizedQuery.api_key;
+            Object.defineProperty(request, 'query', {
+                value: sanitizedQuery,
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            });
+        }
+        this.sanitizeUrlField(request, 'url');
+        this.sanitizeUrlField(request, 'originalUrl');
+    }
+    sanitizeUrlField(request, field) {
+        const currentValue = request[field];
+        if (!currentValue)
             return;
-        const sanitizedQuery = { ...query };
-        delete sanitizedQuery.apiKey;
-        delete sanitizedQuery.apikey;
-        delete sanitizedQuery.api_key;
-        Object.defineProperty(request, 'query', {
-            value: sanitizedQuery,
+        Object.defineProperty(request, field, {
+            value: this.stripQuerySecret(currentValue),
             writable: true,
             configurable: true,
             enumerable: true,
@@ -40905,6 +41093,19 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
     redactQuerySecret(url) {
         return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
+    }
+    stripQuerySecret(url) {
+        try {
+            const parsed = new URL(url, 'http://internal.local');
+            parsed.searchParams.delete('apiKey');
+            parsed.searchParams.delete('apikey');
+            parsed.searchParams.delete('api_key');
+            const search = parsed.searchParams.toString();
+            return `${parsed.pathname}${search ? `?${search}` : ''}${parsed.hash}`;
+        }
+        catch {
+            return this.redactQuerySecret(url);
+        }
     }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {
@@ -41355,7 +41556,9 @@ let LoggerMiddleware = class LoggerMiddleware {
         this.logger = new utils_1.Logger('HTTP');
     }
     use(req, res, next) {
-        const { method, originalUrl } = req;
+        const { method } = req;
+        const originalUrl = req.originalUrl;
+        const safeOriginalUrl = this.redactQuerySecret(originalUrl);
         const startTime = Date.now();
         const ip = req.ip;
         const excludedEndpoints = [
@@ -41376,18 +41579,18 @@ let LoggerMiddleware = class LoggerMiddleware {
                     return;
                 }
                 if (statusCode >= 500) {
-                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
-                    this.logger.error(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
+                    this.logger.error(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 400) {
-                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
-                    this.logger.warn(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
+                    this.logger.warn(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 300) {
-                    this.logger.verbose(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    this.logger.verbose(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else {
-                    this.logger.debug(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    this.logger.debug(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
             });
             res.on('error', (error) => {
@@ -41397,15 +41600,18 @@ let LoggerMiddleware = class LoggerMiddleware {
                     this.logger.warn(`BotsService instance not available for notifications`);
                     return;
                 }
-                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`, { parseMode: 'HTML' });
+                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`, { parseMode: 'HTML' });
             });
         }
         else {
             if (originalUrl.includes('Video')) {
-                this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+                this.logger.log(`Excluded endpoint hit: ${safeOriginalUrl} (length: ${safeOriginalUrl.length})`);
             }
         }
         next();
+    }
+    redactQuerySecret(url) {
+        return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
     }
 };
 exports.LoggerMiddleware = LoggerMiddleware;

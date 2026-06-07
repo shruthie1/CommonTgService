@@ -3,7 +3,9 @@ export declare class AuthGuard implements CanActivate {
     private readonly logger;
     canActivate(context: ExecutionContext): boolean;
     private sanitizeQuery;
+    private sanitizeUrlField;
     private redactQuerySecret;
+    private stripQuerySecret;
     private isIgnoredPath;
     private isOriginAllowed;
     private getHeaderValue;

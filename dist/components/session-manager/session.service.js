@@ -33,6 +33,25 @@ class SessionManager {
     getCredentials(mobile) {
         return (0, tg_config_1.getTelegramCredentialsForMobile)(mobile);
     }
+    normalizeMobileNumber(value) {
+        return (value || '').replace(/[^\d]/g, '');
+    }
+    async withTelegramTimeout(operation, timeoutMs, label) {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`));
+            }, timeoutMs);
+            timer.unref?.();
+        });
+        try {
+            return await Promise.race([operation(), timeoutPromise]);
+        }
+        finally {
+            if (timer)
+                clearTimeout(timer);
+        }
+    }
     static getInstance() {
         if (!SessionManager.instance) {
             SessionManager.instance = new SessionManager();
@@ -158,21 +177,20 @@ class SessionManager {
         let tempClient = null;
         try {
             tempClient = new telegram_1.TelegramClient(new sessions_1.StringSession(sessionString), this.getCredentials(mobile).apiId, this.getCredentials(mobile).apiHash, { connectionRetries: 1 });
-            await tempClient.connect();
-            const userInfo = await tempClient.getMe();
-            if (!userInfo || userInfo.phone !== mobile) {
+            await this.withTelegramTimeout(() => tempClient.connect(), 30000, 'Session validation connect');
+            const userInfo = await this.withTelegramTimeout(() => tempClient.getMe(), 15000, 'Session validation getMe');
+            if (!userInfo || this.normalizeMobileNumber(userInfo.phone || '') !== this.normalizeMobileNumber(mobile)) {
                 return { isValid: false, error: 'Phone number mismatch or invalid user info' };
             }
             this.logger.info(mobile, 'Session validation successful');
-            await this.cleanupClient(tempClient, mobile);
             return { isValid: true, userInfo };
         }
         catch (error) {
             this.logger.error(mobile, 'Session validation failed', error);
-            await this.cleanupClient(tempClient, mobile);
             return { isValid: false, error: error.message || error.toString() || error.errorMessage };
         }
         finally {
+            await this.cleanupClient(tempClient, mobile, false);
         }
     }
     async performSessionCreation(oldSessionString, mobile, password, attempt) {
@@ -242,7 +260,7 @@ class SessionManager {
         }
         return null;
     }
-    async cleanupClient(client, mobile) {
+    async cleanupClient(client, mobile, unregisterManagedClient = true) {
         if (!client)
             return;
         try {
@@ -254,7 +272,9 @@ class SessionManager {
             if (client._eventBuilders) {
                 client._eventBuilders = [];
             }
-            connection_manager_1.connectionManager.unregisterClient(mobile);
+            if (unregisterManagedClient) {
+                connection_manager_1.connectionManager.unregisterClient(mobile);
+            }
             await (0, utils_1.sleep)(1000);
         }
         catch (error) {
@@ -363,6 +383,15 @@ let SessionService = class SessionService {
         }
         currentLimit.count++;
         return { allowed: true };
+    }
+    isPermanentSessionValidationError(error) {
+        const message = (error || '').toLowerCase();
+        return message.includes('phone number mismatch')
+            || message.includes('auth_key_unregistered')
+            || message.includes('session_revoked')
+            || message.includes('session expired')
+            || message.includes('user_deactivated')
+            || message.includes('unauthorized');
     }
     async extractMobileFromSession(sessionString) {
         let lastError = 'Unable to extract phone number from session';
@@ -707,9 +736,19 @@ let SessionService = class SessionService {
                 this.logger.info(mobile, 'No valid sessions found (all sessions are invalid or empty)');
                 return { success: false, error: 'No valid sessions found' };
             }
-            const oldestSession = validSessions[0];
-            this.logger.info(mobile, `Found oldest valid session created at ${oldestSession.createdAt}`);
-            return { success: true, session: oldestSession };
+            for (const candidate of validSessions) {
+                this.logger.info(mobile, `Validating candidate session created at ${candidate.createdAt}`);
+                const validationResult = await this.sessionManager.validateSession(candidate.sessionString, mobile);
+                if (validationResult.isValid) {
+                    this.logger.info(mobile, `Found oldest live session created at ${candidate.createdAt}`);
+                    return { success: true, session: candidate };
+                }
+                this.logger.warn(mobile, `Candidate audit session failed live validation: ${validationResult.error || 'validation failed'}`);
+                if (this.isPermanentSessionValidationError(validationResult.error)) {
+                    await this.sessionAuditService.revokeSession(candidate.mobile, candidate.sessionString, `Validation failed during oldest-session lookup: ${validationResult.error || 'unknown error'}`);
+                }
+            }
+            return { success: false, error: 'No live sessions found after validation' };
         }
         catch (error) {
             this.logger.error(mobile, 'Error finding oldest valid session', error);

@@ -94,7 +94,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 const defaults = {
                     channelId: dto.channelId,
                     broadcast: false,
-                    canSendMsgs: true,
+                    canSendMsgs: false,
                     participantsCount: 0,
                     restricted: false,
                     sendMessages: false,
@@ -652,6 +652,9 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             return Object.keys(data || {});
         }
         catch (error) {
+            if (error instanceof common_1.NotFoundException || error?.status === 404) {
+                return [];
+            }
             throw this.handleError(error, 'Failed to fetch available messages');
         }
     }

@@ -14,6 +14,10 @@ export declare class BufferClientController {
     updateInfo(): Promise<string>;
     joinChannelsforBufferClients(clientId?: string): Promise<string>;
     checkbufferClients(): Promise<string>;
+    refreshBufferSessions(body?: {
+        apply?: boolean;
+        mobile?: string;
+    }): Promise<any>;
     diagnoseWarmup(): Promise<any>;
     diagnoseEnrollment(): Promise<any>;
     addNewUserstoBufferClients(body: BulkEnrollBufferClientsRequestDto): Promise<string>;
