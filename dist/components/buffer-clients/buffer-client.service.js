@@ -434,12 +434,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         this.logger.log(`BufferClient with mobile ${mobile} removed successfully`);
     }
     async search(filter) {
-        if (filter.tgId === "refresh") {
-            this.updateAllClientSessions().catch((error) => {
-                this.logger.error('Error updating all client sessions:', error);
-            });
-            return [];
-        }
         const query = { ...filter };
         if (typeof query.mobile === 'string' && query.mobile) {
             query.mobile = this.canonicalMobile(query.mobile);
@@ -1370,24 +1364,74 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
         return { createdCount, attemptedCount, createdEntries };
     }
-    async updateAllClientSessions() {
+    async updateAllClientSessions(options = {}) {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
-        const bufferClients = await this.bufferClientModel.find({
+        const filter = {
             status: 'active',
             warmupPhase: { $in: ['ready', 'session_rotated'] },
-        }).exec();
+        };
+        if (options.mobile) {
+            filter.mobile = this.canonicalMobile(options.mobile);
+        }
+        const bufferClients = await this.bufferClientModel.find(filter).exec();
+        const result = {
+            dryRun: options.dryRun === true,
+            candidateCount: bufferClients.length,
+            protectedPrimaryClientCount: primaryClientMobiles.size,
+            skippedPrimary: 0,
+            recoveredMissingSessions: 0,
+            rotated: 0,
+            deactivated: 0,
+            failed: 0,
+            candidates: options.dryRun === true
+                ? bufferClients.map((client) => ({
+                    mobile: client.mobile,
+                    warmupPhase: client.warmupPhase,
+                    hasSession: Boolean(client.session?.trim()),
+                    protectedPrimary: this.isPrimaryClientMobile(client.mobile, primaryClientMobiles),
+                }))
+                : undefined,
+        };
         this.logger.info('Starting bulk buffer session rotation', {
             candidateCount: bufferClients.length,
             protectedPrimaryClientCount: primaryClientMobiles.size,
+            dryRun: result.dryRun,
+            mobile: options.mobile || null,
         });
+        if (result.dryRun) {
+            return result;
+        }
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
             if (this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)) {
                 this.logger.debug(`Skipping session rotation for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                result.skippedPrimary++;
                 continue;
             }
             try {
                 this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
+                let activeSession = bufferClient.session?.trim() || '';
+                if (!activeSession) {
+                    let recoveredActiveClient = null;
+                    try {
+                        const recovered = await this.resolveActiveSessionForRotation(bufferClient.mobile);
+                        recoveredActiveClient = recovered?.activeClient || null;
+                        if (!recovered?.activeSession) {
+                            throw new Error(`No verified users session available for ${bufferClient.mobile}`);
+                        }
+                        activeSession = recovered.activeSession;
+                        result.recoveredMissingSessions++;
+                    }
+                    finally {
+                        if (recoveredActiveClient) {
+                            try {
+                                await recoveredActiveClient.destroy();
+                            }
+                            catch {
+                            }
+                        }
+                    }
+                }
                 const client = await connection_manager_1.connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });
                 try {
                     const hasPassword = await client.hasPassword();
@@ -1397,7 +1441,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     }
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
-                    if (!newSession || newSession === bufferClient.session) {
+                    if (!newSession || newSession === activeSession) {
                         throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
                     }
                     const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(bufferClient.mobile, newSession);
@@ -1411,6 +1455,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                         warmupPhase: base_client_service_1.WarmupPhase.SESSION_ROTATED,
                         sessionRotatedAt: new Date(),
                     });
+                    result.rotated++;
                 }
                 catch (error) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
@@ -1419,6 +1464,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                             status: 'inactive',
                             message: `Session update failed: ${errorDetails.message}`,
                         });
+                        result.deactivated++;
+                    }
+                    else {
+                        result.failed++;
                     }
                 }
                 finally {
@@ -1430,10 +1479,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
             catch (error) {
                 this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
+                result.failed++;
                 if (i < bufferClients.length - 1)
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             }
         }
+        return result;
     }
     async getBufferClientsByClientId(clientId, status) {
         const filter = { clientId };

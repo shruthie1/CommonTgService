@@ -57,8 +57,8 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "sendPlain", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
+    (0, swagger_1.ApiProperty)({ default: false }),
+    (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "canSendMsgs", void 0);
 __decorate([

@@ -25,6 +25,8 @@ export declare class SessionManager {
     private readonly OTP_CHECK_INTERVAL;
     private constructor();
     private getCredentials;
+    private normalizeMobileNumber;
+    private withTelegramTimeout;
     static getInstance(): SessionManager;
     createSession(options: SessionCreationOptions): Promise<SessionCreationResult>;
     private checkExistingSession;
@@ -67,6 +69,7 @@ export declare class SessionService {
     constructor(sessionAuditService: SessionAuditService);
     private getCredentials;
     private checkRateLimit;
+    private isPermanentSessionValidationError;
     private extractMobileFromSession;
     createSession(options: SessionCreationOptions): Promise<SessionCreationResult>;
     private tryAuditSessions;

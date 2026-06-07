@@ -68,12 +68,15 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const url = request.url;
         const originalUrl = request.originalUrl;
         const safeOriginalUrl = this.redactQuerySecret(originalUrl || url || path);
+        const queryApiKey = request.query['apiKey']?.toString() ||
+            request.query['apikey']?.toString() ||
+            request.query['api_key']?.toString();
         if (this.isIgnoredPath(path, url, originalUrl)) {
-            this.sanitizeQuery(request);
+            this.sanitizeQuery(request, queryApiKey);
             return true;
         }
         const apiKey = request.headers['x-api-key']?.toString() ||
-            request.query['apiKey']?.toString();
+            queryApiKey;
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
         this.logger.debug(`Request Received: ${safeOriginalUrl}`);
@@ -88,23 +91,44 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             passedReason = 'Origin allowed';
         }
         if (passedReason) {
-            this.sanitizeQuery(request);
+            this.sanitizeQuery(request, queryApiKey);
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
         this.notifyUnauthorized(clientIp, origin, safeOriginalUrl);
         throw new common_1.UnauthorizedException('Access denied');
     }
-    sanitizeQuery(request) {
+    sanitizeQuery(request, queryApiKey) {
+        if (queryApiKey) {
+            Object.defineProperty(request, 'authQueryApiKey', {
+                value: queryApiKey,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        }
         const query = request.query;
-        if (!query)
+        if (query) {
+            const sanitizedQuery = { ...query };
+            delete sanitizedQuery.apiKey;
+            delete sanitizedQuery.apikey;
+            delete sanitizedQuery.api_key;
+            Object.defineProperty(request, 'query', {
+                value: sanitizedQuery,
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            });
+        }
+        this.sanitizeUrlField(request, 'url');
+        this.sanitizeUrlField(request, 'originalUrl');
+    }
+    sanitizeUrlField(request, field) {
+        const currentValue = request[field];
+        if (!currentValue)
             return;
-        const sanitizedQuery = { ...query };
-        delete sanitizedQuery.apiKey;
-        delete sanitizedQuery.apikey;
-        delete sanitizedQuery.api_key;
-        Object.defineProperty(request, 'query', {
-            value: sanitizedQuery,
+        Object.defineProperty(request, field, {
+            value: this.stripQuerySecret(currentValue),
             writable: true,
             configurable: true,
             enumerable: true,
@@ -112,6 +136,19 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
     redactQuerySecret(url) {
         return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
+    }
+    stripQuerySecret(url) {
+        try {
+            const parsed = new URL(url, 'http://internal.local');
+            parsed.searchParams.delete('apiKey');
+            parsed.searchParams.delete('apikey');
+            parsed.searchParams.delete('api_key');
+            const search = parsed.searchParams.toString();
+            return `${parsed.pathname}${search ? `?${search}` : ''}${parsed.hash}`;
+        }
+        catch {
+            return this.redactQuerySecret(url);
+        }
     }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {

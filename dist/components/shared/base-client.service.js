@@ -2055,9 +2055,36 @@ class BaseClientService {
             const mobile = doc.mobile;
             const session = doc.session;
             if (!session?.trim()) {
-                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — skipping`);
-                results.skipped++;
-                continue;
+                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — attempting users-session recovery`);
+                let recoveredActiveClient = null;
+                try {
+                    const recovered = await this.resolveActiveSessionForRotation(mobile);
+                    recoveredActiveClient = recovered?.activeClient || null;
+                    if (recovered?.activeSession) {
+                        results.healed++;
+                        this.logger.warn(`[HealSessions] ${mobile}: recovered missing active session from users record`);
+                        await (0, Helpers_1.sleep)(2000);
+                        continue;
+                    }
+                    this.logger.warn(`[HealSessions] ${mobile}: no verified users session available — skipping`);
+                    results.skipped++;
+                    continue;
+                }
+                catch (error) {
+                    const errorDetails = (0, parseError_1.parseError)(error, `healSessionMissing:${mobile}`);
+                    results.errors.push({ mobile, error: errorDetails.message, action: 'recover_missing_session' });
+                    results.skipped++;
+                    continue;
+                }
+                finally {
+                    if (recoveredActiveClient) {
+                        try {
+                            await recoveredActiveClient.destroy();
+                        }
+                        catch {
+                        }
+                    }
+                }
             }
             let isAlive = false;
             let livenessError = '';

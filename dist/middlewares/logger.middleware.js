@@ -16,7 +16,9 @@ let LoggerMiddleware = class LoggerMiddleware {
         this.logger = new utils_1.Logger('HTTP');
     }
     use(req, res, next) {
-        const { method, originalUrl } = req;
+        const { method } = req;
+        const originalUrl = req.originalUrl;
+        const safeOriginalUrl = this.redactQuerySecret(originalUrl);
         const startTime = Date.now();
         const ip = req.ip;
         const excludedEndpoints = [
@@ -37,18 +39,18 @@ let LoggerMiddleware = class LoggerMiddleware {
                     return;
                 }
                 if (statusCode >= 500) {
-                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
-                    this.logger.error(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
+                    this.logger.error(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 400) {
-                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
-                    this.logger.warn(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`, { parseMode: 'HTML' });
+                    this.logger.warn(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else if (statusCode >= 300) {
-                    this.logger.verbose(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    this.logger.verbose(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
                 else {
-                    this.logger.debug(`${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
+                    this.logger.debug(`${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`);
                 }
             });
             res.on('error', (error) => {
@@ -58,15 +60,18 @@ let LoggerMiddleware = class LoggerMiddleware {
                     this.logger.warn(`BotsService instance not available for notifications`);
                     return;
                 }
-                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`, { parseMode: 'HTML' });
+                botsService.sendMessageByCategory(components_1.ChannelCategory.HTTP_FAILURES, `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`, { parseMode: 'HTML' });
             });
         }
         else {
             if (originalUrl.includes('Video')) {
-                this.logger.log(`Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`);
+                this.logger.log(`Excluded endpoint hit: ${safeOriginalUrl} (length: ${safeOriginalUrl.length})`);
             }
         }
         next();
+    }
+    redactQuerySecret(url) {
+        return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
     }
 };
 exports.LoggerMiddleware = LoggerMiddleware;

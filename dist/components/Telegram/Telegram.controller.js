@@ -127,10 +127,22 @@ let TelegramController = class TelegramController {
         return host ? `${proto}://${host}` : '';
     }
     getRequestApiKey(req, queryApiKey) {
-        const headerApiKey = req.headers['x-api-key'];
-        return queryApiKey
-            || (Array.isArray(headerApiKey) ? headerApiKey[0] : headerApiKey)
-            || undefined;
+        if (queryApiKey)
+            return queryApiKey;
+        const authQueryApiKey = req.authQueryApiKey;
+        if (authQueryApiKey)
+            return authQueryApiKey;
+        const originalUrl = req.originalUrl || req.url || '';
+        try {
+            const parsed = new URL(originalUrl, 'http://internal.local');
+            return parsed.searchParams.get('apiKey')
+                || parsed.searchParams.get('apikey')
+                || parsed.searchParams.get('api_key')
+                || undefined;
+        }
+        catch {
+            return undefined;
+        }
     }
     parseRangeHeader(range, fileSize) {
         const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
@@ -388,7 +400,7 @@ let TelegramController = class TelegramController {
                 res.setHeader('Content-Length', length);
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+                res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('X-Content-Type-Options', 'nosniff');
                 res.setHeader('Access-Control-Allow-Origin', '*');
@@ -423,7 +435,7 @@ let TelegramController = class TelegramController {
             else {
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+                res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
                 res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -475,7 +487,7 @@ let TelegramController = class TelegramController {
             }
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${this.sanitizeFilename(thumbnail.filename)}"`);
-            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+            res.setHeader('Cache-Control', 'private, max-age=604800, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
             return res.send(thumbnail.buffer);
