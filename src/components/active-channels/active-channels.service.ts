@@ -1,5 +1,5 @@
 import { PromoteMsgsService } from '../promote-msgs/promote-msgs.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, OnModuleInit, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
@@ -89,7 +89,7 @@ export class ActiveChannelsService implements OnModuleInit {
         const defaults: Record<string, unknown> = {
           channelId: dto.channelId,
           broadcast: false,
-          canSendMsgs: true,
+          canSendMsgs: false,
           participantsCount: 0,
           restricted: false,
           sendMessages: false,
@@ -735,6 +735,9 @@ export class ActiveChannelsService implements OnModuleInit {
       const data = await this.promoteMsgsService.findOne();
       return Object.keys(data || {});
     } catch (error) {
+      if (error instanceof NotFoundException || error?.status === 404) {
+        return [];
+      }
       throw this.handleError(error, 'Failed to fetch available messages');
     }
   }

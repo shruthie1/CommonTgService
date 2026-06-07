@@ -20,7 +20,7 @@ import {
 } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
-import { Api } from 'telegram';
+import { Api, TelegramClient } from 'telegram';
 import { UsersService } from '../users/users.service';
 import { ActiveChannelsService } from '../active-channels/active-channels.service';
 import { ClientService } from '../clients/client.service';
@@ -578,12 +578,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     }
 
     async search(filter: SearchBufferClientDto): Promise<BufferClientDocument[]> {
-        if (filter.tgId === "refresh") {
-            this.updateAllClientSessions().catch((error) => {
-                this.logger.error('Error updating all client sessions:', error);
-            });
-            return [];
-        }
         const query: BufferClientQuery = { ...filter };
         if (typeof query.mobile === 'string' && query.mobile) {
             query.mobile = this.canonicalMobile(query.mobile);
@@ -1703,25 +1697,78 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     // ---- Buffer-specific: Bulk session update ----
 
-    async updateAllClientSessions() {
+    async updateAllClientSessions(options: { dryRun?: boolean; mobile?: string } = {}) {
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
-        // Only update sessions for READY/SESSION_ROTATED accounts — never touch warming accounts
-        const bufferClients = await this.bufferClientModel.find({
+        const filter: BufferClientQuery = {
             status: 'active',
             warmupPhase: { $in: ['ready', 'session_rotated'] },
-        }).exec();
+        };
+        if (options.mobile) {
+            filter.mobile = this.canonicalMobile(options.mobile);
+        }
+
+        // Only update sessions for READY/SESSION_ROTATED accounts — never touch warming accounts
+        const bufferClients = await this.bufferClientModel.find(filter).exec();
+        const result = {
+            dryRun: options.dryRun === true,
+            candidateCount: bufferClients.length,
+            protectedPrimaryClientCount: primaryClientMobiles.size,
+            skippedPrimary: 0,
+            recoveredMissingSessions: 0,
+            rotated: 0,
+            deactivated: 0,
+            failed: 0,
+            candidates: options.dryRun === true
+                ? bufferClients.map((client) => ({
+                    mobile: client.mobile,
+                    warmupPhase: client.warmupPhase,
+                    hasSession: Boolean(client.session?.trim()),
+                    protectedPrimary: this.isPrimaryClientMobile(client.mobile, primaryClientMobiles),
+                }))
+                : undefined,
+        };
+
         this.logger.info('Starting bulk buffer session rotation', {
             candidateCount: bufferClients.length,
             protectedPrimaryClientCount: primaryClientMobiles.size,
+            dryRun: result.dryRun,
+            mobile: options.mobile || null,
         });
+
+        if (result.dryRun) {
+            return result;
+        }
+
         for (let i = 0; i < bufferClients.length; i++) {
             const bufferClient = bufferClients[i];
             if (this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)) {
                 this.logger.debug(`Skipping session rotation for ${bufferClient.mobile}: currently attached as primary client mobile`);
+                result.skippedPrimary++;
                 continue;
             }
             try {
                 this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
+                let activeSession = bufferClient.session?.trim() || '';
+                if (!activeSession) {
+                    let recoveredActiveClient: TelegramClient | null = null;
+                    try {
+                        const recovered = await this.resolveActiveSessionForRotation(bufferClient.mobile);
+                        recoveredActiveClient = recovered?.activeClient || null;
+                        if (!recovered?.activeSession) {
+                            throw new Error(`No verified users session available for ${bufferClient.mobile}`);
+                        }
+                        activeSession = recovered.activeSession;
+                        result.recoveredMissingSessions++;
+                    } finally {
+                        if (recoveredActiveClient) {
+                            try {
+                                await recoveredActiveClient.destroy();
+                            } catch {
+                                // Best-effort cleanup only.
+                            }
+                        }
+                    }
+                }
                 const client = await connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });
                 try {
                     const hasPassword = await client.hasPassword();
@@ -1732,7 +1779,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     }
                     await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
                     const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
-                    if (!newSession || newSession === bufferClient.session) {
+                    if (!newSession || newSession === activeSession) {
                         throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
                     }
                     const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(bufferClient.mobile, newSession);
@@ -1746,6 +1793,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         warmupPhase: WarmupPhase.SESSION_ROTATED,
                         sessionRotatedAt: new Date(),
                     });
+                    result.rotated++;
                 } catch (error: unknown) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
                     if (isPermanentError(errorDetails)) {
@@ -1753,6 +1801,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                             status: 'inactive',
                             message: `Session update failed: ${errorDetails.message}`,
                         });
+                        result.deactivated++;
+                    } else {
+                        result.failed++;
                     }
                 } finally {
                     await this.safeUnregisterClient(bufferClient.mobile);
@@ -1762,9 +1813,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 }
             } catch (error: unknown) {
                 this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
+                result.failed++;
                 if (i < bufferClients.length - 1) await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             }
         }
+        return result;
     }
 
     // ---- Buffer-specific: Distribution stats ----

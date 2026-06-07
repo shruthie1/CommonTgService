@@ -117,10 +117,21 @@ export class TelegramController {
     }
 
     private getRequestApiKey(req: Request, queryApiKey?: string): string | undefined {
-        const headerApiKey = req.headers['x-api-key'];
-        return queryApiKey
-            || (Array.isArray(headerApiKey) ? headerApiKey[0] : headerApiKey)
-            || undefined;
+        if (queryApiKey) return queryApiKey;
+
+        const authQueryApiKey = (req as Request & { authQueryApiKey?: string }).authQueryApiKey;
+        if (authQueryApiKey) return authQueryApiKey;
+
+        const originalUrl = req.originalUrl || req.url || '';
+        try {
+            const parsed = new URL(originalUrl, 'http://internal.local');
+            return parsed.searchParams.get('apiKey')
+                || parsed.searchParams.get('apikey')
+                || parsed.searchParams.get('api_key')
+                || undefined;
+        } catch {
+            return undefined;
+        }
     }
 
     private parseRangeHeader(range: string, fileSize: number): ParsedByteRange | null {
@@ -656,7 +667,7 @@ export class TelegramController {
                 res.setHeader('Content-Length', length);
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+                res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 
                 // Enable progressive video playback
@@ -701,7 +712,7 @@ export class TelegramController {
                 // Full file download
                 res.setHeader('Content-Type', fileInfo.contentType);
                 res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-                res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+                res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
                 res.setHeader('ETag', fileInfo.etag);
                 res.setHeader('Accept-Ranges', 'bytes');
                 
@@ -814,7 +825,7 @@ export class TelegramController {
             // Set response headers
             res.setHeader('Content-Type', thumbnail.contentType);
             res.setHeader('Content-Disposition', `inline; filename="${this.sanitizeFilename(thumbnail.filename)}"`);
-            res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+            res.setHeader('Cache-Control', 'private, max-age=604800, immutable');
             res.setHeader('ETag', thumbnail.etag);
             res.setHeader('Content-Length', thumbnail.buffer.length);
 

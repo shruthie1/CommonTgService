@@ -7,7 +7,7 @@ export class CreateActiveChannelDto {
   @ApiProperty({ default: false })
   broadcast: boolean;
 
-  @ApiProperty({ default: true })
+  @ApiProperty({ default: false })
   canSendMsgs: boolean;
 
   @ApiProperty({ default: 300 })

@@ -48,8 +48,8 @@ export class ActiveChannel {
   @Prop({ default: false })
   sendPlain: boolean;
 
-  @ApiProperty({ default: true })
-  @Prop({ default: true })
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
   canSendMsgs: boolean;
 
   @ApiProperty({ default: false })

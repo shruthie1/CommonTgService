@@ -8321,6 +8321,69 @@
         ]
       }
     },
+    "/user/aggregate-sort/query": {
+      "post": {
+        "operationId": "UsersController_aggregateSortQuery",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "field"
+                ],
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "sortOrder": {
+                    "type": "string",
+                    "enum": [
+                      "asc",
+                      "desc"
+                    ]
+                  },
+                  "query": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "limit": {
+                    "type": "number"
+                  },
+                  "skip": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown computed field or invalid pagination."
+          }
+        },
+        "summary": "Sort users by computed/nested fields with a MongoDB filter",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
     "/user/recompute-score/{mobile}": {
       "post": {
         "operationId": "UsersController_recomputeScore",
@@ -8761,6 +8824,50 @@
           }
         },
         "summary": "Run buffer warmup processing",
+        "tags": [
+          "Buffer Clients"
+        ]
+      }
+    },
+    "/bufferclients/sessions/refresh": {
+      "post": {
+        "description": "Dry-runs by default. Pass apply=true to start session rotation for ready/session_rotated buffer clients.",
+        "operationId": "BufferClientController_refreshBufferSessions",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apply": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "mobile": {
+                    "type": "string",
+                    "description": "Optional single mobile to refresh"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "summary": "Refresh buffer client sessions explicitly",
         "tags": [
           "Buffer Clients"
         ]
@@ -13781,7 +13888,7 @@
           },
           "canSendMsgs": {
             "type": "boolean",
-            "default": true
+            "default": false
           },
           "participantsCount": {
             "type": "number",
@@ -13892,7 +13999,7 @@
           },
           "canSendMsgs": {
             "type": "boolean",
-            "default": true
+            "default": false
           },
           "participantsCount": {
             "type": "number",

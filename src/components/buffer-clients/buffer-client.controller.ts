@@ -80,6 +80,36 @@ export class BufferClientController {
     return 'initiated Checking';
   }
 
+  @Post('sessions/refresh')
+  @ApiOperation({
+    summary: 'Refresh buffer client sessions explicitly',
+    description: 'Dry-runs by default. Pass apply=true to start session rotation for ready/session_rotated buffer clients.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        apply: { type: 'boolean', default: false },
+        mobile: { type: 'string', description: 'Optional single mobile to refresh' },
+      },
+    },
+    required: false,
+  })
+  @ApiOkResponse({ schema: { type: 'object', additionalProperties: true } })
+  async refreshBufferSessions(@Body() body: { apply?: boolean; mobile?: string } = {}): Promise<any> {
+    const mobile = typeof body?.mobile === 'string' && body.mobile.trim() ? body.mobile.trim() : undefined;
+    if (body?.apply !== true) {
+      return this.clientService.updateAllClientSessions({ dryRun: true, mobile });
+    }
+
+    this.clientService.updateAllClientSessions({ dryRun: false, mobile }).catch((error) => {
+      // Fire-and-forget endpoint; keep failures visible in service logs.
+      // eslint-disable-next-line no-console
+      console.error('Error refreshing buffer client sessions:', error);
+    });
+    return { initiated: true, dryRun: false, mobile: mobile || null };
+  }
+
   @Get('diagnoseWarmup')
   @ApiOperation({ summary: 'Dry-run warmup diagnosis', description: 'Returns what would happen to each active buffer client without executing anything.' })
   @ApiOkResponse({ schema: { type: 'object' } })

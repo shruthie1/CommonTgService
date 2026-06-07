@@ -74,16 +74,20 @@ export class AuthGuard implements CanActivate {
         const url = request.url;
         const originalUrl = request.originalUrl;
         const safeOriginalUrl = this.redactQuerySecret(originalUrl || url || path);
+        const queryApiKey =
+            request.query['apiKey']?.toString() ||
+            request.query['apikey']?.toString() ||
+            request.query['api_key']?.toString();
 
         // ✅ Step 1: Skip ignored paths early
         if (this.isIgnoredPath(path, url, originalUrl)) {
-            this.sanitizeQuery(request);
+            this.sanitizeQuery(request, queryApiKey);
             return true;
         }
 
         const apiKey =
             request.headers['x-api-key']?.toString() ||
-            request.query['apiKey']?.toString();
+            queryApiKey;
 
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
@@ -106,7 +110,7 @@ export class AuthGuard implements CanActivate {
         // ✅ Step 3: Final decision
         if (passedReason) {
             // this.logger.debug(`✅ Access granted because: ${passedReason}`);
-            this.sanitizeQuery(request);
+            this.sanitizeQuery(request, queryApiKey);
             return true;
         }
 
@@ -117,15 +121,40 @@ export class AuthGuard implements CanActivate {
         );
     }
 
-    private sanitizeQuery(request: Request): void {
+    private sanitizeQuery(request: Request, queryApiKey?: string): void {
+        if (queryApiKey) {
+            Object.defineProperty(request, 'authQueryApiKey', {
+                value: queryApiKey,
+                writable: true,
+                configurable: true,
+                enumerable: false,
+            });
+        }
+
         const query = request.query as Record<string, unknown> | undefined;
-        if (!query) return;
-        const sanitizedQuery = { ...query };
-        delete sanitizedQuery.apiKey;
-        delete sanitizedQuery.apikey;
-        delete sanitizedQuery.api_key;
-        Object.defineProperty(request, 'query', {
-            value: sanitizedQuery,
+        if (query) {
+            const sanitizedQuery = { ...query };
+            delete sanitizedQuery.apiKey;
+            delete sanitizedQuery.apikey;
+            delete sanitizedQuery.api_key;
+            Object.defineProperty(request, 'query', {
+                value: sanitizedQuery,
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            });
+        }
+
+        this.sanitizeUrlField(request, 'url');
+        this.sanitizeUrlField(request, 'originalUrl');
+    }
+
+    private sanitizeUrlField(request: Request, field: 'url' | 'originalUrl'): void {
+        const currentValue = request[field];
+        if (!currentValue) return;
+
+        Object.defineProperty(request, field, {
+            value: this.stripQuerySecret(currentValue),
             writable: true,
             configurable: true,
             enumerable: true,
@@ -134,6 +163,19 @@ export class AuthGuard implements CanActivate {
 
     private redactQuerySecret(url: string): string {
         return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
+    }
+
+    private stripQuerySecret(url: string): string {
+        try {
+            const parsed = new URL(url, 'http://internal.local');
+            parsed.searchParams.delete('apiKey');
+            parsed.searchParams.delete('apikey');
+            parsed.searchParams.delete('api_key');
+            const search = parsed.searchParams.toString();
+            return `${parsed.pathname}${search ? `?${search}` : ''}${parsed.hash}`;
+        } catch {
+            return this.redactQuerySecret(url);
+        }
     }
 
     private isIgnoredPath(...urls: string[]): boolean {

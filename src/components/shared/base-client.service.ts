@@ -2589,9 +2589,34 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const session = doc.session;
 
             if (!session?.trim()) {
-                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — skipping`);
-                results.skipped++;
-                continue;
+                this.logger.warn(`[HealSessions] ${mobile}: no session string stored — attempting users-session recovery`);
+                let recoveredActiveClient: TelegramClient | null = null;
+                try {
+                    const recovered = await this.resolveActiveSessionForRotation(mobile);
+                    recoveredActiveClient = recovered?.activeClient || null;
+                    if (recovered?.activeSession) {
+                        results.healed++;
+                        this.logger.warn(`[HealSessions] ${mobile}: recovered missing active session from users record`);
+                        await sleep(2000);
+                        continue;
+                    }
+                    this.logger.warn(`[HealSessions] ${mobile}: no verified users session available — skipping`);
+                    results.skipped++;
+                    continue;
+                } catch (error) {
+                    const errorDetails = parseError(error, `healSessionMissing:${mobile}`);
+                    results.errors.push({ mobile, error: errorDetails.message, action: 'recover_missing_session' });
+                    results.skipped++;
+                    continue;
+                } finally {
+                    if (recoveredActiveClient) {
+                        try {
+                            await recoveredActiveClient.destroy();
+                        } catch {
+                            // Best-effort cleanup only.
+                        }
+                    }
+                }
             }
 
             // Step 1: Test session liveness

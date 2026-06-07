@@ -9,7 +9,9 @@ export class LoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
   use(req: Request, res: Response, next: NextFunction): void {
-    const { method, originalUrl } = req;
+    const { method } = req;
+    const originalUrl = req.originalUrl;
+    const safeOriginalUrl = this.redactQuerySecret(originalUrl);
     const startTime = Date.now(); // Capture start time
     const ip = req.ip;
 
@@ -37,28 +39,28 @@ export class LoggerMiddleware implements NestMiddleware {
         if (statusCode >= 500) {
           botsService.sendMessageByCategory(
             ChannelCategory.HTTP_FAILURES,
-            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
+            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
             { parseMode: 'HTML' }
           );
           this.logger.error(
-            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
+            `${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else if (statusCode >= 400) {
           botsService.sendMessageByCategory(
             ChannelCategory.HTTP_FAILURES,
-            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
+            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
             { parseMode: 'HTML' }
           );
           this.logger.warn(
-            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
+            `${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else if (statusCode >= 300) {
           this.logger.verbose(
-            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
+            `${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         } else {
           this.logger.debug(
-            `${method} ${originalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
+            `${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
           );
         }
       });
@@ -72,18 +74,22 @@ export class LoggerMiddleware implements NestMiddleware {
         }
         botsService.sendMessageByCategory(
           ChannelCategory.HTTP_FAILURES,
-          `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${originalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`,
+          `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`,
           { parseMode: 'HTML' }
         );
       });
     } else {
       if (originalUrl.includes('Video')) {
         this.logger.log(
-          `Excluded endpoint hit: ${originalUrl} (length: ${originalUrl.length})`,
+          `Excluded endpoint hit: ${safeOriginalUrl} (length: ${safeOriginalUrl.length})`,
         );
       }
     }
 
     next();
+  }
+
+  private redactQuerySecret(url: string): string {
+    return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
   }
 }
