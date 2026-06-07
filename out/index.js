@@ -399,7 +399,7 @@ let AppController = AppController_1 = class AppController {
             catch (error) {
                 throw new common_1.HttpException('Invalid URL format', common_1.HttpStatus.BAD_REQUEST);
             }
-            this.logger.log(`[${requestId}] Starting HTTP ${method} request to ${url}`);
+            this.logger.log(`[${requestId}] Starting HTTP ${method} request to ${this.sanitizeUrl(url)}`);
             const httpsAgent = new https.Agent({
                 rejectUnauthorized: true
             });
@@ -450,14 +450,14 @@ let AppController = AppController_1 = class AppController {
         }
         catch (error) {
             const executionTime = Date.now() - startTime;
-            (0, utils_1.parseError)(error, `Failed to Execute Request: ${req.url} | Method: ${req.method?.toUpperCase()}`);
+            (0, utils_1.parseError)(error, `Failed to Execute Request: ${this.sanitizeUrl(req.url)} | Method: ${req.method?.toUpperCase()}`);
             this.logger.error({
                 message: `[${requestId}] Request failed after ${executionTime}ms`,
                 requestId,
                 request: {
-                    url: req.url,
+                    url: this.sanitizeUrl(req.url),
                     method: req.method || 'GET',
-                    params: req.params,
+                    params: this.sanitizeParams(req.params),
                     headers: this.sanitizeHeaders(req.headers || {}),
                     timeout: req.timeout || this.DEFAULT_TIMEOUT,
                     responseType: req.responseType || 'json'
@@ -478,7 +478,7 @@ let AppController = AppController_1 = class AppController {
         }
     }
     sanitizeHeaders(headers) {
-        const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization'];
+        const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key', 'api-key', 'apikey', 'api_key', 'x-auth-token', 'access-token', 'refresh-token'];
         const sanitized = { ...headers };
         sensitiveHeaders.forEach(header => {
             Object.keys(sanitized).forEach(key => {
@@ -488,6 +488,21 @@ let AppController = AppController_1 = class AppController {
             });
         });
         return sanitized;
+    }
+    sanitizeUrl(url) {
+        return (url || '').replace(/([?&](?:apiKey|apikey|api_key|x-api-key|token|access_token|refresh_token|authorization|auth|key|secret|password)=)[^&]*/gi, '$1[REDACTED]');
+    }
+    sanitizeParams(params) {
+        if (!params)
+            return params;
+        const sanitized = {};
+        for (const [key, value] of Object.entries(params)) {
+            sanitized[key] = this.isSensitiveField(key) ? '[REDACTED]' : value;
+        }
+        return sanitized;
+    }
+    isSensitiveField(key) {
+        return /^(apiKey|apikey|api_key|x-api-key|token|access_token|refresh_token|authorization|auth|key|secret|password)$/i.test(key);
     }
     isBinaryResponse(responseType, contentType) {
         if (responseType === 'arraybuffer')
