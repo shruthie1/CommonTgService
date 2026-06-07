@@ -72,7 +72,7 @@ export class AppController {
       }
 
       // Positive case start log (basic)
-      this.logger.log(`[${requestId}] Starting HTTP ${method} request to ${url}`);
+      this.logger.log(`[${requestId}] Starting HTTP ${method} request to ${this.sanitizeUrl(url)}`);
 
       const httpsAgent = new https.Agent({
         rejectUnauthorized: true
@@ -129,15 +129,15 @@ export class AppController {
 
     } catch (error) {
       const executionTime = Date.now() - startTime;
-      parseError(error, `Failed to Execute Request: ${req.url} | Method: ${req.method?.toUpperCase()}`)
+      parseError(error, `Failed to Execute Request: ${this.sanitizeUrl(req.url)} | Method: ${req.method?.toUpperCase()}`)
       // Detailed negative case log
       this.logger.error({
         message: `[${requestId}] Request failed after ${executionTime}ms`,
         requestId,
         request: {
-          url: req.url,
+          url: this.sanitizeUrl(req.url),
           method: req.method || 'GET',
-          params: req.params,
+          params: this.sanitizeParams(req.params),
           headers: this.sanitizeHeaders(req.headers || {}),
           timeout: req.timeout || this.DEFAULT_TIMEOUT,
           responseType: req.responseType || 'json'
@@ -162,7 +162,7 @@ export class AppController {
 
 
   private sanitizeHeaders(headers: Record<string, string>): Record<string, string> {
-    const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization'];
+    const sensitiveHeaders = ['authorization', 'cookie', 'proxy-authorization', 'x-api-key', 'api-key', 'apikey', 'api_key', 'x-auth-token', 'access-token', 'refresh-token'];
     const sanitized = { ...headers };
 
     // Redact sensitive headers
@@ -175,6 +175,25 @@ export class AppController {
     });
 
     return sanitized;
+  }
+
+  private sanitizeUrl(url?: string): string {
+    return (url || '').replace(/([?&](?:apiKey|apikey|api_key|x-api-key|token|access_token|refresh_token|authorization|auth|key|secret|password)=)[^&]*/gi, '$1[REDACTED]');
+  }
+
+  private sanitizeParams(params?: Record<string, string>): Record<string, string> | undefined {
+    if (!params) return params;
+    const sanitized: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(params)) {
+      sanitized[key] = this.isSensitiveField(key) ? '[REDACTED]' : value;
+    }
+
+    return sanitized;
+  }
+
+  private isSensitiveField(key: string): boolean {
+    return /^(apiKey|apikey|api_key|x-api-key|token|access_token|refresh_token|authorization|auth|key|secret|password)$/i.test(key);
   }
 
   private isBinaryResponse(responseType: string, contentType?: string): boolean {
