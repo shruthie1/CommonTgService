@@ -286,12 +286,33 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             await this.safeUnregisterClient(doc.mobile);
         }
     }
+    normalizeSessionForWrite(session) {
+        if (session === undefined)
+            return undefined;
+        if (session === null) {
+            throw new common_1.BadRequestException('session cannot be blank');
+        }
+        if (typeof session !== 'string') {
+            throw new common_1.BadRequestException('session must be a string');
+        }
+        const normalized = session.trim();
+        if (!normalized) {
+            throw new common_1.BadRequestException('session cannot be blank');
+        }
+        return normalized;
+    }
     async create(promoteClient) {
         const canonicalMobile = this.canonicalMobile(promoteClient.mobile);
+        const status = promoteClient.status || 'active';
+        const session = this.normalizeSessionForWrite(promoteClient.session);
+        if (status === 'active' && !session) {
+            throw new common_1.BadRequestException('Active PromoteClient requires a session');
+        }
         const promoteClientData = {
             ...promoteClient,
             mobile: canonicalMobile,
-            status: promoteClient.status || 'active',
+            ...(session ? { session } : {}),
+            status,
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
@@ -327,12 +348,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     async update(mobile, updateClientDto) {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData = { ...updateClientDto };
+        const normalizedSession = this.normalizeSessionForWrite(updateData.session);
+        if (normalizedSession) {
+            updateData.session = normalizedSession;
+        }
         if (updateData.mobile !== undefined) {
             const payloadMobile = this.canonicalMobile(updateData.mobile);
             if (payloadMobile !== canonicalMobile) {
                 throw new common_1.BadRequestException('mobile in payload must match route mobile');
             }
             updateData.mobile = canonicalMobile;
+        }
+        if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
+            throw new common_1.BadRequestException('Cannot activate PromoteClient without a session');
         }
         const updatedUser = await this.promoteClientModel
             .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
@@ -514,6 +542,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user)
             throw new common_1.BadRequestException('User not found');
+        const sourceSession = user.session?.trim();
+        if (!sourceSession) {
+            throw new common_1.BadRequestException('User session missing; cannot create PromoteClient');
+        }
         const isExist = await this.findOne(canonicalMobile, false);
         if (isExist)
             throw new common_1.ConflictException('PromoteClient already exists');
@@ -544,7 +576,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 tgId: user.tgId,
                 lastActive: 'default',
                 mobile: canonicalMobile,
-                session: user.session,
+                session: sourceSession,
                 availableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
@@ -884,7 +916,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 tgId: document.tgId,
                 lastActive: new Date().toISOString(),
                 mobile: document.mobile,
-                session: user.session,
+                session: user.session.trim(),
                 availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,

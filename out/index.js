@@ -18506,12 +18506,36 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             await this.safeUnregisterClient(doc.mobile);
         }
     }
+    normalizeSessionForWrite(session) {
+        if (session === undefined)
+            return undefined;
+        if (session === null) {
+            throw new common_1.BadRequestException('session cannot be blank');
+        }
+        if (typeof session !== 'string') {
+            throw new common_1.BadRequestException('session must be a string');
+        }
+        const normalized = session.trim();
+        if (!normalized) {
+            throw new common_1.BadRequestException('session cannot be blank');
+        }
+        return normalized;
+    }
     async create(bufferClient) {
         const canonicalMobile = this.canonicalMobile(bufferClient.mobile);
-        const createData = { ...bufferClient, mobile: canonicalMobile };
+        const status = bufferClient.status || 'active';
+        const session = this.normalizeSessionForWrite(bufferClient.session);
+        if (status === 'active' && !session) {
+            throw new common_1.BadRequestException('Active BufferClient requires a session');
+        }
+        const createData = {
+            ...bufferClient,
+            mobile: canonicalMobile,
+            ...(session ? { session } : {}),
+            status,
+        };
         const result = await this.bufferClientModel.create({
             ...createData,
-            status: bufferClient.status || 'active',
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
@@ -18545,12 +18569,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     async update(mobile, updateClientDto) {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData = { ...updateClientDto };
+        const normalizedSession = this.normalizeSessionForWrite(updateData.session);
+        if (normalizedSession) {
+            updateData.session = normalizedSession;
+        }
         if (updateData.mobile !== undefined) {
             const payloadMobile = this.canonicalMobile(updateData.mobile);
             if (payloadMobile !== canonicalMobile) {
                 throw new common_1.BadRequestException('mobile in payload must match route mobile');
             }
             updateData.mobile = canonicalMobile;
+        }
+        if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
+            throw new common_1.BadRequestException('Cannot activate BufferClient without a session');
         }
         const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
@@ -18799,6 +18830,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user)
             throw new common_1.BadRequestException('user not found');
+        const sourceSession = user.session?.trim();
+        if (!sourceSession) {
+            throw new common_1.BadRequestException('User session missing; cannot create BufferClient');
+        }
         const isExist = await this.findOne(canonicalMobile, false);
         if (isExist)
             throw new common_1.ConflictException('BufferClient already exist');
@@ -18812,7 +18847,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
             const bufferClient = {
                 tgId: user.tgId,
-                session: user.session,
+                session: sourceSession,
                 mobile: canonicalMobile,
                 availableDate,
                 channels: channels.ids.length,
@@ -19402,10 +19437,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: source user/session missing`);
                 return false;
             }
+            const sourceSession = user.session.trim();
             const targetAvailableDate = availableDate || client_helper_utils_1.ClientHelperUtils.getTodayDateString();
             const bufferClient = {
                 tgId: document.tgId,
-                session: user.session,
+                session: sourceSession,
                 mobile: document.mobile,
                 lastUsed: null,
                 availableDate: targetAvailableDate,
@@ -27858,12 +27894,33 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             await this.safeUnregisterClient(doc.mobile);
         }
     }
+    normalizeSessionForWrite(session) {
+        if (session === undefined)
+            return undefined;
+        if (session === null) {
+            throw new common_1.BadRequestException('session cannot be blank');
+        }
+        if (typeof session !== 'string') {
+            throw new common_1.BadRequestException('session must be a string');
+        }
+        const normalized = session.trim();
+        if (!normalized) {
+            throw new common_1.BadRequestException('session cannot be blank');
+        }
+        return normalized;
+    }
     async create(promoteClient) {
         const canonicalMobile = this.canonicalMobile(promoteClient.mobile);
+        const status = promoteClient.status || 'active';
+        const session = this.normalizeSessionForWrite(promoteClient.session);
+        if (status === 'active' && !session) {
+            throw new common_1.BadRequestException('Active PromoteClient requires a session');
+        }
         const promoteClientData = {
             ...promoteClient,
             mobile: canonicalMobile,
-            status: promoteClient.status || 'active',
+            ...(session ? { session } : {}),
+            status,
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
@@ -27899,12 +27956,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
     async update(mobile, updateClientDto) {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData = { ...updateClientDto };
+        const normalizedSession = this.normalizeSessionForWrite(updateData.session);
+        if (normalizedSession) {
+            updateData.session = normalizedSession;
+        }
         if (updateData.mobile !== undefined) {
             const payloadMobile = this.canonicalMobile(updateData.mobile);
             if (payloadMobile !== canonicalMobile) {
                 throw new common_1.BadRequestException('mobile in payload must match route mobile');
             }
             updateData.mobile = canonicalMobile;
+        }
+        if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
+            throw new common_1.BadRequestException('Cannot activate PromoteClient without a session');
         }
         const updatedUser = await this.promoteClientModel
             .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
@@ -28086,6 +28150,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user)
             throw new common_1.BadRequestException('User not found');
+        const sourceSession = user.session?.trim();
+        if (!sourceSession) {
+            throw new common_1.BadRequestException('User session missing; cannot create PromoteClient');
+        }
         const isExist = await this.findOne(canonicalMobile, false);
         if (isExist)
             throw new common_1.ConflictException('PromoteClient already exists');
@@ -28116,7 +28184,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 tgId: user.tgId,
                 lastActive: 'default',
                 mobile: canonicalMobile,
-                session: user.session,
+                session: sourceSession,
                 availableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
@@ -28456,7 +28524,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 tgId: document.tgId,
                 lastActive: new Date().toISOString(),
                 mobile: document.mobile,
-                session: user.session,
+                session: user.session.trim(),
                 availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
@@ -33141,6 +33209,36 @@ class BaseClientService {
         const doc = await this.model.findOne({ mobile }, { session: 1 }).lean().exec();
         return doc?.session?.trim() || null;
     }
+    async resolveActiveSessionForRotation(mobile) {
+        const storedActiveSession = await this.getStoredActiveSession(mobile);
+        if (storedActiveSession) {
+            return { activeSession: storedActiveSession, activeClient: null, recoveredFromUsers: false };
+        }
+        this.logger.warn(`Active session missing in ${this.clientType} client doc for ${mobile}; checking users backup session`);
+        const users = await this.usersService.search({ mobile });
+        const userSession = users.find((user) => user?.session?.trim())?.session?.trim();
+        if (!userSession) {
+            return null;
+        }
+        const recoveredClient = await this.createVerifiedSessionClient(mobile, userSession);
+        if (!recoveredClient) {
+            this.logger.warn(`Users session for ${mobile} could not be verified as active`);
+            return null;
+        }
+        try {
+            await this.update(mobile, { session: userSession });
+            this.logger.warn(`Recovered missing active session in ${this.clientType} client doc for ${mobile} from users record`);
+            return { activeSession: userSession, activeClient: recoveredClient, recoveredFromUsers: true };
+        }
+        catch (error) {
+            try {
+                await recoveredClient.destroy();
+            }
+            catch {
+            }
+            throw error;
+        }
+    }
     async createDistinctSessionString(mobile, forbiddenSessions, maxAttempts = 2) {
         const forbidden = new Set(forbiddenSessions
             .map((session) => session?.trim())
@@ -33619,15 +33717,19 @@ class BaseClientService {
         let activeClient = null;
         try {
             this.logger.log(`Starting session rotation for ${mobile}`);
-            const activeSession = await this.getStoredActiveSession(mobile);
-            if (!activeSession) {
+            const resolvedActive = await this.resolveActiveSessionForRotation(mobile);
+            if (!resolvedActive) {
                 this.logger.error(`No active session found in client doc for ${mobile}`);
                 return false;
             }
-            activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
+            const activeSession = resolvedActive.activeSession;
+            activeClient = resolvedActive.activeClient;
             if (!activeClient) {
-                this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
-                return false;
+                activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
+                if (!activeClient) {
+                    this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
+                    return false;
+                }
             }
             const users = await this.usersService.search({ mobile });
             if (!users.length) {
@@ -40758,14 +40860,16 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const path = request.path;
         const url = request.url;
         const originalUrl = request.originalUrl;
+        const safeOriginalUrl = this.redactQuerySecret(originalUrl || url || path);
         if (this.isIgnoredPath(path, url, originalUrl)) {
+            this.sanitizeQuery(request);
             return true;
         }
         const apiKey = request.headers['x-api-key']?.toString() ||
             request.query['apiKey']?.toString();
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
-        this.logger.debug(`Request Received: ${originalUrl}`);
+        this.logger.debug(`Request Received: ${safeOriginalUrl}`);
         let passedReason = null;
         if (apiKey && apiKey.toLowerCase() === 'santoor') {
             passedReason = 'API key valid';
@@ -40777,11 +40881,30 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             passedReason = 'Origin allowed';
         }
         if (passedReason) {
+            this.sanitizeQuery(request);
             return true;
         }
         this.logger.warn(`❌ Access denied — no condition satisfied`);
-        this.notifyUnauthorized(clientIp, origin, originalUrl);
+        this.notifyUnauthorized(clientIp, origin, safeOriginalUrl);
         throw new common_1.UnauthorizedException('Access denied');
+    }
+    sanitizeQuery(request) {
+        const query = request.query;
+        if (!query)
+            return;
+        const sanitizedQuery = { ...query };
+        delete sanitizedQuery.apiKey;
+        delete sanitizedQuery.apikey;
+        delete sanitizedQuery.api_key;
+        Object.defineProperty(request, 'query', {
+            value: sanitizedQuery,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+        });
+    }
+    redactQuerySecret(url) {
+        return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
     }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {

@@ -227,6 +227,11 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected selfHealLegacyWarmupAccounts(clientId?: string, limit?: number): Promise<number>;
     protected selfHealLegacyOperationalState(clientId?: string): Promise<void>;
     protected getStoredActiveSession(mobile: string): Promise<string | null>;
+    protected resolveActiveSessionForRotation(mobile: string): Promise<{
+        activeSession: string;
+        activeClient: TelegramClient | null;
+        recoveredFromUsers: boolean;
+    } | null>;
     protected createDistinctSessionString(mobile: string, forbiddenSessions: Array<string | null | undefined>, maxAttempts?: number): Promise<string | null>;
     protected hasDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<boolean>;
     getOrEnsureDistinctUsersBackupSession(mobile: string, activeSession: string | null | undefined): Promise<User | null>;

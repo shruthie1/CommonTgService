@@ -24,6 +24,7 @@ export declare class PromoteClientService extends BaseClientService<PromoteClien
     private isHealthyPromoteClientForCap;
     updateNameAndBio(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
     updateUsername(doc: PromoteClientDocument, client: Client, failedAttempts: number): Promise<number>;
+    private normalizeSessionForWrite;
     create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient>;
     findAll(statusFilter?: ClientStatusType): Promise<PromoteClient[]>;
     findOne(mobile: string, throwErr?: boolean): Promise<PromoteClientDocument | null>;
