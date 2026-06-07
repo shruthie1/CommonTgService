@@ -124,6 +124,21 @@ let UsersController = class UsersController {
         const skipNum = skip ? parseInt(skip, 10) : 0;
         return this.usersService.aggregateSort(field, order, limitNum, skipNum);
     }
+    async aggregateSortQuery(requestBody) {
+        const { field, sortOrder, query = {}, limit, skip } = requestBody || {};
+        if (!field)
+            throw new common_1.BadRequestException('field is required');
+        const limitNum = limit !== undefined ? Number(limit) : 20;
+        const skipNum = skip !== undefined ? Number(skip) : 0;
+        if (!Number.isInteger(limitNum) || limitNum < 1) {
+            throw new common_1.BadRequestException('Limit must be a positive integer');
+        }
+        if (!Number.isInteger(skipNum) || skipNum < 0) {
+            throw new common_1.BadRequestException('Skip must be a non-negative integer');
+        }
+        const order = sortOrder === 'asc' ? 1 : -1;
+        return this.usersService.aggregateSort(field, order, limitNum, skipNum, query);
+    }
     async recomputeScore(mobile) {
         await this.usersService.computeRelationshipScore(mobile);
         return this.usersService.getUserRelationships(mobile);
@@ -352,6 +367,29 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "aggregateSort", null);
+__decorate([
+    (0, common_1.Post)('aggregate-sort/query'),
+    (0, swagger_1.ApiOperation)({ summary: 'Sort users by computed/nested fields with a MongoDB filter' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['field'],
+            properties: {
+                field: { type: 'string' },
+                sortOrder: { type: 'string', enum: ['asc', 'desc'] },
+                query: { type: 'object', additionalProperties: true },
+                limit: { type: 'number' },
+                skip: { type: 'number' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'Unknown computed field or invalid pagination.' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "aggregateSortQuery", null);
 __decorate([
     (0, common_1.Post)('recompute-score/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Recompute relationship score (live Telegram connection)' }),

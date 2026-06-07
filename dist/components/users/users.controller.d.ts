@@ -50,6 +50,13 @@ export declare class UsersController {
         __v: number;
     }>;
     aggregateSort(field: string, sortOrder?: string, limit?: string, skip?: string): Promise<any[]>;
+    aggregateSortQuery(requestBody: {
+        field?: string;
+        sortOrder?: string;
+        query?: Record<string, unknown>;
+        limit?: number;
+        skip?: number;
+    }): Promise<any[]>;
     recomputeScore(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {

@@ -158,9 +158,7 @@ let UsersService = UsersService_1 = class UsersService {
             excludedMobiles = await this.telegramService.getOwnAccountMobiles();
         }
         catch { }
-        const matchStage = {};
-        if (excludedMobiles.length > 0)
-            matchStage.mobile = { $nin: excludedMobiles };
+        const matchStage = await this.getDefaultUserListQuery(excludedMobiles.length > 0 ? { mobile: { $nin: excludedMobiles } } : {});
         const isRecency = aspect === 'recency';
         const sortField = '_sortValue';
         const valueExpr = aspectDef.computed
@@ -214,13 +212,43 @@ let UsersService = UsersService_1 = class UsersService {
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
     }
-    async findAllSorted(limit = 100, skip = 0, sort) {
-        let excludedMobiles = [];
-        try {
-            excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+    hasQueryConstraint(query, field) {
+        if (!query || typeof query !== 'object')
+            return false;
+        if (Object.prototype.hasOwnProperty.call(query, field))
+            return true;
+        for (const key of ['$and', '$or', '$nor']) {
+            const clauses = query[key];
+            if (Array.isArray(clauses) && clauses.some(clause => this.hasQueryConstraint(clause, field))) {
+                return true;
+            }
         }
-        catch { }
-        const filter = excludedMobiles.length > 0 ? { mobile: { $nin: excludedMobiles } } : {};
+        return false;
+    }
+    async getDefaultUserListQuery(query = {}) {
+        const clauses = [];
+        if (!this.hasQueryConstraint(query, 'expired')) {
+            clauses.push({ expired: { $ne: true } });
+        }
+        if (!this.hasQueryConstraint(query, 'mobile')) {
+            let excludedMobiles = [];
+            try {
+                excludedMobiles = await this.telegramService.getOwnAccountMobiles();
+            }
+            catch { }
+            if (excludedMobiles.length > 0) {
+                clauses.push({ mobile: { $nin: excludedMobiles } });
+            }
+        }
+        if (clauses.length === 0)
+            return query;
+        if (!query || Object.keys(query).length === 0) {
+            return clauses.length === 1 ? clauses[0] : { $and: clauses };
+        }
+        return { $and: [...clauses, query] };
+    }
+    async findAllSorted(limit = 100, skip = 0, sort) {
+        const filter = await this.getDefaultUserListQuery();
         const query = this.userModel.find(filter).lean();
         if (sort)
             query.sort(sort);
@@ -305,14 +333,15 @@ let UsersService = UsersService_1 = class UsersService {
                 { tgId: q },
             ];
         }
-        const total = await this.userModel.countDocuments(query).exec();
+        const listQuery = await this.getDefaultUserListQuery(query);
+        const total = await this.userModel.countDocuments(listQuery).exec();
         const totalPages = Math.ceil(total / limitNum);
         if (total === 0) {
             return { users: [], total: 0, page: pageNum, limit: limitNum, totalPages: 0 };
         }
         const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
         const users = await this.userModel
-            .find(query)
+            .find(listQuery)
             .select('-session -password')
             .sort(sort)
             .skip(skip)
@@ -378,17 +407,8 @@ let UsersService = UsersService_1 = class UsersService {
                 query[field] = { $regex: new RegExp(escapeRegex(query[field]), 'i') };
             }
         }
-        if (!filter.mobile) {
-            let excludedMobiles = [];
-            try {
-                excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-            }
-            catch { }
-            if (excludedMobiles.length > 0) {
-                query.mobile = { $nin: excludedMobiles };
-            }
-        }
-        return this.userModel.find(query).sort({ updatedAt: -1 }).limit(200).exec();
+        const listQuery = await this.getDefaultUserListQuery(query);
+        return this.userModel.find(listQuery).sort({ updatedAt: -1 }).limit(200).exec();
     }
     async computeRelationshipScore(mobile) {
         const canonicalMobile = this.canonicalMobile(mobile);
@@ -715,7 +735,7 @@ let UsersService = UsersService_1 = class UsersService {
             throw new common_1.BadRequestException(message);
         }
     }
-    async aggregateSort(computedField, sortOrder = -1, limit = 20, skip = 0) {
+    async aggregateSort(computedField, sortOrder = -1, limit = 20, skip = 0, query = {}) {
         const COMPUTED_FIELDS = {
             intimateTotal: {
                 $reduce: {
@@ -778,11 +798,125 @@ let UsersService = UsersService_1 = class UsersService {
             callPartners: {
                 $size: { $ifNull: ['$calls.chats', []] },
             },
+            totalPhotos: {
+                $let: {
+                    vars: {
+                        splitTotal: {
+                            $add: [
+                                { $ifNull: ['$ownPhotoCount', 0] },
+                                { $ifNull: ['$otherPhotoCount', 0] },
+                            ],
+                        },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: ['$$splitTotal', 0] },
+                            '$$splitTotal',
+                            { $ifNull: ['$photoCount', 0] },
+                        ],
+                    },
+                },
+            },
+            totalVideos: {
+                $let: {
+                    vars: {
+                        splitTotal: {
+                            $add: [
+                                { $ifNull: ['$ownVideoCount', 0] },
+                                { $ifNull: ['$otherVideoCount', 0] },
+                            ],
+                        },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: ['$$splitTotal', 0] },
+                            '$$splitTotal',
+                            { $ifNull: ['$videoCount', 0] },
+                        ],
+                    },
+                },
+            },
+            totalMedia: {
+                $add: [
+                    {
+                        $let: {
+                            vars: {
+                                splitTotal: {
+                                    $add: [
+                                        { $ifNull: ['$ownPhotoCount', 0] },
+                                        { $ifNull: ['$otherPhotoCount', 0] },
+                                    ],
+                                },
+                            },
+                            in: {
+                                $cond: [
+                                    { $gt: ['$$splitTotal', 0] },
+                                    '$$splitTotal',
+                                    { $ifNull: ['$photoCount', 0] },
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        $let: {
+                            vars: {
+                                splitTotal: {
+                                    $add: [
+                                        { $ifNull: ['$ownVideoCount', 0] },
+                                        { $ifNull: ['$otherVideoCount', 0] },
+                                    ],
+                                },
+                            },
+                            in: {
+                                $cond: [
+                                    { $gt: ['$$splitTotal', 0] },
+                                    '$$splitTotal',
+                                    { $ifNull: ['$videoCount', 0] },
+                                ],
+                            },
+                        },
+                    },
+                    { $ifNull: ['$movieCount', 0] },
+                ],
+            },
             totalCallDuration: {
                 $reduce: {
                     input: { $ifNull: ['$calls.chats', []] },
                     initialValue: 0,
                     in: { $add: ['$$value', { $ifNull: ['$$this.totalDuration', 0] }] },
+                },
+            },
+            avgCallDuration: {
+                $let: {
+                    vars: {
+                        durations: {
+                            $filter: {
+                                input: { $ifNull: ['$calls.chats', []] },
+                                as: 'call',
+                                cond: { $gt: [{ $ifNull: ['$$call.averageDuration', 0] }, 0] },
+                            },
+                        },
+                    },
+                    in: {
+                        $cond: [
+                            { $gt: [{ $size: '$$durations' }, 0] },
+                            {
+                                $round: [
+                                    {
+                                        $avg: {
+                                            $map: {
+                                                input: '$$durations',
+                                                as: 'call',
+                                                in: { $ifNull: ['$$call.averageDuration', 0] },
+                                            },
+                                        },
+                                    },
+                                    0,
+                                ],
+                            },
+                            0,
+                        ],
+                    },
                 },
             },
             longestCall: {
@@ -811,15 +945,8 @@ let UsersService = UsersService_1 = class UsersService {
         if (!fieldExpr) {
             throw new common_1.BadRequestException(`Unknown computed field: ${computedField}`);
         }
-        let excludedMobiles = [];
-        try {
-            excludedMobiles = await this.telegramService.getOwnAccountMobiles();
-        }
-        catch { }
         const pipeline = [];
-        if (excludedMobiles.length > 0) {
-            pipeline.push({ $match: { mobile: { $nin: excludedMobiles } } });
-        }
+        pipeline.push({ $match: await this.getDefaultUserListQuery(query) });
         pipeline.push({ $addFields: { _computedSort: fieldExpr } }, { $sort: { _computedSort: sortOrder } }, { $skip: skip }, { $limit: limit }, { $project: { _computedSort: 0 } });
         return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
     }
@@ -828,7 +955,8 @@ let UsersService = UsersService_1 = class UsersService {
             throw new common_1.BadRequestException('Query is invalid.');
         }
         try {
-            const queryExec = this.userModel.find(query).lean();
+            const listQuery = await this.getDefaultUserListQuery(query);
+            const queryExec = this.userModel.find(listQuery).lean();
             if (sort)
                 queryExec.sort(sort);
             if (limit)
