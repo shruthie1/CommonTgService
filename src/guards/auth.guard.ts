@@ -73,9 +73,11 @@ export class AuthGuard implements CanActivate {
         const path = request.path;
         const url = request.url;
         const originalUrl = request.originalUrl;
+        const safeOriginalUrl = this.redactQuerySecret(originalUrl || url || path);
 
         // ✅ Step 1: Skip ignored paths early
         if (this.isIgnoredPath(path, url, originalUrl)) {
+            this.sanitizeQuery(request);
             return true;
         }
 
@@ -86,7 +88,7 @@ export class AuthGuard implements CanActivate {
         const clientIp = this.extractRealClientIP(request);
         const origin = this.extractRealOrigin(request);
 
-        this.logger.debug(`Request Received: ${originalUrl}`);
+        this.logger.debug(`Request Received: ${safeOriginalUrl}`);
         // this.logger.debug(`→ Client IP: ${clientIp}`);
         // this.logger.debug(`→ Origin: ${origin || 'NONE'}`);
 
@@ -104,14 +106,34 @@ export class AuthGuard implements CanActivate {
         // ✅ Step 3: Final decision
         if (passedReason) {
             // this.logger.debug(`✅ Access granted because: ${passedReason}`);
+            this.sanitizeQuery(request);
             return true;
         }
 
         this.logger.warn(`❌ Access denied — no condition satisfied`);
-        this.notifyUnauthorized(clientIp, origin, originalUrl);
+        this.notifyUnauthorized(clientIp, origin, safeOriginalUrl);
         throw new UnauthorizedException(
             'Access denied',
         );
+    }
+
+    private sanitizeQuery(request: Request): void {
+        const query = request.query as Record<string, unknown> | undefined;
+        if (!query) return;
+        const sanitizedQuery = { ...query };
+        delete sanitizedQuery.apiKey;
+        delete sanitizedQuery.apikey;
+        delete sanitizedQuery.api_key;
+        Object.defineProperty(request, 'query', {
+            value: sanitizedQuery,
+            writable: true,
+            configurable: true,
+            enumerable: true,
+        });
+    }
+
+    private redactQuerySecret(url: string): string {
+        return url.replace(/([?&](?:apiKey|apikey|api_key)=)[^&]*/gi, '$1[redacted]');
     }
 
     private isIgnoredPath(...urls: string[]): boolean {

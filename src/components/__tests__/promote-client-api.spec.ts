@@ -7,7 +7,7 @@
  * Every assertion matches exact real-world expected behavior — return types,
  * field isolation, side-effect verification, and error contract.
  */
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { PromoteClient } from '../promote-clients/schemas/promote-client.schema';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
@@ -132,6 +132,12 @@ describe('Promote Client API', () => {
             await expect(
                 service.create(makePromoteClientData({ mobile: '15550100003', tgId: 'different' })),
             ).rejects.toMatchObject({ code: 11000 });
+        });
+
+        it('rejects active promote clients without a session', async () => {
+            await expect(
+                service.create(makePromoteClientData({ mobile: '15550100005', session: undefined as any })),
+            ).rejects.toThrow(BadRequestException);
         });
 
         it('preserves explicit non-default values', async () => {
@@ -282,6 +288,13 @@ describe('Promote Client API', () => {
             const updated = await service.update('15550400005', { channels: 999 });
             expect(updated.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
         });
+
+        it('rejects blank session updates', async () => {
+            await service.create(makePromoteClientData({ mobile: '15550400006' }));
+
+            await expect(service.update('15550400006', { session: '   ' }))
+                .rejects.toThrow(BadRequestException);
+        });
     });
 
     // ─── CREATE OR UPDATE (PUT) ──────────────────────────────────────────────
@@ -377,6 +390,17 @@ describe('Promote Client API', () => {
             expect(updated.status).toBe('active');
             // No message passed → updateData has no message key → old value preserved
             expect(updated.message).toBe('old reason');
+        });
+
+        it('rejects activation when the stored session is missing', async () => {
+            await PromoteClientModel.create(makePromoteClientData({
+                mobile: '15550600004',
+                status: 'inactive',
+                session: undefined as any,
+            }));
+
+            await expect(service.updateStatus('15550600004', 'active'))
+                .rejects.toThrow(BadRequestException);
         });
     });
 

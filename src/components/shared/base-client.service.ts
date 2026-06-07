@@ -1890,6 +1890,41 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return doc?.session?.trim() || null;
     }
 
+    protected async resolveActiveSessionForRotation(
+        mobile: string,
+    ): Promise<{ activeSession: string; activeClient: TelegramClient | null; recoveredFromUsers: boolean } | null> {
+        const storedActiveSession = await this.getStoredActiveSession(mobile);
+        if (storedActiveSession) {
+            return { activeSession: storedActiveSession, activeClient: null, recoveredFromUsers: false };
+        }
+
+        this.logger.warn(`Active session missing in ${this.clientType} client doc for ${mobile}; checking users backup session`);
+        const users = await this.usersService.search({ mobile });
+        const userSession = users.find((user) => user?.session?.trim())?.session?.trim();
+        if (!userSession) {
+            return null;
+        }
+
+        const recoveredClient = await this.createVerifiedSessionClient(mobile, userSession);
+        if (!recoveredClient) {
+            this.logger.warn(`Users session for ${mobile} could not be verified as active`);
+            return null;
+        }
+
+        try {
+            await this.update(mobile, { session: userSession });
+            this.logger.warn(`Recovered missing active session in ${this.clientType} client doc for ${mobile} from users record`);
+            return { activeSession: userSession, activeClient: recoveredClient, recoveredFromUsers: true };
+        } catch (error) {
+            try {
+                await recoveredClient.destroy();
+            } catch {
+                // Best-effort cleanup only.
+            }
+            throw error;
+        }
+    }
+
     protected async createDistinctSessionString(mobile: string, forbiddenSessions: Array<string | null | undefined>, maxAttempts: number = 2): Promise<string | null> {
         const forbidden = new Set(
             forbiddenSessions
@@ -2454,15 +2489,19 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         try {
             this.logger.log(`Starting session rotation for ${mobile}`);
 
-            const activeSession = await this.getStoredActiveSession(mobile);
-            if (!activeSession) {
+            const resolvedActive = await this.resolveActiveSessionForRotation(mobile);
+            if (!resolvedActive) {
                 this.logger.error(`No active session found in client doc for ${mobile}`);
                 return false;
             }
-            activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
+            const activeSession = resolvedActive.activeSession;
+            activeClient = resolvedActive.activeClient;
             if (!activeClient) {
-                this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
-                return false;
+                activeClient = await this.createVerifiedSessionClient(mobile, activeSession);
+                if (!activeClient) {
+                    this.logger.error(`Active session is not live for the expected mobile ${mobile}`);
+                    return false;
+                }
             }
 
             const users = await this.usersService.search({ mobile });

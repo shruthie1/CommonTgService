@@ -7,7 +7,7 @@
  * Every assertion matches exact real-world expected behavior — return types,
  * field isolation, side-effect verification, and error contract.
  */
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { BufferClient } from '../buffer-clients/schemas/buffer-client.schema';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
@@ -132,6 +132,12 @@ describe('Buffer Client API', () => {
             await expect(
                 service.create(makeBufferClientData({ mobile: '15550100003', tgId: 'different' })),
             ).rejects.toMatchObject({ code: 11000 });
+        });
+
+        it('rejects active buffer clients without a session', async () => {
+            await expect(
+                service.create(makeBufferClientData({ mobile: '15550100005', session: undefined as any })),
+            ).rejects.toThrow(BadRequestException);
         });
 
         it('preserves explicit non-default values', async () => {
@@ -275,6 +281,13 @@ describe('Buffer Client API', () => {
             const updated = await service.update('15550400004', { channels: 999 });
             expect(updated.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
         });
+
+        it('rejects blank session updates', async () => {
+            await service.create(makeBufferClientData({ mobile: '15550400005' }));
+
+            await expect(service.update('15550400005', { session: '   ' }))
+                .rejects.toThrow(BadRequestException);
+        });
     });
 
     // ─── CREATE OR UPDATE (PUT) ──────────────────────────────────────────────
@@ -371,6 +384,21 @@ describe('Buffer Client API', () => {
             expect(updated.status).toBe('active');
             // No message passed → updateData has no message key → old value preserved
             expect(updated.message).toBe('old reason');
+        });
+
+        it('rejects activation when a legacy stored session is missing', async () => {
+            await BufferClientModel.collection.insertOne({
+                tgId: 'tg-buf-missing-session',
+                mobile: '15550600004',
+                availableDate: '2026-04-01',
+                channels: 100,
+                clientId: 'test-client-1',
+                status: 'inactive',
+                inUse: false,
+            });
+
+            await expect(service.updateStatus('15550600004', 'active'))
+                .rejects.toThrow(BadRequestException);
         });
     });
 

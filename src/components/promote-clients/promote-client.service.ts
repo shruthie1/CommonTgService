@@ -375,12 +375,33 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     // ---- CRUD (promote-specific) ----
 
+    private normalizeSessionForWrite(session: unknown): string | undefined {
+        if (session === undefined) return undefined;
+        if (session === null) {
+            throw new BadRequestException('session cannot be blank');
+        }
+        if (typeof session !== 'string') {
+            throw new BadRequestException('session must be a string');
+        }
+        const normalized = session.trim();
+        if (!normalized) {
+            throw new BadRequestException('session cannot be blank');
+        }
+        return normalized;
+    }
+
     async create(promoteClient: CreatePromoteClientDto): Promise<PromoteClient> {
         const canonicalMobile = this.canonicalMobile(promoteClient.mobile);
+        const status = promoteClient.status || 'active';
+        const session = this.normalizeSessionForWrite(promoteClient.session);
+        if (status === 'active' && !session) {
+            throw new BadRequestException('Active PromoteClient requires a session');
+        }
         const promoteClientData = {
             ...promoteClient,
             mobile: canonicalMobile,
-            status: promoteClient.status || 'active',
+            ...(session ? { session } : {}),
+            status,
             message: promoteClient.message || 'Account is functioning properly',
         };
         const newUser = new this.promoteClientModel(promoteClientData);
@@ -424,12 +445,19 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<PromoteClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
+        const normalizedSession = this.normalizeSessionForWrite(updateData.session);
+        if (normalizedSession) {
+            updateData.session = normalizedSession;
+        }
         if (updateData.mobile !== undefined) {
             const payloadMobile = this.canonicalMobile(updateData.mobile);
             if (payloadMobile !== canonicalMobile) {
                 throw new BadRequestException('mobile in payload must match route mobile');
             }
             updateData.mobile = canonicalMobile;
+        }
+        if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
+            throw new BadRequestException('Cannot activate PromoteClient without a session');
         }
         const updatedUser = await this.promoteClientModel
             .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
@@ -624,6 +652,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const canonicalMobile = this.canonicalMobile(mobile);
         const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user) throw new BadRequestException('User not found');
+        const sourceSession = user.session?.trim();
+        if (!sourceSession) {
+            throw new BadRequestException('User session missing; cannot create PromoteClient');
+        }
 
         const isExist = await this.findOne(canonicalMobile, false);
         if (isExist) throw new ConflictException('PromoteClient already exists');
@@ -659,7 +691,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 tgId: user.tgId,
                 lastActive: 'default',
                 mobile: canonicalMobile,
-                session: user.session, // Use old trusted session
+                session: sourceSession, // Use old trusted session
                 availableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,
@@ -1067,7 +1099,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 tgId: document.tgId,
                 lastActive: new Date().toISOString(),
                 mobile: document.mobile,
-                session: user.session, // Use old trusted session
+                session: user.session.trim(), // Use old trusted session
                 availableDate: targetAvailableDate,
                 channels: channels.ids.length,
                 clientId: targetClientId,

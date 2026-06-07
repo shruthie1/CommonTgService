@@ -447,12 +447,36 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     // ---- CRUD (buffer-specific) ----
 
+    private normalizeSessionForWrite(session: unknown): string | undefined {
+        if (session === undefined) return undefined;
+        if (session === null) {
+            throw new BadRequestException('session cannot be blank');
+        }
+        if (typeof session !== 'string') {
+            throw new BadRequestException('session must be a string');
+        }
+        const normalized = session.trim();
+        if (!normalized) {
+            throw new BadRequestException('session cannot be blank');
+        }
+        return normalized;
+    }
+
     async create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(bufferClient.mobile);
-        const createData: CreateBufferClientDto = { ...bufferClient, mobile: canonicalMobile };
+        const status = bufferClient.status || 'active';
+        const session = this.normalizeSessionForWrite(bufferClient.session);
+        if (status === 'active' && !session) {
+            throw new BadRequestException('Active BufferClient requires a session');
+        }
+        const createData: CreateBufferClientDto = {
+            ...bufferClient,
+            mobile: canonicalMobile,
+            ...(session ? { session } : {}),
+            status,
+        };
         const result = await this.bufferClientModel.create({
             ...createData,
-            status: bufferClient.status || 'active',
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(
@@ -494,12 +518,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
+        const normalizedSession = this.normalizeSessionForWrite(updateData.session);
+        if (normalizedSession) {
+            updateData.session = normalizedSession;
+        }
         if (updateData.mobile !== undefined) {
             const payloadMobile = this.canonicalMobile(updateData.mobile);
             if (payloadMobile !== canonicalMobile) {
                 throw new BadRequestException('mobile in payload must match route mobile');
             }
             updateData.mobile = canonicalMobile;
+        }
+        if (updateData.status === 'active' && !(updateData.session || await this.getStoredActiveSession(canonicalMobile))) {
+            throw new BadRequestException('Cannot activate BufferClient without a session');
         }
         const updatedBufferClient = await this.bufferClientModel
             .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
@@ -779,6 +810,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const canonicalMobile = this.canonicalMobile(mobile);
         const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
         if (!user) throw new BadRequestException('user not found');
+        const sourceSession = user.session?.trim();
+        if (!sourceSession) {
+            throw new BadRequestException('User session missing; cannot create BufferClient');
+        }
 
         const isExist = await this.findOne(canonicalMobile, false);
         if (isExist) throw new ConflictException('BufferClient already exist');
@@ -795,7 +830,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
             const bufferClient: CreateBufferClientDto = {
                 tgId: user.tgId,
-                session: user.session, // Use old trusted session directly
+                session: sourceSession, // Use old trusted session directly
                 mobile: canonicalMobile,
                 availableDate,
                 channels: channels.ids.length,
@@ -1486,11 +1521,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: source user/session missing`);
                 return false;
             }
+            const sourceSession = user.session.trim();
             const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
 
             const bufferClient: CreateBufferClientDto = {
                 tgId: document.tgId,
-                session: user.session, // Use old trusted session
+                session: sourceSession, // Use old trusted session
                 mobile: document.mobile,
                 lastUsed: null,
                 availableDate: targetAvailableDate,

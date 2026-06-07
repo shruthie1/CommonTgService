@@ -325,6 +325,33 @@ describe('Service flow reliability', () => {
         expect((service as any).verifySessionAuthorizations).toHaveBeenCalledWith('919990090001', 'active-session', expect.anything());
     });
 
+    test('rotateSession recovers missing client-doc session from users before rotating backup', async () => {
+        const service = new TestBaseService();
+        jest.spyOn(service as any, 'getStoredActiveSession')
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce('user-active-session');
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
+        jest.spyOn(service as any, 'verifySessionLive').mockResolvedValue(false);
+        jest.spyOn(service as any, 'verifySessionAuthorizations').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'safeUnregisterClient').mockResolvedValue(undefined);
+        jest.spyOn(service as any, 'createDistinctSessionString').mockResolvedValue('fresh-backup-after-recovery');
+
+        service.usersServiceMock.search
+            .mockResolvedValueOnce([{ tgId: 'tg-recover', mobile: '919990090005', session: 'user-active-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-recover', mobile: '919990090005', session: 'user-active-session' }])
+            .mockResolvedValueOnce([{ tgId: 'tg-recover', mobile: '919990090005', session: 'fresh-backup-after-recovery' }]);
+
+        const rotated = await service.rotateSession('919990090005');
+
+        expect(rotated).toBe(true);
+        expect(service.updateMock).toHaveBeenCalledWith('919990090005', { session: 'user-active-session' });
+        expect(service.usersServiceMock.update).toHaveBeenCalledWith('tg-recover', { session: 'fresh-backup-after-recovery' });
+        expect(service.updateMock).toHaveBeenCalledWith(
+            '919990090005',
+            expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
+        );
+    });
+
     test('rotateSession creates and persists a new backup when the existing backup is stale', async () => {
         const service = new TestBaseService();
         jest.spyOn(service as any, 'getStoredActiveSession').mockResolvedValue('active-session');
