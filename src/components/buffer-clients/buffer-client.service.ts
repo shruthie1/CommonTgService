@@ -94,7 +94,7 @@ type WarmupSimulationSkip = { mobile: string; action: string; priority?: number;
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
-    private isCheckingBufferClients = false;
+    private checkingBufferClientsSince: number = 0;
 
     private promoteClientService: PromoteClientService;
 
@@ -186,15 +186,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             leaveChannelInterval: 120 * 1000,          // 120 seconds
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,             // 120s (redesigned from 20s)
-            channelTarget: 200,                         // Reduced from 350
-            maxJoinsPerSession: 8,                      // NEW: max 8 per session
+            channelTarget: 350,                         // Must exceed buffer swap threshold (200+)
+            maxJoinsPerSession: 12,
             maxNewClientsPerTrigger: 10,
             minTotalClients: 10,
             maxMapSize: 100,
             cooldownHours: 2,
             clientProcessingDelay: 10000,               // 10s between clients
-            maxChannelJoinsPerDay: 20,
-            joinsPerMobilePerRound: 3,
+            maxChannelJoinsPerDay: 25,
+            joinsPerMobilePerRound: 4,
         };
     }
 
@@ -1133,7 +1133,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Check & process buffer clients ----
 
     async checkBufferClients() {
-        if (this.isCheckingBufferClients) {
+        const MAX_CHECK_DURATION = 10 * 60 * 1000; // 10 minutes max
+        if (this.checkingBufferClientsSince > 0 && Date.now() - this.checkingBufferClientsSince < MAX_CHECK_DURATION) {
             this.logger.warn('checkBufferClients already in progress, skipping concurrent call');
             return;
         }
@@ -1141,7 +1142,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return;
         }
-        this.isCheckingBufferClients = true;
+        this.checkingBufferClientsSince = Date.now();
         try {
             await this._checkBufferClientsInternal();
         } catch (error) {
@@ -1149,7 +1150,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.error(`checkBufferClients crashed: ${errMsg}`);
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkBufferClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
-            this.isCheckingBufferClients = false;
+            this.checkingBufferClientsSince = 0;
         }
     }
 
@@ -1402,7 +1403,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             primaryClientCount: primaryClientMobiles.size,
         });
 
-        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(this.config.maxMapSize);
+        const clients = await this.bufferClientModel.find(query).sort({ channels: -1 }).limit(this.config.maxMapSize);
 
         const joinSet = new Set<string>();
         const leaveSet = new Set<string>();

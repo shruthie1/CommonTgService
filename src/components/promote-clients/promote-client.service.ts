@@ -54,7 +54,7 @@ type PromoteClientQuery = Record<string, unknown>;
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
-    private isCheckingPromoteClients = false;
+    private checkingPromoteClientsSince: number = 0;
 
     private bufferClientService: BufferClientService;
 
@@ -106,15 +106,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             leaveChannelInterval: 60 * 1000,            // 1 minute
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,              // 120s (redesigned from 10s)
-            channelTarget: 200,                          // Reduced from 350
-            maxJoinsPerSession: 8,                       // NEW
+            channelTarget: 350,                          // Must exceed promote mobile selection threshold (230)
+            maxJoinsPerSession: 12,
             maxNewClientsPerTrigger: 10,
             minTotalClients: 12,
             maxMapSize: 100,
-            cooldownHours: 2,                            // Fixed inconsistency (was 4h in outer check)
+            cooldownHours: 2,
             clientProcessingDelay: 8000,                 // 8s between clients
-            maxChannelJoinsPerDay: 20,
-            joinsPerMobilePerRound: 3,
+            maxChannelJoinsPerDay: 25,
+            joinsPerMobilePerRound: 4,
         };
     }
 
@@ -562,6 +562,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     private async fetchJoinableChannels(currentChannels: number, limit: number, excludedIds: string[]): Promise<(Channel | ActiveChannel)[]> {
         const capped = Math.min(limit, 25);
         if (capped <= 0) return [];
+        // Use curated activeChannels pool until 220, then broader channels collection
         return currentChannels < 220
             ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
             : this.channelsService.getActiveChannels(capped, 0, excludedIds);
@@ -770,7 +771,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     mobile: { $nin: Array.from(preservedMobiles) },
                     status: 'active',
                 })
-                .sort({ channels: 1 })
+                .sort({ channels: -1 })
                 .limit(this.config.maxMapSize);
 
             const joinSet = new Set<string>();
@@ -849,7 +850,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     // ---- Promote-specific: Check & process promote clients ----
 
     async checkPromoteClients() {
-        if (this.isCheckingPromoteClients) {
+        const MAX_CHECK_DURATION = 10 * 60 * 1000; // 10 minutes max
+        if (this.checkingPromoteClientsSince > 0 && Date.now() - this.checkingPromoteClientsSince < MAX_CHECK_DURATION) {
             this.logger.warn('checkPromoteClients already in progress, skipping concurrent call');
             return;
         }
@@ -857,7 +859,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.warn('Ignored active check promote channels as active client setup exists');
             return;
         }
-        this.isCheckingPromoteClients = true;
+        this.checkingPromoteClientsSince = Date.now();
         try {
             await this._checkPromoteClientsInternal();
         } catch (error) {
@@ -865,7 +867,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkPromoteClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
-            this.isCheckingPromoteClients = false;
+            this.checkingPromoteClientsSince = 0;
         }
     }
 
