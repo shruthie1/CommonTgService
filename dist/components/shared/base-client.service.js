@@ -442,10 +442,6 @@ class BaseClientService {
             return false;
         if (channel.canSendMsgs !== true)
             return false;
-        if ('sendMessages' in channel && channel.sendMessages === true)
-            return false;
-        if ('sendPlain' in channel && channel.sendPlain === true)
-            return false;
         if (channel.restricted === true)
             return false;
         if (channel.banned === true)
@@ -455,8 +451,6 @@ class BaseClientService {
         if (channel.private === true)
             return false;
         if ('tempBan' in channel && channel.tempBan === true)
-            return false;
-        if ('deletedCount' in channel && channel.deletedCount != null && channel.deletedCount > 30)
             return false;
         return true;
     }
@@ -1218,6 +1212,9 @@ class BaseClientService {
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
                     this.incrementDailyJoinCount(mobile);
+                    if (currentChannel.channelId) {
+                        this.activeChannelsService.incrementClientsJoined(currentChannel.channelId).catch(() => { });
+                    }
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
                         try {
                             const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });

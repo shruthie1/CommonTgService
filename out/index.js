@@ -14656,6 +14656,13 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             throw this.handleError(error, 'Failed to fetch all channels');
         }
     }
+    async incrementClientsJoined(channelId) {
+        try {
+            await this.activeChannelModel.updateOne({ channelId }, { $inc: { clientsJoined: 1 } });
+        }
+        catch (error) {
+        }
+    }
     async findOne(channelId) {
         try {
             if (!channelId) {
@@ -14741,12 +14748,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds = []) {
         try {
             await this.repairLegacySendabilityFlags();
-            const positiveKeywords = [
-                'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
-                'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video',
-                'service', 'real', 'call', 'desi', 'partner', 'hook', 'romance', 'flirt', 'single', 'chat',
-                'meet', 'intimate', 'escort', 'night', 'fun', 'hot', 'sexy', 'lovers', 'connect', 'relationship'
-            ];
             const negativeKeywords = [
                 'online', 'realestat', 'propert', 'freefire', 'bgmi', 'promo', 'agent', 'board', 'design',
                 'realt', 'clas', 'PROFIT', 'wholesale', 'retail', 'topper', 'exam', 'motivat', 'medico',
@@ -14761,40 +14762,24 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 'diet', 'travel', 'tour', 'hotel', 'food', 'recipe', 'fashion', 'style', 'beauty', 'music',
                 'art', 'craft', 'event', 'party', 'ticket'
             ];
+            const negativePattern = negativeKeywords.join('|');
             const query = {
                 $and: [
                     {
-                        $or: [
-                            { title: { $regex: positiveKeywords.join('|'), $options: 'i' } },
-                            { username: { $regex: positiveKeywords.join('|'), $options: 'i' } },
-                        ],
+                        title: {
+                            $not: { $regex: negativePattern, $options: 'i' },
+                        },
                     },
                     {
-                        $and: [
-                            {
-                                title: {
-                                    $exists: true,
-                                    $type: 'string',
-                                    $not: { $regex: negativeKeywords.join('|'), $options: 'i' },
-                                },
-                            },
-                            {
-                                username: {
-                                    $exists: true,
-                                    $type: 'string',
-                                    $not: { $regex: negativeKeywords.join('|'), $options: 'i' },
-                                },
-                            },
-                        ],
+                        username: {
+                            $not: { $regex: negativePattern, $options: 'i' },
+                        },
                     },
                     {
                         channelId: { $nin: notIds },
                         participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
                         username: { $ne: null },
-                        deletedCount: { $lte: 30 },
                         canSendMsgs: true,
-                        sendMessages: { $ne: true },
-                        sendPlain: { $ne: true },
                         restricted: { $ne: true },
                         banned: { $ne: true },
                         forbidden: { $ne: true },
@@ -14805,11 +14790,32 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             };
             const pipeline = [
                 { $match: query },
-                { $addFields: { randomField: { $rand: {} } } },
-                { $sort: { randomField: 1 } },
+                {
+                    $match: {
+                        $or: [
+                            { $expr: { $lt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }] }, 5] } },
+                            { $expr: { $lte: [
+                                        { $divide: [{ $ifNull: ['$deletedCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }, 0.01] }] },
+                                        0.15
+                                    ] } },
+                        ],
+                    },
+                },
+                {
+                    $addFields: {
+                        sortScore: {
+                            $multiply: [
+                                { $rand: {} },
+                                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
+                                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
+                            ],
+                        },
+                    },
+                },
+                { $sort: { sortScore: -1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { randomField: 0 } },
+                { $project: { sortScore: 0 } },
             ];
             return await this.activeChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
         }
@@ -15529,6 +15535,11 @@ __decorate([
     (0, mongoose_1.Prop)({ default: null }),
     __metadata("design:type", Date)
 ], ActiveChannel.prototype, "reactRestrictedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ default: 0, type: Number }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], ActiveChannel.prototype, "clientsJoined", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
@@ -21048,8 +21059,7 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
                     username: { $not: { $regex: notPattern } }
                 },
                 {
-                    sendMessages: { $ne: true },
-                    sendPlain: { $ne: true },
+                    canSendMsgs: true,
                     broadcast: { $ne: true },
                     restricted: { $ne: true }
                 }
@@ -21110,8 +21120,6 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
-                    sendMessages: { $ne: true },
-                    sendPlain: { $ne: true },
                     banned: { $ne: true },
                     restricted: { $ne: true },
                     forbidden: { $ne: true },
@@ -21122,11 +21130,21 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
         try {
             const pipeline = [
                 { $match: query },
-                { $addFields: { randomField: { $rand: {} } } },
-                { $sort: { randomField: 1 } },
+                {
+                    $addFields: {
+                        sortScore: {
+                            $multiply: [
+                                { $rand: {} },
+                                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
+                                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
+                            ],
+                        },
+                    },
+                },
+                { $sort: { sortScore: -1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { randomField: 0 } }
+                { $project: { sortScore: 0 } }
             ];
             const result = await this.ChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
             return result;
@@ -32343,10 +32361,6 @@ class BaseClientService {
             return false;
         if (channel.canSendMsgs !== true)
             return false;
-        if ('sendMessages' in channel && channel.sendMessages === true)
-            return false;
-        if ('sendPlain' in channel && channel.sendPlain === true)
-            return false;
         if (channel.restricted === true)
             return false;
         if (channel.banned === true)
@@ -32356,8 +32370,6 @@ class BaseClientService {
         if (channel.private === true)
             return false;
         if ('tempBan' in channel && channel.tempBan === true)
-            return false;
-        if ('deletedCount' in channel && channel.deletedCount != null && channel.deletedCount > 30)
             return false;
         return true;
     }
@@ -33119,6 +33131,9 @@ class BaseClientService {
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
                     this.incrementDailyJoinCount(mobile);
+                    if (currentChannel.channelId) {
+                        this.activeChannelsService.incrementClientsJoined(currentChannel.channelId).catch(() => { });
+                    }
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
                         try {
                             const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
