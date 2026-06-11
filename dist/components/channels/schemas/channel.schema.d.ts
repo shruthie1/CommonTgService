@@ -15,6 +15,7 @@ export declare class Channel {
     forbidden: boolean;
     megagroup: boolean;
     reactRestricted: boolean;
+    reactRestrictedAt: Date | null;
     wordRestriction: number;
     dMRestriction: number;
     availableMsgs: any[];
@@ -151,6 +152,15 @@ export declare const ChannelSchema: mongoose.Schema<Channel, mongoose.Model<Chan
         id: string;
     }>;
     reactRestricted?: mongoose.SchemaDefinitionProperty<boolean, Channel, Document<unknown, {}, Channel, {
+        id: string;
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
+        _id: mongoose.Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    reactRestrictedAt?: mongoose.SchemaDefinitionProperty<Date, Channel, Document<unknown, {}, Channel, {
         id: string;
     }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<Channel & {
         _id: mongoose.Types.ObjectId;

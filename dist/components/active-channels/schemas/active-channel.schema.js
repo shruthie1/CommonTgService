@@ -112,6 +112,11 @@ __decorate([
     __metadata("design:type", Boolean)
 ], ActiveChannel.prototype, "reactRestricted", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ default: null, type: Date }),
+    (0, mongoose_1.Prop)({ default: null }),
+    __metadata("design:type", Date)
+], ActiveChannel.prototype, "reactRestrictedAt", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ default: false }),
     (0, mongoose_1.Prop)({ default: false }),
     __metadata("design:type", Boolean)
