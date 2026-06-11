@@ -140,6 +140,13 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             throw this.handleError(error, 'Failed to fetch all channels');
         }
     }
+    async incrementClientsJoined(channelId) {
+        try {
+            await this.activeChannelModel.updateOne({ channelId }, { $inc: { clientsJoined: 1 } });
+        }
+        catch (error) {
+        }
+    }
     async findOne(channelId) {
         try {
             if (!channelId) {
@@ -225,12 +232,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds = []) {
         try {
             await this.repairLegacySendabilityFlags();
-            const positiveKeywords = [
-                'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
-                'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video',
-                'service', 'real', 'call', 'desi', 'partner', 'hook', 'romance', 'flirt', 'single', 'chat',
-                'meet', 'intimate', 'escort', 'night', 'fun', 'hot', 'sexy', 'lovers', 'connect', 'relationship'
-            ];
             const negativeKeywords = [
                 'online', 'realestat', 'propert', 'freefire', 'bgmi', 'promo', 'agent', 'board', 'design',
                 'realt', 'clas', 'PROFIT', 'wholesale', 'retail', 'topper', 'exam', 'motivat', 'medico',
@@ -245,40 +246,24 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 'diet', 'travel', 'tour', 'hotel', 'food', 'recipe', 'fashion', 'style', 'beauty', 'music',
                 'art', 'craft', 'event', 'party', 'ticket'
             ];
+            const negativePattern = negativeKeywords.join('|');
             const query = {
                 $and: [
                     {
-                        $or: [
-                            { title: { $regex: positiveKeywords.join('|'), $options: 'i' } },
-                            { username: { $regex: positiveKeywords.join('|'), $options: 'i' } },
-                        ],
+                        title: {
+                            $not: { $regex: negativePattern, $options: 'i' },
+                        },
                     },
                     {
-                        $and: [
-                            {
-                                title: {
-                                    $exists: true,
-                                    $type: 'string',
-                                    $not: { $regex: negativeKeywords.join('|'), $options: 'i' },
-                                },
-                            },
-                            {
-                                username: {
-                                    $exists: true,
-                                    $type: 'string',
-                                    $not: { $regex: negativeKeywords.join('|'), $options: 'i' },
-                                },
-                            },
-                        ],
+                        username: {
+                            $not: { $regex: negativePattern, $options: 'i' },
+                        },
                     },
                     {
                         channelId: { $nin: notIds },
                         participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
                         username: { $ne: null },
-                        deletedCount: { $lte: 30 },
                         canSendMsgs: true,
-                        sendMessages: { $ne: true },
-                        sendPlain: { $ne: true },
                         restricted: { $ne: true },
                         banned: { $ne: true },
                         forbidden: { $ne: true },
@@ -289,11 +274,32 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             };
             const pipeline = [
                 { $match: query },
-                { $addFields: { randomField: { $rand: {} } } },
-                { $sort: { randomField: 1 } },
+                {
+                    $match: {
+                        $or: [
+                            { $expr: { $lt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }] }, 5] } },
+                            { $expr: { $lte: [
+                                        { $divide: [{ $ifNull: ['$deletedCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }, 0.01] }] },
+                                        0.15
+                                    ] } },
+                        ],
+                    },
+                },
+                {
+                    $addFields: {
+                        sortScore: {
+                            $multiply: [
+                                { $rand: {} },
+                                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
+                                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
+                            ],
+                        },
+                    },
+                },
+                { $sort: { sortScore: -1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { randomField: 0 } },
+                { $project: { sortScore: 0 } },
             ];
             return await this.activeChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
         }

@@ -149,8 +149,7 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
                     username: { $not: { $regex: notPattern } }
                 },
                 {
-                    sendMessages: { $ne: true },
-                    sendPlain: { $ne: true },
+                    canSendMsgs: true,
                     broadcast: { $ne: true },
                     restricted: { $ne: true }
                 }
@@ -211,8 +210,6 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
                     participantsCount: { $gt: 1000 },
                     username: { $ne: null },
                     canSendMsgs: true,
-                    sendMessages: { $ne: true },
-                    sendPlain: { $ne: true },
                     banned: { $ne: true },
                     restricted: { $ne: true },
                     forbidden: { $ne: true },
@@ -223,11 +220,21 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
         try {
             const pipeline = [
                 { $match: query },
-                { $addFields: { randomField: { $rand: {} } } },
-                { $sort: { randomField: 1 } },
+                {
+                    $addFields: {
+                        sortScore: {
+                            $multiply: [
+                                { $rand: {} },
+                                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
+                                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
+                            ],
+                        },
+                    },
+                },
+                { $sort: { sortScore: -1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { randomField: 0 } }
+                { $project: { sortScore: 0 } }
             ];
             const result = await this.ChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
             return result;

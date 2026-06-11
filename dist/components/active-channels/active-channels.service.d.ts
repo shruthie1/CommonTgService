@@ -16,6 +16,7 @@ export declare class ActiveChannelsService implements OnModuleInit {
     create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel>;
     createMultiple(createChannelDtos: Partial<CreateActiveChannelDto>[]): Promise<string>;
     findAll(): Promise<ActiveChannel[]>;
+    incrementClientsJoined(channelId: string): Promise<void>;
     findOne(channelId: string): Promise<ActiveChannel | null>;
     update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel>;
     removeFromAvailableMsgs(channelId: string, msg: string): Promise<ActiveChannel | null>;
