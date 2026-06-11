@@ -96,6 +96,10 @@ export class ActiveChannel {
   @Prop({ default: null })
   reactRestrictedAt?: Date | null;
 
+  @ApiProperty({ default: 0, type: Number })
+  @Prop({ default: 0 })
+  clientsJoined?: number;
+
   @ApiProperty({ default: false })
   @Prop({ default: false })
   private?: boolean;

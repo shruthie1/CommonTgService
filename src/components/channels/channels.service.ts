@@ -163,8 +163,7 @@ export class ChannelsService implements OnModuleInit {
           username: { $not: { $regex: notPattern } }
         },
         {
-          sendMessages: { $ne: true },
-          sendPlain: { $ne: true },
+          canSendMsgs: true,
           broadcast: { $ne: true },
           restricted: { $ne: true }
         }
@@ -238,8 +237,6 @@ export class ChannelsService implements OnModuleInit {
             participantsCount: { $gt: 1000 },
             username: { $ne: null },
             canSendMsgs: true,
-            sendMessages: { $ne: true },
-            sendPlain: { $ne: true },
             banned: { $ne: true },
             restricted: { $ne: true },
             forbidden: { $ne: true },
@@ -252,11 +249,21 @@ export class ChannelsService implements OnModuleInit {
 
       const pipeline: PipelineStage[] = [
         { $match: query },
-        { $addFields: { randomField: { $rand: {} } } },
-        { $sort: { randomField: 1 as const } },
+        {
+          $addFields: {
+            sortScore: {
+              $multiply: [
+                { $rand: {} },
+                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
+                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
+              ],
+            },
+          },
+        },
+        { $sort: { sortScore: -1 as const } },
         { $skip: skip },
         { $limit: limit },
-        { $project: { randomField: 0 } }
+        { $project: { sortScore: 0 } }
       ];
       const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline, { allowDiskUse: true }).exec();
       return result;

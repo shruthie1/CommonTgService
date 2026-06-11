@@ -139,6 +139,17 @@ export class ActiveChannelsService implements OnModuleInit {
     }
   }
 
+  async incrementClientsJoined(channelId: string): Promise<void> {
+    try {
+      await this.activeChannelModel.updateOne(
+        { channelId },
+        { $inc: { clientsJoined: 1 } }
+      );
+    } catch (error) {
+      // Non-fatal — diversity scoring is best-effort
+    }
+  }
+
   async findOne(channelId: string): Promise<ActiveChannel | null> {
     try {
       if (!channelId) {
@@ -251,12 +262,13 @@ export class ActiveChannelsService implements OnModuleInit {
     try {
       await this.repairLegacySendabilityFlags();
 
-      const positiveKeywords = [
-        'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
-        'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video',
-        'service', 'real', 'call', 'desi', 'partner', 'hook', 'romance', 'flirt', 'single', 'chat',
-        'meet', 'intimate', 'escort', 'night', 'fun', 'hot', 'sexy', 'lovers', 'connect', 'relationship'
-      ];
+      // Positive keywords disabled — negative filter + quality filters are sufficient for channel selection
+      // const positiveKeywords = [
+      //   'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
+      //   'friend', 'frnd', 'boob', 'pussy', 'dating', 'swap', 'gay', 'sex', 'bitch', 'love', 'video',
+      //   'service', 'real', 'call', 'desi', 'partner', 'hook', 'romance', 'flirt', 'single', 'chat',
+      //   'meet', 'intimate', 'escort', 'night', 'fun', 'hot', 'sexy', 'lovers', 'connect', 'relationship'
+      // ];
 
       const negativeKeywords = [
         'online', 'realestat', 'propert', 'freefire', 'bgmi', 'promo', 'agent', 'board', 'design',
@@ -273,40 +285,35 @@ export class ActiveChannelsService implements OnModuleInit {
         'art', 'craft', 'event', 'party', 'ticket'
       ];
 
+      const negativePattern = negativeKeywords.join('|');
+
+      // Positive keyword match — disabled, negative filter + quality filters are sufficient
+      // const positivePattern = positiveKeywords.join('|');
+      // const positiveFilter = {
+      //   $or: [
+      //     { title: { $regex: positivePattern, $options: 'i' } },
+      //     { username: { $regex: positivePattern, $options: 'i' } },
+      //   ],
+      // };
+
       const query = {
         $and: [
+          // positiveFilter,
           {
-            $or: [
-              { title: { $regex: positiveKeywords.join('|'), $options: 'i' } },
-              { username: { $regex: positiveKeywords.join('|'), $options: 'i' } },
-            ],
+            title: {
+              $not: { $regex: negativePattern, $options: 'i' },
+            },
           },
           {
-            $and: [
-              {
-                title: {
-                  $exists: true,
-                  $type: 'string',
-                  $not: { $regex: negativeKeywords.join('|'), $options: 'i' },
-                },
-              },
-              {
-                username: {
-                  $exists: true,
-                  $type: 'string',
-                  $not: { $regex: negativeKeywords.join('|'), $options: 'i' },
-                },
-              },
-            ],
+            username: {
+              $not: { $regex: negativePattern, $options: 'i' },
+            },
           },
           {
             channelId: { $nin: notIds },
             participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
             username: { $ne: null },
-            deletedCount: { $lte: 30 },
             canSendMsgs: true,
-            sendMessages: { $ne: true },
-            sendPlain: { $ne: true },
             restricted: { $ne: true },
             banned: { $ne: true },
             forbidden: { $ne: true },
@@ -318,11 +325,37 @@ export class ActiveChannelsService implements OnModuleInit {
 
       const pipeline: PipelineStage[] = [
         { $match: query },
-        { $addFields: { randomField: { $rand: {} } } },
-        { $sort: { randomField: 1 } },
+        // Deletion rate filter: skip channels with >15% deletion rate (min 5 total messages)
+        {
+          $match: {
+            $or: [
+              // Not enough data — allow
+              { $expr: { $lt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }] }, 5] } },
+              // Deletion rate <= 15%
+              { $expr: { $lte: [
+                { $divide: [{ $ifNull: ['$deletedCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }, 0.01] }] },
+                0.15
+              ] } },
+            ],
+          },
+        },
+        {
+          $addFields: {
+            sortScore: {
+              $multiply: [
+                { $rand: {} },
+                // React weight: non-restricted channels get 3x priority
+                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
+                // Diversity weight: fewer clients joined = higher priority
+                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
+              ],
+            },
+          },
+        },
+        { $sort: { sortScore: -1 } },
         { $skip: skip },
         { $limit: limit },
-        { $project: { randomField: 0 } },
+        { $project: { sortScore: 0 } },
       ];
 
       return await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();

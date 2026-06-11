@@ -642,14 +642,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (!channel) return false;
         if (!channel.channelId || !channel.username) return false;
         if (channel.canSendMsgs !== true) return false;
-        if ('sendMessages' in channel && channel.sendMessages === true) return false;
-        if ('sendPlain' in channel && channel.sendPlain === true) return false;
         if (channel.restricted === true) return false;
         if (channel.banned === true) return false;
         if (channel.forbidden === true) return false;
         if (channel.private === true) return false;
         if ('tempBan' in channel && channel.tempBan === true) return false;
-        if ('deletedCount' in channel && channel.deletedCount != null && channel.deletedCount > 30) return false;
         return true;
     }
 
@@ -1599,6 +1596,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
                     this.incrementDailyJoinCount(mobile);
+
+                    // Track join for diversity scoring
+                    if (currentChannel.channelId) {
+                        this.activeChannelsService.incrementClientsJoined(currentChannel.channelId).catch(() => {});
+                    }
 
                     // Organic interleaving every 2-3 joins
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
