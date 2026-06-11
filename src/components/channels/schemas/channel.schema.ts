@@ -64,6 +64,10 @@ export class Channel {
   @Prop({ default: false })
   reactRestricted: boolean;
 
+  @ApiProperty({ default: null, type: Date })
+  @Prop({ default: null })
+  reactRestrictedAt: Date | null;
+
   @ApiProperty({ type: Number, default: 0 })
   @Prop({ default: 0 })
   wordRestriction: number;
