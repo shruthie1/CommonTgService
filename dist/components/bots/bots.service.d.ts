@@ -19,7 +19,9 @@ export declare enum ChannelCategory {
     UNVDS = "UNVDS",
     PROM_LOGS1 = "PROM_LOGS1",
     PROM_LOGS2 = "PROM_LOGS2",
-    UNAUTH_CALLS = "UNAUTH_CALLS"
+    UNAUTH_CALLS = "UNAUTH_CALLS",
+    CLIENT_PROMOTIONS_1 = "CLIENT_PROMOTIONS_1",
+    CLIENT_PROMOTIONS_2 = "CLIENT_PROMOTIONS_2"
 }
 export interface SendMessageOptions {
     parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';

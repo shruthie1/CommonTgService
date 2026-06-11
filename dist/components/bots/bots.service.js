@@ -44,6 +44,8 @@ var ChannelCategory;
     ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
     ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
     ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
+    ChannelCategory["CLIENT_PROMOTIONS_1"] = "CLIENT_PROMOTIONS_1";
+    ChannelCategory["CLIENT_PROMOTIONS_2"] = "CLIENT_PROMOTIONS_2";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 let BotsService = class BotsService {
     constructor(botModel) {

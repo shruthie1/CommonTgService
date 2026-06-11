@@ -20,6 +20,7 @@ export declare class ActiveChannel {
     bannedAt?: number | null;
     forbidden?: boolean;
     reactRestricted?: boolean;
+    reactRestrictedAt?: Date | null;
     private?: boolean;
     lastMessageTime?: number;
     messageIndex?: number;
@@ -211,6 +212,15 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
         id: string;
     }>;
     reactRestricted?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    reactRestrictedAt?: import("mongoose").SchemaDefinitionProperty<Date, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;

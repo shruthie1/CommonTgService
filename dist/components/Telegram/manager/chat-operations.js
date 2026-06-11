@@ -1102,9 +1102,9 @@ async function createBot(ctx, options) {
         const entity = await ctx.client.getEntity(botFatherUsername);
         ctx.logger.info(ctx.phoneNumber, '[BOT CREATION] Successfully connected to BotFather');
         await ctx.client.sendMessage(entity, { message: '/newbot' });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         await ctx.client.sendMessage(entity, { message: options.name });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         let botUsername = options.username;
         if (!/_bot$/.test(botUsername)) {
             const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -1115,7 +1115,7 @@ async function createBot(ctx, options) {
             ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] Modified username: ${botUsername}`);
         }
         await ctx.client.sendMessage(entity, { message: botUsername });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         const messages = await ctx.client.getMessages(entity, { limit: 1 });
         if (!messages || messages.length === 0)
             throw new Error('No response received from BotFather');
@@ -1129,7 +1129,7 @@ async function createBot(ctx, options) {
         if (options.description) {
             await ctx.client.sendMessage(entity, { message: '/setdescription' });
             await new Promise(resolve => setTimeout(resolve, 1000));
-            await ctx.client.sendMessage(entity, { message: `@${options.username}` });
+            await ctx.client.sendMessage(entity, { message: `@${botUsername}` });
             await new Promise(resolve => setTimeout(resolve, 1000));
             await ctx.client.sendMessage(entity, { message: options.description });
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1137,7 +1137,7 @@ async function createBot(ctx, options) {
         if (options.aboutText) {
             await ctx.client.sendMessage(entity, { message: '/setabouttext' });
             await new Promise(resolve => setTimeout(resolve, 1000));
-            await ctx.client.sendMessage(entity, { message: `@${options.username}` });
+            await ctx.client.sendMessage(entity, { message: `@${botUsername}` });
             await new Promise(resolve => setTimeout(resolve, 1000));
             await ctx.client.sendMessage(entity, { message: options.aboutText });
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1147,7 +1147,7 @@ async function createBot(ctx, options) {
                 const photoBuffer = await (0, helpers_1.downloadFileFromUrl)(options.profilePhotoUrl);
                 await ctx.client.sendMessage(entity, { message: '/setuserpic' });
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                await ctx.client.sendMessage(entity, { message: `@${options.username}` });
+                await ctx.client.sendMessage(entity, { message: `@${botUsername}` });
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 await ctx.client.sendFile(entity, { file: Buffer.from(photoBuffer), caption: '', forceDocument: false });
                 await new Promise(resolve => setTimeout(resolve, 1000));
