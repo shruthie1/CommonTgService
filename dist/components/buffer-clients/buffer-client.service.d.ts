@@ -16,7 +16,7 @@ import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } f
 export declare class BufferClientService extends BaseClientService<BufferClientDocument> {
     private bufferClientModel;
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT;
-    private isCheckingBufferClients;
+    private checkingBufferClientsSince;
     private promoteClientService;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientServiceRef: PromoteClientService, sessionService: SessionService, botsService: BotsService);
     private getPrimaryClientMobiles;
