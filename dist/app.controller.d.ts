@@ -8,6 +8,9 @@ export declare class AppController {
     getHello(): string;
     executeRequest(req: ExecuteRequestDto, res: Response): Promise<any>;
     private sanitizeHeaders;
+    private sanitizeUrl;
+    private sanitizeParams;
+    private isSensitiveField;
     private isBinaryResponse;
     private handleRequestError;
 }
