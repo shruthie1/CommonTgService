@@ -45,7 +45,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
         this.bufferClientModel = bufferClientModel;
         this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
-        this.isCheckingBufferClients = false;
+        this.checkingBufferClientsSince = 0;
         this.promoteClientService = promoteClientServiceRef;
     }
     async getPrimaryClientMobiles(clientId) {
@@ -92,15 +92,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             leaveChannelInterval: 120 * 1000,
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,
-            channelTarget: 200,
-            maxJoinsPerSession: 8,
+            channelTarget: 350,
+            maxJoinsPerSession: 12,
             maxNewClientsPerTrigger: 10,
             minTotalClients: 10,
             maxMapSize: 100,
             cooldownHours: 2,
             clientProcessingDelay: 10000,
-            maxChannelJoinsPerDay: 20,
-            joinsPerMobilePerRound: 3,
+            maxChannelJoinsPerDay: 25,
+            joinsPerMobilePerRound: 4,
         };
     }
     async updateNameAndBio(doc, client, failedAttempts) {
@@ -928,7 +928,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         };
     }
     async checkBufferClients() {
-        if (this.isCheckingBufferClients) {
+        const MAX_CHECK_DURATION = 10 * 60 * 1000;
+        if (this.checkingBufferClientsSince > 0 && Date.now() - this.checkingBufferClientsSince < MAX_CHECK_DURATION) {
             this.logger.warn('checkBufferClients already in progress, skipping concurrent call');
             return;
         }
@@ -936,7 +937,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
             return;
         }
-        this.isCheckingBufferClients = true;
+        this.checkingBufferClientsSince = Date.now();
         try {
             await this._checkBufferClientsInternal();
         }
@@ -949,7 +950,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             catch { }
         }
         finally {
-            this.isCheckingBufferClients = false;
+            this.checkingBufferClientsSince = 0;
         }
     }
     async _checkBufferClientsInternal() {
@@ -1146,7 +1147,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             preservedCount: preservedMobiles.size,
             primaryClientCount: primaryClientMobiles.size,
         });
-        const clients = await this.bufferClientModel.find(query).sort({ channels: 1 }).limit(this.config.maxMapSize);
+        const clients = await this.bufferClientModel.find(query).sort({ channels: -1 }).limit(this.config.maxMapSize);
         const joinSet = new Set();
         const leaveSet = new Set();
         let successCount = 0;
