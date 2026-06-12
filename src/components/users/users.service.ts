@@ -341,7 +341,52 @@ export class UsersService {
     return false;
   }
 
+  /**
+   * Coerce ISO-date STRING operands on Date-typed fields to real Date objects.
+   *
+   * `createdAt`/`updatedAt` are stored as BSON Date (Mongoose timestamps), but
+   * clients send range filters like `{ createdAt: { $gte: "2026-04-13T...Z" } }`
+   * as strings. MongoDB type-bracketing means a Date field never matches a string
+   * operand, so those filters silently return nothing. We rewrite the string
+   * operands to Date for the known date fields so the filter actually works.
+   */
+  private coerceDateOperands(query: any): any {
+    if (!query || typeof query !== 'object') return query;
+    const DATE_FIELDS = new Set(['createdAt', 'updatedAt']);
+    const RANGE_OPS = new Set(['$gte', '$lte', '$gt', '$lt', '$eq', '$ne']);
+    const toDate = (v: any): any => {
+      if (typeof v !== 'string') return v;
+      const ts = Date.parse(v);
+      return Number.isNaN(ts) ? v : new Date(ts);
+    };
+    const walk = (node: any): any => {
+      if (!node || typeof node !== 'object') return node;
+      if (Array.isArray(node)) return node.map(walk);
+      const out: any = {};
+      for (const [key, value] of Object.entries(node)) {
+        if (DATE_FIELDS.has(key) && value && typeof value === 'object' && !Array.isArray(value)) {
+          // Range-operator object on a date field: convert string operands to Date.
+          const coercedOps: any = {};
+          for (const [op, opVal] of Object.entries(value as Record<string, any>)) {
+            coercedOps[op] = RANGE_OPS.has(op) ? toDate(opVal) : opVal;
+          }
+          out[key] = coercedOps;
+        } else if (DATE_FIELDS.has(key) && typeof value === 'string') {
+          // Direct equality with a string date.
+          out[key] = toDate(value);
+        } else if (key === '$and' || key === '$or' || key === '$nor') {
+          out[key] = Array.isArray(value) ? (value as any[]).map(walk) : value;
+        } else {
+          out[key] = value;
+        }
+      }
+      return out;
+    };
+    return walk(query);
+  }
+
   private async getDefaultUserListQuery(query: QueryFilter<UserDocument> = {}): Promise<QueryFilter<UserDocument>> {
+    query = this.coerceDateOperands(query);
     const clauses: QueryFilter<UserDocument>[] = [];
 
     if (!this.hasQueryConstraint(query, 'expired')) {
@@ -1170,6 +1215,80 @@ export class UsersService {
       { $limit: limit },
       { $project: { _computedSort: 0 } },
     );
+
+    return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
+  }
+
+  /**
+   * Signal fields usable for composite ranking, mapped to their Mongo value
+   * expression. Each is verified to be populated in the data. Nested-array
+   * signals are summed across relationships.top[] / calls.chats[].
+   *
+   * `defaultWeight` reflects how discriminating/intentful a signal is: intimate
+   * and voice (rare, strong "lovers" signals) outweigh broad activity like msgs.
+   */
+  private static readonly COMPOSITE_SIGNALS: Record<string, { expr: any; defaultWeight: number; label: string }> = {
+    relScore: { expr: { $ifNull: ['$relationships.score', 0] }, defaultWeight: 1, label: 'Relationship Score' },
+    intimate: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.intimateMessageCount', 0] }] } } }, defaultWeight: 3, label: 'Intimate Messages' },
+    voice: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.voiceCount', 0] }] } } }, defaultWeight: 2.5, label: 'Voice Messages' },
+    media: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.mediaCount', 0] }] } } }, defaultWeight: 1.5, label: 'Shared Media' },
+    calls: { expr: { $ifNull: ['$calls.totalCalls', 0] }, defaultWeight: 2, label: 'Total Calls' },
+    videoCalls: { expr: { $ifNull: ['$calls.video', 0] }, defaultWeight: 2, label: 'Video Calls' },
+    callPartners: { expr: { $size: { $ifNull: ['$calls.chats', []] } }, defaultWeight: 1.5, label: 'Call Partners' },
+    msgs: { expr: { $ifNull: ['$msgs', 0] }, defaultWeight: 1, label: 'Messages' },
+    contacts: { expr: { $ifNull: ['$contacts', 0] }, defaultWeight: 0.5, label: 'Contacts' },
+  };
+
+  /**
+   * Rank users by a WEIGHTED COMPOSITE of one or more stat signals.
+   *
+   * composite = Σ weight · ln(1 + value)  over the selected signals.
+   * The ln(1+x) compression keeps a single huge field (e.g. media=120k) from
+   * dominating signals on a smaller scale (e.g. voice). With one signal this is
+   * equivalent to sorting by that field. Users with zero on every selected
+   * signal are excluded. `query` is an optional pre-filter (dates/starred/etc),
+   * AND-ed with the default visibility query (date operands are coerced).
+   */
+  async compositeRank(
+    signals: Array<{ field: string; weight?: number }>,
+    limit: number = 20,
+    skip: number = 0,
+    query: QueryFilter<UserDocument> = {},
+  ): Promise<any[]> {
+    if (!Array.isArray(signals) || signals.length === 0) {
+      throw new BadRequestException('At least one signal is required');
+    }
+    const resolved = signals.map((s) => {
+      const def = UsersService.COMPOSITE_SIGNALS[s.field];
+      if (!def) throw new BadRequestException(`Unknown composite signal: ${s.field}`);
+      const weight = (s.weight !== undefined && Number.isFinite(Number(s.weight)) && Number(s.weight) > 0)
+        ? Number(s.weight)
+        : def.defaultWeight;
+      return { field: s.field, weight, expr: def.expr };
+    });
+
+    // Stage 1: materialize each signal's raw value into a temp field.
+    const valueFields: Record<string, any> = {};
+    resolved.forEach((s, i) => { valueFields[`_sig${i}`] = s.expr; });
+
+    // Stage 2: composite = Σ weight · ln(1 + value).
+    const terms = resolved.map((s, i) => ({ $multiply: [s.weight, { $ln: { $add: [1, `$_sig${i}`] } }] }));
+    // Stage 3: keep only users with at least one selected signal > 0.
+    const presenceOr = resolved.map((_, i) => ({ [`_sig${i}`]: { $gt: 0 } }));
+
+    const cleanup: Record<string, 0> = { _composite: 0 };
+    resolved.forEach((_, i) => { cleanup[`_sig${i}`] = 0; });
+
+    const pipeline: any[] = [
+      { $match: await this.getDefaultUserListQuery(query) },
+      { $addFields: valueFields },
+      { $match: { $or: presenceOr } },
+      { $addFields: { _composite: { $add: terms } } },
+      { $sort: { _composite: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { ...cleanup, session: 0, password: 0 } },
+    ];
 
     return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
   }

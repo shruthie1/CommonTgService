@@ -332,6 +332,66 @@ export class UsersController {
     return this.usersService.aggregateSort(field, order as 1 | -1, limitNum, skipNum, query as any);
   }
 
+  @Post('composite-rank')
+  @ApiOperation({
+    summary: 'Rank users by a weighted composite of multiple stat signals',
+    description: 'composite = Σ weight·ln(1+value) over the selected signals, sorted descending. With one signal it is equivalent to sorting by that field. Optional query pre-filters (e.g. createdAt range, starred). Signals: relScore, intimate, voice, media, calls, videoCalls, callPartners, msgs, contacts.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['signals'],
+      properties: {
+        signals: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['field'],
+            properties: {
+              field: { type: 'string' },
+              weight: { type: 'number', description: 'Optional; defaults to a per-signal weight' },
+            },
+          },
+        },
+        query: { type: 'object', additionalProperties: true },
+        limit: { type: 'number' },
+        skip: { type: 'number' },
+      },
+    },
+  })
+  @ApiOkResponse({ type: [User] })
+  @ApiBadRequestResponse({ description: 'No signals, unknown signal, or invalid pagination.' })
+  async compositeRank(
+    @Body() requestBody: {
+      signals?: Array<{ field?: string; weight?: number }>;
+      query?: Record<string, unknown>;
+      limit?: number;
+      skip?: number;
+    },
+  ) {
+    const { signals, query = {}, limit, skip } = requestBody || {};
+    if (!Array.isArray(signals) || signals.length === 0) {
+      throw new BadRequestException('signals must be a non-empty array');
+    }
+    const cleanedSignals = signals
+      .filter((s): s is { field: string; weight?: number } => !!s && typeof s.field === 'string' && s.field.length > 0)
+      .map((s) => ({ field: s.field, weight: s.weight }));
+    if (cleanedSignals.length === 0) {
+      throw new BadRequestException('signals must each have a field');
+    }
+
+    const limitNum = limit !== undefined ? Number(limit) : 20;
+    const skipNum = skip !== undefined ? Number(skip) : 0;
+    if (!Number.isInteger(limitNum) || limitNum < 1) {
+      throw new BadRequestException('Limit must be a positive integer');
+    }
+    if (!Number.isInteger(skipNum) || skipNum < 0) {
+      throw new BadRequestException('Skip must be a non-negative integer');
+    }
+
+    return this.usersService.compositeRank(cleanedSignals, limitNum, skipNum, query as any);
+  }
+
   @Post('recompute-score/:mobile')
   @ApiOperation({ summary: 'Recompute relationship score (live Telegram connection)' })
   @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
