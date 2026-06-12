@@ -258,7 +258,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -304,7 +304,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -588,7 +588,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             }
             finally {
@@ -616,6 +616,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async markAsInactive(mobile, reason) {
         try {
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
             this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason);
         }
@@ -671,7 +675,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
-                    await this.usersService.update(user.tgId, { expired: true });
+                    await this.usersService.expireAccount(canonicalMobile, 'Permanent error during buffer enrollment');
                 }
                 catch { }
             }
@@ -1184,7 +1188,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(mobile, reason);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                 }
             }
             finally {
@@ -1276,9 +1280,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
-                    await this.usersService.update(document.tgId, { expired: true });
+                    await this.usersService.expireAccount(document.mobile, errorDetails.message);
                 }
                 catch { }
             }
@@ -1461,10 +1464,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 catch (error) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.update(bufferClient.mobile, {
-                            status: 'inactive',
-                            message: `Session update failed: ${errorDetails.message}`,
-                        });
+                        await this.deactivateClient(bufferClient.mobile, `Session update failed: ${errorDetails.message}`, { permanent: true });
                         result.deactivated++;
                     }
                     else {

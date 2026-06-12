@@ -13,6 +13,7 @@ exports.BufferClientSchema = exports.BufferClient = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const mongoose_1 = require("@nestjs/mongoose");
 const mobile_utils_1 = require("../../shared/mobile-utils");
+const client_helper_utils_1 = require("../../shared/client-helper.utils");
 let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
@@ -32,8 +33,11 @@ __decorate([
     __metadata("design:type", String)
 ], BufferClient.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment (UTC YYYY-MM-DD).' }),
+    (0, mongoose_1.Prop)({
+        required: true,
+        set: (value) => client_helper_utils_1.ClientHelperUtils.normalizeAvailableDate(value) ?? value,
+    }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "availableDate", void 0);
 __decorate([

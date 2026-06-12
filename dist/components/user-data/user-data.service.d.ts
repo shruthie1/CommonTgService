@@ -5,8 +5,10 @@ import { UpdateUserDataDto } from './dto/update-user-data.dto';
 export declare class UserDataService {
     private readonly userDataModel;
     private callCounts;
+    private static readonly MAX_CALL_COUNTS;
     private logger;
     constructor(userDataModel: Model<UserDataDocument>);
+    private recordCall;
     create(createUserDataDto: CreateUserDataDto): Promise<UserDataDocument>;
     findAll(limit?: number): Promise<UserDataDocument[]>;
     findOne(profile: string, chatId: string): Promise<(UserData & {

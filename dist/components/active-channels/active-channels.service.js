@@ -32,6 +32,8 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         this.DEFAULT_SKIP = 0;
         this.MIN_PARTICIPANTS_COUNT = 600;
         this.logger = new common_1.Logger(ActiveChannelsService_1.name);
+        this.REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
+        this.TEMP_BAN_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
         this.legacySendabilityRepaired = false;
     }
     async onModuleInit() {
@@ -41,6 +43,25 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         catch (error) {
             this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
         }
+        try {
+            await this.autoHealChannels();
+        }
+        catch (error) {
+            this.logger.warn(`Channel auto-heal failed: ${error instanceof Error ? error.message : error}`);
+        }
+    }
+    async autoHealChannels() {
+        const now = Date.now();
+        const reactCutoff = new Date(now - this.REACT_RESTRICTED_HEAL_MS);
+        const tempBanCutoff = now - this.TEMP_BAN_HEAL_MS;
+        const reactResult = await this.activeChannelModel.updateMany({ reactRestricted: true, reactRestrictedAt: { $ne: null, $lte: reactCutoff } }, { $set: { reactRestricted: false, reactRestrictedAt: null, updatedAt: new Date() } });
+        const tempBanResult = await this.activeChannelModel.updateMany({ tempBan: true, bannedAt: { $ne: null, $lte: tempBanCutoff } }, { $set: { tempBan: false, bannedAt: null, updatedAt: new Date() } });
+        const reactRestrictedHealed = reactResult.modifiedCount || 0;
+        const tempBanHealed = tempBanResult.modifiedCount || 0;
+        if (reactRestrictedHealed > 0 || tempBanHealed > 0) {
+            this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed}, tempBan on ${tempBanHealed} channel(s)`);
+        }
+        return { reactRestrictedHealed, tempBanHealed };
     }
     async create(createActiveChannelDto) {
         try {

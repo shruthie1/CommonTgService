@@ -315,16 +315,19 @@ class BaseClientService {
     mobilesMatch(a, b) {
         return (0, mobile_utils_1.mobilesEqual)(a, b);
     }
-    async deactivateClient(mobile, reason) {
+    async deactivateClient(mobile, reason, options = {}) {
         try {
             await this.updateStatus(mobile, 'inactive', reason);
-            return true;
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
             return false;
         }
+        if (options.permanent) {
+            await this.expireUserByMobile(mobile);
+        }
+        return true;
     }
     async updateUser2FAStatus(tgId, mobile) {
         try {
@@ -536,7 +539,7 @@ class BaseClientService {
             this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
-                await this.deactivateClient(mobile, reason);
+                await this.deactivateClient(mobile, reason, { permanent: true });
             }
             await (0, Helpers_1.sleep)(5000);
             return { passed: false, performed: true };
@@ -570,7 +573,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -609,7 +612,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -727,7 +730,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -775,7 +778,7 @@ class BaseClientService {
                 }
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
-                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
+                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
                     this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                     return 0;
                 }
@@ -803,7 +806,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -832,7 +835,7 @@ class BaseClientService {
             const errorMsg = errorDetails?.message || '';
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
+                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
                 this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                 return 0;
             }
@@ -843,7 +846,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -862,22 +865,6 @@ class BaseClientService {
         }
         const now = Date.now();
         let updateCount = 0;
-        const initialLastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-        const initialWarmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-        if (initialLastUsed > 0 && (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY || initialWarmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)) {
-            await this.backfillTimestamps(doc.mobile, doc, now);
-            if (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY) {
-                const updateData = {
-                    warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
-                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
-                };
-                await this.update(doc.mobile, updateData);
-                this.logger.log(`Client ${doc.mobile} has lastUsed in ${initialWarmupPhase}; marking warmup as ${warmup_phases_1.WarmupPhase.SESSION_ROTATED}`);
-                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
-            }
-            this.logger.debug(`Client ${doc.mobile} has been used and is ${initialWarmupPhase}, assuming configured`);
-            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
-        }
         try {
             doc = await this.repairWarmupMetadata(doc, now);
         }
@@ -1061,7 +1048,7 @@ class BaseClientService {
             }
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                const deactivated = await this.deactivateClient(doc.mobile, reason);
+                const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'}`, { parseMode: 'HTML' });
             }
             else {
@@ -1146,6 +1133,7 @@ class BaseClientService {
         const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
         const delay = Math.max(60000, baseInterval + jitter);
         this.joinChannelIntervalId = this.createTimeout(async () => {
+            this.joinChannelIntervalId = null;
             await this.processJoinChannelInterval();
         }, delay);
     }
@@ -1229,10 +1217,25 @@ class BaseClientService {
                     }
                 }
                 if (joinCount > 0) {
+                    let optimisticCount = null;
                     try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                        const inc = await this.model.findOneAndUpdate({ mobile }, { $inc: { channels: joinCount } }, { new: true, projection: { channels: 1 } });
+                        optimisticCount = typeof inc?.channels === 'number' ? inc.channels : null;
                     }
-                    catch {
+                    catch (incError) {
+                        this.logger.warn(`Failed to increment channel count for ${mobile} (+${joinCount}): ${this.getErrorText(incError)}`);
+                    }
+                    if (optimisticCount !== null && optimisticCount >= warmup_phases_1.MIN_CHANNELS_FOR_MATURING) {
+                        try {
+                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                            if (typeof channelsInfo?.ids?.length === 'number' && channelsInfo.ids.length !== optimisticCount) {
+                                await this.update(mobile, { channels: channelsInfo.ids.length });
+                                this.logger.debug(`Reconciled channel count for ${mobile}: optimistic=${optimisticCount} → actual=${channelsInfo.ids.length}`);
+                            }
+                        }
+                        catch (reconcileError) {
+                            this.logger.debug(`Channel-count reconcile skipped for ${mobile}: ${this.getErrorText(reconcileError)}`);
+                        }
                     }
                 }
                 if (channels.length === 0 || this.isMobileDailyCapped(mobile)) {
@@ -1259,9 +1262,7 @@ class BaseClientService {
                 else if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    const deactivated = await this.deactivateClient(mobile, reason);
-                    if (deactivated)
-                        await this.expireUserByMobile(mobile);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                 }
                 else {
                     const channels = this.joinChannelMap.get(mobile);
@@ -1307,6 +1308,7 @@ class BaseClientService {
         const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
         const delay = Math.max(30000, baseInterval + jitter);
         this.leaveChannelIntervalId = this.createTimeout(async () => {
+            this.leaveChannelIntervalId = null;
             await this.processLeaveChannelInterval();
         }, delay);
     }
@@ -1370,9 +1372,7 @@ class BaseClientService {
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    const deactivated = await this.deactivateClient(mobile, reason);
-                    if (deactivated)
-                        await this.expireUserByMobile(mobile);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                     this.removeFromLeaveMap(mobile);
                 }
                 else if (channelsToProcess.length > 0) {
@@ -1392,7 +1392,7 @@ class BaseClientService {
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            clearInterval(this.joinChannelIntervalId);
+            clearTimeout(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
         }
@@ -1400,7 +1400,7 @@ class BaseClientService {
     }
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
-            clearInterval(this.leaveChannelIntervalId);
+            clearTimeout(this.leaveChannelIntervalId);
             this.activeTimeouts.delete(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
         }
@@ -1549,13 +1549,11 @@ class BaseClientService {
     }
     async expireUserByMobile(mobile) {
         try {
-            const users = await this.usersService.search({ mobile, expired: false });
-            const user = users[0];
-            if (user?.tgId) {
-                await this.usersService.update(user.tgId, { expired: true });
-            }
+            await this.usersService.expireAccount(mobile, 'Client retired (permanent failure)');
         }
-        catch {
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`expireUserByMobile: failed to expire user for ${mobile}: ${errorMessage}`);
         }
     }
     normalizeDateString(dateValue) {
@@ -1772,7 +1770,7 @@ class BaseClientService {
     }
     async getLeastRecentlyUsedClients(clientId, limit = 1) {
         await this.selfHealLegacyOperationalState(clientId);
-        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+        const todayInclusive = client_helper_utils_1.ClientHelperUtils.getTodayDateString() + '￿';
         return this.model
             .find({
             clientId,
@@ -1780,7 +1778,7 @@ class BaseClientService {
             inUse: { $ne: true },
             warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
             $or: [
-                { availableDate: { $lte: today } },
+                { availableDate: { $lte: todayInclusive } },
                 { availableDate: { $exists: false } },
                 { availableDate: null },
             ],
@@ -1796,7 +1794,7 @@ class BaseClientService {
     async getUnusedClients(hoursAgo = 24, clientId) {
         await this.selfHealLegacyOperationalState(clientId);
         const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
-        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+        const todayInclusive = client_helper_utils_1.ClientHelperUtils.getTodayDateString() + '￿';
         const filter = {
             status: 'active',
             inUse: { $ne: true },
@@ -1804,7 +1802,7 @@ class BaseClientService {
             $and: [
                 {
                     $or: [
-                        { availableDate: { $lte: today } },
+                        { availableDate: { $lte: todayInclusive } },
                         { availableDate: { $exists: false } },
                         { availableDate: null },
                     ],
@@ -2114,7 +2112,7 @@ class BaseClientService {
                 }
                 else {
                     this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
-                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`, { permanent: true });
                     if (deactivated)
                         results.deactivated++;
                     else
@@ -2124,7 +2122,7 @@ class BaseClientService {
             catch (error) {
                 const errMsg = (0, parseError_1.parseError)(error, `healSessionCreate:${mobile}`).message;
                 this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
-                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`);
+                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`, { permanent: true });
                 if (deactivated)
                     results.deactivated++;
                 results.errors.push({ mobile, error: errMsg, action: deactivated ? 'deactivated (creation error)' : 'deactivation failed (creation error)' });

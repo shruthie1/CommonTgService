@@ -60,27 +60,48 @@ async function createClient(ctx, session, handler = true, handlerFn) {
     }
 }
 async function destroyClient(ctx, session) {
-    if (ctx.client) {
+    const client = ctx.client;
+    if (!client)
+        return;
+    try {
+        client._errorHandler = null;
+    }
+    catch { }
+    let destroyed = false;
+    try {
+        await client.destroy();
+        destroyed = true;
+        ctx.logger.info(ctx.phoneNumber, 'Client Disconnected Sucessfully');
+    }
+    catch (error) {
+        (0, parseError_1.parseError)(error, `${ctx.phoneNumber}: Error during client.destroy()`);
+    }
+    try {
+        client._eventBuilders = [];
+    }
+    catch { }
+    try {
+        session?.delete();
+    }
+    catch { }
+    try {
+        client._destroyed = true;
+    }
+    catch { }
+    if (!destroyed) {
         try {
-            ctx.client._errorHandler = null;
-            await ctx.client?.destroy();
-            ctx.client._eventBuilders = [];
-            session?.delete();
-            await (0, Helpers_1.sleep)(2000);
-            ctx.logger.info(ctx.phoneNumber, 'Client Disconnected Sucessfully');
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, `${ctx.phoneNumber}: Error during client cleanup`);
-        }
-        finally {
-            if (ctx.client) {
-                ctx.client._destroyed = true;
-                if (ctx.client._sender && typeof ctx.client._sender.disconnect === 'function') {
-                    await ctx.client._sender.disconnect();
-                }
+            if (client._sender && typeof client._sender.disconnect === 'function') {
+                await client._sender.disconnect();
             }
         }
+        catch (senderError) {
+            (0, parseError_1.parseError)(senderError, `${ctx.phoneNumber}: Error force-disconnecting sender`);
+        }
     }
+    try {
+        await (0, Helpers_1.sleep)(2000);
+    }
+    catch { }
 }
 function handleClientError(ctx, error) {
     const { contains } = require('../../../utils');

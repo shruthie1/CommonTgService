@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var BufferClientController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BufferClientController = void 0;
 const common_1 = require("@nestjs/common");
@@ -22,9 +23,10 @@ const buffer_client_schema_1 = require("./schemas/buffer-client.schema");
 const update_buffer_client_dto_1 = require("./dto/update-buffer-client.dto");
 const client_swagger_dto_1 = require("../shared/dto/client-swagger.dto");
 const base_client_service_1 = require("../shared/base-client.service");
-let BufferClientController = class BufferClientController {
+let BufferClientController = BufferClientController_1 = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
+        this.logger = new common_1.Logger(BufferClientController_1.name);
     }
     sanitizeQuery(query) {
         const { apiKey: _apiKey, ...rest } = query;
@@ -37,14 +39,14 @@ let BufferClientController = class BufferClientController {
         return this.clientService.search(this.sanitizeQuery(query));
     }
     async updateInfo() {
-        this.clientService.updateInfo();
+        this.clientService.updateInfo().catch((error) => this.logger.error(`updateInfo failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async joinChannelsforBufferClients(clientId) {
         return this.clientService.joinchannelForBufferClients(true, clientId);
     }
     async checkbufferClients() {
-        this.clientService.checkBufferClients();
+        this.clientService.checkBufferClients().catch((error) => this.logger.error(`checkBufferClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async refreshBufferSessions(body = {}) {
@@ -70,7 +72,7 @@ let BufferClientController = class BufferClientController {
         if (body.clientsNeedingBufferClients && !Array.isArray(body.clientsNeedingBufferClients)) {
             throw new common_1.BadRequestException('clientsNeedingBufferClients must be an array');
         }
-        this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds, body.clientsNeedingBufferClients || [], undefined);
+        this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds, body.clientsNeedingBufferClients || [], undefined).catch((error) => this.logger.error(`addNewUserstoBufferClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async findAll(status) {
@@ -136,7 +138,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async healDeadSessions() {
-        this.clientService.healDeadSessions();
+        this.clientService.healDeadSessions().catch((error) => this.logger.error(`healDeadSessions failed: ${error?.message || error}`));
         return 'Session healing initiated for buffer clients';
     }
     async remove(mobile) {
@@ -458,7 +460,7 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "remove", null);
-exports.BufferClientController = BufferClientController = __decorate([
+exports.BufferClientController = BufferClientController = BufferClientController_1 = __decorate([
     (0, swagger_1.ApiTags)('Buffer Clients'),
     (0, common_1.Controller)('bufferclients'),
     __metadata("design:paramtypes", [buffer_client_service_1.BufferClientService])

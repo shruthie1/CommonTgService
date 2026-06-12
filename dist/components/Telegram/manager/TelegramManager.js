@@ -102,9 +102,12 @@ class TelegramManager {
         this.client = null;
     }
     connected() {
-        return this.client.connected;
+        return this.client?.connected ?? false;
     }
     async connect() {
+        if (!this.client) {
+            throw new Error(`Cannot connect: no client for ${this.phoneNumber} (not created or already destroyed)`);
+        }
         await this.client.connect();
     }
     async getMe() {
