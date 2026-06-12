@@ -50,6 +50,7 @@ export declare class UsersService {
     }>;
     findAll(limit?: number, skip?: number): Promise<User[]>;
     private hasQueryConstraint;
+    private coerceDateOperands;
     private getDefaultUserListQuery;
     findAllSorted(limit?: number, skip?: number, sort?: Record<string, 1 | -1>): Promise<User[]>;
     summary(): Promise<Record<string, any>>;
@@ -101,5 +102,10 @@ export declare class UsersService {
     }>;
     private canonicalMobile;
     aggregateSort(computedField: string, sortOrder?: 1 | -1, limit?: number, skip?: number, query?: QueryFilter<UserDocument>): Promise<any[]>;
+    private static readonly COMPOSITE_SIGNALS;
+    compositeRank(signals: Array<{
+        field: string;
+        weight?: number;
+    }>, limit?: number, skip?: number, query?: QueryFilter<UserDocument>): Promise<any[]>;
     executeQuery(query: QueryFilter<UserDocument>, sort?: Record<string, 1 | -1>, limit?: number, skip?: number): Promise<User[]>;
 }

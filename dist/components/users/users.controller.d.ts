@@ -57,6 +57,15 @@ export declare class UsersController {
         limit?: number;
         skip?: number;
     }): Promise<any[]>;
+    compositeRank(requestBody: {
+        signals?: Array<{
+            field?: string;
+            weight?: number;
+        }>;
+        query?: Record<string, unknown>;
+        limit?: number;
+        skip?: number;
+    }): Promise<any[]>;
     recomputeScore(mobile: string): Promise<User & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {
