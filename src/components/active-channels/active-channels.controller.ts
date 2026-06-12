@@ -23,6 +23,12 @@ export class ActiveChannelsController {
     return this.activeChannelsService.createMultiple(createChannelDtos);
   }
 
+  @Post('auto-heal')
+  @ApiOperation({ summary: 'Clear time-expired reactRestricted / tempBan flags so channels can recover' })
+  async autoHeal() {
+    return this.activeChannelsService.autoHealChannels();
+  }
+
   @Get('analytics')
   @ApiOperation({ summary: 'Get comprehensive channel analytics' })
   async analytics() {

@@ -1803,6 +1803,15 @@ describe('Service flow reliability', () => {
                 failedUpdateAttempts: 0,
                 lastUpdateAttempt: null,
                 inUse: false,
+                // Genuine terminal account: all security + identity steps proven, so
+                // repairWarmupMetadata (runs first) won't demote it for missing prereqs.
+                privacyUpdatedAt: new Date('2026-01-05T12:00:00.000Z'),
+                twoFASetAt: new Date('2026-01-06T12:00:00.000Z'),
+                otherAuthsRemovedAt: new Date('2026-01-06T12:00:00.000Z'),
+                profilePicsDeletedAt: new Date('2026-01-07T12:00:00.000Z'),
+                nameBioUpdatedAt: new Date('2026-01-08T12:00:00.000Z'),
+                usernameUpdatedAt: new Date('2026-01-09T12:00:00.000Z'),
+                profilePicsUpdatedAt: new Date('2026-01-15T12:00:00.000Z'),
             } as any;
 
             const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
@@ -1825,6 +1834,14 @@ describe('Service flow reliability', () => {
                 failedUpdateAttempts: 0,
                 lastUpdateAttempt: null,
                 inUse: false,
+                // Genuine terminal account: all security + identity steps proven.
+                privacyUpdatedAt: new Date('2026-01-05T12:00:00.000Z'),
+                twoFASetAt: new Date('2026-01-06T12:00:00.000Z'),
+                otherAuthsRemovedAt: new Date('2026-01-06T12:00:00.000Z'),
+                profilePicsDeletedAt: new Date('2026-01-07T12:00:00.000Z'),
+                nameBioUpdatedAt: new Date('2026-01-08T12:00:00.000Z'),
+                usernameUpdatedAt: new Date('2026-01-09T12:00:00.000Z'),
+                profilePicsUpdatedAt: new Date('2026-01-15T12:00:00.000Z'),
             } as any;
 
             const result = await service.processClient(doc, { clientId: 'client-1' } as Client);

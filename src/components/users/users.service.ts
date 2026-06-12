@@ -24,6 +24,8 @@ import bigInt from 'big-integer';
 import { parseError } from '../../utils/parseError';
 import { canonicalizeMobile } from '../shared/mobile-utils';
 import { getTelegramCommonChatIds } from '../../utils/telegram-utils/common-chats';
+import { BufferClientService } from '../buffer-clients/buffer-client.service';
+import { PromoteClientService } from '../promote-clients/promote-client.service';
 
 @Injectable()
 export class UsersService {
@@ -34,8 +36,66 @@ export class UsersService {
     private telegramService: TelegramService,
     @Inject(forwardRef(() => ClientService))
     private clientsService: ClientService,
-    private readonly botsService: BotsService
+    private readonly botsService: BotsService,
+    // NOT @Optional(): these power the expireAccount cascade. If the forwardRef
+    // cycle ever fails to resolve, we want a loud bootstrap failure — a silent
+    // null here would reintroduce the exact "user expired but pool still active"
+    // bug expireAccount exists to prevent.
+    @Inject(forwardRef(() => BufferClientService))
+    private bufferClientService: BufferClientService,
+    @Inject(forwardRef(() => PromoteClientService))
+    private promoteClientService: PromoteClientService,
   ) { }
+
+  /**
+   * Single source of truth for retiring a permanently-lost account.
+   *
+   * "expired" means the account is fully lost (session revoked, banned, or
+   * deactivated). When that happens, the user doc must be marked expired AND
+   * any matching bufferClients / promoteClients must be deactivated so they
+   * stop being selected for warmup, swaps, or promotion. Previously callers
+   * set `expired: true` on the user doc directly, leaving the pool records
+   * active — producing "user not found" / empty-array responses for a mobile
+   * that the pools still treated as live.
+   *
+   * Idempotent: safe to call repeatedly. Pool deactivation failures are
+   * non-fatal — marking the user expired is the primary action.
+   */
+  async expireAccount(
+    mobile: string,
+    reason: string = 'Account permanently lost (session revoked / banned / deactivated)',
+  ): Promise<void> {
+    const canonicalMobile = this.canonicalMobile(mobile);
+
+    // 1. Mark the user doc expired (match by mobile regardless of current expired state).
+    try {
+      await this.userModel
+        .updateOne({ mobile: canonicalMobile }, { $set: { expired: true } })
+        .exec();
+    } catch (error) {
+      this.logger.error(`expireAccount: failed to mark user ${canonicalMobile} expired: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // 2. Cascade: deactivate any matching buffer / promote pool records.
+    //    markAsInactive is idempotent (no-op if the record is missing or already
+    //    inactive), so this is safe even when only one pool holds the mobile.
+    await Promise.allSettled([
+      (async () => {
+        try {
+          await this.bufferClientService.markAsInactive(canonicalMobile, reason);
+        } catch (error) {
+          this.logger.error(`expireAccount: failed to deactivate buffer client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      })(),
+      (async () => {
+        try {
+          await this.promoteClientService.markAsInactive(canonicalMobile, reason);
+        } catch (error) {
+          this.logger.error(`expireAccount: failed to deactivate promote client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      })(),
+    ]);
+  }
 
   async create(user: CreateUserDto): Promise<User | undefined> {
     const canonicalMobile = this.canonicalMobile(user.mobile);
@@ -488,10 +548,13 @@ export class UsersService {
   }
 
   async delete(tgId: string): Promise<void> {
-    const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
-    if (result.matchedCount === 0) {
+    const user = await this.userModel.findOne({ tgId }).select('mobile').exec();
+    if (!user) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
     }
+    // Deleting a user means the account is gone — cascade so the pool records
+    // are deactivated too, not just the user doc.
+    await this.expireAccount(user.mobile, 'User deleted');
   }
 
   async search(filter: SearchUserDto): Promise<User[]> {

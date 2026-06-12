@@ -221,10 +221,25 @@ describe('processClient — all exit paths', () => {
         expect(result.updateCount).toBe(0);
     });
 
+    // A genuinely terminal account has all security + identity timestamps set, so
+    // repairWarmupMetadata (which now runs first) won't demote it for missing
+    // prerequisites. Tests of the lastUsed-in-terminal-phase shortcut must use a
+    // complete doc, otherwise the account is correctly demoted instead of skipped.
+    const terminalTimestamps = () => ({
+        privacyUpdatedAt: new Date('2026-03-05T12:00:00.000Z'),
+        twoFASetAt: new Date('2026-03-06T12:00:00.000Z'),
+        otherAuthsRemovedAt: new Date('2026-03-06T12:00:00.000Z'),
+        profilePicsDeletedAt: new Date('2026-03-07T12:00:00.000Z'),
+        nameBioUpdatedAt: new Date('2026-03-08T12:00:00.000Z'),
+        usernameUpdatedAt: new Date('2026-03-09T12:00:00.000Z'),
+        profilePicsUpdatedAt: new Date('2026-03-15T12:00:00.000Z'),
+    });
+
     test('EXIT 6: session_rotated account with lastUsed → backfill and skip', async () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SESSION_ROTATED,
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
+            ...terminalTimestamps(),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateSummary).toBe('backfill_timestamps');
@@ -235,6 +250,7 @@ describe('processClient — all exit paths', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.READY,
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
+            ...terminalTimestamps(),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
         expect(result.updateSummary).toBe('mark_session_rotated_from_last_used');
@@ -246,6 +262,21 @@ describe('processClient — all exit paths', () => {
                 sessionRotatedAt: expect.any(Date),
             }),
         );
+    });
+
+    test('EXIT 6c: terminal phase + lastUsed but MISSING security prerequisites → repaired/demoted, NOT skipped', async () => {
+        // Regression guard for the H1 fix: an account claiming SESSION_ROTATED with a
+        // lastUsed but no 2FA/auth-removal proof must be demoted by repairWarmupMetadata
+        // first, NOT auto-treated as configured. It must not short-circuit to
+        // backfill_timestamps / mark_session_rotated.
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
+            lastUsed: new Date('2026-03-20T12:00:00.000Z'),
+            // intentionally NO security timestamps
+        });
+        const result = await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(result.updateSummary).not.toBe('backfill_timestamps');
+        expect(result.updateSummary).not.toBe('mark_session_rotated_from_last_used');
     });
 
     test('EXIT 6b: SETTLING account with lastUsed → still processes (not terminal)', async () => {

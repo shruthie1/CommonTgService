@@ -388,7 +388,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -437,7 +437,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -754,7 +754,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             } finally {
                 await this.safeUnregisterClient(doc.mobile);
@@ -785,6 +785,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null> {
         try {
+            // Idempotent: if there's no buffer record, or it's already inactive,
+            // do nothing. This keeps the expireAccount cascade cheap and avoids a
+            // duplicate "Status Update" notification when the originating pool was
+            // already deactivated by deactivateClient.
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
             this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason);
         } catch (error) {
@@ -845,9 +853,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 .exec();
         } catch (error) {
             const errorDetails = parseError(error, `Failed to set as Buffer Client ${canonicalMobile}`);
-            // Retire permanently dead accounts at the source
+            // Retire permanently dead accounts at the source (cascades to pools)
             if (isPermanentError(errorDetails)) {
-                try { await this.usersService.update(user.tgId, { expired: true }); } catch { }
+                try { await this.usersService.expireAccount(canonicalMobile, 'Permanent error during buffer enrollment'); } catch { }
             }
             throw new HttpException(errorDetails.message, errorDetails.status);
         } finally {
@@ -1444,7 +1452,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const errorDetails = parseError(error, `JoinChannelErr: ${mobile}`);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(mobile, reason);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                 }
             } finally {
                 await this.safeUnregisterClient(mobile);
@@ -1564,10 +1572,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if (isPermanentError(errorDetails)) {
-                // Try to mark buffer doc inactive (may not exist yet)
-                await this.deactivateClient(document.mobile, errorDetails.message);
-                // Also retire the source user so it's not selected again
-                try { await this.usersService.update(document.tgId, { expired: true }); } catch { }
+                // Retire the source user — cascades to deactivate buffer/promote pool docs
+                try { await this.usersService.expireAccount(document.mobile, errorDetails.message); } catch { }
             }
             return false;
         } finally {
@@ -1798,10 +1804,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 } catch (error: unknown) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
                     if (isPermanentError(errorDetails)) {
-                        await this.update(bufferClient.mobile, {
-                            status: 'inactive',
-                            message: `Session update failed: ${errorDetails.message}`,
-                        });
+                        // Permanent session-rotation failure — retire everywhere (user + pools), not just this pool record.
+                        await this.deactivateClient(bufferClient.mobile, `Session update failed: ${errorDetails.message}`, { permanent: true });
                         result.deactivated++;
                     } else {
                         result.failed++;

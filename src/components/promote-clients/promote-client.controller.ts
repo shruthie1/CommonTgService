@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe, NotFoundException, Logger } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -28,6 +28,7 @@ import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 @ApiTags('Promote Clients')
 @Controller('promoteclients')
 export class PromoteClientController {
+  private readonly logger = new Logger(PromoteClientController.name);
   constructor(private readonly clientService: PromoteClientService) {}
 
   private sanitizeQuery<T extends object>(query: T): T {
@@ -68,7 +69,8 @@ export class PromoteClientController {
   @ApiOperation({ summary: 'Refresh promote client metadata', description: 'Starts a background refresh of promote client metadata and channel counts.' })
   @ApiAcceptedResponse({ schema: { type: 'string'} })
   async updateInfo(): Promise<string> {
-    this.clientService.updateInfo();
+    // Fire-and-forget — must .catch or an unhandled rejection crashes the process.
+    this.clientService.updateInfo().catch((error) => this.logger.error(`updateInfo failed: ${error?.message || error}`));
     return 'initiated Checking';
   }
 
@@ -76,7 +78,7 @@ export class PromoteClientController {
   @ApiOperation({ summary: 'Run promote warmup processing', description: 'Starts the background warmup processor for eligible promote clients.' })
   @ApiAcceptedResponse({ schema: { type: 'string'} })
   async checkpromoteClients(): Promise<string> {
-    this.clientService.checkPromoteClients();
+    this.clientService.checkPromoteClients().catch((error) => this.logger.error(`checkPromoteClients failed: ${error?.message || error}`));
     return 'initiated Checking';
   }
 
@@ -99,7 +101,7 @@ export class PromoteClientController {
       body.goodIds,
       body.clientsNeedingPromoteClients || [],
       undefined
-    );
+    ).catch((error) => this.logger.error(`addNewUserstoPromoteClients failed: ${error?.message || error}`));
     return 'initiated Checking';
   }
 
@@ -159,7 +161,7 @@ export class PromoteClientController {
   })
   @ApiAcceptedResponse({ schema: { type: 'string' } })
   async healDeadSessions(): Promise<string> {
-    this.clientService.healDeadSessions();
+    this.clientService.healDeadSessions().catch((error) => this.logger.error(`healDeadSessions failed: ${error?.message || error}`));
     return 'Session healing initiated for promote clients';
   }
 

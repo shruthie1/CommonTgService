@@ -330,7 +330,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -365,7 +365,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -542,7 +542,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             } finally {
                 await this.safeUnregisterClient(doc.mobile);
@@ -573,8 +573,16 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     async markAsInactive(mobile: string, reason: string): Promise<PromoteClientDocument | null> {
-        this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
         try {
+            // Idempotent: if there's no promote record, or it's already inactive,
+            // do nothing. Keeps the expireAccount cascade cheap and avoids a
+            // duplicate "Status Update" notification when the originating pool was
+            // already deactivated by deactivateClient.
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
+            this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -717,9 +725,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 .exec();
         } catch (error) {
             const errorDetails = parseError(error);
-            // Retire permanently dead accounts at the source
+            // Retire permanently dead accounts at the source (cascades to pools)
             if (isPermanentError(errorDetails)) {
-                try { await this.usersService.update(user.tgId, { expired: true }); } catch { }
+                try { await this.usersService.expireAccount(canonicalMobile, 'Permanent error during promote enrollment'); } catch { }
             }
             throw new HttpException(errorDetails.message, errorDetails.status);
         } finally {
@@ -819,7 +827,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     if (isPermanentError(errorDetails)) {
                         await sleep(1000);
                         const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                        await this.deactivateClient(mobile, reason);
+                        await this.deactivateClient(mobile, reason, { permanent: true });
                     }
                 } finally {
                     await this.safeUnregisterClient(mobile);
@@ -1143,10 +1151,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         } catch (error: unknown) {
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             if (isPermanentError(errorDetails)) {
-                // Try to mark promote doc inactive (may not exist yet)
-                await this.deactivateClient(document.mobile, errorDetails.message);
-                // Also retire the source user so it's not selected again
-                try { await this.usersService.update(document.tgId, { expired: true }); } catch { }
+                // Retire the source user — cascades to deactivate buffer/promote pool docs
+                try { await this.usersService.expireAccount(document.mobile, errorDetails.message); } catch { }
             }
             return false;
         } finally {

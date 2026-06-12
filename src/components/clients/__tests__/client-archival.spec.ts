@@ -69,6 +69,10 @@ function makeUsersService(users: any[] = []) {
             return users.filter((u) => u.mobile === mobile);
         }),
         update: jest.fn().mockResolvedValue(1),
+        // expireAccount is the cascade entry point: marks the user expired AND
+        // deactivates matching buffer/promote pool records. Permanent-reason
+        // archival now routes through this instead of a bare pool updateStatus.
+        expireAccount: jest.fn().mockResolvedValue(undefined),
     };
 }
 
@@ -128,9 +132,8 @@ describe('Client Archival', () => {
                 'AUTH_KEY_DUPLICATED',  // reason from tg-aut
             );
 
-            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+            expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '80001',
-                'inactive',
                 'AUTH_KEY_DUPLICATED',
             );
             expect(bufferService.update).not.toHaveBeenCalled();
@@ -147,9 +150,8 @@ describe('Client Archival', () => {
                 'USER_DEACTIVATED_BAN',
             );
 
-            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+            expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '80001',
-                'inactive',
                 'USER_DEACTIVATED_BAN',
             );
             expect(bufferService.update).not.toHaveBeenCalled();
@@ -242,9 +244,8 @@ describe('Client Archival', () => {
                 existingClient, '80001', false, false, 0, 'AUTH_KEY_DUPLICATED',
             );
 
-            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+            expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '80001',
-                'inactive',
                 'AUTH_KEY_DUPLICATED',
             );
             expect(usersService.search).not.toHaveBeenCalled();
@@ -262,9 +263,8 @@ describe('Client Archival', () => {
                 existingClient, '80001', true, true, 10, 'FROZEN_METHOD_INVALID',
             );
 
-            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+            expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '80001',
-                'inactive',
                 'FROZEN_METHOD_INVALID',
             );
             expect(telegramService.updatePrivacyforDeletedAccount).not.toHaveBeenCalled();
@@ -360,8 +360,8 @@ describe('Client Archival', () => {
                 existingClient, '80001', false, true, 10,
             );
 
-            // Should have called strict inactive marker because assertDistinctUserBackupSession threw permanent error
-            expect(bufferService.updateStatus).toHaveBeenCalledWith('80001', 'inactive', expect.any(String));
+            // Should have cascaded retirement because assertDistinctUserBackupSession threw permanent error
+            expect(usersService.expireAccount).toHaveBeenCalledWith('80001', expect.any(String));
         });
     });
 
@@ -410,9 +410,8 @@ describe('Client Archival', () => {
                 existingClient, '80001', true, true, 0,
             );
 
-            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+            expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '80001',
-                'inactive',
                 expect.stringContaining('FROZEN_METHOD_INVALID'),
             );
             expect(bufferService.createOrUpdate).not.toHaveBeenCalled();
@@ -538,9 +537,8 @@ describe('Client Archival', () => {
                 existingClient, '80001', false, false, 0, 'AUTH_KEY_DUPLICATED',
             );
 
-            expect(bufferService.updateStatus).toHaveBeenCalledWith(
+            expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '80001',
-                'inactive',
                 'AUTH_KEY_DUPLICATED',
             );
             expect(bufferService.update).not.toHaveBeenCalled();

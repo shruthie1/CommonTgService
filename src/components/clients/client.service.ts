@@ -561,8 +561,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       );
       const errorDetails = parseError(error, `setupClient failed for ${newBufferClient.mobile}`);
       if (isPermanentError(errorDetails)) {
-        // Account is permanently dead — retire it, don't recycle
-        await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
+        // Account is permanently dead — retire it everywhere (user + pools), don't recycle
+        await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
         await this.notify(`Buffer Marked Inactive\n\nMobile: ${newBufferClient.mobile}\nClient: ${clientId}\nReason: Permanent error during setup`);
       } else {
         // Transient error — push availability out so it's not retried immediately
@@ -604,7 +604,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     } catch (error) {
       const errorDetails = parseError(error, `Failed to get Telegram client for NewMobile: ${newMobile}`, true);
       if (isPermanentError(errorDetails)) {
-        await this.bufferClientService.markAsInactive(newMobile, errorDetails.message);
+        // New mobile is permanently dead — retire everywhere (user + pools)
+        await this.usersService.expireAccount(newMobile, errorDetails.message);
       }
       throw error;
     }
@@ -676,9 +677,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await this.notify(`Client Swap Complete\n\nClient: ${clientId}\nOld Mobile: ${existingMobile}\nNew Mobile: ${newMobile}\nStatus: Cutover finished successfully`);
     } catch (error) {
       const errorDetails = parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
-      // Mark buffer inactive on permanent failure so setupClient's catch can distinguish
+      // Retire the new mobile on permanent failure (before cutover committed) so it's
+      // expired everywhere and setupClient's catch can still distinguish via the now-inactive pool record.
       if (!cutoverCommitted && isPermanentError(errorDetails)) {
-        try { await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`); } catch { }
+        try { await this.usersService.expireAccount(newMobile, `Session update failed: ${errorDetails.message}`); } catch { }
       }
       this.logger.error(
         `[${clientId}] Client session cutover failed`,
@@ -746,18 +748,23 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return !!reason && isPermanentError({ message: reason });
   }
 
+  /**
+   * Retire an old-main mobile that is being archived for a PERMANENT reason
+   * (session revoked / banned / deactivated). This is only ever called on
+   * permanent archival reasons / permanent errors, so it cascades through
+   * usersService.expireAccount — marking the user expired AND deactivating any
+   * matching buffer/promote pool record — so the dead mobile can never be
+   * re-selected. expireAccount is idempotent and safe even if no pool record
+   * exists for this mobile.
+   */
   private async markBufferInactiveForArchival(mobile: string, reason: string): Promise<void> {
     try {
-      const updated = await this.bufferClientService.updateStatus(mobile, 'inactive', reason);
-      this.logger.warn(`Archived buffer client marked inactive`, {
-        mobile,
-        status: updated?.status,
-        message: updated?.message,
-      });
+      await this.usersService.expireAccount(mobile, reason);
+      this.logger.warn(`Archived account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
       await this.notify(`Buffer Marked Inactive\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 200)}`);
     } catch (error) {
-      const errorDetails = parseError(error, `Failed to mark archived buffer inactive: ${mobile}`, false);
-      this.logger.error(`Failed to mark archived buffer inactive for ${mobile}: ${errorDetails.message}`);
+      const errorDetails = parseError(error, `Failed to retire archived account: ${mobile}`, false);
+      this.logger.error(`Failed to retire archived account ${mobile}: ${errorDetails.message}`);
       await this.notify(`Buffer Inactive Update Failed\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 160)}\nError: ${errorDetails.message.substring(0, 200)}`);
     }
   }

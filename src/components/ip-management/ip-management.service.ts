@@ -348,15 +348,25 @@ export class IpManagementService {
             }
         }
 
-        // Remove stale proxies from this source that weren't in the incoming list
+        // Remove stale proxies from this source that weren't in the incoming list.
+        // Compute the stale set in code (a small list) and delete via $in, instead
+        // of a $nor with one clause per incoming proxy — which builds an unbounded
+        // query (thousands of clauses) that can blow the BSON document limit.
         if (removeStale) {
-            const result = await this.proxyIpModel.deleteMany({
-                source,
-                $nor: proxies.map(p => ({ ipAddress: p.ipAddress, port: p.port })),
-            });
-            removed = result.deletedCount;
-            if (removed > 0) {
-                this.logger.debug(`Removed ${removed} stale ${source} proxies`);
+            const incomingKeys = new Set(proxies.map(p => `${p.ipAddress}:${p.port}`));
+            const existing = await this.proxyIpModel
+                .find({ source }, { ipAddress: 1, port: 1 })
+                .lean()
+                .exec();
+            const staleIds = existing
+                .filter(p => !incomingKeys.has(`${p.ipAddress}:${p.port}`))
+                .map(p => p._id);
+            if (staleIds.length > 0) {
+                const result = await this.proxyIpModel.deleteMany({ _id: { $in: staleIds } });
+                removed = result.deletedCount;
+                if (removed > 0) {
+                    this.logger.debug(`Removed ${removed} stale ${source} proxies`);
+                }
             }
         }
 

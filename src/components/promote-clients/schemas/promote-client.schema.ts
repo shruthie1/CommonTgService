@@ -4,6 +4,7 @@ import { Document } from 'mongoose';
 import { WarmupPhaseType } from '../../shared/warmup-phases';
 import { ClientStatusType } from '../../shared/base-client.service';
 import { canonicalizeMobile } from '../../shared/mobile-utils';
+import { ClientHelperUtils } from '../../shared/client-helper.utils';
 
 export type PromoteClientDocument = PromoteClient & Document;
 @Schema({
@@ -27,8 +28,13 @@ export class PromoteClient {
   @Prop({ required: true })
   lastActive: string;
 
-  @ApiProperty({ description: 'Date when this client becomes available for assignment.'})
-  @Prop({ required: true })
+  @ApiProperty({ description: 'Date when this client becomes available for assignment (UTC YYYY-MM-DD).'})
+  @Prop({
+    required: true,
+    // Normalize to date-only on write so the string-based `{ $lte: today }`
+    // selection queries can't be defeated by a stored ISO datetime.
+    set: (value: string | Date | number) => ClientHelperUtils.normalizeAvailableDate(value) ?? value,
+  })
   availableDate: string;
 
   @ApiProperty({ description: 'Current joined channel count.'})

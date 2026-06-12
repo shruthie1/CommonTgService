@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, Query, Patch, Put, BadRequestException, ParseEnumPipe, NotFoundException, Logger } from '@nestjs/common';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -27,6 +27,7 @@ import { ClientStatus, ClientStatusType } from '../shared/base-client.service';
 @ApiTags('Buffer Clients')
 @Controller('bufferclients')
 export class BufferClientController {
+  private readonly logger = new Logger(BufferClientController.name);
   constructor(private readonly clientService: BufferClientService) { }
 
   private sanitizeQuery<T extends object>(query: T): T {
@@ -59,8 +60,9 @@ export class BufferClientController {
   @ApiOperation({ summary: 'Refresh buffer client metadata', description: 'Starts a background refresh of buffer client metadata and channel counts.' })
   @ApiAcceptedResponse({ schema: { type: 'string'} })
   async updateInfo(): Promise<string> {
-    // Fire-and-forget pattern for long-running operations
-    this.clientService.updateInfo();
+    // Fire-and-forget pattern for long-running operations. Must .catch — an
+    // unhandled rejection here would crash the process.
+    this.clientService.updateInfo().catch((error) => this.logger.error(`updateInfo failed: ${error?.message || error}`));
     return 'initiated Checking';
   }
 
@@ -76,7 +78,7 @@ export class BufferClientController {
   @ApiOperation({ summary: 'Run buffer warmup processing', description: 'Starts the background warmup processor for eligible buffer clients.' })
   @ApiAcceptedResponse({ schema: { type: 'string'} })
   async checkbufferClients(): Promise<string> {
-    this.clientService.checkBufferClients();
+    this.clientService.checkBufferClients().catch((error) => this.logger.error(`checkBufferClients failed: ${error?.message || error}`));
     return 'initiated Checking';
   }
 
@@ -143,7 +145,7 @@ export class BufferClientController {
       body.goodIds,
       body.clientsNeedingBufferClients || [],
       undefined
-    );
+    ).catch((error) => this.logger.error(`addNewUserstoBufferClients failed: ${error?.message || error}`));
     return 'initiated Checking';
   }
 
@@ -325,7 +327,7 @@ export class BufferClientController {
   })
   @ApiAcceptedResponse({ schema: { type: 'string' } })
   async healDeadSessions(): Promise<string> {
-    this.clientService.healDeadSessions();
+    this.clientService.healDeadSessions().catch((error) => this.logger.error(`healDeadSessions failed: ${error?.message || error}`));
     return 'Session healing initiated for buffer clients';
   }
 

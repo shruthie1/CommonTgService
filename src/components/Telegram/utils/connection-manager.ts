@@ -35,6 +35,11 @@ interface GetClientOptions {
 class ConnectionManager {
     private static instance: ConnectionManager | null = null;
     private clients = new Map<string, ClientInfo>();
+    // Per-mobile in-flight dedup: concurrent getClient(mobile) calls share ONE
+    // build promise instead of each creating a client. Without this, two callers
+    // racing for the same mobile both run createNewClient and the second overwrites
+    // the first in `clients` — leaking the first manager's live MTProto connection.
+    private inFlight = new Map<string, Promise<TelegramManager>>();
     private logger = new TelegramLogger('ConnectionManager');
     private cleanupTimer: NodeJS.Timeout | null = null;
     private usersService: UsersService | null = null;
@@ -79,7 +84,25 @@ class ConnectionManager {
 
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
 
-        const connectPromise = (async () => {
+        // Fast path: reuse a healthy client without taking the in-flight lock.
+        const existing = this.clients.get(mobile);
+        if (existing && !forceReconnect && existing.state === 'connected' && this.isClientHealthy(existing)) {
+            this.updateLastUsed(mobile);
+            this.logger.info(mobile, 'Reusing healthy client');
+            return existing.client;
+        }
+
+        // If a build for this mobile is already in flight, join it instead of
+        // starting a second one. (forceReconnect always starts a fresh build.)
+        if (!forceReconnect) {
+            const pending = this.inFlight.get(mobile);
+            if (pending) {
+                this.logger.info(mobile, 'Joining in-flight client build');
+                return pending;
+            }
+        }
+
+        const buildPromise = (async () => {
             try {
                 const existingClient = this.clients.get(mobile);
                 if (existingClient && !forceReconnect) {
@@ -103,7 +126,16 @@ class ConnectionManager {
                 throw error;
             }
         })();
-        return await connectPromise;
+
+        this.inFlight.set(mobile, buildPromise);
+        try {
+            return await buildPromise;
+        } finally {
+            // Only clear if it's still ours (a later forceReconnect may have replaced it).
+            if (this.inFlight.get(mobile) === buildPromise) {
+                this.inFlight.delete(mobile);
+            }
+        }
     }
 
     private async createNewClient(mobile: string, options: { autoDisconnect: boolean; handler: boolean }): Promise<TelegramManager> {
@@ -202,15 +234,15 @@ class ConnectionManager {
         if (isPermanentError(errorDetails)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
-                const users = await this.usersService!.search({ mobile });
-                const user = users[0] as User;
-                if (user) {
-                    await this.usersService!.updateByFilter(
-                        { $or: [{ tgId: user.tgId }, { mobile: mobile }] },
-                        { expired: true }
-                    );
-                    markedAsExpired = true;
-                }
+                // expireAccount is the single source of truth: it marks the user
+                // doc expired AND cascades to deactivate any matching buffer /
+                // promote pool records, so a permanently-lost account can't be
+                // left active in the pools.
+                await this.usersService!.expireAccount(
+                    mobile,
+                    `Permanent connection error: ${errorDetails.message?.substring(0, 120) || 'unknown'}`,
+                );
+                markedAsExpired = true;
             } catch (updateError) {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
             }

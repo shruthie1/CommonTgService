@@ -514,15 +514,39 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return mobilesEqual(a, b);
     }
 
-    protected async deactivateClient(mobile: string, reason: string): Promise<boolean> {
+    /**
+     * Deactivate a pool client.
+     *
+     * When `permanent` is true, this is a *retirement*: the account is gone
+     * (session revoked / banned / deactivated), so after deactivating this
+     * pool's record we ALSO cascade through `expireUserByMobile` →
+     * `usersService.expireAccount`, which marks the user doc expired and
+     * deactivates the sibling pool too. This is the single source of truth for
+     * permanent-failure retirement — every `isPermanentError` deactivation must
+     * pass `{ permanent: true }` so an expired account is never left active in
+     * the users collection or the other pool.
+     */
+    protected async deactivateClient(
+        mobile: string,
+        reason: string,
+        options: { permanent?: boolean } = {},
+    ): Promise<boolean> {
         try {
             await this.updateStatus(mobile, 'inactive', reason);
-            return true;
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
             return false;
         }
+        // The pool record is now inactive — that's the primary action and the
+        // return value reflects it. The cascade below is best-effort (it logs its
+        // own failures) and must NOT flip the result to false: doing so would
+        // mislabel a successful deactivation as failed in caller notifications.
+        if (options.permanent) {
+            // Cascade: retire the user doc + sibling pool.
+            await this.expireUserByMobile(mobile);
+        }
+        return true;
     }
 
     protected async updateUser2FAStatus(tgId: string, mobile: string): Promise<void> {
@@ -749,7 +773,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
-                await this.deactivateClient(mobile, reason);
+                await this.deactivateClient(mobile, reason, { permanent: true });
             }
             await sleep(5000);
             return { passed: false, performed: true };
@@ -786,7 +810,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -825,7 +849,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -960,7 +984,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -1020,7 +1044,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 } else if (verificationStatus === 'foreign') {
                     // Foreign password — account is NOT safely controlled by us
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
-                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
+                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
                     this.botsService.sendMessageByCategory(
                         ChannelCategory.ACCOUNT_NOTIFICATIONS,
                         `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — ${deactivated ? 'marked inactive' : 'inactive update failed'}`,
@@ -1054,7 +1078,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -1093,7 +1117,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // If the self-check failed, our session is dead — this is critical
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
+                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
                 // Notify via bot
                 this.botsService.sendMessageByCategory(
                     ChannelCategory.ACCOUNT_NOTIFICATIONS,
@@ -1110,7 +1134,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             });
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         } finally {
@@ -1134,24 +1158,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const now = Date.now();
         let updateCount = 0;
 
-        const initialLastUsed = ClientHelperUtils.getTimestamp(doc.lastUsed);
-        const initialWarmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
-        if (initialLastUsed > 0 && (initialWarmupPhase === WarmupPhase.READY || initialWarmupPhase === WarmupPhase.SESSION_ROTATED)) {
-            await this.backfillTimestamps(doc.mobile, doc, now);
-            if (initialWarmupPhase === WarmupPhase.READY) {
-                const updateData: BaseClientUpdate = {
-                    warmupPhase: WarmupPhase.SESSION_ROTATED,
-                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
-                };
-                await this.update(doc.mobile, updateData);
-                this.logger.log(`Client ${doc.mobile} has lastUsed in ${initialWarmupPhase}; marking warmup as ${WarmupPhase.SESSION_ROTATED}`);
-                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
-            }
-            this.logger.debug(`Client ${doc.mobile} has been used and is ${initialWarmupPhase}, assuming configured`);
-            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
-        }
-
         // ── Phase 1: DB-only checks & action resolution (no TG connection, no sleep) ──
+        // repairWarmupMetadata runs FIRST so that the lastUsed-in-READY shortcut
+        // below operates on a repaired doc — an account missing a security
+        // prerequisite (2FA / auth removal) gets demoted here and won't be
+        // auto-promoted to session_rotated just because it has a lastUsed.
         try {
             doc = await this.repairWarmupMetadata(doc, now);
         } catch (err) {
@@ -1167,6 +1178,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
             if (daysSinceEnrolled > 45 && phase !== WarmupPhase.SESSION_ROTATED && phase !== WarmupPhase.READY) {
                 this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
+                // NOT { permanent: true }: a zombie is stuck warming, not a proven-dead
+                // session. We retire the pool record but do NOT mark the user expired
+                // (expired = session revoked / banned / deactivated only).
                 const deactivated = await this.deactivateClient(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
                 this.botsService.sendMessageByCategory(
                     ChannelCategory.ACCOUNT_NOTIFICATIONS,
@@ -1401,7 +1415,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                const deactivated = await this.deactivateClient(doc.mobile, reason);
+                const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 this.botsService.sendMessageByCategory(
                     ChannelCategory.ACCOUNT_NOTIFICATIONS,
                     `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'}`,
@@ -1505,6 +1519,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const jitter = ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
         const delay = Math.max(60000, baseInterval + jitter); // min 1 minute
         this.joinChannelIntervalId = this.createTimeout(async () => {
+            // Null the named handle the moment this timer fires. Otherwise the
+            // field keeps pointing at an already-fired timer, and the
+            // `if (!this.joinChannelIntervalId)` guards (joinChannelQueue, the
+            // leave→join kick) wrongly believe the queue is still running and
+            // refuse to restart it — silently stalling channel growth.
+            this.joinChannelIntervalId = null;
             await this.processJoinChannelInterval();
         }, delay);
     }
@@ -1621,10 +1641,35 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 // Increment channel count by successful joins (no extra TG API call)
                 if (joinCount > 0) {
+                    let optimisticCount: number | null = null;
                     try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
-                    } catch {
-                        // Non-fatal — count will be corrected on next health check
+                        const inc = await this.model.findOneAndUpdate(
+                            { mobile },
+                            { $inc: { channels: joinCount } },
+                            { new: true, projection: { channels: 1 } },
+                        );
+                        optimisticCount = typeof inc?.channels === 'number' ? inc.channels : null;
+                    } catch (incError) {
+                        // Don't swallow silently — a lost count write drifts the growing→maturing
+                        // gate (channel count IS the readiness signal) until the next health check.
+                        this.logger.warn(`Failed to increment channel count for ${mobile} (+${joinCount}): ${this.getErrorText(incError)}`);
+                    }
+
+                    // Channel count gates growing→maturing. The optimistic $inc counts join
+                    // *attempts*, which can drift from reality. Once the optimistic count reaches
+                    // the maturing threshold, reconcile with the authoritative Telegram count
+                    // (the account is already connected here) so the phase transition isn't
+                    // mis-gated by drift. Cheap: only fires near the boundary, not every round.
+                    if (optimisticCount !== null && optimisticCount >= MIN_CHANNELS_FOR_MATURING) {
+                        try {
+                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                            if (typeof channelsInfo?.ids?.length === 'number' && channelsInfo.ids.length !== optimisticCount) {
+                                await this.update(mobile, { channels: channelsInfo.ids.length });
+                                this.logger.debug(`Reconciled channel count for ${mobile}: optimistic=${optimisticCount} → actual=${channelsInfo.ids.length}`);
+                            }
+                        } catch (reconcileError) {
+                            this.logger.debug(`Channel-count reconcile skipped for ${mobile}: ${this.getErrorText(reconcileError)}`);
+                        }
                     }
                 }
 
@@ -1656,8 +1701,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 } else if (isPermanentError(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    const deactivated = await this.deactivateClient(mobile, reason);
-                    if (deactivated) await this.expireUserByMobile(mobile);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                 } else {
                     // Transient error — restore the failed channel and track failures
                     const channels = this.joinChannelMap.get(mobile);
@@ -1709,6 +1753,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const jitter = ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
         const delay = Math.max(30000, baseInterval + jitter);
         this.leaveChannelIntervalId = this.createTimeout(async () => {
+            // Null the named handle the moment this timer fires (see join-round note).
+            this.leaveChannelIntervalId = null;
             await this.processLeaveChannelInterval();
         }, delay);
     }
@@ -1781,8 +1827,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
                 if (isPermanentError(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    const deactivated = await this.deactivateClient(mobile, reason);
-                    if (deactivated) await this.expireUserByMobile(mobile);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                     this.removeFromLeaveMap(mobile);
                 } else if (channelsToProcess.length > 0) {
                     // Transient failure — restore spliced channels back to the queue
@@ -1803,7 +1848,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            clearInterval(this.joinChannelIntervalId);
+            // setTimeout handle (the queue uses a randomized setTimeout chain, not
+            // setInterval) — must be cleared with clearTimeout.
+            clearTimeout(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
         }
@@ -1812,7 +1859,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
-            clearInterval(this.leaveChannelIntervalId);
+            clearTimeout(this.leaveChannelIntervalId);
             this.activeTimeouts.delete(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
         }
@@ -1991,13 +2038,17 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected async expireUserByMobile(mobile: string): Promise<void> {
         try {
-            const users = await this.usersService.search({ mobile, expired: false });
-            const user = users[0];
-            if (user?.tgId) {
-                await this.usersService.update(user.tgId, { expired: true });
-            }
-        } catch {
-            // Non-fatal: client doc deactivation is the primary retirement action.
+            // Delegate to the single source of truth: marks the user doc expired
+            // AND cascades to deactivate any matching buffer / promote pool
+            // records (idempotent — re-deactivating the already-inactive current
+            // pool is a no-op).
+            await this.usersService.expireAccount(mobile, 'Client retired (permanent failure)');
+        } catch (error) {
+            // Non-fatal: client doc deactivation is the primary retirement action,
+            // but a failure to mark the user expired leaves the account selectable
+            // again, so surface it rather than swallowing silently.
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`expireUserByMobile: failed to expire user for ${mobile}: ${errorMessage}`);
         }
     }
 
@@ -2243,7 +2294,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     async getLeastRecentlyUsedClients(clientId: string, limit: number = 1): Promise<TDoc[]> {
         await this.selfHealLegacyOperationalState(clientId);
-        const today = ClientHelperUtils.getTodayDateString();
+        // Inclusive upper bound: '￿' sorts after any same-day ISO datetime, so a
+        // legacy stored value like '2026-06-12T18:30:00Z' still matches today.
+        const todayInclusive = ClientHelperUtils.getTodayDateString() + '￿';
 
         return this.model
             .find({
@@ -2252,7 +2305,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 inUse: { $ne: true },
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
                 $or: [
-                    { availableDate: { $lte: today } },
+                    { availableDate: { $lte: todayInclusive } },
                     { availableDate: { $exists: false } },
                     { availableDate: null },
                 ],
@@ -2271,7 +2324,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         await this.selfHealLegacyOperationalState(clientId);
 
         const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
-        const today = ClientHelperUtils.getTodayDateString();
+        // Inclusive upper bound: '￿' sorts after any same-day ISO datetime (see note
+        // in getLeastRecentlyUsedClients) so legacy datetime values still match.
+        const todayInclusive = ClientHelperUtils.getTodayDateString() + '￿';
         const filter: MongoQuery = {
             status: 'active',
             inUse: { $ne: true },
@@ -2279,7 +2334,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             $and: [
                 {
                     $or: [
-                        { availableDate: { $lte: today } },
+                        { availableDate: { $lte: todayInclusive } },
                         { availableDate: { $exists: false } },
                         { availableDate: null },
                     ],
@@ -2654,14 +2709,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.logger.log(`[HealSessions] ${mobile}: session healed ✓`);
                 } else {
                     this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
-                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`, { permanent: true });
                     if (deactivated) results.deactivated++;
                     else results.errors.push({ mobile, error: createResult.error || 'creation failed', action: 'deactivation failed' });
                 }
             } catch (error) {
                 const errMsg = parseError(error, `healSessionCreate:${mobile}`).message;
                 this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
-                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`);
+                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`, { permanent: true });
                 if (deactivated) results.deactivated++;
                 results.errors.push({ mobile, error: errMsg, action: deactivated ? 'deactivated (creation error)' : 'deactivation failed (creation error)' });
             }

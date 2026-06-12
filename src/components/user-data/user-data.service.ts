@@ -16,10 +16,26 @@ import { ChannelCategory } from '../bots';
 @Injectable()
 export class UserDataService {
     private callCounts: Map<string, number> = new Map();
+    // Bound the in-process call counter so it can't grow unbounded (one entry per
+    // distinct chatId ever fetched). Map preserves insertion order, so we evict
+    // the oldest entries once we exceed the cap.
+    private static readonly MAX_CALL_COUNTS = 5000;
     private logger = new Logger(UserDataService.name)
     constructor(
         @InjectModel(UserData.name) private readonly userDataModel: Model<UserDataDocument>,
     ) { }
+
+    private recordCall(chatId: string): number {
+        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
+        // Re-insert at the end (most-recently-used) to keep eviction order meaningful.
+        this.callCounts.delete(chatId);
+        this.callCounts.set(chatId, currentCount);
+        if (this.callCounts.size > UserDataService.MAX_CALL_COUNTS) {
+            const oldest = this.callCounts.keys().next().value;
+            if (oldest !== undefined) this.callCounts.delete(oldest);
+        }
+        return currentCount;
+    }
 
     async create(createUserDataDto: CreateUserDataDto): Promise<UserDataDocument> {
         try {
@@ -40,8 +56,7 @@ export class UserDataService {
             throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
 
-        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
-        this.callCounts.set(chatId, currentCount);
+        const currentCount = this.recordCall(chatId);
 
         return { ...user, count: currentCount };
     }

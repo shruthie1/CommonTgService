@@ -26,7 +26,7 @@ describe('ClientService session separation safeguards', () => {
                 ensureDistinctUsersBackupSession: jest.fn(async () => true),
                 getOrEnsureDistinctUsersBackupSession: jest.fn(async () => ({ tgId: 'tg-default', mobile: '90000', session: 'backup-session' })),
             },
-            overrides?.usersService || { search: jest.fn(), update: jest.fn() },
+            overrides?.usersService || { search: jest.fn(), update: jest.fn(), expireAccount: jest.fn().mockResolvedValue(undefined) },
         );
     }
 
@@ -175,7 +175,8 @@ describe('ClientService session separation safeguards', () => {
             ensureDistinctUsersBackupSession: jest.fn(async () => true),
             getOrEnsureDistinctUsersBackupSession: jest.fn(),
         };
-        const service = makeService({ clientModel, bufferClientService });
+        const usersService = { search: jest.fn(), update: jest.fn(), expireAccount: jest.fn().mockResolvedValue(undefined) };
+        const service = makeService({ clientModel, bufferClientService, usersService });
         (service as any).isInitialized = true;
 
         await (service as any).handleSetupClient('shruthi1', {
@@ -186,9 +187,9 @@ describe('ClientService session separation safeguards', () => {
         });
 
         expect(bufferClientService.executeQuery).toHaveBeenCalled();
-        expect(bufferClientService.updateStatus).toHaveBeenCalledWith(
+        // Permanent reason + no replacement buffer → retire the old mobile everywhere via the cascade
+        expect(usersService.expireAccount).toHaveBeenCalledWith(
             '916207672173',
-            'inactive',
             'FROZEN_METHOD_INVALID',
         );
         expect(bufferClientService.createOrUpdate).not.toHaveBeenCalled();

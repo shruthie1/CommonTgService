@@ -32,6 +32,24 @@ export class ClientHelperUtils {
     }
 
     /**
+     * Normalize any date-ish value to a stable UTC 'YYYY-MM-DD' string.
+     *
+     * Selection queries compare `availableDate` as a STRING (`{ $lte: today }`),
+     * which is only correct when every stored value is exactly `YYYY-MM-DD`. A
+     * full ISO datetime (e.g. '2026-06-12T18:30:00Z') sorts AFTER the date-only
+     * `today`, so a ready account would be silently excluded. Use this on every
+     * write so stored values are always date-only. Returns null for unparseable
+     * input (caller decides the fallback).
+     */
+    static normalizeAvailableDate(value: Date | string | number | null | undefined): string | null {
+        if (value === null || value === undefined || value === '') return null;
+        // Already a clean date-only string — fast path.
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+        const ts = this.getTimestamp(value as Date | string);
+        return ts > 0 ? this.toDateString(ts) : null;
+    }
+
+    /**
      * Get date string N days ago in 'YYYY-MM-DD' format
      * @param days - Number of days ago
      * @param oneDayMs - Milliseconds in one day (24 * 60 * 60 * 1000)

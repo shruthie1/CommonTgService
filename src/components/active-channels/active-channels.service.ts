@@ -24,12 +24,58 @@ export class ActiveChannelsService implements OnModuleInit {
     private promoteMsgsService: PromoteMsgsService,
   ) { }
 
+  // Auto-heal windows: a channel-level restriction is a transient signal, not a
+  // permanent verdict. Clear it after the window so a one-off restriction (or a
+  // false positive) doesn't keep a channel dead forever.
+  private readonly REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;  // 3 days
+  private readonly TEMP_BAN_HEAL_MS = 3 * 24 * 60 * 60 * 1000;          // 3 days
+
   async onModuleInit(): Promise<void> {
     try {
       await this.repairLegacySendabilityFlags();
     } catch (error) {
       this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
     }
+    try {
+      await this.autoHealChannels();
+    } catch (error) {
+      this.logger.warn(`Channel auto-heal failed: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /**
+   * Clear time-expired channel-level restrictions so flagged channels can recover.
+   *
+   * The schema records `reactRestrictedAt` / `bannedAt` timestamps but nothing
+   * ever read them — meaning a channel marked `reactRestricted` or `tempBan`
+   * stayed dead permanently. This heals them once the window has elapsed:
+   *  - reactRestricted cleared after REACT_RESTRICTED_HEAL_MS (so it's re-tried)
+   *  - tempBan cleared after TEMP_BAN_HEAL_MS
+   * Permanent flags (`banned`, `private`) are NOT touched here.
+   */
+  async autoHealChannels(): Promise<{ reactRestrictedHealed: number; tempBanHealed: number }> {
+    const now = Date.now();
+    const reactCutoff = new Date(now - this.REACT_RESTRICTED_HEAL_MS);
+    const tempBanCutoff = now - this.TEMP_BAN_HEAL_MS;
+
+    // reactRestrictedAt is a Date; heal where it's older than the cutoff.
+    const reactResult = await this.activeChannelModel.updateMany(
+      { reactRestricted: true, reactRestrictedAt: { $ne: null, $lte: reactCutoff } },
+      { $set: { reactRestricted: false, reactRestrictedAt: null, updatedAt: new Date() } },
+    );
+
+    // bannedAt is a numeric timestamp; heal tempBan where it's older than the cutoff.
+    const tempBanResult = await this.activeChannelModel.updateMany(
+      { tempBan: true, bannedAt: { $ne: null, $lte: tempBanCutoff } },
+      { $set: { tempBan: false, bannedAt: null, updatedAt: new Date() } },
+    );
+
+    const reactRestrictedHealed = reactResult.modifiedCount || 0;
+    const tempBanHealed = tempBanResult.modifiedCount || 0;
+    if (reactRestrictedHealed > 0 || tempBanHealed > 0) {
+      this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed}, tempBan on ${tempBanHealed} channel(s)`);
+    }
+    return { reactRestrictedHealed, tempBanHealed };
   }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {

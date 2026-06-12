@@ -96,10 +96,16 @@ import { Dialog } from 'telegram/tl/custom/dialog';
         }
 
         connected(): boolean {
-            return this.client.connected;
+            // Null-safe: this.client is null before createClient and after destroy().
+            // The connection-manager health loop calls this on every tick, so an
+            // unguarded deref here throws and can break the cleanup iteration.
+            return this.client?.connected ?? false;
         }
 
         async connect(): Promise<void> {
+            if (!this.client) {
+                throw new Error(`Cannot connect: no client for ${this.phoneNumber} (not created or already destroyed)`);
+            }
             await this.client.connect();
         }
 

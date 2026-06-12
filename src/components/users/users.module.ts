@@ -7,6 +7,8 @@ import { TelegramModule } from '../Telegram/Telegram.module';
 import { ClientModule } from '../clients/client.module';
 import { InitModule } from '../ConfigurationInit/init.module';
 import { BotsModule } from '../bots';
+import { BufferClientModule } from '../buffer-clients/buffer-client.module';
+import { PromoteClientModule } from '../promote-clients/promote-client.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { BotsModule } from '../bots';
     MongooseModule.forFeature([{ name: 'userModule', schema: UserSchema, collection: 'users' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => ClientModule),
+    forwardRef(() => BufferClientModule),
+    forwardRef(() => PromoteClientModule),
     BotsModule
   ],
   controllers: [UsersController],

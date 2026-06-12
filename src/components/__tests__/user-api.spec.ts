@@ -61,11 +61,15 @@ describe('Users API', () => {
             getOwnAccountTgIds: jest.fn().mockResolvedValue([]),
         } as any;
         botsService = mockBotsService();
+        const mockBufferClientService = { markAsInactive: jest.fn().mockResolvedValue(null) };
+        const mockPromoteClientService = { markAsInactive: jest.fn().mockResolvedValue(null) };
         service = new UsersService(
             userModel,
             telegramService as any,
             mockClientService as any,
             botsService as any,
+            mockBufferClientService as any,
+            mockPromoteClientService as any,
         );
     });
 

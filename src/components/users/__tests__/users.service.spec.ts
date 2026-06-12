@@ -53,11 +53,20 @@ describe('UsersService', () => {
         } as any);
         const unregisterSpy = jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
 
+        const bufferClientService = {
+            markAsInactive: jest.fn().mockResolvedValue(null),
+        };
+        const promoteClientService = {
+            markAsInactive: jest.fn().mockResolvedValue(null),
+        };
+
         const service = new UsersService(
             MockUserModel,
             telegramService as any,
             clientsService as any,
             botsService as any,
+            bufferClientService as any,
+            promoteClientService as any,
         );
 
         await service.create({

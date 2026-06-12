@@ -65,25 +65,46 @@ export async function createClient(
 }
 
 export async function destroyClient(ctx: TgContext, session: StringSession): Promise<void> {
-    if (ctx.client) {
+    const client = ctx.client;
+    if (!client) return;
+
+    // 1. Detach the error handler first so a late RPC error during teardown can't
+    //    re-enter handleClientError.
+    try { client._errorHandler = null; } catch { /* best-effort */ }
+
+    // 2. Primary teardown: the public destroy() disconnects the underlying MTProto
+    //    sender and releases the socket. This is the action that actually matters.
+    let destroyed = false;
+    try {
+        await client.destroy();
+        destroyed = true;
+        ctx.logger.info(ctx.phoneNumber, 'Client Disconnected Sucessfully');
+    } catch (error) {
+        parseError(error, `${ctx.phoneNumber}: Error during client.destroy()`);
+    }
+
+    // 3. Best-effort internal cleanup. Each step is independently guarded so a
+    //    throw here can never abort teardown or leak the sender — the previous
+    //    version let a throwing _eventBuilders/_sender access escape, leaving the
+    //    MTProto sender connected (a memory leak AND a live fingerprint Telegram
+    //    can still see after we think the client is gone).
+    try { client._eventBuilders = []; } catch { /* best-effort */ }
+    try { session?.delete(); } catch { /* best-effort */ }
+    try { client._destroyed = true; } catch { /* best-effort */ }
+
+    // 4. If destroy() failed/partially failed, force-disconnect the sender as a
+    //    fallback so the socket can't linger. Guarded so it can't throw out.
+    if (!destroyed) {
         try {
-            ctx.client._errorHandler = null;
-            await ctx.client?.destroy();
-            ctx.client._eventBuilders = [];
-            session?.delete();
-            await sleep(2000);
-            ctx.logger.info(ctx.phoneNumber, 'Client Disconnected Sucessfully');
-        } catch (error) {
-            parseError(error, `${ctx.phoneNumber}: Error during client cleanup`);
-        } finally {
-            if (ctx.client) {
-                ctx.client._destroyed = true;
-                if (ctx.client._sender && typeof ctx.client._sender.disconnect === 'function') {
-                    await ctx.client._sender.disconnect();
-                }
+            if (client._sender && typeof client._sender.disconnect === 'function') {
+                await client._sender.disconnect();
             }
+        } catch (senderError) {
+            parseError(senderError, `${ctx.phoneNumber}: Error force-disconnecting sender`);
         }
     }
+
+    try { await sleep(2000); } catch { /* best-effort */ }
 }
 
 export function handleClientError(ctx: TgContext, error: Error): NodeJS.Timeout | null {
