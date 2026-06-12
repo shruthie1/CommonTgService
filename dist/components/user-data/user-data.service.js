@@ -27,6 +27,17 @@ let UserDataService = UserDataService_1 = class UserDataService {
         this.callCounts = new Map();
         this.logger = new utils_1.Logger(UserDataService_1.name);
     }
+    recordCall(chatId) {
+        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
+        this.callCounts.delete(chatId);
+        this.callCounts.set(chatId, currentCount);
+        if (this.callCounts.size > UserDataService_1.MAX_CALL_COUNTS) {
+            const oldest = this.callCounts.keys().next().value;
+            if (oldest !== undefined)
+                this.callCounts.delete(oldest);
+        }
+        return currentCount;
+    }
     async create(createUserDataDto) {
         try {
             return await this.userDataModel.create(createUserDataDto);
@@ -43,8 +54,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
         if (!user) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
-        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
-        this.callCounts.set(chatId, currentCount);
+        const currentCount = this.recordCall(chatId);
         return { ...user, count: currentCount };
     }
     clearCount(chatId) {
@@ -195,6 +205,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     }
 };
 exports.UserDataService = UserDataService;
+UserDataService.MAX_CALL_COUNTS = 5000;
 exports.UserDataService = UserDataService = UserDataService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(user_data_schema_1.UserData.name)),

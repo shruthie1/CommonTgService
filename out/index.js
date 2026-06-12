@@ -7247,9 +7247,12 @@ class TelegramManager {
         this.client = null;
     }
     connected() {
-        return this.client.connected;
+        return this.client?.connected ?? false;
     }
     async connect() {
+        if (!this.client) {
+            throw new Error(`Cannot connect: no client for ${this.phoneNumber} (not created or already destroyed)`);
+        }
         await this.client.connect();
     }
     async getMe() {
@@ -9580,27 +9583,48 @@ async function createClient(ctx, session, handler = true, handlerFn) {
     }
 }
 async function destroyClient(ctx, session) {
-    if (ctx.client) {
+    const client = ctx.client;
+    if (!client)
+        return;
+    try {
+        client._errorHandler = null;
+    }
+    catch { }
+    let destroyed = false;
+    try {
+        await client.destroy();
+        destroyed = true;
+        ctx.logger.info(ctx.phoneNumber, 'Client Disconnected Sucessfully');
+    }
+    catch (error) {
+        (0, parseError_1.parseError)(error, `${ctx.phoneNumber}: Error during client.destroy()`);
+    }
+    try {
+        client._eventBuilders = [];
+    }
+    catch { }
+    try {
+        session?.delete();
+    }
+    catch { }
+    try {
+        client._destroyed = true;
+    }
+    catch { }
+    if (!destroyed) {
         try {
-            ctx.client._errorHandler = null;
-            await ctx.client?.destroy();
-            ctx.client._eventBuilders = [];
-            session?.delete();
-            await (0, Helpers_1.sleep)(2000);
-            ctx.logger.info(ctx.phoneNumber, 'Client Disconnected Sucessfully');
-        }
-        catch (error) {
-            (0, parseError_1.parseError)(error, `${ctx.phoneNumber}: Error during client cleanup`);
-        }
-        finally {
-            if (ctx.client) {
-                ctx.client._destroyed = true;
-                if (ctx.client._sender && typeof ctx.client._sender.disconnect === 'function') {
-                    await ctx.client._sender.disconnect();
-                }
+            if (client._sender && typeof client._sender.disconnect === 'function') {
+                await client._sender.disconnect();
             }
         }
+        catch (senderError) {
+            (0, parseError_1.parseError)(senderError, `${ctx.phoneNumber}: Error force-disconnecting sender`);
+        }
     }
+    try {
+        await (0, Helpers_1.sleep)(2000);
+    }
+    catch { }
 }
 function handleClientError(ctx, error) {
     const { contains } = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
@@ -12279,6 +12303,7 @@ const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../util
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
+        this.inFlight = new Map();
         this.logger = new telegram_logger_1.TelegramLogger('ConnectionManager');
         this.cleanupTimer = null;
         this.usersService = null;
@@ -12312,7 +12337,20 @@ class ConnectionManager {
             }
         }
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
-        const connectPromise = (async () => {
+        const existing = this.clients.get(mobile);
+        if (existing && !forceReconnect && existing.state === 'connected' && this.isClientHealthy(existing)) {
+            this.updateLastUsed(mobile);
+            this.logger.info(mobile, 'Reusing healthy client');
+            return existing.client;
+        }
+        if (!forceReconnect) {
+            const pending = this.inFlight.get(mobile);
+            if (pending) {
+                this.logger.info(mobile, 'Joining in-flight client build');
+                return pending;
+            }
+        }
+        const buildPromise = (async () => {
             try {
                 const existingClient = this.clients.get(mobile);
                 if (existingClient && !forceReconnect) {
@@ -12334,7 +12372,15 @@ class ConnectionManager {
                 throw error;
             }
         })();
-        return await connectPromise;
+        this.inFlight.set(mobile, buildPromise);
+        try {
+            return await buildPromise;
+        }
+        finally {
+            if (this.inFlight.get(mobile) === buildPromise) {
+                this.inFlight.delete(mobile);
+            }
+        }
     }
     async createNewClient(mobile, options) {
         if (!this.usersService) {
@@ -12407,12 +12453,8 @@ class ConnectionManager {
         if ((0, isPermanentError_1.default)(errorDetails)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
-                const users = await this.usersService.search({ mobile });
-                const user = users[0];
-                if (user) {
-                    await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
-                    markedAsExpired = true;
-                }
+                await this.usersService.expireAccount(mobile, `Permanent connection error: ${errorDetails.message?.substring(0, 120) || 'unknown'}`);
+                markedAsExpired = true;
             }
             catch (updateError) {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
@@ -14331,6 +14373,9 @@ let ActiveChannelsController = class ActiveChannelsController {
     async createMultiple(createChannelDtos) {
         return this.activeChannelsService.createMultiple(createChannelDtos);
     }
+    async autoHeal() {
+        return this.activeChannelsService.autoHealChannels();
+    }
     async analytics() {
         return this.activeChannelsService.analytics();
     }
@@ -14378,6 +14423,13 @@ __decorate([
     __metadata("design:paramtypes", [Array]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "createMultiple", null);
+__decorate([
+    (0, common_1.Post)('auto-heal'),
+    (0, swagger_1.ApiOperation)({ summary: 'Clear time-expired reactRestricted / tempBan flags so channels can recover' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "autoHeal", null);
 __decorate([
     (0, common_1.Get)('analytics'),
     (0, swagger_1.ApiOperation)({ summary: 'Get comprehensive channel analytics' }),
@@ -14548,6 +14600,8 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         this.DEFAULT_SKIP = 0;
         this.MIN_PARTICIPANTS_COUNT = 600;
         this.logger = new common_1.Logger(ActiveChannelsService_1.name);
+        this.REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
+        this.TEMP_BAN_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
         this.legacySendabilityRepaired = false;
     }
     async onModuleInit() {
@@ -14557,6 +14611,25 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         catch (error) {
             this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
         }
+        try {
+            await this.autoHealChannels();
+        }
+        catch (error) {
+            this.logger.warn(`Channel auto-heal failed: ${error instanceof Error ? error.message : error}`);
+        }
+    }
+    async autoHealChannels() {
+        const now = Date.now();
+        const reactCutoff = new Date(now - this.REACT_RESTRICTED_HEAL_MS);
+        const tempBanCutoff = now - this.TEMP_BAN_HEAL_MS;
+        const reactResult = await this.activeChannelModel.updateMany({ reactRestricted: true, reactRestrictedAt: { $ne: null, $lte: reactCutoff } }, { $set: { reactRestricted: false, reactRestrictedAt: null, updatedAt: new Date() } });
+        const tempBanResult = await this.activeChannelModel.updateMany({ tempBan: true, bannedAt: { $ne: null, $lte: tempBanCutoff } }, { $set: { tempBan: false, bannedAt: null, updatedAt: new Date() } });
+        const reactRestrictedHealed = reactResult.modifiedCount || 0;
+        const tempBanHealed = tempBanResult.modifiedCount || 0;
+        if (reactRestrictedHealed > 0 || tempBanHealed > 0) {
+            this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed}, tempBan on ${tempBanHealed} channel(s)`);
+        }
+        return { reactRestrictedHealed, tempBanHealed };
     }
     async create(createActiveChannelDto) {
         try {
@@ -17755,6 +17828,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var BufferClientController_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BufferClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -17766,9 +17840,10 @@ const buffer_client_schema_1 = __webpack_require__(/*! ./schemas/buffer-client.s
 const update_buffer_client_dto_1 = __webpack_require__(/*! ./dto/update-buffer-client.dto */ "./src/components/buffer-clients/dto/update-buffer-client.dto.ts");
 const client_swagger_dto_1 = __webpack_require__(/*! ../shared/dto/client-swagger.dto */ "./src/components/shared/dto/client-swagger.dto.ts");
 const base_client_service_1 = __webpack_require__(/*! ../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
-let BufferClientController = class BufferClientController {
+let BufferClientController = BufferClientController_1 = class BufferClientController {
     constructor(clientService) {
         this.clientService = clientService;
+        this.logger = new common_1.Logger(BufferClientController_1.name);
     }
     sanitizeQuery(query) {
         const { apiKey: _apiKey, ...rest } = query;
@@ -17781,14 +17856,14 @@ let BufferClientController = class BufferClientController {
         return this.clientService.search(this.sanitizeQuery(query));
     }
     async updateInfo() {
-        this.clientService.updateInfo();
+        this.clientService.updateInfo().catch((error) => this.logger.error(`updateInfo failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async joinChannelsforBufferClients(clientId) {
         return this.clientService.joinchannelForBufferClients(true, clientId);
     }
     async checkbufferClients() {
-        this.clientService.checkBufferClients();
+        this.clientService.checkBufferClients().catch((error) => this.logger.error(`checkBufferClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async refreshBufferSessions(body = {}) {
@@ -17814,7 +17889,7 @@ let BufferClientController = class BufferClientController {
         if (body.clientsNeedingBufferClients && !Array.isArray(body.clientsNeedingBufferClients)) {
             throw new common_1.BadRequestException('clientsNeedingBufferClients must be an array');
         }
-        this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds, body.clientsNeedingBufferClients || [], undefined);
+        this.clientService.addNewUserstoBufferClients(body.badIds, body.goodIds, body.clientsNeedingBufferClients || [], undefined).catch((error) => this.logger.error(`addNewUserstoBufferClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async findAll(status) {
@@ -17880,7 +17955,7 @@ let BufferClientController = class BufferClientController {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async healDeadSessions() {
-        this.clientService.healDeadSessions();
+        this.clientService.healDeadSessions().catch((error) => this.logger.error(`healDeadSessions failed: ${error?.message || error}`));
         return 'Session healing initiated for buffer clients';
     }
     async remove(mobile) {
@@ -18202,7 +18277,7 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], BufferClientController.prototype, "remove", null);
-exports.BufferClientController = BufferClientController = __decorate([
+exports.BufferClientController = BufferClientController = BufferClientController_1 = __decorate([
     (0, swagger_1.ApiTags)('Buffer Clients'),
     (0, common_1.Controller)('bufferclients'),
     __metadata("design:paramtypes", [buffer_client_service_1.BufferClientService])
@@ -18532,7 +18607,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -18578,7 +18653,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -18862,7 +18937,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             }
             finally {
@@ -18890,6 +18965,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async markAsInactive(mobile, reason) {
         try {
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
             this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason);
         }
@@ -18945,7 +19024,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
-                    await this.usersService.update(user.tgId, { expired: true });
+                    await this.usersService.expireAccount(canonicalMobile, 'Permanent error during buffer enrollment');
                 }
                 catch { }
             }
@@ -19458,7 +19537,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const errorDetails = (0, parseError_1.parseError)(error, `JoinChannelErr: ${mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(mobile, reason);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                 }
             }
             finally {
@@ -19550,9 +19629,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             this.logger.error(`Error processing buffer client ${document.mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
-                    await this.usersService.update(document.tgId, { expired: true });
+                    await this.usersService.expireAccount(document.mobile, errorDetails.message);
                 }
                 catch { }
             }
@@ -19735,10 +19813,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 catch (error) {
                     const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
                     if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await this.update(bufferClient.mobile, {
-                            status: 'inactive',
-                            message: `Session update failed: ${errorDetails.message}`,
-                        });
+                        await this.deactivateClient(bufferClient.mobile, `Session update failed: ${errorDetails.message}`, { permanent: true });
                         result.deactivated++;
                     }
                     else {
@@ -20272,6 +20347,7 @@ exports.BufferClientSchema = exports.BufferClient = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
+const client_helper_utils_1 = __webpack_require__(/*! ../../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
 let BufferClient = class BufferClient {
 };
 exports.BufferClient = BufferClient;
@@ -20291,8 +20367,11 @@ __decorate([
     __metadata("design:type", String)
 ], BufferClient.prototype, "session", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment (UTC YYYY-MM-DD).' }),
+    (0, mongoose_1.Prop)({
+        required: true,
+        set: (value) => client_helper_utils_1.ClientHelperUtils.normalizeAvailableDate(value) ?? value,
+    }),
     __metadata("design:type", String)
 ], BufferClient.prototype, "availableDate", void 0);
 __decorate([
@@ -22460,7 +22539,7 @@ let ClientService = ClientService_1 = class ClientService {
             await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${errorMessage.substring(0, 200)}`);
             const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
+                await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
                 await this.notify(`Buffer Marked Inactive\n\nMobile: ${newBufferClient.mobile}\nClient: ${clientId}\nReason: Permanent error during setup`);
             }
             else {
@@ -22504,7 +22583,7 @@ let ClientService = ClientService_1 = class ClientService {
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to get Telegram client for NewMobile: ${newMobile}`, true);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(newMobile, errorDetails.message);
+                await this.usersService.expireAccount(newMobile, errorDetails.message);
             }
             throw error;
         }
@@ -22573,7 +22652,7 @@ let ClientService = ClientService_1 = class ClientService {
             const errorDetails = (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
             if (!cutoverCommitted && (0, isPermanentError_1.default)(errorDetails)) {
                 try {
-                    await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`);
+                    await this.usersService.expireAccount(newMobile, `Session update failed: ${errorDetails.message}`);
                 }
                 catch { }
             }
@@ -22634,17 +22713,13 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async markBufferInactiveForArchival(mobile, reason) {
         try {
-            const updated = await this.bufferClientService.updateStatus(mobile, 'inactive', reason);
-            this.logger.warn(`Archived buffer client marked inactive`, {
-                mobile,
-                status: updated?.status,
-                message: updated?.message,
-            });
+            await this.usersService.expireAccount(mobile, reason);
+            this.logger.warn(`Archived account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
             await this.notify(`Buffer Marked Inactive\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 200)}`);
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to mark archived buffer inactive: ${mobile}`, false);
-            this.logger.error(`Failed to mark archived buffer inactive for ${mobile}: ${errorDetails.message}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to retire archived account: ${mobile}`, false);
+            this.logger.error(`Failed to retire archived account ${mobile}: ${errorDetails.message}`);
             await this.notify(`Buffer Inactive Update Failed\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 160)}\nError: ${errorDetails.message.substring(0, 200)}`);
         }
     }
@@ -26605,13 +26680,20 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
             }
         }
         if (removeStale) {
-            const result = await this.proxyIpModel.deleteMany({
-                source,
-                $nor: proxies.map(p => ({ ipAddress: p.ipAddress, port: p.port })),
-            });
-            removed = result.deletedCount;
-            if (removed > 0) {
-                this.logger.debug(`Removed ${removed} stale ${source} proxies`);
+            const incomingKeys = new Set(proxies.map(p => `${p.ipAddress}:${p.port}`));
+            const existing = await this.proxyIpModel
+                .find({ source }, { ipAddress: 1, port: 1 })
+                .lean()
+                .exec();
+            const staleIds = existing
+                .filter(p => !incomingKeys.has(`${p.ipAddress}:${p.port}`))
+                .map(p => p._id);
+            if (staleIds.length > 0) {
+                const result = await this.proxyIpModel.deleteMany({ _id: { $in: staleIds } });
+                removed = result.deletedCount;
+                if (removed > 0) {
+                    this.logger.debug(`Removed ${removed} stale ${source} proxies`);
+                }
             }
         }
         this.logger.log(`Sync "${source}" complete: created=${created}, updated=${updated}, removed=${removed}, errors=${errors.length}`);
@@ -27253,6 +27335,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var PromoteClientController_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.PromoteClientController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -27264,9 +27347,10 @@ const promote_client_schema_1 = __webpack_require__(/*! ./schemas/promote-client
 const update_promote_client_dto_1 = __webpack_require__(/*! ./dto/update-promote-client.dto */ "./src/components/promote-clients/dto/update-promote-client.dto.ts");
 const client_swagger_dto_1 = __webpack_require__(/*! ../shared/dto/client-swagger.dto */ "./src/components/shared/dto/client-swagger.dto.ts");
 const base_client_service_1 = __webpack_require__(/*! ../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
-let PromoteClientController = class PromoteClientController {
+let PromoteClientController = PromoteClientController_1 = class PromoteClientController {
     constructor(clientService) {
         this.clientService = clientService;
+        this.logger = new common_1.Logger(PromoteClientController_1.name);
     }
     sanitizeQuery(query) {
         const { apiKey: _apiKey, ...rest } = query;
@@ -27282,11 +27366,11 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async updateInfo() {
-        this.clientService.updateInfo();
+        this.clientService.updateInfo().catch((error) => this.logger.error(`updateInfo failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients();
+        this.clientService.checkPromoteClients().catch((error) => this.logger.error(`checkPromoteClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async addNewUserstoPromoteClients(body) {
@@ -27296,7 +27380,7 @@ let PromoteClientController = class PromoteClientController {
         if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
             throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
         }
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined);
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch((error) => this.logger.error(`addNewUserstoPromoteClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async findAll(status) {
@@ -27315,7 +27399,7 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async healDeadSessions() {
-        this.clientService.healDeadSessions();
+        this.clientService.healDeadSessions().catch((error) => this.logger.error(`healDeadSessions failed: ${error?.message || error}`));
         return 'Session healing initiated for promote clients';
     }
     async remove(mobile) {
@@ -27680,7 +27764,7 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "getUsageStatistics", null);
-exports.PromoteClientController = PromoteClientController = __decorate([
+exports.PromoteClientController = PromoteClientController = PromoteClientController_1 = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
     __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])
@@ -27997,7 +28081,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -28030,7 +28114,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -28188,7 +28272,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             }
             finally {
@@ -28215,8 +28299,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         return this.update(mobile, { lastUsed: new Date() });
     }
     async markAsInactive(mobile, reason) {
-        this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
         try {
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
+            this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason);
         }
         catch (error) {
@@ -28351,7 +28439,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const errorDetails = (0, parseError_1.parseError)(error);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
-                    await this.usersService.update(user.tgId, { expired: true });
+                    await this.usersService.expireAccount(canonicalMobile, 'Permanent error during promote enrollment');
                 }
                 catch { }
             }
@@ -28436,7 +28524,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await (0, Helpers_1.sleep)(1000);
                         const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                        await this.deactivateClient(mobile, reason);
+                        await this.deactivateClient(mobile, reason, { permanent: true });
                     }
                 }
                 finally {
@@ -28701,9 +28789,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         catch (error) {
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
-                    await this.usersService.update(document.tgId, { expired: true });
+                    await this.usersService.expireAccount(document.mobile, errorDetails.message);
                 }
                 catch { }
             }
@@ -28966,6 +29053,7 @@ exports.PromoteClientSchema = exports.PromoteClient = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mobile_utils_1 = __webpack_require__(/*! ../../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
+const client_helper_utils_1 = __webpack_require__(/*! ../../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
 let PromoteClient = class PromoteClient {
 };
 exports.PromoteClient = PromoteClient;
@@ -28985,8 +29073,11 @@ __decorate([
     __metadata("design:type", String)
 ], PromoteClient.prototype, "lastActive", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment.' }),
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, swagger_1.ApiProperty)({ description: 'Date when this client becomes available for assignment (UTC YYYY-MM-DD).' }),
+    (0, mongoose_1.Prop)({
+        required: true,
+        set: (value) => client_helper_utils_1.ClientHelperUtils.normalizeAvailableDate(value) ?? value,
+    }),
     __metadata("design:type", String)
 ], PromoteClient.prototype, "availableDate", void 0);
 __decorate([
@@ -32236,16 +32327,19 @@ class BaseClientService {
     mobilesMatch(a, b) {
         return (0, mobile_utils_1.mobilesEqual)(a, b);
     }
-    async deactivateClient(mobile, reason) {
+    async deactivateClient(mobile, reason, options = {}) {
         try {
             await this.updateStatus(mobile, 'inactive', reason);
-            return true;
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
             return false;
         }
+        if (options.permanent) {
+            await this.expireUserByMobile(mobile);
+        }
+        return true;
     }
     async updateUser2FAStatus(tgId, mobile) {
         try {
@@ -32457,7 +32551,7 @@ class BaseClientService {
             this.logger.warn(`Health check failed for ${mobile}: ${errorDetails.message}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(`Health check failed: ${errorDetails.message}`, telegramClient);
-                await this.deactivateClient(mobile, reason);
+                await this.deactivateClient(mobile, reason, { permanent: true });
             }
             await (0, Helpers_1.sleep)(5000);
             return { passed: false, performed: true };
@@ -32491,7 +32585,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -32530,7 +32624,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -32648,7 +32742,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -32696,7 +32790,7 @@ class BaseClientService {
                 }
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
-                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies');
+                    const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
                     this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                     return 0;
                 }
@@ -32724,7 +32818,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -32753,7 +32847,7 @@ class BaseClientService {
             const errorMsg = errorDetails?.message || '';
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`);
+                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
                 this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
                 return 0;
             }
@@ -32764,7 +32858,7 @@ class BaseClientService {
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -32783,22 +32877,6 @@ class BaseClientService {
         }
         const now = Date.now();
         let updateCount = 0;
-        const initialLastUsed = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed);
-        const initialWarmupPhase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-        if (initialLastUsed > 0 && (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY || initialWarmupPhase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)) {
-            await this.backfillTimestamps(doc.mobile, doc, now);
-            if (initialWarmupPhase === warmup_phases_1.WarmupPhase.READY) {
-                const updateData = {
-                    warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
-                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
-                };
-                await this.update(doc.mobile, updateData);
-                this.logger.log(`Client ${doc.mobile} has lastUsed in ${initialWarmupPhase}; marking warmup as ${warmup_phases_1.WarmupPhase.SESSION_ROTATED}`);
-                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
-            }
-            this.logger.debug(`Client ${doc.mobile} has been used and is ${initialWarmupPhase}, assuming configured`);
-            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
-        }
         try {
             doc = await this.repairWarmupMetadata(doc, now);
         }
@@ -32982,7 +33060,7 @@ class BaseClientService {
             }
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                const deactivated = await this.deactivateClient(doc.mobile, reason);
+                const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'}`, { parseMode: 'HTML' });
             }
             else {
@@ -33067,6 +33145,7 @@ class BaseClientService {
         const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
         const delay = Math.max(60000, baseInterval + jitter);
         this.joinChannelIntervalId = this.createTimeout(async () => {
+            this.joinChannelIntervalId = null;
             await this.processJoinChannelInterval();
         }, delay);
     }
@@ -33150,10 +33229,25 @@ class BaseClientService {
                     }
                 }
                 if (joinCount > 0) {
+                    let optimisticCount = null;
                     try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                        const inc = await this.model.findOneAndUpdate({ mobile }, { $inc: { channels: joinCount } }, { new: true, projection: { channels: 1 } });
+                        optimisticCount = typeof inc?.channels === 'number' ? inc.channels : null;
                     }
-                    catch {
+                    catch (incError) {
+                        this.logger.warn(`Failed to increment channel count for ${mobile} (+${joinCount}): ${this.getErrorText(incError)}`);
+                    }
+                    if (optimisticCount !== null && optimisticCount >= warmup_phases_1.MIN_CHANNELS_FOR_MATURING) {
+                        try {
+                            const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
+                            if (typeof channelsInfo?.ids?.length === 'number' && channelsInfo.ids.length !== optimisticCount) {
+                                await this.update(mobile, { channels: channelsInfo.ids.length });
+                                this.logger.debug(`Reconciled channel count for ${mobile}: optimistic=${optimisticCount} → actual=${channelsInfo.ids.length}`);
+                            }
+                        }
+                        catch (reconcileError) {
+                            this.logger.debug(`Channel-count reconcile skipped for ${mobile}: ${this.getErrorText(reconcileError)}`);
+                        }
                     }
                 }
                 if (channels.length === 0 || this.isMobileDailyCapped(mobile)) {
@@ -33180,9 +33274,7 @@ class BaseClientService {
                 else if ((0, isPermanentError_1.default)(errorDetails)) {
                     this.removeFromJoinMap(mobile);
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    const deactivated = await this.deactivateClient(mobile, reason);
-                    if (deactivated)
-                        await this.expireUserByMobile(mobile);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                 }
                 else {
                     const channels = this.joinChannelMap.get(mobile);
@@ -33228,6 +33320,7 @@ class BaseClientService {
         const jitter = client_helper_utils_1.ClientHelperUtils.gaussianRandom(0, baseInterval * 0.25, -baseInterval * 0.5, baseInterval * 0.5);
         const delay = Math.max(30000, baseInterval + jitter);
         this.leaveChannelIntervalId = this.createTimeout(async () => {
+            this.leaveChannelIntervalId = null;
             await this.processLeaveChannelInterval();
         }, delay);
     }
@@ -33291,9 +33384,7 @@ class BaseClientService {
                 const errorDetails = this.handleError(error, `${mobile} Leave Channel Error`, mobile);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    const deactivated = await this.deactivateClient(mobile, reason);
-                    if (deactivated)
-                        await this.expireUserByMobile(mobile);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
                     this.removeFromLeaveMap(mobile);
                 }
                 else if (channelsToProcess.length > 0) {
@@ -33313,7 +33404,7 @@ class BaseClientService {
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
-            clearInterval(this.joinChannelIntervalId);
+            clearTimeout(this.joinChannelIntervalId);
             this.activeTimeouts.delete(this.joinChannelIntervalId);
             this.joinChannelIntervalId = null;
         }
@@ -33321,7 +33412,7 @@ class BaseClientService {
     }
     clearLeaveChannelInterval() {
         if (this.leaveChannelIntervalId) {
-            clearInterval(this.leaveChannelIntervalId);
+            clearTimeout(this.leaveChannelIntervalId);
             this.activeTimeouts.delete(this.leaveChannelIntervalId);
             this.leaveChannelIntervalId = null;
         }
@@ -33470,13 +33561,11 @@ class BaseClientService {
     }
     async expireUserByMobile(mobile) {
         try {
-            const users = await this.usersService.search({ mobile, expired: false });
-            const user = users[0];
-            if (user?.tgId) {
-                await this.usersService.update(user.tgId, { expired: true });
-            }
+            await this.usersService.expireAccount(mobile, 'Client retired (permanent failure)');
         }
-        catch {
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.warn(`expireUserByMobile: failed to expire user for ${mobile}: ${errorMessage}`);
         }
     }
     normalizeDateString(dateValue) {
@@ -33693,7 +33782,7 @@ class BaseClientService {
     }
     async getLeastRecentlyUsedClients(clientId, limit = 1) {
         await this.selfHealLegacyOperationalState(clientId);
-        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+        const todayInclusive = client_helper_utils_1.ClientHelperUtils.getTodayDateString() + '￿';
         return this.model
             .find({
             clientId,
@@ -33701,7 +33790,7 @@ class BaseClientService {
             inUse: { $ne: true },
             warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
             $or: [
-                { availableDate: { $lte: today } },
+                { availableDate: { $lte: todayInclusive } },
                 { availableDate: { $exists: false } },
                 { availableDate: null },
             ],
@@ -33717,7 +33806,7 @@ class BaseClientService {
     async getUnusedClients(hoursAgo = 24, clientId) {
         await this.selfHealLegacyOperationalState(clientId);
         const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
-        const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
+        const todayInclusive = client_helper_utils_1.ClientHelperUtils.getTodayDateString() + '￿';
         const filter = {
             status: 'active',
             inUse: { $ne: true },
@@ -33725,7 +33814,7 @@ class BaseClientService {
             $and: [
                 {
                     $or: [
-                        { availableDate: { $lte: today } },
+                        { availableDate: { $lte: todayInclusive } },
                         { availableDate: { $exists: false } },
                         { availableDate: null },
                     ],
@@ -34035,7 +34124,7 @@ class BaseClientService {
                 }
                 else {
                     this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
-                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`);
+                    const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`, { permanent: true });
                     if (deactivated)
                         results.deactivated++;
                     else
@@ -34045,7 +34134,7 @@ class BaseClientService {
             catch (error) {
                 const errMsg = (0, parseError_1.parseError)(error, `healSessionCreate:${mobile}`).message;
                 this.logger.error(`[HealSessions] ${mobile}: session creation threw — ${errMsg}`);
-                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`);
+                const deactivated = await this.deactivateClient(mobile, `Session heal: creation error — ${errMsg}`, { permanent: true });
                 if (deactivated)
                     results.deactivated++;
                 results.errors.push({ mobile, error: errMsg, action: deactivated ? 'deactivated (creation error)' : 'deactivation failed (creation error)' });
@@ -34088,6 +34177,14 @@ class ClientHelperUtils {
     }
     static getTodayDateString() {
         return this.toDateString(new Date());
+    }
+    static normalizeAvailableDate(value) {
+        if (value === null || value === undefined || value === '')
+            return null;
+        if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value))
+            return value;
+        const ts = this.getTimestamp(value);
+        return ts > 0 ? this.toDateString(ts) : null;
     }
     static getDateStringDaysAgo(days, oneDayMs) {
         return this.toDateString(Date.now() - days * oneDayMs);
@@ -37795,6 +37892,17 @@ let UserDataService = UserDataService_1 = class UserDataService {
         this.callCounts = new Map();
         this.logger = new utils_1.Logger(UserDataService_1.name);
     }
+    recordCall(chatId) {
+        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
+        this.callCounts.delete(chatId);
+        this.callCounts.set(chatId, currentCount);
+        if (this.callCounts.size > UserDataService_1.MAX_CALL_COUNTS) {
+            const oldest = this.callCounts.keys().next().value;
+            if (oldest !== undefined)
+                this.callCounts.delete(oldest);
+        }
+        return currentCount;
+    }
     async create(createUserDataDto) {
         try {
             return await this.userDataModel.create(createUserDataDto);
@@ -37811,8 +37919,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
         if (!user) {
             throw new common_1.NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
-        const currentCount = (this.callCounts.get(chatId) || 0) + 1;
-        this.callCounts.set(chatId, currentCount);
+        const currentCount = this.recordCall(chatId);
         return { ...user, count: currentCount };
     }
     clearCount(chatId) {
@@ -37963,6 +38070,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     }
 };
 exports.UserDataService = UserDataService;
+UserDataService.MAX_CALL_COUNTS = 5000;
 exports.UserDataService = UserDataService = UserDataService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(user_data_schema_1.UserData.name)),
@@ -39260,6 +39368,8 @@ const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */
 const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./src/components/clients/client.module.ts");
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const buffer_client_module_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts");
+const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -39270,6 +39380,8 @@ exports.UsersModule = UsersModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: 'userModule', schema: user_schema_1.UserSchema, collection: 'users' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
+            (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             bots_1.BotsModule
         ],
         controllers: [users_controller_1.UsersController],
@@ -39321,13 +39433,46 @@ const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "bi
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const mobile_utils_1 = __webpack_require__(/*! ../shared/mobile-utils */ "./src/components/shared/mobile-utils.ts");
 const common_chats_1 = __webpack_require__(/*! ../../utils/telegram-utils/common-chats */ "./src/utils/telegram-utils/common-chats.ts");
+const buffer_client_service_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.service */ "./src/components/buffer-clients/buffer-client.service.ts");
+const promote_client_service_1 = __webpack_require__(/*! ../promote-clients/promote-client.service */ "./src/components/promote-clients/promote-client.service.ts");
 let UsersService = UsersService_1 = class UsersService {
-    constructor(userModel, telegramService, clientsService, botsService) {
+    constructor(userModel, telegramService, clientsService, botsService, bufferClientService, promoteClientService) {
         this.userModel = userModel;
         this.telegramService = telegramService;
         this.clientsService = clientsService;
         this.botsService = botsService;
+        this.bufferClientService = bufferClientService;
+        this.promoteClientService = promoteClientService;
         this.logger = new utils_1.Logger(UsersService_1.name);
+    }
+    async expireAccount(mobile, reason = 'Account permanently lost (session revoked / banned / deactivated)') {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        try {
+            await this.userModel
+                .updateOne({ mobile: canonicalMobile }, { $set: { expired: true } })
+                .exec();
+        }
+        catch (error) {
+            this.logger.error(`expireAccount: failed to mark user ${canonicalMobile} expired: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        await Promise.allSettled([
+            (async () => {
+                try {
+                    await this.bufferClientService.markAsInactive(canonicalMobile, reason);
+                }
+                catch (error) {
+                    this.logger.error(`expireAccount: failed to deactivate buffer client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            })(),
+            (async () => {
+                try {
+                    await this.promoteClientService.markAsInactive(canonicalMobile, reason);
+                }
+                catch (error) {
+                    this.logger.error(`expireAccount: failed to deactivate promote client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            })(),
+        ]);
     }
     async create(user) {
         const canonicalMobile = this.canonicalMobile(user.mobile);
@@ -39679,10 +39824,11 @@ let UsersService = UsersService_1 = class UsersService {
         return { mobile: canonicalMobile, starred: newVal };
     }
     async delete(tgId) {
-        const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
-        if (result.matchedCount === 0) {
+        const user = await this.userModel.findOne({ tgId }).select('mobile').exec();
+        if (!user) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
+        await this.expireAccount(user.mobile, 'User deleted');
     }
     async search(filter) {
         const query = { ...filter };
@@ -40265,10 +40411,14 @@ exports.UsersService = UsersService = UsersService_1 = __decorate([
     __param(0, (0, mongoose_1.InjectModel)('userModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         client_service_1.ClientService,
-        bots_1.BotsService])
+        bots_1.BotsService,
+        buffer_client_service_1.BufferClientService,
+        promote_client_service_1.PromoteClientService])
 ], UsersService);
 
 
@@ -42342,32 +42492,57 @@ __exportStar(__webpack_require__(/*! ./readbleTimeDifference */ "./src/utils/rea
 /*!***************************************!*\
   !*** ./src/utils/isPermanentError.ts ***!
   \***************************************/
-(__unused_webpack_module, exports, __webpack_require__) {
+(__unused_webpack_module, exports) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports["default"] = isPermanentError;
-const common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
+const RECOVERABLE_OVERRIDES = [
+    'INPUT_USER_DEACTIVATED',
+];
+const PERMANENT_ERRORS = [
+    'SESSION_REVOKED',
+    'AUTH_KEY_UNREGISTERED',
+    'AUTH_KEY_DUPLICATED',
+    'SESSION_EXPIRED',
+    'USER_DEACTIVATED',
+    'USER_DEACTIVATED_BAN',
+    'PHONE_NUMBER_BANNED',
+    'PHONE_NUMBER_INVALID',
+    'FROZEN_METHOD_INVALID',
+    'FROZEN_PARTICIPANT_MISSING',
+];
+function containsToken(text, token) {
+    if (typeof text !== 'string' || !token)
+        return false;
+    const haystack = text.toUpperCase();
+    const needle = token.toUpperCase();
+    let from = 0;
+    while (true) {
+        const idx = haystack.indexOf(needle, from);
+        if (idx === -1)
+            return false;
+        const before = idx === 0 ? '' : haystack[idx - 1];
+        const after = idx + needle.length >= haystack.length ? '' : haystack[idx + needle.length];
+        const isWordChar = (c) => c !== '' && /[A-Z0-9_]/.test(c);
+        if (!isWordChar(before) && !isWordChar(after))
+            return true;
+        from = idx + 1;
+    }
+}
+function classify(text) {
+    if (typeof text !== 'string' || text.trim() === '')
+        return false;
+    if (RECOVERABLE_OVERRIDES.some(token => containsToken(text, token)))
+        return false;
+    return PERMANENT_ERRORS.some(token => containsToken(text, token));
+}
 function isPermanentError(errorDetails) {
-    const permanentErrors = [
-        'SESSION_REVOKED',
-        'AUTH_KEY_UNREGISTERED',
-        'AUTH_KEY_DUPLICATED',
-        'SESSION_EXPIRED',
-        'USER_DEACTIVATED',
-        'USER_DEACTIVATED_BAN',
-        'PHONE_NUMBER_BANNED',
-        'PHONE_NUMBER_INVALID',
-        'FROZEN_METHOD_INVALID',
-        'FROZEN_PARTICIPANT_MISSING',
-    ];
-    if ((0, common_1.contains)(errorDetails.message, permanentErrors) && !(0, common_1.contains)(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
+    if (classify(errorDetails.message))
         return true;
-    }
     const rawMessage = errorDetails.error?.message || errorDetails.error?.errorMessage;
-    if ((0, common_1.contains)(rawMessage, permanentErrors) && !(0, common_1.contains)(errorDetails.message, ['INPUT_USER_DEACTIVATED'])) {
+    if (classify(rawMessage))
         return true;
-    }
     return false;
 }
 

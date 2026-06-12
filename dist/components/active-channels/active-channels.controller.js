@@ -28,6 +28,9 @@ let ActiveChannelsController = class ActiveChannelsController {
     async createMultiple(createChannelDtos) {
         return this.activeChannelsService.createMultiple(createChannelDtos);
     }
+    async autoHeal() {
+        return this.activeChannelsService.autoHealChannels();
+    }
     async analytics() {
         return this.activeChannelsService.analytics();
     }
@@ -75,6 +78,13 @@ __decorate([
     __metadata("design:paramtypes", [Array]),
     __metadata("design:returntype", Promise)
 ], ActiveChannelsController.prototype, "createMultiple", null);
+__decorate([
+    (0, common_1.Post)('auto-heal'),
+    (0, swagger_1.ApiOperation)({ summary: 'Clear time-expired reactRestricted / tempBan flags so channels can recover' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], ActiveChannelsController.prototype, "autoHeal", null);
 __decorate([
     (0, common_1.Get)('analytics'),
     (0, swagger_1.ApiOperation)({ summary: 'Get comprehensive channel analytics' }),

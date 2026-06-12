@@ -7,6 +7,7 @@ import { ActivationRequestDto, BulkEnrollPromoteClientsRequestDto, DeactivationR
 import { ClientStatusType } from '../shared/base-client.service';
 export declare class PromoteClientController {
     private readonly clientService;
+    private readonly logger;
     constructor(clientService: PromoteClientService);
     private sanitizeQuery;
     create(createClientDto: CreatePromoteClientDto): Promise<PromoteClient>;

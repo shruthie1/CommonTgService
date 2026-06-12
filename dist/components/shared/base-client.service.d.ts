@@ -175,7 +175,9 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected handleError(error: unknown, context: string, mobile?: string): ReturnType<typeof parseError>;
     protected canonicalMobile(mobile: string): string;
     protected mobilesMatch(a?: string | null, b?: string | null): boolean;
-    protected deactivateClient(mobile: string, reason: string): Promise<boolean>;
+    protected deactivateClient(mobile: string, reason: string, options?: {
+        permanent?: boolean;
+    }): Promise<boolean>;
     protected updateUser2FAStatus(tgId: string, mobile: string): Promise<void>;
     protected readNestedString(root: unknown, path: readonly ObjectPathSegment[]): string;
     protected getErrorText(error: unknown): string;

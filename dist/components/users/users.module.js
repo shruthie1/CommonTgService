@@ -16,6 +16,8 @@ const Telegram_module_1 = require("../Telegram/Telegram.module");
 const client_module_1 = require("../clients/client.module");
 const init_module_1 = require("../ConfigurationInit/init.module");
 const bots_1 = require("../bots");
+const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
+const promote_client_module_1 = require("../promote-clients/promote-client.module");
 let UsersModule = class UsersModule {
 };
 exports.UsersModule = UsersModule;
@@ -26,6 +28,8 @@ exports.UsersModule = UsersModule = __decorate([
             mongoose_1.MongooseModule.forFeature([{ name: 'userModule', schema: user_schema_1.UserSchema, collection: 'users' }]),
             (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
+            (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
+            (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             bots_1.BotsModule
         ],
         controllers: [users_controller_1.UsersController],

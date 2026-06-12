@@ -6,13 +6,18 @@ import { ClientService } from '../clients/client.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { BotsService } from '../bots';
+import { BufferClientService } from '../buffer-clients/buffer-client.service';
+import { PromoteClientService } from '../promote-clients/promote-client.service';
 export declare class UsersService {
     private userModel;
     private telegramService;
     private clientsService;
     private readonly botsService;
+    private bufferClientService;
+    private promoteClientService;
     private readonly logger;
-    constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService, botsService: BotsService);
+    constructor(userModel: Model<UserDocument>, telegramService: TelegramService, clientsService: ClientService, botsService: BotsService, bufferClientService: BufferClientService, promoteClientService: PromoteClientService);
+    expireAccount(mobile: string, reason?: string): Promise<void>;
     create(user: CreateUserDto): Promise<User | undefined>;
     top(options: {
         page?: number;

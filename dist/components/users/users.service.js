@@ -32,13 +32,46 @@ const big_integer_1 = __importDefault(require("big-integer"));
 const parseError_1 = require("../../utils/parseError");
 const mobile_utils_1 = require("../shared/mobile-utils");
 const common_chats_1 = require("../../utils/telegram-utils/common-chats");
+const buffer_client_service_1 = require("../buffer-clients/buffer-client.service");
+const promote_client_service_1 = require("../promote-clients/promote-client.service");
 let UsersService = UsersService_1 = class UsersService {
-    constructor(userModel, telegramService, clientsService, botsService) {
+    constructor(userModel, telegramService, clientsService, botsService, bufferClientService, promoteClientService) {
         this.userModel = userModel;
         this.telegramService = telegramService;
         this.clientsService = clientsService;
         this.botsService = botsService;
+        this.bufferClientService = bufferClientService;
+        this.promoteClientService = promoteClientService;
         this.logger = new utils_1.Logger(UsersService_1.name);
+    }
+    async expireAccount(mobile, reason = 'Account permanently lost (session revoked / banned / deactivated)') {
+        const canonicalMobile = this.canonicalMobile(mobile);
+        try {
+            await this.userModel
+                .updateOne({ mobile: canonicalMobile }, { $set: { expired: true } })
+                .exec();
+        }
+        catch (error) {
+            this.logger.error(`expireAccount: failed to mark user ${canonicalMobile} expired: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        await Promise.allSettled([
+            (async () => {
+                try {
+                    await this.bufferClientService.markAsInactive(canonicalMobile, reason);
+                }
+                catch (error) {
+                    this.logger.error(`expireAccount: failed to deactivate buffer client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            })(),
+            (async () => {
+                try {
+                    await this.promoteClientService.markAsInactive(canonicalMobile, reason);
+                }
+                catch (error) {
+                    this.logger.error(`expireAccount: failed to deactivate promote client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            })(),
+        ]);
     }
     async create(user) {
         const canonicalMobile = this.canonicalMobile(user.mobile);
@@ -390,10 +423,11 @@ let UsersService = UsersService_1 = class UsersService {
         return { mobile: canonicalMobile, starred: newVal };
     }
     async delete(tgId) {
-        const result = await this.userModel.updateOne({ tgId }, { $set: { expired: true } }).exec();
-        if (result.matchedCount === 0) {
+        const user = await this.userModel.findOne({ tgId }).select('mobile').exec();
+        if (!user) {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
+        await this.expireAccount(user.mobile, 'User deleted');
     }
     async search(filter) {
         const query = { ...filter };
@@ -976,9 +1010,13 @@ exports.UsersService = UsersService = UsersService_1 = __decorate([
     __param(0, (0, mongoose_1.InjectModel)('userModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
         Telegram_service_1.TelegramService,
         client_service_1.ClientService,
-        bots_1.BotsService])
+        bots_1.BotsService,
+        buffer_client_service_1.BufferClientService,
+        promote_client_service_1.PromoteClientService])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

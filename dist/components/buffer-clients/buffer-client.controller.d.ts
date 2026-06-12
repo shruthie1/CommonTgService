@@ -7,6 +7,7 @@ import { ActivationRequestDto, BulkEnrollBufferClientsRequestDto, DeactivationRe
 import { ClientStatusType } from '../shared/base-client.service';
 export declare class BufferClientController {
     private readonly clientService;
+    private readonly logger;
     constructor(clientService: BufferClientService);
     private sanitizeQuery;
     create(createClientDto: CreateBufferClientDto): Promise<BufferClient>;

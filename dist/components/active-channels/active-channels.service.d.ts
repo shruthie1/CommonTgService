@@ -12,7 +12,13 @@ export declare class ActiveChannelsService implements OnModuleInit {
     private readonly MIN_PARTICIPANTS_COUNT;
     private readonly logger;
     constructor(activeChannelModel: Model<ActiveChannelDocument>, promoteMsgsService: PromoteMsgsService);
+    private readonly REACT_RESTRICTED_HEAL_MS;
+    private readonly TEMP_BAN_HEAL_MS;
     onModuleInit(): Promise<void>;
+    autoHealChannels(): Promise<{
+        reactRestrictedHealed: number;
+        tempBanHealed: number;
+    }>;
     create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel>;
     createMultiple(createChannelDtos: Partial<CreateActiveChannelDto>[]): Promise<string>;
     findAll(): Promise<ActiveChannel[]>;

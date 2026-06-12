@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var PromoteClientController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PromoteClientController = void 0;
 const common_1 = require("@nestjs/common");
@@ -22,9 +23,10 @@ const promote_client_schema_1 = require("./schemas/promote-client.schema");
 const update_promote_client_dto_1 = require("./dto/update-promote-client.dto");
 const client_swagger_dto_1 = require("../shared/dto/client-swagger.dto");
 const base_client_service_1 = require("../shared/base-client.service");
-let PromoteClientController = class PromoteClientController {
+let PromoteClientController = PromoteClientController_1 = class PromoteClientController {
     constructor(clientService) {
         this.clientService = clientService;
+        this.logger = new common_1.Logger(PromoteClientController_1.name);
     }
     sanitizeQuery(query) {
         const { apiKey: _apiKey, ...rest } = query;
@@ -40,11 +42,11 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.joinchannelForPromoteClients();
     }
     async updateInfo() {
-        this.clientService.updateInfo();
+        this.clientService.updateInfo().catch((error) => this.logger.error(`updateInfo failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async checkpromoteClients() {
-        this.clientService.checkPromoteClients();
+        this.clientService.checkPromoteClients().catch((error) => this.logger.error(`checkPromoteClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async addNewUserstoPromoteClients(body) {
@@ -54,7 +56,7 @@ let PromoteClientController = class PromoteClientController {
         if (body.clientsNeedingPromoteClients && !Array.isArray(body.clientsNeedingPromoteClients)) {
             throw new common_1.BadRequestException('clientsNeedingPromoteClients must be an array');
         }
-        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined);
+        this.clientService.addNewUserstoPromoteClients(body.badIds, body.goodIds, body.clientsNeedingPromoteClients || [], undefined).catch((error) => this.logger.error(`addNewUserstoPromoteClients failed: ${error?.message || error}`));
         return 'initiated Checking';
     }
     async findAll(status) {
@@ -73,7 +75,7 @@ let PromoteClientController = class PromoteClientController {
         return this.clientService.createOrUpdate(mobile, updateClientDto);
     }
     async healDeadSessions() {
-        this.clientService.healDeadSessions();
+        this.clientService.healDeadSessions().catch((error) => this.logger.error(`healDeadSessions failed: ${error?.message || error}`));
         return 'Session healing initiated for promote clients';
     }
     async remove(mobile) {
@@ -438,7 +440,7 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PromoteClientController.prototype, "getUsageStatistics", null);
-exports.PromoteClientController = PromoteClientController = __decorate([
+exports.PromoteClientController = PromoteClientController = PromoteClientController_1 = __decorate([
     (0, swagger_1.ApiTags)('Promote Clients'),
     (0, common_1.Controller)('promoteclients'),
     __metadata("design:paramtypes", [promote_client_service_1.PromoteClientService])

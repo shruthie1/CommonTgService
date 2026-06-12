@@ -245,7 +245,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -278,7 +278,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
             return 0;
         }
@@ -436,7 +436,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 const errorDetails = (0, parseError_1.parseError)(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if ((0, isPermanentError_1.default)(errorDetails)) {
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                    await this.deactivateClient(doc.mobile, reason);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             }
             finally {
@@ -463,8 +463,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         return this.update(mobile, { lastUsed: new Date() });
     }
     async markAsInactive(mobile, reason) {
-        this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
         try {
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
+            this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
             return await this.updateStatus(mobile, 'inactive', reason);
         }
         catch (error) {
@@ -599,7 +603,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const errorDetails = (0, parseError_1.parseError)(error);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 try {
-                    await this.usersService.update(user.tgId, { expired: true });
+                    await this.usersService.expireAccount(canonicalMobile, 'Permanent error during promote enrollment');
                 }
                 catch { }
             }
@@ -684,7 +688,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                     if ((0, isPermanentError_1.default)(errorDetails)) {
                         await (0, Helpers_1.sleep)(1000);
                         const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                        await this.deactivateClient(mobile, reason);
+                        await this.deactivateClient(mobile, reason, { permanent: true });
                     }
                 }
                 finally {
@@ -949,9 +953,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         catch (error) {
             const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.deactivateClient(document.mobile, errorDetails.message);
                 try {
-                    await this.usersService.update(document.tgId, { expired: true });
+                    await this.usersService.expireAccount(document.mobile, errorDetails.message);
                 }
                 catch { }
             }

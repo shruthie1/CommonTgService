@@ -491,7 +491,7 @@ let ClientService = ClientService_1 = class ClientService {
             await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${errorMessage.substring(0, 200)}`);
             const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
+                await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
                 await this.notify(`Buffer Marked Inactive\n\nMobile: ${newBufferClient.mobile}\nClient: ${clientId}\nReason: Permanent error during setup`);
             }
             else {
@@ -535,7 +535,7 @@ let ClientService = ClientService_1 = class ClientService {
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to get Telegram client for NewMobile: ${newMobile}`, true);
             if ((0, isPermanentError_1.default)(errorDetails)) {
-                await this.bufferClientService.markAsInactive(newMobile, errorDetails.message);
+                await this.usersService.expireAccount(newMobile, errorDetails.message);
             }
             throw error;
         }
@@ -604,7 +604,7 @@ let ClientService = ClientService_1 = class ClientService {
             const errorDetails = (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
             if (!cutoverCommitted && (0, isPermanentError_1.default)(errorDetails)) {
                 try {
-                    await this.bufferClientService.markAsInactive(newMobile, `Session update failed: ${errorDetails.message}`);
+                    await this.usersService.expireAccount(newMobile, `Session update failed: ${errorDetails.message}`);
                 }
                 catch { }
             }
@@ -665,17 +665,13 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async markBufferInactiveForArchival(mobile, reason) {
         try {
-            const updated = await this.bufferClientService.updateStatus(mobile, 'inactive', reason);
-            this.logger.warn(`Archived buffer client marked inactive`, {
-                mobile,
-                status: updated?.status,
-                message: updated?.message,
-            });
+            await this.usersService.expireAccount(mobile, reason);
+            this.logger.warn(`Archived account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
             await this.notify(`Buffer Marked Inactive\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 200)}`);
         }
         catch (error) {
-            const errorDetails = (0, parseError_1.parseError)(error, `Failed to mark archived buffer inactive: ${mobile}`, false);
-            this.logger.error(`Failed to mark archived buffer inactive for ${mobile}: ${errorDetails.message}`);
+            const errorDetails = (0, parseError_1.parseError)(error, `Failed to retire archived account: ${mobile}`, false);
+            this.logger.error(`Failed to retire archived account ${mobile}: ${errorDetails.message}`);
             await this.notify(`Buffer Inactive Update Failed\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 160)}\nError: ${errorDetails.message.substring(0, 200)}`);
         }
     }

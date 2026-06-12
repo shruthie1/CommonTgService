@@ -7,6 +7,10 @@ export declare class ActiveChannelsController {
     constructor(activeChannelsService: ActiveChannelsService);
     create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel>;
     createMultiple(createChannelDtos: CreateActiveChannelDto[]): Promise<string>;
+    autoHeal(): Promise<{
+        reactRestrictedHealed: number;
+        tempBanHealed: number;
+    }>;
     analytics(): Promise<Record<string, any>>;
     paginated(page?: string, limit?: string, sortBy?: string, sortOrder?: string, search?: string, filter?: string): Promise<{
         channels: ActiveChannel[];

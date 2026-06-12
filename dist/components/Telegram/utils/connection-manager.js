@@ -17,6 +17,7 @@ const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentEr
 class ConnectionManager {
     constructor() {
         this.clients = new Map();
+        this.inFlight = new Map();
         this.logger = new telegram_logger_1.TelegramLogger('ConnectionManager');
         this.cleanupTimer = null;
         this.usersService = null;
@@ -50,7 +51,20 @@ class ConnectionManager {
             }
         }
         const { autoDisconnect = true, handler = true, forceReconnect = false } = options;
-        const connectPromise = (async () => {
+        const existing = this.clients.get(mobile);
+        if (existing && !forceReconnect && existing.state === 'connected' && this.isClientHealthy(existing)) {
+            this.updateLastUsed(mobile);
+            this.logger.info(mobile, 'Reusing healthy client');
+            return existing.client;
+        }
+        if (!forceReconnect) {
+            const pending = this.inFlight.get(mobile);
+            if (pending) {
+                this.logger.info(mobile, 'Joining in-flight client build');
+                return pending;
+            }
+        }
+        const buildPromise = (async () => {
             try {
                 const existingClient = this.clients.get(mobile);
                 if (existingClient && !forceReconnect) {
@@ -72,7 +86,15 @@ class ConnectionManager {
                 throw error;
             }
         })();
-        return await connectPromise;
+        this.inFlight.set(mobile, buildPromise);
+        try {
+            return await buildPromise;
+        }
+        finally {
+            if (this.inFlight.get(mobile) === buildPromise) {
+                this.inFlight.delete(mobile);
+            }
+        }
     }
     async createNewClient(mobile, options) {
         if (!this.usersService) {
@@ -145,12 +167,8 @@ class ConnectionManager {
         if ((0, isPermanentError_1.default)(errorDetails)) {
             this.logger.info(mobile, 'Marking user as expired due to permanent error');
             try {
-                const users = await this.usersService.search({ mobile });
-                const user = users[0];
-                if (user) {
-                    await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: mobile }] }, { expired: true });
-                    markedAsExpired = true;
-                }
+                await this.usersService.expireAccount(mobile, `Permanent connection error: ${errorDetails.message?.substring(0, 120) || 'unknown'}`);
+                markedAsExpired = true;
             }
             catch (updateError) {
                 this.logger.error(mobile, 'Failed to mark user as expired', updateError);
