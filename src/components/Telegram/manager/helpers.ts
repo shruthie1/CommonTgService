@@ -305,7 +305,7 @@ function buildInternalDownloadHeaders(url: string): Record<string, string> {
         const parsed = new URL(url);
         const apiKey = process.env.X_API_KEY || process.env.API_KEY || 'santoor';
         const internalHosts = new Set([
-            'cms.paidgirl.site',
+            'cms.paidgirls.site',
             'localhost',
             '127.0.0.1',
         ]);

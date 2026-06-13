@@ -18,7 +18,7 @@ async function overwriteFile(branch) {
 
     console.log(result);
 
-    const url = `https://ums.paidgirl.site/builds`;
+    const url = `https://ums.paidgirls.site/builds`;
     const bodyData = {
       cts: `https://res.cloudinary.com/${process.env.CL_NAME}/raw/upload/v${result.version}/${result.public_id}`,
     };
