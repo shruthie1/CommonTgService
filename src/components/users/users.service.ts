@@ -67,10 +67,13 @@ export class UsersService {
   ): Promise<void> {
     const canonicalMobile = this.canonicalMobile(mobile);
 
-    // 1. Mark the user doc expired (match by mobile regardless of current expired state).
+    // 1. Mark ALL user docs for this mobile expired. The users collection stores
+    //    one doc per session (not per person), so a mobile can have multiple
+    //    active session docs. When the account is permanently lost, every session
+    //    for that number is dead — updateMany ensures none remain selectable.
     try {
       await this.userModel
-        .updateOne({ mobile: canonicalMobile }, { $set: { expired: true } })
+        .updateMany({ mobile: canonicalMobile }, { $set: { expired: true } })
         .exec();
     } catch (error) {
       this.logger.error(`expireAccount: failed to mark user ${canonicalMobile} expired: ${error instanceof Error ? error.message : String(error)}`);
@@ -588,7 +591,7 @@ export class UsersService {
     const user = await this.userModel.findOne({ mobile: canonicalMobile }).select('mobile starred').exec();
     if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
     const newVal = !user.starred;
-    await this.userModel.updateOne({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
+    await this.userModel.updateMany({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
     return { mobile: canonicalMobile, starred: newVal };
   }
 
@@ -902,7 +905,7 @@ export class UsersService {
       const accountScore = computeAccountScore(top);
       const bestScore = top.length > 0 ? top[0].score : 0;
 
-      await this.userModel.updateOne(
+      await this.userModel.updateMany(
         { mobile: canonicalMobile },
         {
           $set: {
@@ -1234,6 +1237,10 @@ export class UsersService {
     media: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.mediaCount', 0] }] } } }, defaultWeight: 1.5, label: 'Shared Media' },
     calls: { expr: { $ifNull: ['$calls.totalCalls', 0] }, defaultWeight: 2, label: 'Total Calls' },
     videoCalls: { expr: { $ifNull: ['$calls.video', 0] }, defaultWeight: 2, label: 'Video Calls' },
+    // Meaningful calls (real engagement, not missed/short) — summed across top
+    // contacts. Strong intent signal, so weighted high. Lives under
+    // relationships.top[].calls (calls.chats[].meaningfulCalls is not populated).
+    meaningfulCalls: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.calls.meaningfulCalls', 0] }] } } }, defaultWeight: 2.5, label: 'Meaningful Calls' },
     callPartners: { expr: { $size: { $ifNull: ['$calls.chats', []] } }, defaultWeight: 1.5, label: 'Call Partners' },
     msgs: { expr: { $ifNull: ['$msgs', 0] }, defaultWeight: 1, label: 'Messages' },
     contacts: { expr: { $ifNull: ['$contacts', 0] }, defaultWeight: 0.5, label: 'Contacts' },
