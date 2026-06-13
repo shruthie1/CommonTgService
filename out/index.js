@@ -39017,6 +39017,27 @@ let UsersController = class UsersController {
         const order = sortOrder === 'asc' ? 1 : -1;
         return this.usersService.aggregateSort(field, order, limitNum, skipNum, query);
     }
+    async compositeRank(requestBody) {
+        const { signals, query = {}, limit, skip } = requestBody || {};
+        if (!Array.isArray(signals) || signals.length === 0) {
+            throw new common_1.BadRequestException('signals must be a non-empty array');
+        }
+        const cleanedSignals = signals
+            .filter((s) => !!s && typeof s.field === 'string' && s.field.length > 0)
+            .map((s) => ({ field: s.field, weight: s.weight }));
+        if (cleanedSignals.length === 0) {
+            throw new common_1.BadRequestException('signals must each have a field');
+        }
+        const limitNum = limit !== undefined ? Number(limit) : 20;
+        const skipNum = skip !== undefined ? Number(skip) : 0;
+        if (!Number.isInteger(limitNum) || limitNum < 1) {
+            throw new common_1.BadRequestException('Limit must be a positive integer');
+        }
+        if (!Number.isInteger(skipNum) || skipNum < 0) {
+            throw new common_1.BadRequestException('Skip must be a non-negative integer');
+        }
+        return this.usersService.compositeRank(cleanedSignals, limitNum, skipNum, query);
+    }
     async recomputeScore(mobile) {
         await this.usersService.computeRelationshipScore(mobile);
         return this.usersService.getUserRelationships(mobile);
@@ -39268,6 +39289,41 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "aggregateSortQuery", null);
+__decorate([
+    (0, common_1.Post)('composite-rank'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Rank users by a weighted composite of multiple stat signals',
+        description: 'composite = Σ weight·ln(1+value) over the selected signals, sorted descending. With one signal it is equivalent to sorting by that field. Optional query pre-filters (e.g. createdAt range, starred). Signals: relScore, intimate, voice, media, calls, videoCalls, callPartners, msgs, contacts.',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['signals'],
+            properties: {
+                signals: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        required: ['field'],
+                        properties: {
+                            field: { type: 'string' },
+                            weight: { type: 'number', description: 'Optional; defaults to a per-signal weight' },
+                        },
+                    },
+                },
+                query: { type: 'object', additionalProperties: true },
+                limit: { type: 'number' },
+                skip: { type: 'number' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiOkResponse)({ type: [user_schema_1.User] }),
+    (0, swagger_1.ApiBadRequestResponse)({ description: 'No signals, unknown signal, or invalid pagination.' }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "compositeRank", null);
 __decorate([
     (0, common_1.Post)('recompute-score/:mobile'),
     (0, swagger_1.ApiOperation)({ summary: 'Recompute relationship score (live Telegram connection)' }),
@@ -39659,7 +39715,47 @@ let UsersService = UsersService_1 = class UsersService {
         }
         return false;
     }
+    coerceDateOperands(query) {
+        if (!query || typeof query !== 'object')
+            return query;
+        const DATE_FIELDS = new Set(['createdAt', 'updatedAt']);
+        const RANGE_OPS = new Set(['$gte', '$lte', '$gt', '$lt', '$eq', '$ne']);
+        const toDate = (v) => {
+            if (typeof v !== 'string')
+                return v;
+            const ts = Date.parse(v);
+            return Number.isNaN(ts) ? v : new Date(ts);
+        };
+        const walk = (node) => {
+            if (!node || typeof node !== 'object')
+                return node;
+            if (Array.isArray(node))
+                return node.map(walk);
+            const out = {};
+            for (const [key, value] of Object.entries(node)) {
+                if (DATE_FIELDS.has(key) && value && typeof value === 'object' && !Array.isArray(value)) {
+                    const coercedOps = {};
+                    for (const [op, opVal] of Object.entries(value)) {
+                        coercedOps[op] = RANGE_OPS.has(op) ? toDate(opVal) : opVal;
+                    }
+                    out[key] = coercedOps;
+                }
+                else if (DATE_FIELDS.has(key) && typeof value === 'string') {
+                    out[key] = toDate(value);
+                }
+                else if (key === '$and' || key === '$or' || key === '$nor') {
+                    out[key] = Array.isArray(value) ? value.map(walk) : value;
+                }
+                else {
+                    out[key] = value;
+                }
+            }
+            return out;
+        };
+        return walk(query);
+    }
     async getDefaultUserListQuery(query = {}) {
+        query = this.coerceDateOperands(query);
         const clauses = [];
         if (!this.hasQueryConstraint(query, 'expired')) {
             clauses.push({ expired: { $ne: true } });
@@ -40385,6 +40481,37 @@ let UsersService = UsersService_1 = class UsersService {
         pipeline.push({ $addFields: { _computedSort: fieldExpr } }, { $sort: { _computedSort: sortOrder } }, { $skip: skip }, { $limit: limit }, { $project: { _computedSort: 0 } });
         return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
     }
+    async compositeRank(signals, limit = 20, skip = 0, query = {}) {
+        if (!Array.isArray(signals) || signals.length === 0) {
+            throw new common_1.BadRequestException('At least one signal is required');
+        }
+        const resolved = signals.map((s) => {
+            const def = UsersService_1.COMPOSITE_SIGNALS[s.field];
+            if (!def)
+                throw new common_1.BadRequestException(`Unknown composite signal: ${s.field}`);
+            const weight = (s.weight !== undefined && Number.isFinite(Number(s.weight)) && Number(s.weight) > 0)
+                ? Number(s.weight)
+                : def.defaultWeight;
+            return { field: s.field, weight, expr: def.expr };
+        });
+        const valueFields = {};
+        resolved.forEach((s, i) => { valueFields[`_sig${i}`] = s.expr; });
+        const terms = resolved.map((s, i) => ({ $multiply: [s.weight, { $ln: { $add: [1, `$_sig${i}`] } }] }));
+        const presenceOr = resolved.map((_, i) => ({ [`_sig${i}`]: { $gt: 0 } }));
+        const cleanup = { _composite: 0 };
+        resolved.forEach((_, i) => { cleanup[`_sig${i}`] = 0; });
+        const pipeline = [
+            { $match: await this.getDefaultUserListQuery(query) },
+            { $addFields: valueFields },
+            { $match: { $or: presenceOr } },
+            { $addFields: { _composite: { $add: terms } } },
+            { $sort: { _composite: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { ...cleanup, session: 0, password: 0 } },
+        ];
+        return this.userModel.aggregate(pipeline).allowDiskUse(true).exec();
+    }
     async executeQuery(query, sort, limit, skip) {
         if (!query) {
             throw new common_1.BadRequestException('Query is invalid.');
@@ -40406,6 +40533,17 @@ let UsersService = UsersService_1 = class UsersService {
     }
 };
 exports.UsersService = UsersService;
+UsersService.COMPOSITE_SIGNALS = {
+    relScore: { expr: { $ifNull: ['$relationships.score', 0] }, defaultWeight: 1, label: 'Relationship Score' },
+    intimate: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.intimateMessageCount', 0] }] } } }, defaultWeight: 3, label: 'Intimate Messages' },
+    voice: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.voiceCount', 0] }] } } }, defaultWeight: 2.5, label: 'Voice Messages' },
+    media: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.mediaCount', 0] }] } } }, defaultWeight: 1.5, label: 'Shared Media' },
+    calls: { expr: { $ifNull: ['$calls.totalCalls', 0] }, defaultWeight: 2, label: 'Total Calls' },
+    videoCalls: { expr: { $ifNull: ['$calls.video', 0] }, defaultWeight: 2, label: 'Video Calls' },
+    callPartners: { expr: { $size: { $ifNull: ['$calls.chats', []] } }, defaultWeight: 1.5, label: 'Call Partners' },
+    msgs: { expr: { $ifNull: ['$msgs', 0] }, defaultWeight: 1, label: 'Messages' },
+    contacts: { expr: { $ifNull: ['$contacts', 0] }, defaultWeight: 0.5, label: 'Contacts' },
+};
 exports.UsersService = UsersService = UsersService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('userModule')),
