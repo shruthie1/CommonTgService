@@ -39505,7 +39505,7 @@ let UsersService = UsersService_1 = class UsersService {
         const canonicalMobile = this.canonicalMobile(mobile);
         try {
             await this.userModel
-                .updateOne({ mobile: canonicalMobile }, { $set: { expired: true } })
+                .updateMany({ mobile: canonicalMobile }, { $set: { expired: true } })
                 .exec();
         }
         catch (error) {
@@ -39916,7 +39916,7 @@ let UsersService = UsersService_1 = class UsersService {
         if (!user)
             throw new common_1.NotFoundException(`User with mobile ${mobile} not found`);
         const newVal = !user.starred;
-        await this.userModel.updateOne({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
+        await this.userModel.updateMany({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
         return { mobile: canonicalMobile, starred: newVal };
     }
     async delete(tgId) {
@@ -40192,7 +40192,7 @@ let UsersService = UsersService_1 = class UsersService {
             const top = (0, scoring_1.rankRelationships)(candidates, 5);
             const accountScore = (0, scoring_1.computeAccountScore)(top);
             const bestScore = top.length > 0 ? top[0].score : 0;
-            await this.userModel.updateOne({ mobile: canonicalMobile }, {
+            await this.userModel.updateMany({ mobile: canonicalMobile }, {
                 $set: {
                     'relationships.score': accountScore,
                     'relationships.bestScore': bestScore,
@@ -40540,6 +40540,7 @@ UsersService.COMPOSITE_SIGNALS = {
     media: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.mediaCount', 0] }] } } }, defaultWeight: 1.5, label: 'Shared Media' },
     calls: { expr: { $ifNull: ['$calls.totalCalls', 0] }, defaultWeight: 2, label: 'Total Calls' },
     videoCalls: { expr: { $ifNull: ['$calls.video', 0] }, defaultWeight: 2, label: 'Video Calls' },
+    meaningfulCalls: { expr: { $reduce: { input: { $ifNull: ['$relationships.top', []] }, initialValue: 0, in: { $add: ['$$value', { $ifNull: ['$$this.calls.meaningfulCalls', 0] }] } } }, defaultWeight: 2.5, label: 'Meaningful Calls' },
     callPartners: { expr: { $size: { $ifNull: ['$calls.chats', []] } }, defaultWeight: 1.5, label: 'Call Partners' },
     msgs: { expr: { $ifNull: ['$msgs', 0] }, defaultWeight: 1, label: 'Messages' },
     contacts: { expr: { $ifNull: ['$contacts', 0] }, defaultWeight: 0.5, label: 'Contacts' },
