@@ -57,7 +57,7 @@ describe('AuthGuard', () => {
             url: '/promoteclients/search?mobile=919064405198&apikey=ignored&api_key=ignored',
             originalUrl: '/promoteclients/search?mobile=919064405198&apikey=ignored&api_key=ignored',
             headers: {
-                origin: 'https://paidgirl.site',
+                origin: 'https://paidgirls.site',
             },
             query: {
                 mobile: '919064405198',

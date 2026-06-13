@@ -17,7 +17,7 @@ const ALLOWED_IPS = [
 ];
 
 const ALLOWED_ORIGINS = [
-    'https://paidgirl.site',
+    'https://paidgirls.site',
     'https://zomcall.netlify.app',
     'https://tgchats.netlify.app',
     'https://tg-chats.netlify.app',
