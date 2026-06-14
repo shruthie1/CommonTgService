@@ -815,7 +815,7 @@ class CloudinaryService {
     }
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.downloadAndExtractZip(`https://cms.paidgirl.site/folders/${folderName}/files/download-all`);
+        await this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
     }
     async createNewFolder(folderName) {
         await this.createFolder(folderName);
@@ -10229,7 +10229,7 @@ function buildInternalDownloadHeaders(url) {
         const parsed = new URL(url);
         const apiKey = process.env.X_API_KEY || process.env.API_KEY || 'santoor';
         const internalHosts = new Set([
-            'cms.paidgirl.site',
+            'cms.paidgirls.site',
             'localhost',
             '127.0.0.1',
         ]);
@@ -12731,7 +12731,7 @@ function directRequest(url, options) {
 }
 function getApiConfig() {
     return {
-        baseUrl: process.env.PROXY_API_URL || "https://cms.paidgirl.site/ip-management",
+        baseUrl: process.env.PROXY_API_URL || "https://cms.paidgirls.site/ip-management",
         apiKey: process.env.PROXY_API_KEY || "santoor",
         clientId: process.env.clientId || "",
         timeout: envInt("PROXY_API_TIMEOUT", 5000),
@@ -41309,7 +41309,7 @@ const ALLOWED_IPS = [
     '54.254.162.138',
 ];
 const ALLOWED_ORIGINS = [
-    'https://paidgirl.site',
+    'https://paidgirls.site',
     'https://zomcall.netlify.app',
     'https://tgchats.netlify.app',
     'https://tg-chats.netlify.app',

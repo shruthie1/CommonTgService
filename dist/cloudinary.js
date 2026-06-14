@@ -84,7 +84,7 @@ class CloudinaryService {
     }
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.downloadAndExtractZip(`https://cms.paidgirl.site/folders/${folderName}/files/download-all`);
+        await this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
     }
     async createNewFolder(folderName) {
         await this.createFolder(folderName);

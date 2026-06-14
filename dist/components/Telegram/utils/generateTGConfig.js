@@ -94,7 +94,7 @@ function directRequest(url, options) {
 }
 function getApiConfig() {
     return {
-        baseUrl: process.env.PROXY_API_URL || "https://cms.paidgirl.site/ip-management",
+        baseUrl: process.env.PROXY_API_URL || "https://cms.paidgirls.site/ip-management",
         apiKey: process.env.PROXY_API_KEY || "santoor",
         clientId: process.env.clientId || "",
         timeout: envInt("PROXY_API_TIMEOUT", 5000),
