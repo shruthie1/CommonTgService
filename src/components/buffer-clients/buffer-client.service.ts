@@ -469,6 +469,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (status === 'active' && !session) {
             throw new BadRequestException('Active BufferClient requires a session');
         }
+        // Cross-collection dedup guard: prevent the same mobile from being created in
+        // bufferClients when it already lives in another pool (promote/clients) — the same
+        // account running concurrently across pools causes Telegram SESSION_REVOKED.
+        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+        if (enrolledIn && enrolledIn !== 'bufferClients') {
+            throw new BadRequestException(
+                `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`
+            );
+        }
         const createData: CreateBufferClientDto = {
             ...bufferClient,
             mobile: canonicalMobile,

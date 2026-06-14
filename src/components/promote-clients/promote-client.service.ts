@@ -397,6 +397,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         if (status === 'active' && !session) {
             throw new BadRequestException('Active PromoteClient requires a session');
         }
+        // Cross-collection dedup guard: prevent the same mobile from being created in
+        // promoteClients when it already lives in another pool (buffer/clients) — the same
+        // account running concurrently across pools causes Telegram SESSION_REVOKED.
+        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+        if (enrolledIn && enrolledIn !== 'promoteClients') {
+            throw new BadRequestException(
+                `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`
+            );
+        }
         const promoteClientData = {
             ...promoteClient,
             mobile: canonicalMobile,
