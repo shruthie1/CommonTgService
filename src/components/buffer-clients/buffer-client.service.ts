@@ -656,6 +656,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     async setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument> {
         const now = new Date();
+        // Verify the replacement exists BEFORE revoking the current primary. The partial
+        // unique index on { clientId, inUse:true } forces an assign-after-revoke order, so
+        // if we revoked first and the target turned out to be missing (e.g. recycled between
+        // selection and cutover) we would throw NotFound after stranding the clientId with
+        // ZERO in-use primaries. Guarding here keeps the old primary intact on failure.
+        const exists = await this.bufferClientModel.exists({ mobile, clientId });
+        if (!exists) {
+            throw new NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
+        }
         const revoked = await this.bufferClientModel.updateMany(
             {
                 clientId,
@@ -842,6 +851,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const clients = await this.clientService.findAll();
         const clientMobiles = clients.map((client) => client?.mobile);
         if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile))) throw new BadRequestException('Number is an Active Client');
+
+        // Cross-pool guard: refuse to enroll a mobile that already lives in the promote
+        // pool. Running one account as BOTH a buffer and a promote client produces two
+        // concurrent live sessions on one Telegram account => SESSION_REVOKED (permanent
+        // account loss — the #1 operational risk). `create()` enforces this via
+        // isMobileEnrolledAnywhere; this operator-facing path must too.
+        if (await this.promoteClientService.existsByMobile(canonicalMobile)) {
+            throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in promoteClients; refusing to create a cross-pool BufferClient`);
+        }
 
         const telegramClient = await connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {

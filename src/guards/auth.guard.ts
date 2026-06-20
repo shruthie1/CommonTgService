@@ -231,7 +231,13 @@ export class AuthGuard implements CanActivate {
         request: Request,
         headerName: string,
     ): string | undefined {
-        return request.headers[headerName.toLowerCase()] as string;
+        // Express represents a header sent multiple times as string[]. Downstream callers
+        // (e.g. xForwardedFor.split(',')) assume a string, so normalize to the first value to
+        // avoid a TypeError crash (500). Fail-closed: a malformed array header simply won't
+        // match any allowlist entry.
+        const raw = request.headers[headerName.toLowerCase()];
+        if (Array.isArray(raw)) return raw[0];
+        return raw as string | undefined;
     }
 
     private extractRealClientIP(request: Request): string {

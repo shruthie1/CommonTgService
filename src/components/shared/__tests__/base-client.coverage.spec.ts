@@ -970,7 +970,13 @@ describe('channel leave queue', () => {
         );
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
         await service.pub.processLeaveChannelSequentially();
-        expect(updateOne).toHaveBeenCalledWith({ mobile: '919990000090' }, { $inc: { channels: -2 } });
+        // Decrement uses a floor-at-0 pipeline update (a plain $inc could drive channels
+        // negative when the stored count is stale below leftCount).
+        expect(updateOne).toHaveBeenCalledWith(
+            { mobile: '919990000090' },
+            [{ $set: { channels: { $max: [0, { $subtract: [{ $ifNull: ['$channels', 0] }, 2] }] } } }],
+            { updatePipeline: true },
+        );
         expect((service as any).leaveChannelMap.has('919990000090')).toBe(false);
     });
 
@@ -2494,8 +2500,12 @@ describe('helper fallback branches', () => {
         );
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
         await service.pub.processLeaveChannelSequentially();
-        // leftCount defaulted to channelsToProcess.length (2) -> decrement by 2.
-        expect(updateOne).toHaveBeenCalledWith({ mobile: '919990000330' }, { $inc: { channels: -2 } });
+        // leftCount defaulted to channelsToProcess.length (2) -> floor-at-0 pipeline decrement by 2.
+        expect(updateOne).toHaveBeenCalledWith(
+            { mobile: '919990000330' },
+            [{ $set: { channels: { $max: [0, { $subtract: [{ $ifNull: ['$channels', 0] }, 2] }] } } }],
+            { updatePipeline: true },
+        );
     });
 });
 

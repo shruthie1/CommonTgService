@@ -4,13 +4,16 @@
 failing test asserting the real production scenario, then a minimal source fix, then
 green. Externals-only mocking; real MongoDB (mongodb-memory-server) for data paths.
 
-**Outcome:** 55 reproducible production bugs found and fixed across 17 audit rounds.
-Final state — **3,730 tests pass** (119 suites); `tsc`, `lint`, `build` all clean.
-Coverage rose from 39.8% → 96.7% lines and 21.5% → 92.9% branches.
+**Outcome:** 62 reproducible production bugs found and fixed across 19 audit rounds.
+Final state — all suites pass; `tsc`, `lint`, `build` all clean.
+Coverage rose from 39.8% → 96.7%+ lines and 21.5% → 92.9%+ branches.
 The hunt converged twice on **3 consecutive clean audit rounds**: first across
 workflows/edge-cases, cross-module contracts, and idempotency/retries (rounds 10-12);
 then (after a re-invoked goal targeting fresh surface) across re-audit-of-changes,
 time/scale boundaries, and error-path/dependency-failure injection (rounds 15-17).
+Round 19 then re-audited the previously-uncovered files — the session-config critical
+path (auth.guard, generateTGConfig) and the lifecycle/swap core (base-client / buffer /
+promote / clients services) — finding 6 more bugs (see "Round 19" below).
 
 Commits: `4d6448b` (coverage + scenario-audit fixes), `09eabde` (bug-hunt rounds 4-9),
 `f80ac1b` (this report), and a final commit for rounds 13-14, on branch
@@ -290,3 +293,53 @@ regardless of autoDisconnect (the isIdle gate still protects in-flight ops).
   raising a graduation gate (which can strand accounts).
 - **Re-audit your own fixes** — bug #38 was a regression introduced by the #35 fix, caught only
   by re-auditing changed code.
+
+---
+
+## Round 19 — re-audit of previously-uncovered files (2026-06-20)
+
+A spec-inventory error had left several large files believed untested. Re-checking all
+spec conventions (sibling `__tests__`, mirrored `src/__tests__`, and `*.coverage.spec.ts`
+variants) showed the session-config path was already covered, but the **lifecycle/swap
+core** (`base-client`, `buffer-client`, `promote-client`, `client` services) genuinely had
+no behavioral specs. Fanned-out reproduce-first TDD agents audited each. 6 new bugs:
+
+**Session-config critical path:**
+- **🔴 auth.guard 500-on-array-header** (`getHeaderValue`): a header sent twice arrives as
+  `string[]`; `xForwardedFor.split(',')` throws `TypeError` → HTTP **500 instead of a clean
+  401**, trivially triggerable by any unauthenticated caller. Fixed fail-closed (normalize
+  array → first element); also hardens `cf-connecting-ip`, `x-real-ip`, `origin`.
+- `generateTGConfig` (session-survival #1): **no bug** — 6 suspicion areas reproduced and
+  disproved. (400-day config-cache TTL with no read-refresh surfaced as intentional.)
+
+**Lifecycle / swap core (all data-loss / session-survival critical):**
+- **🔴 Negative channel count** (`base-client` `processLeaveChannelSequentially`):
+  `$inc:{channels:-leftCount}` could drive `channels` negative when the stored count was
+  stale below `leftCount`, corrupting every readiness/refill query. Fixed with a floor-at-0
+  pipeline update (`$max[0, channels-leftCount]`).
+- **🔴 Lost joins on transient error** (`base-client` `processJoinChannelSequentially`): a
+  transient throw on a later join in a round skipped the post-loop channel increment,
+  **losing already-successful joins** → count drifts below reality, mis-gating
+  growing→maturing. Fixed: persist the successful `joinCount` in the transient branch.
+- **🔴 Stranded primary** (`buffer-client` `setPrimaryInUse`): revoked the old in-use
+  primary (updateMany) *before* confirming the new target exists; if the target was recycled
+  between selection and cutover, it threw NotFound **after** leaving the clientId with ZERO
+  in-use primaries. Fixed: existence guard before the destructive revoke.
+- **🔴 Cross-pool dual enrollment** (`buffer-client` `setAsBufferClient`): the operator-facing
+  enroll path checked the buffer pool and active clients but **not promoteClients** → the same
+  number live as both buffer and promote = two concurrent sessions on one Telegram account =
+  `SESSION_REVOKED` (permanent loss). Fixed to mirror `create()`'s cross-pool guard.
+- **🔴 Blank-session overwrite** (`client` `update`): Mongoose `required` treats a
+  whitespace-only string as present, so `session:'   '` overwrote the live **non-renewable**
+  session → next restart connects invalid → revoked → permanent account loss. Fixed: reject
+  blank/whitespace/null session in `update()`.
+
+**Surfaced (not fixed):** promote `markAsActive` can reactivate an inactive account (only the
+explicit operator `activate` endpoint calls it); `setAsBufferClient` not under the enrollment
+lock (residual single-process race; unique index prevents a second doc); `updateProfilePhotos`
+stamps the photo step done on upload failure (intentional, to unblock the pipeline).
+
+New behavioral specs added (real Mongo): base-client, buffer, promote, clients. Each fix was
+verified reproduce-first (revert → its test fails → restore → green). Two stale assertions in
+the pre-existing `base-client.coverage.spec.ts` — which had frozen the old buggy `$inc`
+call-shape against a mocked `updateOne` — were updated to the corrected floor-at-0 shape.

@@ -293,6 +293,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   async update(clientId: string, updateClientDto: UpdateClientDto): Promise<Client> {
     this.ensureInitialized();
+    // Guard the active session against blank/whitespace overwrites. Mongoose `required`
+    // treats a whitespace-only string as present, so without this a stray update with
+    // session '' or '   ' would silently destroy the live (non-renewable) session =>
+    // permanent account loss. session is non-renewable; never let it be cleared via update.
+    if (updateClientDto.session !== undefined &&
+        (updateClientDto.session === null || !String(updateClientDto.session).trim())) {
+      throw new BadRequestException('Cannot update client with a blank session');
+    }
     try {
       const cleanUpdateDto: Mutable<UpdateClientDto> = this.cleanUpdateObject(updateClientDto);
       if (cleanUpdateDto.mobile !== undefined) {

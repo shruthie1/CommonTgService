@@ -1736,7 +1736,20 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     const reason = await this.buildPermanentAccountReason(errorDetails.message);
                     await this.deactivateClient(mobile, reason, { permanent: true });
                 } else {
-                    // Transient error — restore the failed channel and track failures
+                    // Transient error — restore the failed channel and track failures.
+                    // Persist any joins that DID succeed before the throw: the increment
+                    // block after the while loop never runs when tryJoiningChannel throws,
+                    // so without this the DB channel count drifts below reality and the
+                    // growing→maturing readiness gate is mis-evaluated. (The flood/permanent
+                    // branches above instead re-query the authoritative count, so they don't
+                    // need this.)
+                    if (joinCount > 0) {
+                        try {
+                            await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                        } catch (incError) {
+                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${mobile} after transient error: ${this.getErrorText(incError)}`);
+                        }
+                    }
                     const channels = this.joinChannelMap.get(mobile);
                     if (currentChannel && channels) {
                         channels.unshift(currentChannel);
@@ -1847,10 +1860,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 const skippedCount = leaveResult?.skipCount ?? 0;
                 this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
 
-                // Decrement stored channel count so refill can pick this mobile up again
+                // Decrement stored channel count so refill can pick this mobile up again.
+                // Floor at 0 with a pipeline update: a plain $inc can drive channels negative
+                // when the stored count is stale/low relative to leftCount, and a negative
+                // channels value corrupts every downstream readiness/refill computation
+                // (channelTarget - channels would over-enqueue joins).
                 if (leftCount > 0) {
                     try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });
+                        await this.model.updateOne({ mobile }, [
+                            { $set: { channels: { $max: [0, { $subtract: [{ $ifNull: ['$channels', 0] }, leftCount] }] } } },
+                        ], { updatePipeline: true } as any);
                     } catch {
                         // Non-fatal — health check will correct
                     }

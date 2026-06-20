@@ -172,6 +172,28 @@ describe('AuthGuard', () => {
             expect(guard.canActivate(makeContext(req))).toBe(true);
         });
 
+        // Regression: a header sent multiple times arrives as string[] from Express. The IP
+        // extractor calls .split(',') on it, which throws TypeError -> NestJS returns 500
+        // instead of a clean 401. Any unauthenticated caller can trigger this trivially.
+        it('does NOT crash (500) on an array-valued x-forwarded-for header', () => {
+            const guard = new AuthGuard();
+            const req = baseReq({ headers: { 'x-forwarded-for': ['9.9.9.9', '8.8.8.8'] as any } });
+            let thrown: any;
+            try {
+                guard.canActivate(makeContext(req));
+            } catch (e) {
+                thrown = e;
+            }
+            // Clean deny (401), never a raw TypeError.
+            expect(thrown).toBeInstanceOf(UnauthorizedException);
+        });
+
+        it('normalizes an array-valued cf-connecting-ip to its first value (allowlist match)', () => {
+            const guard = new AuthGuard();
+            const req = baseReq({ headers: { 'cf-connecting-ip': ['31.97.59.2', '9.9.9.9'] as any } });
+            expect(guard.canActivate(makeContext(req))).toBe(true);
+        });
+
         it('grants access via request.ip (stripping ::ffff:) in whitelist', () => {
             const guard = new AuthGuard();
             const req = baseReq({ ip: '::ffff:18.142.128.26' });
