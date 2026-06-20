@@ -814,7 +814,20 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
         // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
       } else {
-        this.logger.log('Not Deleting user');
+        // Transient failure: the cutover already happened, so the old primary is no longer
+        // the live account — but it is still inUse=true/status=active. Release the
+        // reservation and push availability forward so it returns to the buffer pool for a
+        // later retry instead of being stranded inUse=true (excluded from every selection).
+        const retryAvailableDate = ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
+        await this.bufferClientService.update(existingMobile, {
+          inUse: false,
+          status: 'active',
+          availableDate: retryAvailableDate,
+          message: `Archival retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
+        }).catch((updateError) => {
+          this.logger.error(`Failed to release stranded archival reservation for ${existingMobile}: ${parseError(updateError, '', false).message}`);
+        });
+        this.logger.log(`Released archival reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
       }
     }
   }

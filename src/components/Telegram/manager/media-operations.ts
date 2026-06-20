@@ -39,6 +39,11 @@ const missingThumbnailCache = new ByteLimitedLruCache<true>({
     ttlMs: MISSING_THUMBNAIL_CACHE_TTL_MS,
 });
 
+function safeIsoString(date?: Date): string | undefined {
+    if (!(date instanceof Date) || isNaN(date.getTime())) return undefined;
+    return date.toISOString();
+}
+
 function normalizeMediaLimit(limit?: number): number {
     const numericLimit = Number(limit);
     if (!Number.isFinite(numericLimit) || numericLimit <= 0) return MEDIA_DEFAULT_LIMIT;
@@ -595,7 +600,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
                 firstMessageId: overallFirstMessageId,
                 lastMessageId: overallLastMessageId,
             },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     } else {
         const total = filteredMessages.length;
@@ -612,7 +617,7 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
                 prevMaxId: maxId && filteredMessages.length > 0 ? firstMessageId : undefined,
                 firstMessageId, lastMessageId,
             },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -671,13 +676,13 @@ export async function getAllMediaMetaData(ctx: TgContext, params: MediaQueryPara
                 pagination: { page: 1, limit: grouped[mediaType]?.length || 0, total: grouped[mediaType]?.length || 0, totalPages: 1, hasMore: false },
             })),
             pagination: { page: 1, limit: allMedia.length, total: allMedia.length, totalPages: 1, hasMore: false },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     } else {
         return {
             data: allMedia,
             pagination: { page: 1, limit: allMedia.length, total: allMedia.length, totalPages: 1, hasMore: false },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -848,7 +853,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
                 prevMaxId: maxId && mediaData.length > 0 ? overallFirstMessageId : undefined,
                 firstMessageId: overallFirstMessageId, lastMessageId: overallLastMessageId,
             },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     } else {
         const total = mediaData.length;
@@ -865,7 +870,7 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
                 prevMaxId: maxId && mediaData.length > 0 ? firstMessageId : undefined,
                 firstMessageId, lastMessageId,
             },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }

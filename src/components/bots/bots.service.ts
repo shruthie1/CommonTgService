@@ -51,7 +51,7 @@ export interface MediaOptions extends Omit<SendMessageOptions, 'disableWebPagePr
     hasSpoiler?: boolean;
 }
 
-export interface PhotoOptions extends MediaOptions { }
+export type PhotoOptions = MediaOptions;
 export interface VideoOptions extends MediaOptions {
     duration?: number;
     width?: number;
@@ -109,7 +109,7 @@ export interface MediaGroupItem {
     thumbnail?: Buffer;
 }
 
-export interface MediaGroupOptions extends Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'> { }
+export type MediaGroupOptions = Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'>;
 
 @Injectable()
 export class BotsService implements OnModuleInit {

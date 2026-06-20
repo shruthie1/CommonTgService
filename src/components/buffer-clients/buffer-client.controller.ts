@@ -106,7 +106,7 @@ export class BufferClientController {
 
     this.clientService.updateAllClientSessions({ dryRun: false, mobile }).catch((error) => {
       // Fire-and-forget endpoint; keep failures visible in service logs.
-      // eslint-disable-next-line no-console
+       
       console.error('Error refreshing buffer client sessions:', error);
     });
     return { initiated: true, dryRun: false, mobile: mobile || null };

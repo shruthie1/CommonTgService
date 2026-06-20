@@ -299,6 +299,7 @@ export class WebshareProxyService implements OnModuleInit {
             protocol: 'socks5',
             username: proxy.username,
             password: proxy.password,
+            /* istanbul ignore next -- syncProxies filters to valid proxies before mapping, so 'inactive' is unreachable here; kept for direct-call safety */
             status: proxy.valid ? 'active' : 'inactive',
             source: SOURCE_NAME,
             webshareId: proxy.id,

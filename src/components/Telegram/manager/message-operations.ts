@@ -7,6 +7,8 @@ import { SearchMessagesDto, SearchMessagesResponseDto, MessageMediaType } from '
 import { SendTgMessageDto } from '../dto/send-message.dto';
 import { MediaAlbumOptions } from '../types/telegram-types';
 import { contains } from '../../../utils';
+import { parseError } from '../../../utils/parseError';
+import isPermanentError from '../../../utils/isPermanentError';
 import { getSearchFilter, downloadFileFromUrl, detectContentType, getMimeType, getMediaExtension, getMediaAttributes, toISODate, getMediaType, extractMediaMetaFromMessage } from './helpers';
 import { safeGetEntityById } from './chat-operations';
 
@@ -29,9 +31,10 @@ export async function forwardSecretMsgs(ctx: TgContext, fromChatId: string, toCh
     let offset = 0;
     const limit = 100;
     let forwardedCount = 0;
-    const messages: Api.Message[] = [];
+    let pageSize = 0;
     do {
         const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
+        pageSize = messages.length;
         const messageIds = messages.map((message: Api.Message) => {
             offset = message.id;
             if (message.id && message.media) {
@@ -54,7 +57,7 @@ export async function forwardSecretMsgs(ctx: TgContext, fromChatId: string, toCh
             }
             await sleep(5000);
         }
-    } while (messages.length > 0);
+    } while (pageSize > 0);
     ctx.logger.info(ctx.phoneNumber, 'Left the channel with ID:', toChatId);
     return { forwardedCount };
 }
@@ -76,6 +79,13 @@ export async function forwardMessages(ctx: TgContext, fromChatId: string, toChat
             await sleep(5000);
         } catch (error) {
             ctx.logger.error(ctx.phoneNumber, 'Error occurred while forwarding messages:', error);
+            // A permanent error (session revoked / account banned) means the account is gone —
+            // stop forwarding the remaining chunks instead of repeatedly invoking on a dead
+            // account (session-burn risk). Re-throw so the caller can mark-and-skip.
+            if (isPermanentError(parseError(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, 'Permanent error while forwarding; aborting remaining chunks', error);
+                throw error;
+            }
         }
     }
 

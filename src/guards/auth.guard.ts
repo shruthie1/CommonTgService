@@ -211,18 +211,32 @@ export class AuthGuard implements CanActivate {
     }
 
     private extractRealClientIP(request: Request): string {
-        // Cloudflare first
-        const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
-        if (cfConnectingIP) return cfConnectingIP;
+        // SECURITY / TRUST BOUNDARY:
+        // The cf-connecting-ip / x-real-ip / x-forwarded-for headers are client-supplied and
+        // therefore SPOOFABLE. They are only trustworthy when this service is reached EXCLUSIVELY
+        // through the Cloudflare/nginx hop that sets them (the production topology). If the service
+        // is ever directly reachable, an attacker could set `cf-connecting-ip: <an allowlisted IP>`
+        // and bypass the IP allowlist.
+        //
+        // We honor these headers by default (production runs behind the proxy), but allow them to
+        // be disabled via TRUST_PROXY_HEADERS=false for deployments where the proxy hop is not
+        // guaranteed — in which case only the real socket peer is used.
+        const trustProxyHeaders = process.env.TRUST_PROXY_HEADERS !== 'false';
 
-        // Nginx-provided IPs
-        const xRealIP = this.getHeaderValue(request, 'x-real-ip');
-        if (xRealIP) return xRealIP;
+        if (trustProxyHeaders) {
+            // Cloudflare first
+            const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
+            if (cfConnectingIP) return cfConnectingIP;
 
-        const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
-        if (xForwardedFor) return xForwardedFor.split(',')[0].trim();
+            // Nginx-provided IPs
+            const xRealIP = this.getHeaderValue(request, 'x-real-ip');
+            if (xRealIP) return xRealIP;
 
-        // Express defaults
+            const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
+            if (xForwardedFor) return xForwardedFor.split(',')[0].trim();
+        }
+
+        // Real socket peer (the only non-spoofable source).
         if (request.ip) return request.ip.replace('::ffff:', '');
         if (request.connection?.remoteAddress)
             return request.connection.remoteAddress.replace('::ffff:', '');

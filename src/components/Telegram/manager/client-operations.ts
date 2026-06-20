@@ -5,6 +5,7 @@ import { LogLevel } from 'telegram/extensions/Logger';
 import { sleep } from 'telegram/Helpers';
 import { TgContext } from './types';
 import { parseError } from '../../../utils/parseError';
+import { contains } from '../../../utils/common';
 import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
 import { notifbot } from '../../../utils/logbots';
 import { generateTGConfig } from '../utils/generateTGConfig';
@@ -108,7 +109,6 @@ export async function destroyClient(ctx: TgContext, session: StringSession): Pro
 }
 
 export function handleClientError(ctx: TgContext, error: Error): NodeJS.Timeout | null {
-    const { contains } = require('../../../utils');
     const errorDetails = parseError(error, `${ctx.phoneNumber}: RPC Error`, false);
     if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
         ctx.logger.error(ctx.phoneNumber, `Timeout error occurred for ${ctx.phoneNumber}`, error);

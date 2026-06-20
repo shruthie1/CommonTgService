@@ -17,7 +17,12 @@ export class ExceptionsFilter implements ExceptionFilter {
         const errorDetails = parseError(exception, 'Exception', false);
         console.error("stack:", exception["stack"])
 
+        // parseError always returns a non-zero default status and a non-empty
+        // default message (see extractStatusCode/extractErrorMessage), so the
+        // `||` fallbacks below are defense-in-depth that real input never hits.
+        /* istanbul ignore next -- defensive: parseError guarantees a truthy status/message */
         let status = errorDetails.status || HttpStatus.INTERNAL_SERVER_ERROR;
+        /* istanbul ignore next -- defensive: parseError guarantees a truthy status/message */
         let message = errorDetails.message || 'Internal server error';
 
         if (exception instanceof HttpException) {

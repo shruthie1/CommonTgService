@@ -211,6 +211,7 @@ class SeededRandom {
 }
 
 // Enhanced random selection with weighted preferences
+/* istanbul ignore next -- unused internal helper: obfuscateText uses SeededRandom.choice; getRandom has no caller/export */
 function getRandom<T>(arr: readonly T[], weights?: WeightArray | null): T {
     if (arr.length === 0) {
         throw new Error('Cannot select from empty array');

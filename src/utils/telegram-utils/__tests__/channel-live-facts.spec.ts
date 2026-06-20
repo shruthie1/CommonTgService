@@ -136,6 +136,49 @@ describe('getTelegramChannelLiveFacts', () => {
         expect(result!.participantsCount).toBe(9999);
     });
 
+    test('coerces a numeric-string participant count from the resolver', async () => {
+        // The participants resolver (e.g. a GetFullChannel call) sometimes hands back
+        // the count as a string. It should be coerced to a floored integer.
+        const result = await getTelegramChannelLiveFacts(stubClient, {
+            channelId: '123456',
+            entity: makeEntity({ participantsCount: 10 }),
+            resolveParticipantsCount: async () => '4200',
+        });
+
+        expect(result!.participantsCount).toBe(4200);
+    });
+
+    test('ignores a non-numeric / negative string count and falls back to entity field', async () => {
+        // A garbage or negative string from the resolver must not pass through; the
+        // code falls back to the entity's own participantsCount.
+        const result = await getTelegramChannelLiveFacts(stubClient, {
+            channelId: '123456',
+            entity: makeEntity({ participantsCount: 777 }),
+            resolveParticipantsCount: async () => '-5',
+        });
+
+        expect(result!.participantsCount).toBe(777);
+    });
+
+    test('coerces a numeric-string participantsCount on the entity itself', async () => {
+        const result = await getTelegramChannelLiveFacts(stubClient, {
+            channelId: '123456',
+            entity: makeEntity({ participantsCount: '3500' }),
+        });
+
+        expect(result!.participantsCount).toBe(3500);
+    });
+
+    test('returns null participantsCount when both resolver and entity values are unusable', async () => {
+        const result = await getTelegramChannelLiveFacts(stubClient, {
+            channelId: '123456',
+            entity: makeEntity({ participantsCount: 'not-a-number' }),
+            resolveParticipantsCount: async () => 'also-bad',
+        });
+
+        expect(result!.participantsCount).toBeNull();
+    });
+
     test('falls back to entity.participantsCount when resolver returns null', async () => {
         const result = await getTelegramChannelLiveFacts(stubClient, {
             channelId: '123456',

@@ -558,6 +558,27 @@ describe('Enrollment Deduplication', () => {
             expect(botsService.sendMessageByCategory).not.toHaveBeenCalled();
         });
 
+        it('CONCURRENT cross-pool enrollment of the same mobile creates AT MOST one pool record', async () => {
+            // The race that produces two sessions on one account => Telegram revokes both.
+            // Fire buffer + promote enrollment for the SAME mobile simultaneously and assert the
+            // mobile ends up in at most one pool (never both), with no duplicate within a pool.
+            const mobile = '15550160001';
+            await insertUser({ mobile });
+
+            const doc = { mobile, tgId: 'tg-cross-race' };
+            const [bufferRes, promoteRes] = await Promise.allSettled([
+                (bufferService as any).createBufferClientFromUser(doc, 'main-client-1'),
+                (promoteService as any).createPromoteClientFromUser(doc, 'main-client-1'),
+            ]);
+            void bufferRes; void promoteRes;
+
+            const bufferCount = await BufferClientModel.countDocuments({ mobile });
+            const promoteCount = await PromoteClientModel.countDocuments({ mobile });
+
+            // With the per-mobile enrollment lock, exactly one pool wins — never both.
+            expect(bufferCount + promoteCount).toBe(1);
+        });
+
         it('buffer: skips mobile that is the main client mobile', async () => {
             const result = await (bufferService as any).createBufferClientFromUser(
                 { mobile: mainClient.mobile, tgId: 'tg-cross-6' },

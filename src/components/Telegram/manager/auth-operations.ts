@@ -187,8 +187,12 @@ export async function set2fa(ctx: TgContext): Promise<{ email: string; hint: str
                         throw new Error(`Failed to retrieve email code after ${maxRetries} attempts`);
                     },
                     onEmailCodeError: (e: Error) => {
+                        // Do NOT resolve to a code string here — GramJS submits whatever this
+                        // returns as the verification code. Returning 'error' would submit garbage
+                        // and burn a 2FA attempt (too-many-attempts / FLOOD risk on a precious
+                        // account). Reject so the 2FA flow aborts cleanly and can be retried.
                         ctx.logger.error(ctx.phoneNumber, 'Email code error:', parseError(e));
-                        return Promise.resolve('error');
+                        return Promise.reject(e);
                     },
                 });
             } finally {
@@ -250,19 +254,18 @@ export async function waitForOtp(ctx: TgContext): Promise<string> {
 
             if (isFresh) {
                 return message.text.split('.')[0].split('code:**')[1].trim();
-            } else {
-                const code = message.text.split('.')[0].split('code:**')[1].trim();
-                if (i == 2) {
-                    return code;
-                }
-                await sleep(5000);
             }
+            // Stale code: do NOT submit an expired login OTP. Submitting an old code can fail
+            // the login or, worse, be the wrong code for a fresh session attempt. Wait for a
+            // fresh one; if none arrives within the attempts, throw so the caller retries cleanly.
+            ctx.logger.warn(ctx.phoneNumber, `OTP found but stale (>${freshnessLimit / 1000}s); not submitting, awaiting a fresh code`);
+            await sleep(5000);
         } catch (err) {
             ctx.logger.warn(ctx.phoneNumber, `OTP read attempt ${i + 1} failed: ${err instanceof Error ? err.message : String(err)}`);
             await sleep(2000);
         }
     }
-    throw new Error('Failed to get OTP after 3 attempts');
+    throw new Error('Failed to get a fresh OTP after 3 attempts');
 }
 
 export async function getSessionInfo(ctx: TgContext): Promise<SessionInfo> {

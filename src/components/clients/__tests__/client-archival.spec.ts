@@ -363,6 +363,31 @@ describe('Client Archival', () => {
             // Should have cascaded retirement because assertDistinctUserBackupSession threw permanent error
             expect(usersService.expireAccount).toHaveBeenCalledWith('80001', expect.any(String));
         });
+
+        it('releases the reservation (not stranded inUse=true) on a TRANSIENT error during archival (BUG-6)', async () => {
+            const bufferService = makeBufferClientService({
+                // Transient failure while creating the distinct backup session — must NOT expire,
+                // must NOT leave the old primary stranded inUse=true/status=active.
+                getOrEnsureDistinctUsersBackupSession: jest.fn().mockRejectedValue(
+                    new Error('TIMEOUT: connection reset'),
+                ),
+            });
+            const usersService = makeUsersService([existingUser]);
+            const service = makeService({ bufferClientService: bufferService, usersService });
+
+            await (service as any).handleClientArchival(
+                existingClient, '80001', false, true, 10,
+            );
+
+            // Not a permanent error → must not retire the account.
+            expect(usersService.expireAccount).not.toHaveBeenCalled();
+            // Reservation released back to the pool for retry.
+            expect(bufferService.update).toHaveBeenCalledWith('80001', expect.objectContaining({
+                inUse: false,
+                status: 'active',
+                availableDate: expect.any(String),
+            }));
+        });
     });
 
     // ═══════════════════════════════════════════════════════════════════════

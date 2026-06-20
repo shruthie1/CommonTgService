@@ -47,6 +47,7 @@ import {
 import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
+import { withEnrollmentLock } from '../shared/enrollment-lock';
 
 type ClientCount = { _id: string; count: number };
 type PromoteClientQuery = Record<string, unknown>;
@@ -132,7 +133,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const enrolledAtMs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
         if (enrolledAtMs > 0) {
             const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > 45) {
+            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
                 return false;
             }
         }
@@ -303,6 +304,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
+
+                    // Assignment resolved — the step is satisfied even if the profile already
+                    // matched and no write was needed.  Without this the account loops on
+                    // update_name_bio forever (nameBioUpdatedAt never stamped, failures never
+                    // incremented, so zombie detection never fires).  Mirrors updateProfilePhotos.
+                    updateCount = Math.max(updateCount, 1);
                 }
             } else {
                 // No persona assignment — mark step as done so the account isn't stuck in IDENTITY phase.
@@ -400,21 +407,25 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         // Cross-collection dedup guard: prevent the same mobile from being created in
         // promoteClients when it already lives in another pool (buffer/clients) — the same
         // account running concurrently across pools causes Telegram SESSION_REVOKED.
-        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
-        if (enrolledIn && enrolledIn !== 'promoteClients') {
-            throw new BadRequestException(
-                `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`
-            );
-        }
-        const promoteClientData = {
-            ...promoteClient,
-            mobile: canonicalMobile,
-            ...(session ? { session } : {}),
-            status,
-            message: promoteClient.message || 'Account is functioning properly',
-        };
-        const newUser = new this.promoteClientModel(promoteClientData);
-        const result = await newUser.save();
+        // The check-then-create is serialized per canonical mobile (across buffer + promote
+        // services in this process) so two concurrent enrollments can't both pass the check.
+        const result = await withEnrollmentLock(canonicalMobile, async () => {
+            const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+            if (enrolledIn && enrolledIn !== 'promoteClients') {
+                throw new BadRequestException(
+                    `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`
+                );
+            }
+            const promoteClientData = {
+                ...promoteClient,
+                mobile: canonicalMobile,
+                ...(session ? { session } : {}),
+                status,
+                message: promoteClient.message || 'Account is functioning properly',
+            };
+            const newUser = new this.promoteClientModel(promoteClientData);
+            return newUser.save();
+        });
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
             [
@@ -1127,18 +1138,30 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 lastUsed: null,
             };
 
-            await this.promoteClientModel.findOneAndUpdate(
-                { mobile: document.mobile },
-                {
-                    $set: {
-                        ...promoteClient,
-                        warmupPhase: WarmupPhase.ENROLLED,
-                        warmupJitter: ClientHelperUtils.generateWarmupJitter(),
-                        enrolledAt: new Date(),
-                    }
-                },
-                { new: true, upsert: true }
-            ).exec();
+            // Serialize the dedup re-check + write per canonical mobile (across buffer + promote
+            // in this process) so a concurrent buffer enrollment of the same mobile cannot also
+            // land — two live sessions on one account => Telegram SESSION_REVOKED (account loss).
+            const enrolled = await withEnrollmentLock(this.canonicalMobile(document.mobile), async () => {
+                const already = await this.isMobileEnrolledAnywhere(document.mobile);
+                if (already && already !== 'promoteClients') {
+                    this.logger.warn(`Skipping promote enrollment for ${document.mobile}: now enrolled in ${already}`);
+                    return false;
+                }
+                await this.promoteClientModel.findOneAndUpdate(
+                    { mobile: document.mobile },
+                    {
+                        $set: {
+                            ...promoteClient,
+                            warmupPhase: WarmupPhase.ENROLLED,
+                            warmupJitter: ClientHelperUtils.generateWarmupJitter(),
+                            enrolledAt: new Date(),
+                        }
+                    },
+                    { new: true, upsert: true }
+                ).exec();
+                return true;
+            });
+            if (!enrolled) return false;
 
             // Do NOT mark user as 2FA-enabled here — 2FA is set later during settling phase
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);

@@ -196,7 +196,9 @@ export class MailReader {
             });
             console.log('Disconnected from mail server');
         } catch (err) {
+            /* istanbul ignore next -- the inner disconnect promise only ever resolves (errors are swallowed by finish()); this catch is defensive and unreachable from tests */
             console.error('Error disconnecting from mail server:', parseError(err));
+            /* istanbul ignore next -- see above */
             throw err;
         }
     }

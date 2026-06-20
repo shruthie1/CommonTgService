@@ -83,3 +83,31 @@ describe('ClientHelperUtils.getTimestamp', () => {
         expect(ClientHelperUtils.getTimestamp('2025-99-99')).toBe(0);
     });
 });
+
+describe('ClientHelperUtils.normalizeAvailableDate', () => {
+    // availableDate is compared as a STRING in selection queries, so an
+    // unparseable or empty write must normalize to null (caller picks a fallback)
+    // rather than poisoning the field with a value that mis-sorts.
+    test('null / undefined / empty string → null (early return)', () => {
+        expect(ClientHelperUtils.normalizeAvailableDate(null)).toBeNull();
+        expect(ClientHelperUtils.normalizeAvailableDate(undefined)).toBeNull();
+        expect(ClientHelperUtils.normalizeAvailableDate('')).toBeNull();
+    });
+
+    test('clean YYYY-MM-DD string → returned unchanged (fast path)', () => {
+        expect(ClientHelperUtils.normalizeAvailableDate('2026-06-12')).toBe('2026-06-12');
+    });
+
+    test('full ISO datetime → collapsed to date-only', () => {
+        expect(ClientHelperUtils.normalizeAvailableDate('2026-06-12T18:30:00Z')).toBe('2026-06-12');
+    });
+
+    test('numeric timestamp → date-only string', () => {
+        const ts = Date.UTC(2026, 0, 15);
+        expect(ClientHelperUtils.normalizeAvailableDate(ts)).toBe('2026-01-15');
+    });
+
+    test('unparseable non-empty value → null (ts <= 0 branch)', () => {
+        expect(ClientHelperUtils.normalizeAvailableDate('not-a-real-date')).toBeNull();
+    });
+});

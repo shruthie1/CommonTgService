@@ -151,7 +151,7 @@ describe('processClient — all exit paths', () => {
         expect(result.updateCount).toBe(0);
     });
 
-    test('EXIT 3: zombie detected (50 days in settling with failures)', async () => {
+    test('EXIT 3: stuck account detected (50 days in settling)', async () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
@@ -163,7 +163,22 @@ describe('processClient — all exit paths', () => {
         expect(updateStatusSpy).toHaveBeenCalledWith(
             doc.mobile,
             'inactive',
-            expect.stringContaining('Zombie'),
+            expect.stringContaining('Stuck'),
+        );
+    });
+
+    test('EXIT 3a: stuck account detected with ZERO failures (BUG-2 — failure-independent)', async () => {
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(50, mockNow),
+            failedUpdateAttempts: 0, // can't-join-channels case: no warmup failures recorded
+        });
+        await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(updateStatusSpy).toHaveBeenCalledWith(
+            doc.mobile,
+            'inactive',
+            expect.stringContaining('Stuck'),
         );
     });
 

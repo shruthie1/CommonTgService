@@ -64,9 +64,18 @@ export default [
     },
   },
   {
+    // Test files are excluded from tsconfig (`exclude: ["**/*spec.ts"]`), so typed
+    // linting (`parserOptions.project`) cannot parse them. Lint specs WITHOUT the
+    // typed project, and relax rules that are normal/expected in tests.
     files: ['**/*.spec.ts', '**/*.test.ts'],
+    languageOptions: {
+      parserOptions: {
+        project: null,
+      },
+    },
     rules: {
-      '@typescript-eslint/no-empty-object-type': 'off'
-    }
+      '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+    },
   },
 ];

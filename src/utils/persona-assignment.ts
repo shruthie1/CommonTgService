@@ -64,6 +64,7 @@ function makeLCG(seed: number): () => number {
 /**
  * Seeded pick: pick one element from arr using the given PRNG.
  */
+/* istanbul ignore next -- unused internal helper: candidate generation uses seededShuffle, not seededPick; no caller/export */
 function seededPick<T>(arr: T[], prng: () => number): T {
     const idx = Math.floor(prng() * arr.length);
     return arr[idx];

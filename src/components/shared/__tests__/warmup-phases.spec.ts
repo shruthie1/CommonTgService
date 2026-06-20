@@ -513,7 +513,7 @@ describe('getWarmupPhaseAction', () => {
             const enrolledAt = new Date(now - 26 * ONE_DAY_MS);
 
             // Day 0: enrolled, wait
-            let doc = makeDoc({ warmupPhase: WarmupPhase.ENROLLED, enrolledAt, warmupJitter: 0 });
+            const doc = makeDoc({ warmupPhase: WarmupPhase.ENROLLED, enrolledAt, warmupJitter: 0 });
             let simNow = enrolledAt.getTime() + 0.5 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('wait');
 

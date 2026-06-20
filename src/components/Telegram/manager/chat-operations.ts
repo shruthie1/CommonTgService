@@ -88,7 +88,7 @@ export async function getMessages(ctx: TgContext, entityLike: Api.TypeEntityLike
         try {
             const entity = await safeGetEntityById(ctx, sid);
             entityCache.set(sid, entity as Api.User | Api.Chat | Api.Channel | null);
-        } catch {
+        } /* istanbul ignore next -- safeGetEntityById swallows all resolution errors internally and only throws when the client is missing, which cannot happen here */ catch {
             entityCache.set(sid, null);
         }
     }));
@@ -202,7 +202,7 @@ export async function getMessagesNew(ctx: TgContext, chatId: string, offset: num
         try {
             const entity = await safeGetEntityById(ctx, sid);
             entityCache.set(sid, entity as Api.User | Api.Chat | Api.Channel | null);
-        } catch {
+        } /* istanbul ignore next -- safeGetEntityById swallows all resolution errors internally and only throws when the client is missing, which cannot happen here */ catch {
             entityCache.set(sid, null);
         }
     }));
@@ -862,7 +862,7 @@ async function fetchMessageMediaForChats(
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = (msgResult as { total?: number })?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-            if (totalMessages < 10 && callData.callCountsByChat[chatId]?.totalCalls < 1) {
+            if (totalMessages < 10 && (callData.callCountsByChat[chatId]?.totalCalls ?? 0) < 1) {
                 ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
                 result[chatId] = null;
                 skipped++;

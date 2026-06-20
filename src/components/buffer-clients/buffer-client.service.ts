@@ -43,11 +43,13 @@ import {
     BaseClientService,
     ClientStatusType,
     ClientConfig,
+    WindowNeed,
     performOrganicActivity,
     WarmupPhase,
     getWarmupPhaseAction,
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
+import { withEnrollmentLock } from '../shared/enrollment-lock';
 
 type ClientCount = { _id: string; count: number };
 type EnrollmentDecision = {
@@ -61,8 +63,8 @@ type EnrollmentDecision = {
     totalNeeded: number;
     calculationReason: string;
     priority: number;
-    replenishmentWindows: unknown;
-    shortTermWindows: unknown;
+    replenishmentWindows: WindowNeed[];
+    shortTermWindows: WindowNeed[];
     wouldEnroll?: number;
     cappedReason?: string | null;
     blockedReason?: string;
@@ -162,7 +164,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const enrolledAtMs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
         if (enrolledAtMs > 0) {
             const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > 45) {
+            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
                 return false;
             }
         }
@@ -361,6 +363,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         await telegramClient.client.invoke(new Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
+
+                    // Assignment resolved — the step is satisfied even if the profile already
+                    // matched and no write was needed.  Without this the account loops on
+                    // update_name_bio forever (nameBioUpdatedAt never stamped, failures never
+                    // incremented, so zombie detection never fires).  Mirrors updateProfilePhotos.
+                    updateCount = Math.max(updateCount, 1);
                 }
             } else {
                 // No persona pool on client — stamp nameBioUpdatedAt anyway so the
@@ -472,20 +480,22 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Cross-collection dedup guard: prevent the same mobile from being created in
         // bufferClients when it already lives in another pool (promote/clients) — the same
         // account running concurrently across pools causes Telegram SESSION_REVOKED.
-        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
-        if (enrolledIn && enrolledIn !== 'bufferClients') {
-            throw new BadRequestException(
-                `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`
-            );
-        }
-        const createData: CreateBufferClientDto = {
-            ...bufferClient,
-            mobile: canonicalMobile,
-            ...(session ? { session } : {}),
-            status,
-        };
-        const result = await this.bufferClientModel.create({
-            ...createData,
+        // The check-then-create is serialized per canonical mobile (across buffer + promote
+        // services in this process) so two concurrent enrollments can't both pass the check.
+        const result = await withEnrollmentLock(canonicalMobile, async () => {
+            const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+            if (enrolledIn && enrolledIn !== 'bufferClients') {
+                throw new BadRequestException(
+                    `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`
+                );
+            }
+            const createData: CreateBufferClientDto = {
+                ...bufferClient,
+                mobile: canonicalMobile,
+                ...(session ? { session } : {}),
+                status,
+            };
+            return this.bufferClientModel.create({ ...createData });
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(
@@ -1030,8 +1040,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
                 const enrolledTs = ClientHelperUtils.getTimestamp(bc.enrolledAt) || ClientHelperUtils.getTimestamp(bc.createdAt);
                 const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                if (daysSinceEnrolled > 45 && warmupPhase !== WarmupPhase.SESSION_ROTATED && warmupPhase !== WarmupPhase.READY) {
-                    processSkipReason = `zombie_${Math.round(daysSinceEnrolled)}d`;
+                if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS && warmupPhase !== WarmupPhase.SESSION_ROTATED && warmupPhase !== WarmupPhase.READY) {
+                    processSkipReason = `stuck_${Math.round(daysSinceEnrolled)}d`;
                 }
             } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
                 const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
@@ -1548,18 +1558,31 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 message: 'Enrolled for warmup',
             };
 
-            await this.bufferClientModel.findOneAndUpdate(
-                { mobile: document.mobile },
-                {
-                    $set: {
-                        ...bufferClient,
-                        warmupPhase: WarmupPhase.ENROLLED,
-                        warmupJitter: ClientHelperUtils.generateWarmupJitter(),
-                        enrolledAt: new Date(),
-                    }
-                },
-                { new: true, upsert: true }
-            ).exec();
+            // Serialize the dedup re-check + write per canonical mobile (across buffer + promote
+            // in this process). Without this, a concurrent promote enrollment of the same mobile
+            // can pass its own pre-check before this write lands, producing two live sessions on
+            // one account => Telegram SESSION_REVOKED (permanent account loss).
+            const enrolled = await withEnrollmentLock(this.canonicalMobile(document.mobile), async () => {
+                const already = await this.isMobileEnrolledAnywhere(document.mobile);
+                if (already && already !== 'bufferClients') {
+                    this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: now enrolled in ${already}`);
+                    return false;
+                }
+                await this.bufferClientModel.findOneAndUpdate(
+                    { mobile: document.mobile },
+                    {
+                        $set: {
+                            ...bufferClient,
+                            warmupPhase: WarmupPhase.ENROLLED,
+                            warmupJitter: ClientHelperUtils.generateWarmupJitter(),
+                            enrolledAt: new Date(),
+                        }
+                    },
+                    { new: true, upsert: true }
+                ).exec();
+                return true;
+            });
+            if (!enrolled) return false;
 
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(

@@ -108,8 +108,10 @@ async function runWithTimeout<T>(
   }
 }
 
-function defaultShouldRetry(error: any, attempt: number): boolean {
-  if (attempt >= 3) return false;
+function defaultShouldRetry(error: any, _attempt: number): boolean {
+  // Note: do NOT cap attempts here — the retry loop already bounds attempts via `maxRetries`.
+  // A hard cap here silently ignored callers that asked for more retries (e.g. maxRetries:6),
+  // making a flaky-but-recoverable error give up early.
   if (error?.message?.toLowerCase().includes("cancelled")) return false;
   const msg = (error?.message || "").toLowerCase();
   const code = error?.code;

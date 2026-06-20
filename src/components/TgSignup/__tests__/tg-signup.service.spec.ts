@@ -506,4 +506,366 @@ describe('TgSignupService practical flows', () => {
         expect(getActiveSignupSessions().has('919999000014')).toBe(false);
         expect(getActiveSignupSessions().has('919999000015')).toBe(true);
     });
+
+    test('cleanupStaleSessions swallows errors thrown while inspecting a session', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000020');
+
+        const session = getActiveSignupSessions().get('919999000020');
+        // Make `session.client.connected` getter throw to hit the catch branch.
+        Object.defineProperty(session, 'client', {
+            get() { throw new Error('inspect boom'); },
+            configurable: true,
+        });
+        session.lastActivityAt = Date.now() - 301000;
+
+        await expect((service as any).cleanupStaleSessions()).resolves.toBeUndefined();
+        // Session remains since disconnect never ran (error caught).
+        expect(getActiveSignupSessions().has('919999000020')).toBe(true);
+        // Restore so afterEach cleanup does not blow up.
+        delete (session as any).client;
+        getActiveSignupSessions().delete('919999000020');
+    });
+
+    test('onModuleDestroy disconnects all active signup sessions', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-b', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000021');
+        await service.sendCode('+919999000022');
+
+        const client1 = clientInstances[0];
+        const client2 = clientInstances[1];
+
+        await service.onModuleDestroy();
+
+        expect(client1.destroy).toHaveBeenCalled();
+        expect(client2.destroy).toHaveBeenCalled();
+        expect(getActiveSignupSessions().size).toBe(0);
+    });
+
+    test('disconnectClient logs a warning when destroy throws but still removes the session', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000023');
+
+        const session = getActiveSignupSessions().get('919999000023');
+        session.client.destroy.mockRejectedValueOnce(new Error('destroy failed'));
+
+        await (service as any).disconnectClient('919999000023');
+
+        expect(getActiveSignupSessions().has('919999000023')).toBe(false);
+    });
+
+    test('sendCode maps PHONE_NUMBER_INVALID errors to a user-facing message', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeError({ errorMessage: 'PHONE_NUMBER_INVALID' });
+
+        const service = makeService();
+        await expect(service.sendCode('+919999000024')).rejects.toThrow('Please enter a valid phone number');
+    });
+
+    test('sendCode falls back to generic OTP error for unknown failures', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeError({ errorMessage: 'SOMETHING_WEIRD' });
+
+        const service = makeService();
+        await expect(service.sendCode('+919999000025')).rejects.toThrow('Unable to send OTP. Please try again');
+    });
+
+    test('mapSentCodeResult throws when Telegram returns an immediate SentCodeSuccess', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult(new SentCodeSuccess());
+
+        const service = makeService();
+        await expect(service.sendCode('+919999000026')).rejects.toThrow('Unexpected immediate login');
+    });
+
+    test('verifyCode completes a non-2FA SignIn straight through processLoginResult', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000027');
+
+        queueInvokeResult({
+            user: {
+                phone: '919999000027',
+                id: 'tg-27',
+                firstName: 'User27',
+                lastName: '',
+                username: 'user27',
+            },
+        });
+
+        const result = await service.verifyCode('+919999000027', '12345');
+
+        expect(result).toEqual({
+            status: 200,
+            message: 'Registration successful',
+            session: 'signup-session-1',
+        });
+        expect(usersService.create).toHaveBeenCalledWith(
+            expect.objectContaining({ mobile: '919999000027', tgId: 'tg-27', twoFA: false }),
+        );
+    });
+
+    test('verifyCode wraps generic SignIn failures as a verification error', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000028');
+
+        clientInstances[0].invoke.mockImplementationOnce(async () => {
+            throw { errorMessage: 'SOME_OTHER_ERROR', message: 'weird' };
+        });
+
+        await expect(service.verifyCode('+919999000028', '12345')).rejects.toThrow('Verification failed. Please try again.');
+    });
+
+    test('handle2FALogin rejects with 2FA-required when CheckPassword response lacks a user (no password edge)', async () => {
+        // Exercises the `!signInResult.user` branch in handle2FALogin via empty CheckPassword result.
+        mockConfig();
+        computeCheckMock.mockResolvedValue('computed');
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000029');
+
+        clientInstances[0].invoke
+            .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+            .mockImplementationOnce(async () => ({ srp: 'params' }))
+            .mockImplementationOnce(async () => ({})); // no user
+
+        await expect(service.verifyCode('+919999000029', '12345', 'pw')).rejects.toThrow('Incorrect 2FA password');
+    });
+
+    test('handleNewUserRegistration rejects when SignUp returns no user', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000030');
+
+        clientInstances[0].invoke
+            .mockImplementationOnce(async () => new AuthorizationSignUpRequired())
+            .mockImplementationOnce(async () => ({})); // SignUp result without user
+
+        await expect(service.verifyCode('+919999000030', '12345')).rejects.toThrow(BadRequestException);
+    });
+
+    test('processLoginResult rejects outright when handed an empty session string', async () => {
+        // Direct unit-level guard: a present user but blank session string is invalid input,
+        // surfacing as a server-side failure without ever calling the users service.
+        const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+        const service = makeService(usersService);
+
+        await expect((service as any).processLoginResult({ phone: '919999000047', id: 'tg-47' }, ''))
+            .rejects.toThrow('Failed to complete registration');
+        expect(usersService.create).not.toHaveBeenCalled();
+    });
+
+    test('processLoginResult rejects when registered user is missing mobile/tgId', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000031');
+
+        // SignIn succeeds but user has no phone/id -> processLoginResult validation fails.
+        queueInvokeResult({ user: { firstName: 'NoIds' } });
+
+        await expect(service.verifyCode('+919999000031', '12345')).rejects.toThrow(BadRequestException);
+        expect(usersService.create).not.toHaveBeenCalled();
+    });
+
+    test('processLoginResult propagates downstream create failures as a server-side error', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const usersService = { create: jest.fn().mockRejectedValue(new Error('db down')) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000032');
+
+        queueInvokeResult({
+            user: { phone: '919999000032', id: 'tg-32', firstName: 'U', lastName: '', username: '' },
+        });
+
+        // processLoginResult wraps the create failure as InternalServerErrorException, which
+        // bubbles into verifyCode's inner catch and surfaces as the generic verification error.
+        await expect(service.verifyCode('+919999000032', '12345')).rejects.toThrow('Verification failed. Please try again.');
+        expect(usersService.create).toHaveBeenCalled();
+    });
+
+    test('verifyCode rejects when SignIn returns a falsy authorization', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000040');
+
+        // SignIn resolves to null -> `!signInResult` guard trips, wrapped as verification error.
+        queueInvokeResult(null);
+
+        await expect(service.verifyCode('+919999000040', '12345')).rejects.toThrow('Verification failed. Please try again.');
+    });
+
+    test('verifyCode wraps a SignIn that yields an empty session string as a verification error', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000041');
+
+        // Telegram returns a valid user, but session.save() yields '' -> sessionString guard trips.
+        clientInstances[0].session.save.mockReturnValue('');
+        queueInvokeResult({
+            user: { phone: '919999000041', id: 'tg-41', firstName: 'U', lastName: '', username: '' },
+        });
+
+        await expect(service.verifyCode('+919999000041', '12345')).rejects.toThrow('Verification failed. Please try again.');
+        expect(usersService.create).not.toHaveBeenCalled();
+    });
+
+    test('handle2FALogin rejects when CheckPassword yields an empty session string', async () => {
+        mockConfig();
+        computeCheckMock.mockResolvedValue('computed');
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000042');
+
+        clientInstances[0].invoke
+            .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+            .mockImplementationOnce(async () => ({ srp: 'params' }))
+            .mockImplementationOnce(async () => ({ user: { phone: '919999000042', id: 'tg-42' } }));
+        // session.save() returns '' after a successful CheckPassword -> sessionString guard trips.
+        clientInstances[0].session.save.mockReturnValue('');
+
+        await expect(service.verifyCode('+919999000042', '12345', 'pw-42')).rejects.toThrow('Incorrect 2FA password');
+    });
+
+    test('handle2FALogin surfaces "2FA password required" when invoked without a password', async () => {
+        // Direct unit-level scenario: handle2FALogin is reached with an empty password,
+        // so the catch branch maps the failure to the password-required message.
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000043');
+        const session = getActiveSignupSessions().get('919999000043');
+
+        // GetPassword invoke throws -> caught with falsy password -> "2FA password required".
+        session.client.invoke.mockRejectedValueOnce(new Error('srp failed'));
+
+        await expect((service as any).handle2FALogin('919999000043', session.client, ''))
+            .rejects.toThrow('2FA password required');
+    });
+
+    test('handleNewUserRegistration rejects when SignUp yields an empty session string', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000044');
+
+        clientInstances[0].invoke
+            .mockImplementationOnce(async () => new AuthorizationSignUpRequired())
+            .mockImplementationOnce(async () => ({ user: { phone: '919999000044', id: 'tg-44' } }));
+        // session.save() returns '' so the new-user sessionString guard trips.
+        clientInstances[0].session.save.mockReturnValue('');
+
+        await expect(service.verifyCode('+919999000044', '12345')).rejects.toThrow(BadRequestException);
+    });
+
+    test('verifyCode disconnects the session when the outer catch sees a "Connection failed" error', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const service = makeService();
+        await service.sendCode('+919999000045');
+
+        const session = getActiveSignupSessions().get('919999000045');
+        session.client.connected = false;
+        // ensureConnectedClient reconnect throws with a "Connection failed" message; rebuild also fails,
+        // so the error escapes to verifyCode's outer catch which then disconnects the session.
+        queueConnectFailure('Connection failed');
+        queueConnectFailure('Connection failed');
+
+        await expect(service.verifyCode('+919999000045', '12345')).rejects.toThrow('Connection failed');
+        expect(getActiveSignupSessions().has('919999000045')).toBe(false);
+    });
+
+    test('processLoginResult rethrows a BadRequestException raised by the users service create', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        // usersService.create throws a BadRequestException -> processLoginResult rethrows it as-is.
+        const usersService = { create: jest.fn().mockRejectedValue(new BadRequestException('duplicate user')) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000046');
+
+        queueInvokeResult({
+            user: { phone: '919999000046', id: 'tg-46', firstName: 'U', lastName: '', username: '' },
+        });
+
+        // The BadRequestException bubbles through processLoginResult; verifyCode's inner catch then
+        // re-wraps non-OTP/2FA failures as the generic verification error.
+        await expect(service.verifyCode('+919999000046', '12345')).rejects.toThrow('Verification failed. Please try again.');
+        expect(usersService.create).toHaveBeenCalled();
+    });
+
+    test('ensureConnectedClient takes the already-connected fast path on verify', async () => {
+        mockConfig();
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000033');
+
+        const session = getActiveSignupSessions().get('919999000033');
+        session.client.connected = true;
+        const connectCallsBefore = clientInstances[0].connect.mock.calls.length;
+
+        queueInvokeResult({
+            user: { phone: '919999000033', id: 'tg-33', firstName: 'U', lastName: '', username: '' },
+        });
+
+        const result = await service.verifyCode('+919999000033', '12345');
+        expect(result.status).toBe(200);
+        // No additional connect call because client was already connected.
+        expect(clientInstances[0].connect.mock.calls.length).toBe(connectCallsBefore);
+    });
 });

@@ -53,7 +53,7 @@ describe('Buffer Client API', () => {
             mockActiveChannelsService() as any,
             mockClientService([{ clientId: 'test-client-1', mobile: '15559999999' }]) as any,
             mockChannelsService() as any,
-            { findAll: jest.fn().mockResolvedValue([]) } as any,
+            { findAll: jest.fn().mockResolvedValue([]), existsByMobile: jest.fn().mockResolvedValue(false) } as any,
             mockSessionService() as any,
             botsService as any,
         );

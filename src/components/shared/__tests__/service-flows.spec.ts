@@ -1183,8 +1183,11 @@ describe('Service flow reliability', () => {
 
         const added = await service.refillJoinQueue();
 
+        // `remaining` = maxChannelJoinsPerDay - dailyJoinCount (0 here). Assert against the
+        // live config value so the test doesn't go stale when the daily cap is retuned.
+        const expectedRemaining = service.config.maxChannelJoinsPerDay;
         expect(added).toBe(1);
-        expect(activeChannelsService.getActiveChannels).toHaveBeenCalledWith(20, 0, ['existing-1', 'existing-2']);
+        expect(activeChannelsService.getActiveChannels).toHaveBeenCalledWith(expectedRemaining, 0, ['existing-1', 'existing-2']);
         expect((service as any).joinChannelMap.get('919990011111')).toEqual([{ channelId: 'new-1', username: 'new-1', canSendMsgs: true }]);
     });
 
@@ -1536,7 +1539,7 @@ describe('Service flow reliability', () => {
         };
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null) };
+        (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null), incrementClientsJoined: jest.fn().mockResolvedValue(undefined) };
 
         (service as any).joinChannelMap.set('mobile-A', [
             { channelId: 'a1', username: 'a1', canSendMsgs: true }, { channelId: 'a2', username: 'a2', canSendMsgs: true },
@@ -1575,7 +1578,7 @@ describe('Service flow reliability', () => {
         };
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null) };
+        (service as any).activeChannelsService = { findOne: jest.fn().mockResolvedValue(null), incrementClientsJoined: jest.fn().mockResolvedValue(undefined) };
 
         (service as any).joinChannelMap.set('capped-mobile', [
             { channelId: 'c1', username: 'c1', canSendMsgs: true }, { channelId: 'c2', username: 'c2', canSendMsgs: true },
@@ -1652,6 +1655,7 @@ describe('Service flow reliability', () => {
                     ? { channelId, username: 'stale_banned', canSendMsgs: true, banned: true }
                     : null
             )),
+            incrementClientsJoined: jest.fn().mockResolvedValue(undefined),
         };
 
         (service as any).joinChannelMap.set('mobile-stale', [
@@ -1699,7 +1703,7 @@ describe('Service flow reliability', () => {
     // ======= STUCK SCENARIO TESTS =======
     // These test processClient end-to-end for every scenario that could cause an account to get stuck.
 
-    describe('Stuck scenario: zombie detection at 45 days', () => {
+    describe('Stuck scenario: stuck detection at 45 days', () => {
         test('account in settling for 50 days with 3+ failures → marks inactive', async () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
@@ -1723,7 +1727,7 @@ describe('Service flow reliability', () => {
             expect(updateStatusSpy).toHaveBeenCalledWith(
                 '919990007771',
                 'inactive',
-                expect.stringContaining('Zombie'),
+                expect.stringContaining('Stuck'),
             );
         });
 

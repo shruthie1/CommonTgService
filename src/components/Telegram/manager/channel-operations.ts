@@ -10,6 +10,9 @@ import isPermanentError from '../../../utils/isPermanentError';
 import { downloadFileFromUrl } from './helpers';
 import { connectionManager } from '../utils/connection-manager';
 import { isChannelOrGroupEntity, normalizeChatId } from '../../../utils/telegram-utils/dialog-chat-utils';
+import { searchMessages, forwardMessages, forwardSecretMsgs } from './message-operations';
+import { getTopPrivateChats } from './chat-operations';
+import { MessageMediaType } from '../dto/message-search.dto';
 
 export interface LeaveChannelsResult {
     successCount: number;
@@ -84,18 +87,12 @@ async function createOrJoinChannel(ctx: TgContext, channel: string): Promise<{ i
 }
 
 export async function forwardMedia(ctx: TgContext, channel: string, fromChatId: string): Promise<void> {
-    // Import lazily to avoid circular deps
-    const { searchMessages, forwardMessages } = require('./message-operations');
-    const { getTopPrivateChats } = require('./chat-operations');
-    const { MessageMediaType } = require('../dto/message-search.dto');
-
     let channelId: bigInt.BigInteger | undefined;
     try {
         ctx.logger.info(ctx.phoneNumber, `Forwarding media from chat to channel ${channel} from ${fromChatId}`);
         if (fromChatId) {
             const channelDetails = await createOrJoinChannel(ctx, channel);
             channelId = channelDetails.id;
-            const { forwardSecretMsgs } = require('./message-operations');
             await forwardSecretMsgs(ctx, fromChatId, channelId?.toString());
         } else {
             const result = await getTopPrivateChats(ctx);
@@ -109,8 +106,8 @@ export async function forwardMedia(ctx: TgContext, channel: string, fromChatId: 
                 for (const chatId of finalChats) {
                     const mediaMessages = await searchMessages(ctx, { chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE] });
                     ctx.logger.info(ctx.phoneNumber, `Forwarding messages from chat: ${chatId} to channel: ${channelId}`);
-                    await forwardMessages(ctx, chatId, channelId, mediaMessages.photo.messages);
-                    await forwardMessages(ctx, chatId, channelId, mediaMessages.video.messages);
+                    await forwardMessages(ctx, chatId, channelId.toString(), mediaMessages.photo.messages);
+                    await forwardMessages(ctx, chatId, channelId.toString(), mediaMessages.video.messages);
                 }
             }
             ctx.logger.info(ctx.phoneNumber, 'Completed forwarding messages from top private chats to channel:', channelId);
@@ -194,18 +191,21 @@ export async function leaveChannels(ctx: TgContext, chats: string[]): Promise<Le
                 await ctx.client.invoke(new Api.channels.LeaveChannel({ channel: entity }));
                 chatType = entity.broadcast ? 'channel' : 'supergroup';
                 left = true;
-            } else if (entity instanceof Api.Chat) {
-                await ctx.client.invoke(new Api.messages.DeleteChatUser({
-                    chatId: entity.id,
-                    userId: (me as Api.User).id,
-                    revokeHistory: false,
-                }));
-                chatType = 'group';
-                left = true;
             } else {
-                ctx.logger.warn(ctx.phoneNumber, `Unknown entity type for ${id}, skipping`);
-                skipCount++;
-                continue;
+                /* istanbul ignore else -- final else unreachable: entityMap is populated only with entities passing isChannelOrGroupEntity() = (instanceof Api.Channel || Api.Chat); the Channel case is handled above, so here the entity is always an Api.Chat. Defensive guard only. */
+                if (entity instanceof Api.Chat) {
+                    await ctx.client.invoke(new Api.messages.DeleteChatUser({
+                        chatId: entity.id,
+                        userId: (me as Api.User).id,
+                        revokeHistory: false,
+                    }));
+                    chatType = 'group';
+                    left = true;
+                } else {
+                    ctx.logger.warn(ctx.phoneNumber, `Unknown entity type for ${id}, skipping`);
+                    skipCount++;
+                    continue;
+                }
             }
 
             if (left) {
@@ -252,9 +252,11 @@ export async function getGrpMembers(ctx: TgContext, entity: EntityLike, offset: 
         );
 
         let totalCount = 0;
+        let consumedCount = 0;
         if (participants instanceof Api.channels.ChannelParticipants) {
             totalCount = participants.count;
             const users = participants.participants;
+            consumedCount = users.length;
             ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}, Total: ${totalCount}`);
             for (const user of users) {
                 const userInfo = user instanceof Api.ChannelParticipant ? user.userId : null;
@@ -273,9 +275,12 @@ export async function getGrpMembers(ctx: TgContext, entity: EntityLike, offset: 
             ctx.logger.info(ctx.phoneNumber, 'No members found or invalid group.');
         }
 
-        const nextOffset = offset + result.length;
-        const hasMore = nextOffset < totalCount;
-        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length}, hasMore=${hasMore}`);
+        // Advance by the number of participants CONSUMED this page (not the resolved-user count).
+        // Admins/creator/banned/left entries are filtered out of `result`, so using result.length
+        // would leave the offset stuck and re-fetch the same page forever (infinite loop / FLOOD).
+        const nextOffset = offset + consumedCount;
+        const hasMore = consumedCount > 0 && nextOffset < totalCount;
+        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length} (consumed ${consumedCount}), hasMore=${hasMore}`);
 
         return {
             members: result,
@@ -428,8 +433,12 @@ export async function getGroupBannedUsers(ctx: TgContext, groupId: string): Prom
         const participants = result.participants as Api.ChannelParticipantBanned[];
         return participants.map(participant => {
             const bannedRights = participant.bannedRights as Api.ChatBannedRights;
+            // A banned participant's peer is normally an Api.PeerUser (userId), but can also be
+            // a PeerChannel/PeerChat. Read whichever id field is present rather than assuming PeerChat.
+            const peer = participant.peer as { userId?: bigInt.BigInteger; channelId?: bigInt.BigInteger; chatId?: bigInt.BigInteger };
+            const peerId = peer?.userId ?? peer?.channelId ?? peer?.chatId;
             return {
-                userId: (participant.peer as Api.PeerChat).chatId.toString(),
+                userId: peerId != null ? peerId.toString() : '',
                 bannedRights: {
                     viewMessages: bannedRights.viewMessages || false,
                     sendMessages: bannedRights.sendMessages || false,

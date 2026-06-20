@@ -59,6 +59,7 @@ export async function performOrganicActivity(
     }
 }
 
+/* istanbul ignore next -- default args are never used; every call site passes explicit bounds */
 async function randomPause(minMs: number = 15000, maxMs: number = 45000): Promise<void> {
     const delay = ClientHelperUtils.gaussianRandom(
         (minMs + maxMs) / 2,

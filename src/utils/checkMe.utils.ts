@@ -17,30 +17,6 @@ export const safeAttemptReverse = (val: string | null | undefined): string => {
     }
 };
 
-// Check if strings are similar enough (lenient matching)
-const isSimilarEnough = (actual: string, expected: string): boolean => {
-    const normalizedActual = normalize(actual);
-    const normalizedExpected = normalize(expected);
-
-    // If exact match after normalization
-    if (normalizedActual === normalizedExpected) return true;
-
-    // If one contains the other (lenient)
-    if (normalizedActual.includes(normalizedExpected) || normalizedExpected.includes(normalizedActual)) return true;
-
-    // Calculate simple similarity ratio
-    const longer = normalizedActual.length > normalizedExpected.length ? normalizedActual : normalizedExpected;
-    const shorter = normalizedActual.length > normalizedExpected.length ? normalizedExpected : normalizedActual;
-
-    if (longer.length === 0) return true; // Both empty
-
-    // Allow 30% difference
-    const editDistance = levenshteinDistance(normalizedActual, normalizedExpected);
-    const similarity = 1 - editDistance / longer.length;
-
-    return similarity >= 0.7; // 70% similar is good enough
-};
-
 const levenshteinDistance = (str1: string, str2: string): number => {
     const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(0));
 

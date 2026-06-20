@@ -151,36 +151,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** One availability window's supply/demand snapshot. */
+export interface WindowNeed {
+    window: string;
+    available: number;
+    needed: number;
+    targetDate: string;
+    minRequired: number;
+}
+
+/** Projected available count for a window at its target date. */
+export interface ProjectedWindowCount {
+    window: string;
+    available: number;
+    targetDate: string;
+}
+
 /**
  * Availability window calculation result.
  */
 export interface AvailabilityNeeds {
     totalNeeded: number;
-    windowNeeds: Array<{
-        window: string;
-        available: number;
-        needed: number;
-        targetDate: string;
-        minRequired: number;
-    }>;
+    windowNeeds: WindowNeed[];
     totalActive: number;
     totalNeededForCount: number;
     calculationReason: string;
     priority: number;
     readyActive: number;
     warmingPipeline: number;
-    replenishmentWindowNeeds: Array<{
-        window: string;
-        available: number;
-        needed: number;
-        targetDate: string;
-        minRequired: number;
-    }>;
-    projectedWindowCounts: Array<{
-        window: string;
-        available: number;
-        targetDate: string;
-    }>;
+    replenishmentWindowNeeds: WindowNeed[];
+    projectedWindowCounts: ProjectedWindowCount[];
 }
 
 // Re-export for subclasses
@@ -219,6 +219,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
     protected readonly MAX_UPDATES_PER_CYCLE = 20;
+    /** A non-terminal account still warming past this many days is stuck and gets retired. */
+    protected readonly STUCK_WARMUP_DAYS = 45;
     protected dailyJoinCounts: Map<string, number> = new Map();
     protected dailyJoinDate: string = '';
     /** Tracks per-mobile transient join failures in the current loop. Reset on each refill. */
@@ -392,6 +394,37 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         // Return the freshly-updated Mongoose doc to preserve getter-based schema properties.
         // Fall back to original doc with fields applied if update returned partial/nothing.
         return (repairedDoc?.mobile ? repairedDoc as TDoc : Object.assign(doc, updateData));
+    }
+
+    /**
+     * An account still in a non-terminal warmup phase past STUCK_WARMUP_DAYS is stuck and
+     * will never become usable — retire it and alert. This is independent of failure counts:
+     * many stuck states (can't join channels, steps that no-op without throwing) never
+     * increment failedUpdateAttempts, so a failure-gated check would miss them entirely.
+     * Returns true if the account was identified as stuck and retired.
+     */
+    protected async retireIfStuck(doc: TDoc, now: number): Promise<boolean> {
+        const enrolledTs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
+        const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+        const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
+
+        // READY/SESSION_ROTATED are terminal: warmup is complete and the account is usable
+        // (a READY account just hasn't rotated its session yet — it is not lost).
+        if (daysSinceEnrolled <= this.STUCK_WARMUP_DAYS || phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
+            return false;
+        }
+
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
+        // NOT { permanent: true }: a stuck account is not a proven-dead session. We retire the
+        // pool record but do NOT mark the user expired (expired = revoked / banned only).
+        const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
+        this.botsService.sendMessageByCategory(
+            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            `<b>STUCK ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`,
+            { parseMode: 'HTML' }
+        );
+        return true;
     }
 
     constructor(
@@ -1172,23 +1205,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const failedAttempts = doc.failedUpdateAttempts || 0;
         const lastFailureTime = ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
 
+        // Retire accounts stuck warming past the age limit — independent of failure counts,
+        // since many stuck states never increment failedUpdateAttempts (e.g. can't join
+        // channels, or steps that no-op without throwing).
+        if (await this.retireIfStuck(doc, now)) {
+            return { updateCount: 0 };
+        }
+
         if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-            const enrolledTs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
-            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-            const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
-            if (daysSinceEnrolled > 45 && phase !== WarmupPhase.SESSION_ROTATED && phase !== WarmupPhase.READY) {
-                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                // NOT { permanent: true }: a zombie is stuck warming, not a proven-dead
-                // session. We retire the pool record but do NOT mark the user expired
-                // (expired = session revoked / banned / deactivated only).
-                const deactivated = await this.deactivateClient(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                this.botsService.sendMessageByCategory(
-                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                    `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`,
-                    { parseMode: 'HTML' }
-                );
-                return { updateCount: 0 };
-            }
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
             const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
             const resetDoc1 = await this.update(doc.mobile, resetFields);

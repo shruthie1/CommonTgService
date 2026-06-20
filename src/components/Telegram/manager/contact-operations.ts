@@ -4,6 +4,8 @@ import bigInt from 'big-integer';
 import { CustomFile } from 'telegram/client/uploads';
 import { TgContext, ContactStats, ImportContactResult, BlockListResult } from './types';
 import { generateCSV, generateVCard, createVCardContent } from './helpers';
+import { parseError } from '../../../utils/parseError';
+import isPermanentError from '../../../utils/isPermanentError';
 
 function getFloodWaitSeconds(error: any): number | null {
     if (error?.seconds != null) return error.seconds;
@@ -31,6 +33,13 @@ export async function addContact(ctx: TgContext, data: { mobile: string; tgId: s
                     ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during addContact, stopping batch`);
                     break;
                 }
+                // A permanent error (session revoked / account banned/deactivated) means the
+                // account is gone — stop the batch and surface it so the caller can mark-and-skip,
+                // instead of hammering a dead account for every remaining contact (session-burn risk).
+                if (isPermanentError(parseError(err, '', false))) {
+                    ctx.logger.error(ctx.phoneNumber, `Permanent error during addContact, aborting batch`, err);
+                    throw err;
+                }
                 ctx.logger.info(ctx.phoneNumber, err);
             }
             if (i < data.length - 1) {
@@ -39,7 +48,11 @@ export async function addContact(ctx: TgContext, data: { mobile: string; tgId: s
         }
     } catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error adding contacts:', error);
-        const { parseError } = require('../../../utils/parseError');
+        // Surface permanent errors so the caller can mark-and-skip the dead account; only
+        // swallow transient/unknown failures (the batch already stopped at the failure point).
+        if (isPermanentError(parseError(error, '', false))) {
+            throw error;
+        }
         parseError(error, `Failed to save contacts`);
     }
 }
@@ -62,7 +75,6 @@ export async function addContacts(ctx: TgContext, mobiles: string[], namePrefix:
         ctx.logger.info(ctx.phoneNumber, 'Imported Contacts Result:', result);
     } catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error adding contacts:', error);
-        const { parseError } = require('../../../utils/parseError');
         parseError(error, `Failed to save contacts`);
     }
 }
@@ -102,7 +114,7 @@ export async function exportContacts(ctx: TgContext, format: 'vcard' | 'csv', in
             firstName: contact.firstName || '',
             lastName: contact.lastName || '',
             phone: contact.phone || '',
-            blocked: blockedContacts && 'peerBlocked' in blockedContacts
+            blocked: blockedContacts && 'blocked' in blockedContacts
                 ? ((blockedContacts as Api.contacts.Blocked).blocked || []).some((p: Api.PeerBlocked) =>
                     (p.peerId instanceof Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false
                 )
@@ -137,6 +149,13 @@ export async function importContacts(ctx: TgContext, data: { firstName: string; 
                 results.push({ success: false, phone: contact.phone, error: `FLOOD_WAIT_${floodWait}` });
                 break;
             }
+            // Permanent error (revoked/banned/deactivated): the account is gone. Record it and
+            // stop the batch rather than continuing to invoke on a dead account (session-burn risk).
+            if (isPermanentError(parseError(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, `Permanent error during importContacts, aborting batch`, error);
+                results.push({ success: false, phone: contact.phone, error: error.message });
+                break;
+            }
             results.push({ success: false, phone: contact.phone, error: error.message });
         }
         if (i < data.length - 1) {
@@ -167,6 +186,13 @@ export async function manageBlockList(ctx: TgContext, userIds: string[], block: 
                 results.push({ success: false, userId, error: `FLOOD_WAIT_${floodWait}` });
                 break;
             }
+            // Permanent error (revoked/banned/deactivated): stop the batch instead of continuing
+            // to invoke on a dead account (session-burn risk).
+            if (isPermanentError(parseError(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, `Permanent error during ${block ? 'block' : 'unblock'}, aborting batch`, error);
+                results.push({ success: false, userId, error: error.message });
+                break;
+            }
             results.push({ success: false, userId, error: error.message });
         }
         if (i < userIds.length - 1) {
@@ -183,14 +209,23 @@ export async function getContactStatistics(ctx: TgContext): Promise<ContactStats
     const contactsResult = await ctx.client.invoke(new Api.contacts.GetContacts({}));
     const contacts = ('users' in contactsResult ? contactsResult.users : []) as Api.User[];
 
-    const onlineContacts = contacts.filter((c: Api.User) => c.status && 'wasOnline' in c.status);
+    // "Online" = currently online (Api.UserStatusOnline). The previous check
+    // (`'wasOnline' in status`) actually matched Api.UserStatusOffline (which carries
+    // `wasOnline`), so it counted OFFLINE contacts as online and excluded the genuinely
+    // online ones. "Recently offline" (has `wasOnline`) is the basis for last-week-active.
+    const onlineNowContacts = contacts.filter(
+        (c: Api.User) => c.status instanceof Api.UserStatusOnline,
+    );
+    const recentlyOfflineContacts = contacts.filter(
+        (c: Api.User) => c.status instanceof Api.UserStatusOffline,
+    );
 
     return {
         total: contacts.length,
-        online: onlineContacts.length,
+        online: onlineNowContacts.length,
         withPhone: contacts.filter((c: Api.User) => c.phone).length,
         mutual: contacts.filter((c: Api.User) => c.mutualContact).length,
-        lastWeekActive: onlineContacts.filter((c: Api.User) => {
+        lastWeekActive: recentlyOfflineContacts.filter((c: Api.User) => {
             const status = c.status as Api.UserStatusOffline;
             const lastSeen = new Date(status.wasOnline * 1000);
             const weekAgo = new Date();

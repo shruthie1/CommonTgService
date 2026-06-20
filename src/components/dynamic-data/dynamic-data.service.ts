@@ -114,6 +114,9 @@ export class DynamicDataService {
                 doc.data = updateDto.value;
             }
 
+            // `data` is a Mixed type; in-place mutations (set/array ops) are not
+            // auto-detected by Mongoose and would silently fail to persist.
+            doc.markModified('data');
             await doc.save({ session: useSession });
             this.logger.debug(`Successfully updated document with configKey: ${configKey}`);
 
@@ -191,6 +194,8 @@ export class DynamicDataService {
             }
 
             set(doc.data, updateDto.path, array);
+            // `data` is a Mixed type; mark it modified so the array mutation persists.
+            doc.markModified('data');
             await doc.save({ session });
             this.logger.debug('Array operation completed successfully');
         } catch (error) {
@@ -219,6 +224,8 @@ export class DynamicDataService {
                 }
                 this.logger.debug(`Removing data at path: ${path}`);
                 unset(doc.data, path);
+                // `data` is a Mixed type; mark it modified so the deletion persists.
+                doc.markModified('data');
                 await doc.save({ session });
             } else {
                 this.logger.debug(`Deleting entire document with configKey: ${configKey}`);

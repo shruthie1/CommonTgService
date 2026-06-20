@@ -181,7 +181,8 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
                 await this.sleep(delay);
             }
         }
-        
+
+        /* istanbul ignore next -- unreachable: loop always returns or throws on the final attempt */
         throw new Error('All retry attempts failed');
     }
 

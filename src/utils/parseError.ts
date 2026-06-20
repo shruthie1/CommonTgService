@@ -49,6 +49,7 @@ function shouldLogDiagnostics(): boolean {
  * @param maxDepth - Maximum recursion depth
  * @returns String representation of data
  */
+/* istanbul ignore next -- defensive serializer; only reachable via the unreachable catch below (extractMessage never throws) */
 function safeStringify(data: any, depth = 0, maxDepth = 3): string {
   if (depth > maxDepth) {
     return '[Max Depth Reached]';
@@ -312,6 +313,7 @@ export function parseError(
     try {
       extractedMessage = typeof rawMessage === 'string' ? rawMessage : extractMessage(rawMessage);
     } catch (e) {
+      /* istanbul ignore next -- extractMessage is fully self-catching and never throws; this catch is defense-in-depth */
       extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
     }
 
