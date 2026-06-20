@@ -254,6 +254,22 @@ describe('UsersController', () => {
             await expect(controller.aggregateSort('intimateTotal', 'asc', '5', '2')).resolves.toBe('agg');
             expect(stub.aggregateSort).toHaveBeenCalledWith('intimateTotal', 1, 5, 2);
         });
+
+        it('throws when limit non-numeric', async () => {
+            await expect(controller.aggregateSort('intimateTotal', 'desc', 'abc')).rejects.toThrow('Limit must be a positive integer');
+        });
+
+        it('throws when limit negative', async () => {
+            await expect(controller.aggregateSort('intimateTotal', 'desc', '-5')).rejects.toThrow('Limit must be a positive integer');
+        });
+
+        it('throws when skip non-numeric', async () => {
+            await expect(controller.aggregateSort('intimateTotal', 'desc', '10', 'abc')).rejects.toThrow('Skip must be a non-negative integer');
+        });
+
+        it('throws when skip negative', async () => {
+            await expect(controller.aggregateSort('intimateTotal', 'desc', '10', '-3')).rejects.toThrow('Skip must be a non-negative integer');
+        });
     });
 
     describe('aggregateSortQuery (POST)', () => {

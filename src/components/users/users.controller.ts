@@ -304,6 +304,12 @@ export class UsersController {
     const order = sortOrder === 'asc' ? 1 : -1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
     const skipNum = skip ? parseInt(skip, 10) : 0;
+    if (!Number.isInteger(limitNum) || limitNum < 1) {
+      throw new BadRequestException('Limit must be a positive integer');
+    }
+    if (!Number.isInteger(skipNum) || skipNum < 0) {
+      throw new BadRequestException('Skip must be a non-negative integer');
+    }
     return this.usersService.aggregateSort(field, order as 1 | -1, limitNum, skipNum);
   }
 

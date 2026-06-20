@@ -324,6 +324,11 @@ export class TgSignupService implements OnModuleDestroy {
     }
 
     private async handle2FALogin(phone: string, client: TelegramClient, password: string): Promise<TgSignupResponse> {
+        // The password-check phase (GetPassword + computeCheck + CheckPassword) is the only part
+        // that indicates a wrong 2FA password. Anything after a successful CheckPassword (session
+        // capture, persistence) is a downstream failure and must surface its real error rather than
+        // being mislabelled as an incorrect password.
+        let signInResult: Api.auth.Authorization;
         try {
             this.logger.debug(`Fetching password SRP parameters for ${phone}`);
             const passwordSrpResult = await client.invoke(new Api.account.GetPassword());
@@ -332,7 +337,7 @@ export class TgSignupService implements OnModuleDestroy {
             const passwordCheck = await computeCheck(passwordSrpResult, password);
 
             this.logger.debug(`Invoking CheckPassword API for ${phone}`);
-            const signInResult = await client.invoke(
+            signInResult = await client.invoke(
                 new Api.auth.CheckPassword({
                     password: passwordCheck,
                 })
@@ -341,23 +346,25 @@ export class TgSignupService implements OnModuleDestroy {
             if (!signInResult || !signInResult.user) {
                 throw new BadRequestException('Invalid response from Telegram server');
             }
-
-            this.logger.log(`2FA login successful for ${phone}`);
-            const sessionString = client.session.save() as unknown as string;
-            if (!sessionString) {
-                throw new Error('Failed to generate session string');
-            }
-
-            const userData = await this.processLoginResult(signInResult.user, sessionString, password);
-            await this.disconnectClient(phone);
-            return userData;
         } catch (error) {
-            this.logger.error(`2FA login failed for ${phone}: ${error.message}`, error.stack);
+            this.logger.error(`2FA password check failed for ${phone}: ${error.message}`, error.stack);
             if (password) {
                 throw new BadRequestException('Incorrect 2FA password');
             }
             throw new BadRequestException('2FA password required');
         }
+
+        // Password was accepted by Telegram. From here on, errors are downstream failures
+        // (session capture / persistence) and propagate with their real cause.
+        this.logger.log(`2FA login successful for ${phone}`);
+        const sessionString = client.session.save() as unknown as string;
+        if (!sessionString) {
+            throw new Error('Failed to generate session string');
+        }
+
+        const userData = await this.processLoginResult(signInResult.user, sessionString, password);
+        await this.disconnectClient(phone);
+        return userData;
     }
 
     private async handleNewUserRegistration(

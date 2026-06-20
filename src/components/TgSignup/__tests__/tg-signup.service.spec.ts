@@ -366,6 +366,40 @@ describe('TgSignupService practical flows', () => {
         );
     });
 
+    test('2FA login surfaces a downstream persist failure instead of mislabelling it as a wrong password', async () => {
+        // SignIn -> SESSION_PASSWORD_NEEDED, GetPassword + CheckPassword succeed with a valid user,
+        // but usersService.create rejects (e.g. E11000 duplicate). The password WAS correct, so the
+        // error must NOT be reported as "Incorrect 2FA password".
+        mockConfig();
+        computeCheckMock.mockResolvedValue('computed-password-check');
+        queueConnectSuccess();
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        const duplicateError: any = new Error('E11000 duplicate key error collection: users');
+        duplicateError.code = 11000;
+        const usersService = { create: jest.fn().mockRejectedValue(duplicateError) };
+        const service = makeService(usersService);
+        await service.sendCode('+919999000048');
+
+        clientInstances[0].invoke
+            .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+            .mockImplementationOnce(async () => ({ srp: 'params' }))
+            .mockImplementationOnce(async () => ({
+                user: {
+                    phone: '919999000048',
+                    id: 'tg-48',
+                    firstName: 'User48',
+                    lastName: '',
+                    username: 'user48',
+                },
+            }));
+
+        const error = await service.verifyCode('+919999000048', '12345', 'correct-password').catch(e => e);
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).not.toContain('Incorrect 2FA password');
+        expect(usersService.create).toHaveBeenCalled();
+    });
+
     test('verifyCode maps incorrect 2FA password to a user-facing bad request', async () => {
         mockConfig();
         computeCheckMock.mockResolvedValue('computed-password-check');
@@ -753,7 +787,9 @@ describe('TgSignupService practical flows', () => {
         expect(usersService.create).not.toHaveBeenCalled();
     });
 
-    test('handle2FALogin rejects when CheckPassword yields an empty session string', async () => {
+    test('handle2FALogin surfaces a post-auth empty-session-string failure as a generic verification error, not a wrong password', async () => {
+        // CheckPassword SUCCEEDS (password was correct) but session.save() yields '' afterwards.
+        // This is a downstream failure, so it must NOT be reported as "Incorrect 2FA password".
         mockConfig();
         computeCheckMock.mockResolvedValue('computed');
         queueConnectSuccess();
@@ -769,7 +805,10 @@ describe('TgSignupService practical flows', () => {
         // session.save() returns '' after a successful CheckPassword -> sessionString guard trips.
         clientInstances[0].session.save.mockReturnValue('');
 
-        await expect(service.verifyCode('+919999000042', '12345', 'pw-42')).rejects.toThrow('Incorrect 2FA password');
+        const error = await service.verifyCode('+919999000042', '12345', 'pw-42').catch(e => e);
+        expect(error.message).not.toContain('Incorrect 2FA password');
+        // The real downstream cause surfaces instead of a bogus password error.
+        expect(error.message).toBe('Failed to generate session string');
     });
 
     test('handle2FALogin surfaces "2FA password required" when invoked without a password', async () => {

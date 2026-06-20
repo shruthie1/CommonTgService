@@ -91,7 +91,7 @@ export class UserDataService {
         delete (updateUserDataDto as any)._id;
 
         return this.userDataModel
-            .updateMany({ chatId }, { $set: updateUserDataDto }, { upsert: true })
+            .updateMany({ chatId }, { $set: updateUserDataDto })
             .exec();
     }
 

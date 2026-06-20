@@ -171,6 +171,12 @@ describe('UserDataService', () => {
             const docs = await model.find({ chatId: 'shared' }).lean();
             expect(docs.every(d => d.totalCount === 7)).toBe(true);
         });
+
+        it('is a no-op when no docs match (no phantom upsert insert)', async () => {
+            const res = await service.updateAll('chatId-that-matches-nothing', { totalCount: 5 } as any);
+            expect(res.upsertedCount).toBe(0);
+            expect(await model.countDocuments({})).toBe(0);
+        });
     });
 
     describe('remove', () => {
