@@ -84,8 +84,13 @@ export function scoreRelationship(chat: RelationshipCandidate): number {
   const mutualScore = isMutualContact ? 50 : 0;
   const commonChatScore = Math.min(commonChats, 10) * 15.0;
 
-  const daysSinceLastMessage = lastMessageDate
+  // Clamp to >= 0 so a FUTURE-dated message (clock skew / bad data) can't produce a negative
+  // "days since" and inflate recencyBonus above its 100 cap.
+  const rawDaysSinceLastMessage = lastMessageDate
     ? (Date.now() - new Date(lastMessageDate).getTime()) / (1000 * 60 * 60 * 24)
+    : 999;
+  const daysSinceLastMessage = Number.isFinite(rawDaysSinceLastMessage)
+    ? Math.max(0, rawDaysSinceLastMessage)
     : 999;
   const recencyBonus = daysSinceLastMessage <= 90
     ? 100 * (1 - daysSinceLastMessage / 90)

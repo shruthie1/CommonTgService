@@ -246,6 +246,21 @@ describe('ActiveChannelsService (real Mongo)', () => {
       await expect(service.search({})).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    test('search REJECTS injected Mongo operators (NoSQL injection guard)', async () => {
+      // Express parses ?title[$ne]=__none__ into { title: { $ne: '__none__' } }. Passed raw to
+      // Model.find() this returns the WHOLE collection (operator injection / filter bypass).
+      await seed({ channelId: 'inj-1', title: 'real' });
+      await seed({ channelId: 'inj-2', title: 'also-real' });
+      await expect(service.search({ title: { $ne: '__none__' } } as any))
+        .rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    test('search rejects a top-level $where/$expr operator key', async () => {
+      await seed({ channelId: 'inj-3' });
+      await expect(service.search({ $where: 'true' } as any))
+        .rejects.toBeInstanceOf(BadRequestException);
+    });
+
     test('createMultiple upserts', async () => {
       const r = await service.createMultiple([
         { channelId: 'cm-1', title: 'A' } as any,
@@ -349,6 +364,22 @@ describe('ActiveChannelsService (real Mongo)', () => {
     test('search term path', async () => {
       await seed({ channelId: 'searchable-id', title: 'Unique Topic' });
       const r = await service.paginated({ search: 'Unique' });
+      expect(r.total).toBe(1);
+    });
+
+    test('filter=banned + search keeps BOTH constraints (search must not drop the banned filter)', async () => {
+      // The search $or previously overwrote the banned $or, returning unbanned channels too.
+      await seed({ channelId: 'b-alpha', banned: true, title: 'alpha banned' });
+      await seed({ channelId: 'ok-alpha', banned: false, forbidden: false, title: 'alpha healthy' });
+      const r = await service.paginated({ filter: 'banned', search: 'alpha' });
+      expect(r.total).toBe(1); // only the banned 'alpha', not the healthy one
+    });
+
+    test('search term with regex metacharacters is matched literally (no ReDoS / over-match)', async () => {
+      await seed({ channelId: 'lit-1', title: 'a.b.c' });
+      await seed({ channelId: 'lit-2', title: 'axbxc' });
+      // "a.b.c" must match the literal title only, not the regex-wildcard 'axbxc'.
+      const r = await service.paginated({ search: 'a.b.c' });
       expect(r.total).toBe(1);
     });
   });

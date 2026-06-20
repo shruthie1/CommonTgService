@@ -54,10 +54,21 @@ export class WebshareProxyService implements OnModuleInit {
     // ==================== FETCH PROXIES ====================
 
     async fetchAllProxies(): Promise<WebshareProxy[]> {
+        const { proxies } = await this.fetchAllProxiesWithStatus();
+        return proxies;
+    }
+
+    /**
+     * Fetches all proxy pages. Returns `complete: false` if pagination was cut short by an
+     * error after at least one page succeeded — callers must NOT prune the pool against an
+     * incomplete result, or valid proxies on the un-fetched pages get wrongly deleted.
+     */
+    async fetchAllProxiesWithStatus(): Promise<{ proxies: WebshareProxy[]; complete: boolean }> {
         this.ensureConfigured();
         const allProxies: WebshareProxy[] = [];
         let page = 1;
         const pageSize = 100;
+        let complete = true;
 
         this.logger.log('Fetching all proxies from Webshare...');
 
@@ -73,7 +84,9 @@ export class WebshareProxyService implements OnModuleInit {
 
                 this.logger.debug(`Fetched page ${page}: ${results.length} proxies (total so far: ${allProxies.length}/${count})`);
 
-                if (!next || allProxies.length >= count) {
+                // Terminate on: no next link, reached the reported count, OR an empty page
+                // (a buggy/flaky API returning `next` with no results would otherwise loop forever).
+                if (!next || allProxies.length >= count || results.length === 0) {
                     break;
                 }
 
@@ -81,15 +94,16 @@ export class WebshareProxyService implements OnModuleInit {
             } catch (error) {
                 this.logger.error(`Failed to fetch page ${page}: ${error.message}`);
                 if (allProxies.length > 0) {
-                    this.logger.warn(`Partial fetch: returning ${allProxies.length} proxies fetched before error`);
+                    this.logger.warn(`Partial fetch: returning ${allProxies.length} proxies fetched before error (INCOMPLETE)`);
+                    complete = false;
                     break;
                 }
                 throw error;
             }
         }
 
-        this.logger.log(`Fetched ${allProxies.length} proxies from Webshare`);
-        return allProxies;
+        this.logger.log(`Fetched ${allProxies.length} proxies from Webshare (complete=${complete})`);
+        return { proxies: allProxies, complete };
     }
 
     // ==================== SYNC ====================
@@ -101,15 +115,22 @@ export class WebshareProxyService implements OnModuleInit {
         try {
             this.logger.log(`Starting Webshare proxy sync (removeStale=${removeStale})`);
 
-            const webshareProxies = await this.fetchAllProxies();
+            const { proxies: webshareProxies, complete } = await this.fetchAllProxiesWithStatus();
 
             const dtos: CreateProxyIpDto[] = webshareProxies
                 .filter(p => p.proxy_address && p.valid)
                 .map(p => this.webshareToDto(p));
 
+            // Only prune stale rows when the fetch was COMPLETE. Pruning against a partial fetch
+            // would delete valid proxies that live on the pages we failed to retrieve.
+            const effectiveRemoveStale = removeStale && complete;
+            if (removeStale && !complete) {
+                this.logger.warn('Webshare fetch was incomplete; skipping stale-removal to avoid deleting valid proxies');
+            }
+
             this.logger.log(`Converting ${dtos.length} valid proxies (filtered from ${webshareProxies.length} total)`);
 
-            const result = await this.ipManagementService.syncFromExternal(SOURCE_NAME, dtos, removeStale);
+            const result = await this.ipManagementService.syncFromExternal(SOURCE_NAME, dtos, effectiveRemoveStale);
 
             const syncResult: WebshareSyncResult = {
                 totalFetched: webshareProxies.length,
@@ -160,6 +181,7 @@ export class WebshareProxyService implements OnModuleInit {
     ): Promise<{ success: boolean; message: string; replacementId?: string }> {
         this.ensureConfigured();
 
+        let markedInactive = false;
         try {
             const proxy = await this.ipManagementService.findProxyIpById(ipAddress, port);
 
@@ -171,6 +193,7 @@ export class WebshareProxyService implements OnModuleInit {
             }
 
             await this.ipManagementService.markInactive(ipAddress, port);
+            markedInactive = true;
 
             const body: Record<string, string> = {
                 proxy_address: ipAddress,
@@ -190,6 +213,15 @@ export class WebshareProxyService implements OnModuleInit {
             };
         } catch (error) {
             this.logger.error(`Failed to replace proxy ${ipAddress}:${port}: ${error.message}`);
+            // Roll back the markInactive so a failed Webshare request doesn't strand a still-valid
+            // proxy as inactive forever (it would silently leave rotation, shrinking the pool).
+            if (markedInactive) {
+                try {
+                    await this.ipManagementService.markActive(ipAddress, port);
+                } catch (rollbackErr) {
+                    this.logger.error(`Failed to roll back proxy ${ipAddress}:${port} to active: ${rollbackErr.message}`);
+                }
+            }
             return {
                 success: false,
                 message: `Replacement failed: ${error.message}`,

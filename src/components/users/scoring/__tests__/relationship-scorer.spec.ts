@@ -187,6 +187,19 @@ describe('scoreRelationship', () => {
       const c = makeCandidate({ lastMessageDate: new Date(FIXED_NOW - 200 * 24 * 60 * 60 * 1000).toISOString() });
       expect(scoreRelationship(c)).toBe(0);
     });
+
+    test('FUTURE-dated message (clock skew) must NOT exceed the 100 recency cap', () => {
+      // A lastMessageDate in the future yields negative daysSince -> 100*(1 - neg/90) > 100,
+      // inflating the score. Recency must be clamped to [0,100].
+      const c = makeCandidate({ lastMessageDate: new Date(FIXED_NOW + 30 * 24 * 60 * 60 * 1000).toISOString() });
+      expect(scoreRelationship(c)).toBeLessThanOrEqual(100);
+      expect(scoreRelationship(c)).toBe(100); // a "just now / future" message is max recency
+    });
+
+    test('unparseable lastMessageDate does not produce NaN', () => {
+      const c = makeCandidate({ lastMessageDate: 'not-a-real-date' });
+      expect(Number.isNaN(scoreRelationship(c))).toBe(false);
+    });
   });
 
   test('combined deterministic score', () => {

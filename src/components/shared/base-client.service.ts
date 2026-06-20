@@ -723,7 +723,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     removeFromLeaveMap(key: string) {
         this.leaveChannelMap.delete(key);
         if (this.leaveChannelMap.size === 0) {
-            this.clearLeaveChannelInterval();
+            // Clear only the pending timer — NOT the processing guard. This runs from inside
+            // processLeaveChannelSequentially's loop; clearing isLeaveChannelProcessing here
+            // (as clearLeaveChannelInterval does) would drop the re-entrancy guard mid-iteration
+            // and let a concurrent leave tick start a second pass (double-leave). The owning
+            // processLeaveChannelInterval finally-block is the only place that resets the flag.
+            if (this.leaveChannelIntervalId) {
+                clearTimeout(this.leaveChannelIntervalId);
+                this.activeTimeouts.delete(this.leaveChannelIntervalId);
+                this.leaveChannelIntervalId = null;
+            }
         }
     }
 
@@ -2190,7 +2199,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
             const isLegacyOperational = !doc.warmupPhase && ClientHelperUtils.getTimestamp(doc.lastUsed) > 0;
 
-            if (isLegacyOperational || isAccountReady(phase)) {
+            // An account only counts as READY SUPPLY if it can actually be swapped in. The
+            // buffer-swap query also requires the channel threshold, and warmup can graduate a
+            // STALLED account to SESSION_ROTATED with as few as ~half the target channels. Counting
+            // such an account as ready creates phantom supply: planning thinks the pool is healthy
+            // and stops replenishing, while no account actually qualifies for a swap.
+            const meetsSwapChannelThreshold = (doc.channels || 0) >= MIN_CHANNELS_FOR_MATURING;
+            if ((isLegacyOperational || isAccountReady(phase)) && meetsSwapChannelThreshold) {
                 readyOperationalDates.push(operationalDate);
             } else {
                 pipelineOperationalDates.push(operationalDate);

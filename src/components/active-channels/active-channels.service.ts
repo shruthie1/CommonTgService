@@ -298,6 +298,19 @@ export class ActiveChannelsService implements OnModuleInit {
         throw new BadRequestException('Search filter is required');
       }
 
+      // Guard against NoSQL operator injection: this endpoint takes a raw query object, so
+      // an attacker could pass ?title[$ne]= or {$where:...} to bypass the filter / dump the
+      // collection. Only allow flat scalar equality — reject $-prefixed keys and object/array
+      // values (which is where operators like $ne/$gt/$regex/$where live).
+      for (const [key, value] of Object.entries(filter)) {
+        if (key.startsWith('$')) {
+          throw new BadRequestException(`Invalid search field: ${key}`);
+        }
+        if (value !== null && typeof value === 'object') {
+          throw new BadRequestException(`Invalid search value for field: ${key}`);
+        }
+      }
+
       return await this.activeChannelModel.find(filter).lean().exec();
     } catch (error) {
       throw this.handleError(error, 'Failed to search channels');
@@ -701,11 +714,21 @@ export class ActiveChannelsService implements OnModuleInit {
 
     if (search?.trim()) {
       const q = search.trim();
-      query.$or = [
-        { title: { $regex: q, $options: 'i' } },
-        { username: { $regex: q, $options: 'i' } },
+      // Escape regex metacharacters so the term is matched literally (no ReDoS / wildcard over-match).
+      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchOr = [
+        { title: { $regex: escaped, $options: 'i' } },
+        { username: { $regex: escaped, $options: 'i' } },
         { channelId: q },
       ];
+      // A filter (e.g. 'banned') may already have set query.$or. Don't overwrite it — combine
+      // both $or groups under $and so the filter constraint is preserved alongside the search.
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: searchOr }];
+        delete query.$or;
+      } else {
+        query.$or = searchOr;
+      }
     }
 
     const total = await this.activeChannelModel.countDocuments(query).exec();

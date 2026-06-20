@@ -245,6 +245,34 @@ describe('WebshareProxyService', () => {
             expect(rows[0].countryCode).toBe('GB');
         });
 
+        it('does NOT prune the pool when the fetch was INCOMPLETE (partial fetch + removeStale)', async () => {
+            configure();
+            // First sync: two proxies across pages, both persisted.
+            axiosClient.get.mockResolvedValueOnce({
+                data: {
+                    results: [
+                        proxy({ id: 'a', proxy_address: '10.0.0.1', port: 1001 }),
+                        proxy({ id: 'b', proxy_address: '10.0.0.2', port: 1002 }),
+                    ],
+                    next: null, count: 2,
+                },
+            });
+            await service.syncProxies(true);
+            expect(await proxyIpModel.countDocuments({ source: 'webshare' })).toBe(2);
+
+            // Second sync: page 1 succeeds (only proxy "a"), page 2 ERRORS -> partial fetch.
+            // proxy "b" is still valid in Webshare; it must NOT be deleted from a partial set.
+            axiosClient.get
+                .mockResolvedValueOnce({ data: { results: [proxy({ id: 'a', proxy_address: '10.0.0.1', port: 1001 })], next: 'page2', count: 2 } })
+                .mockRejectedValueOnce(new Error('network blip on page 2'));
+
+            const result = await service.syncProxies(true);
+
+            expect(result.removed).toBe(0);            // no pruning on incomplete data
+            const rows = await proxyIpModel.find({ source: 'webshare' }).lean();
+            expect(rows.map(r => r.ipAddress).sort()).toEqual(['10.0.0.1', '10.0.0.2']); // both survive
+        });
+
         it('keeps stale rows when removeStale is false', async () => {
             configure();
             axiosClient.get.mockResolvedValueOnce({
@@ -333,6 +361,23 @@ describe('WebshareProxyService', () => {
             const result = await service.replaceProxy('9.9.9.9', 70);
             expect(result.success).toBe(false);
             expect(result.message).toContain('Replacement failed');
+        });
+
+        it('ROLLS BACK to active when the Webshare replacement POST fails', async () => {
+            // Real scenario: markInactive runs first, then the Webshare POST times out / 429s.
+            // Without rollback the proxy is left inactive FOREVER and silently leaves rotation,
+            // shrinking the pool. The proxy must be restored to active on POST failure.
+            configure();
+            await proxyIpModel.create({
+                ipAddress: '5.5.5.5', port: 95, protocol: 'socks5', source: 'webshare', status: 'active',
+            });
+            axiosClient.post.mockRejectedValue(new Error('429 Too Many Requests'));
+
+            const result = await service.replaceProxy('5.5.5.5', 95);
+            expect(result.success).toBe(false);
+
+            const row = await proxyIpModel.findOne({ ipAddress: '5.5.5.5', port: 95 }).lean();
+            expect(row!.status).toBe('active'); // restored, not stranded inactive
         });
 
         it('replaces without a country code (no country_code in the body)', async () => {

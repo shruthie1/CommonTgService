@@ -39,7 +39,7 @@ import { TelegramService } from '../Telegram/Telegram.service';
 import TelegramManager from '../Telegram/TelegramManager';
 import { User } from '../users';
 import { bioMatches, lastNameMatches, nameMatchesAssignment } from '../../utils/homoglyph-normalizer';
-import { WarmupPhase } from '../shared/warmup-phases';
+import { WarmupPhase, MIN_CHANNELS_FOR_MATURING } from '../shared/warmup-phases';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { ActiveClientSetup } from '../Telegram/manager/types';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
@@ -509,7 +509,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       mobile: { $ne: existingClientMobile },
       createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
       availableDate: { $lte: today },
-      channels: { $gt: 200 },
+      // Match the warmup graduation threshold (>= MIN_CHANNELS_FOR_MATURING). Using $gt: 200
+      // excluded accounts sitting at exactly the graduation count, making them count as ready
+      // supply yet never swap-eligible.
+      channels: { $gte: MIN_CHANNELS_FOR_MATURING },
       status: 'active',
       inUse: { $ne: true },
       warmupPhase: WarmupPhase.SESSION_ROTATED,

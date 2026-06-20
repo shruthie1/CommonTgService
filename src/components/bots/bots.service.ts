@@ -256,18 +256,18 @@ export class BotsService implements OnModuleInit {
             bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
             return bots;
         }
-        // For all bots, aggregate from category caches if available
-        const allCategories = Object.values(ChannelCategory);
-        const allBots: BotDocument[] = [];
-        for (const cat of allCategories) {
-            const bots = this.cache.get<BotDocument[]>(`category:${cat}`) || [];
-            allBots.push(...bots);
-        }
-        if (allBots.length > 0) {
-            return allBots;
+        // For "all bots" we cannot trust per-category caches: only some categories may be warm
+        // (sendByCategoryWithFailover warms one at a time), and aggregating warm caches would
+        // silently return an INCOMPLETE set. Use a dedicated all-bots cache key instead, and
+        // fall back to the DB (refreshing both the all-bots and per-category caches).
+        const ALL_BOTS_KEY = 'all-bots';
+        const cachedAll = this.cache.get<BotDocument[]>(ALL_BOTS_KEY);
+        if (cachedAll) {
+            return cachedAll;
         }
         console.warn('Cache miss for all bots');
         const bots = await this.botModel.find().lean().exec();
+        this.cache.set(ALL_BOTS_KEY, bots);
         bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
         const botsByCategory = bots.reduce((acc, bot) => {
             if (!acc[bot.category]) acc[bot.category] = [];

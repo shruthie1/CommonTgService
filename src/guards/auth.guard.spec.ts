@@ -319,6 +319,20 @@ describe('AuthGuard', () => {
             expect(guard.canActivate(makeContext(req))).toBe(true);
         });
 
+        it('allows GET /builds without auth (read is public)', () => {
+            const guard = new AuthGuard();
+            const req = baseReq({ path: '/builds', url: '/builds', originalUrl: '/builds', method: 'GET' });
+            expect(guard.canActivate(makeContext(req))).toBe(true);
+        });
+
+        it('DENIES PATCH /builds without auth (write must be protected)', () => {
+            // /builds is in IGNORE_PATHS for the public GET, but the PATCH that overwrites
+            // build/deploy config must NOT be reachable unauthenticated.
+            const guard = new AuthGuard();
+            const req = baseReq({ path: '/builds', url: '/builds', originalUrl: '/builds', method: 'PATCH', headers: {}, ip: '203.0.113.99' });
+            expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
+        });
+
         it('notifies on unauthorized access', () => {
             const guard = new AuthGuard();
             const req = baseReq({ headers: { origin: 'https://evil.com' } });

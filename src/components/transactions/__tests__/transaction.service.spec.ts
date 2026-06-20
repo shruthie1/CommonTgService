@@ -151,6 +151,16 @@ describe('TransactionService', () => {
       expect(mockedFetch).toHaveBeenCalledTimes(1);
     });
 
+    it('filters by amount === 0 (zero-value/refund transactions must be findable)', async () => {
+      // Real scenario: looking up zero-amount transactions. `if (filters.amount)` drops a
+      // legitimate 0 (falsy), so the amount constraint is silently ignored.
+      await service.create(makeDto({ transactionId: 'zeroamt1', amount: 0, profile: 'zp' }) as any);
+      await service.create(makeDto({ transactionId: 'bigamt01', amount: 999, profile: 'zp' }) as any);
+      const res = await service.findAll({ amount: 0, profile: 'zp' });
+      expect(res.total).toBe(1);
+      expect(res.transactions[0].transactionId).toBe('zeroamt1');
+    });
+
     it('throws BadRequest "Failed to fetch transactions" when model.find throws', async () => {
       jest.spyOn(model, 'find').mockImplementation(() => {
         throw new Error('boom');

@@ -17,16 +17,18 @@ export class SearchUserDto {
   mobile?: string;
 
   @ApiPropertyOptional({ description: '2FA status' })
-  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+  // `boolean | string` design-type prevents the ValidationPipe's enableImplicitConversion from
+  // running Boolean("false")===true (which would override the @Transform and invert the filter).
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
   @IsOptional()
   @IsBoolean()
-  twoFA?: boolean;
+  twoFA?: boolean | string;
 
   @ApiPropertyOptional({ description: 'Expiration status' })
-  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
   @IsOptional()
   @IsBoolean()
-  expired?: boolean;
+  expired?: boolean | string;
 
   @ApiPropertyOptional({ description: 'Session string' })
   @IsOptional()
@@ -54,14 +56,14 @@ export class SearchUserDto {
   gender?: string;
 
   @ApiPropertyOptional({ description: 'Demo given status' })
-  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
   @IsOptional()
   @IsBoolean()
-  demoGiven?: boolean;
+  demoGiven?: boolean | string;
 
   @ApiPropertyOptional({ description: 'Starred status' })
-  @Transform(({ value }: TransformFnParams) => value === 'true' || value === true)
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
   @IsOptional()
   @IsBoolean()
-  starred?: boolean;
+  starred?: boolean | string;
 }

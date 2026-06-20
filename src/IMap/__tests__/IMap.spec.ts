@@ -146,6 +146,28 @@ describe('MailReader', () => {
         expect(code).toBe('54321');
         expect(imap.deletedSeqNos).toEqual([3]);
     });
+
+    test('picks the newest code by DATE even when the newest email has a lower seqno', async () => {
+        // Real scenario: a re-sent / re-delivered Telegram email can arrive with a LOWER
+        // sequence number than an older one (seqno tracks insertion, not the Date header).
+        // The freshest OTP by date must win — selecting by seqno would submit a stale code
+        // and delete the wrong (newer) message.
+        const imap = new FakeImap();
+        const reader = MailReader.createForTest(() => imap as any);
+        const startedAt = new Date('2026-04-11T10:00:00.000Z');
+
+        imap.searchResults = [1, 2, 3];
+        // seqno 3 is OLDER; seqno 1 is the NEWEST by date.
+        imap.messages.set(1, { body: 'Telegram verification code 11111.', date: new Date('2026-04-11T10:09:00.000Z') });
+        imap.messages.set(2, { body: 'Telegram verification code 22222.', date: new Date('2026-04-11T10:04:00.000Z') });
+        imap.messages.set(3, { body: 'Telegram verification code 33333.', date: new Date('2026-04-11T10:02:00.000Z') });
+
+        await reader.connectToMail();
+        const code = await reader.getCode({ expectedLength: 5, minReceivedAt: startedAt });
+
+        expect(code).toBe('11111');             // newest by date, not highest seqno
+        expect(imap.deletedSeqNos).toEqual([1]); // deletes the newest, not seqno 3
+    });
 });
 
 /**

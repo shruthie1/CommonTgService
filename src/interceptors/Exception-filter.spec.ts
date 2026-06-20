@@ -88,4 +88,25 @@ describe('ExceptionsFilter', () => {
 
         expect(response.status).toHaveBeenCalled();
     });
+
+    it('does NOT re-write headers when the response has already started streaming', () => {
+        // Real scenario: the global 60s timeout (or any error) fires mid-stream on
+        // downloadMedia after 206/200 headers + bytes were already sent. Calling
+        // response.status().json() then throws "Cannot set headers after they are sent"
+        // and corrupts the download. The filter must detect headersSent and just end.
+        const json = jest.fn();
+        const status = jest.fn().mockReturnValue({ json });
+        const end = jest.fn();
+        const response = { status, json, end, headersSent: true };
+        const host = {
+            switchToHttp: () => ({ getResponse: () => response, getRequest: () => ({}) }),
+        } as unknown as ArgumentsHost;
+
+        const filter = new ExceptionsFilter();
+        expect(() => filter.catch(new Error('mid-stream timeout'), host)).not.toThrow();
+
+        expect(status).not.toHaveBeenCalled(); // must NOT try to set status/headers again
+        expect(json).not.toHaveBeenCalled();
+        expect(end).toHaveBeenCalled();        // terminate the already-started response
+    });
 });

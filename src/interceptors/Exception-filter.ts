@@ -34,6 +34,14 @@ export class ExceptionsFilter implements ExceptionFilter {
                     : (errorResponse as any).message || errorResponse;
         }
 
+        // If the response already started streaming (e.g. a timeout/error fired mid-stream on a
+        // media download), we cannot set status/headers again — doing so throws "Cannot set
+        // headers after they are sent" and corrupts the stream. Just terminate the connection.
+        if (response.headersSent) {
+            response.end();
+            return;
+        }
+
         response.status(status).json({
             statusCode: status,
             message,

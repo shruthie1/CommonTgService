@@ -543,6 +543,23 @@ export class SessionService {
         return { allowed: true };
     }
 
+    /**
+     * Read-only rate-limit check (does NOT increment). Used by orchestration paths that may
+     * delegate the actual creation to createSession(), which performs the authoritative
+     * increment — so a single logical request is billed exactly once, not twice.
+     */
+    private peekRateLimit(mobile: string): { allowed: boolean; resetTime?: number } {
+        const now = Date.now();
+        const rateLimit = this.rateLimitMap.get(mobile);
+        if (rateLimit && now > rateLimit.resetTime) {
+            return { allowed: true };
+        }
+        if (rateLimit && rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: rateLimit.resetTime };
+        }
+        return { allowed: true };
+    }
+
     private isPermanentSessionValidationError(error?: string): boolean {
         const message = (error || '').toLowerCase();
         return message.includes('phone number mismatch')
@@ -860,8 +877,11 @@ export class SessionService {
 
             this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
 
-            // Check rate limiting first
-            const rateLimitCheck = this.checkRateLimit(mobile);
+            // Check rate limiting WITHOUT incrementing — the fallback path delegates to
+            // createSession(), which performs the authoritative increment. Incrementing here too
+            // would double-bill a single request (tripping the limit at half the real budget) and
+            // would wrongly count cache-hits (returning an existing session) as new creations.
+            const rateLimitCheck = this.peekRateLimit(mobile);
             if (!rateLimitCheck.allowed) {
                 const resetTime = new Date(rateLimitCheck.resetTime || 0);
                 return {

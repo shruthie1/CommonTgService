@@ -247,6 +247,24 @@ describe('lifecycle & map helpers', () => {
         expect((service as any).isLeaveChannelProcessing).toBe(false);
     });
 
+    test('removeFromLeaveMap does NOT clear the processing guard mid-iteration', async () => {
+        // Real scenario: processLeaveChannelSequentially calls removeFromLeaveMap() as it drains
+        // each mobile. When the last entry is removed the map empties — but the for-loop is still
+        // running (awaiting unregister/sleep). If removeFromLeaveMap flips isLeaveChannelProcessing
+        // to false here, a concurrent leaveChannelQueue tick passes the `if (processing) return`
+        // guard and starts a SECOND concurrent leave pass over the same accounts (double-leave).
+        const service = new TestBaseService();
+        (service as any).isLeaveChannelProcessing = true; // we are "mid-iteration"
+        (service as any).leaveChannelMap.set('m1', ['c1']);
+
+        (service as any).removeFromLeaveMap('m1'); // drains the map to empty
+
+        expect((service as any).leaveChannelMap.size).toBe(0);
+        // The processing guard must remain held until the owning processLeaveChannelInterval
+        // finally-block resets it — NOT cleared as a side effect of emptying the map.
+        expect((service as any).isLeaveChannelProcessing).toBe(true);
+    });
+
     test('cleanup swallows errors thrown while clearing', async () => {
         const service = new TestBaseService();
         jest.spyOn(service as any, 'clearAllTimeouts').mockImplementation(() => { throw new Error('boom'); });
@@ -282,12 +300,19 @@ describe('lifecycle & map helpers', () => {
         expect((service as any).safeSetLeaveChannelMap('m1', ['c1', 'c3'])).toBe(true);
     });
 
-    test('removeFromLeaveMap clears interval when last entry removed', () => {
+    test('removeFromLeaveMap clears the pending timer (but not the processing guard) when last entry removed', () => {
         const service = new TestBaseService();
-        const clearSpy = jest.spyOn(service as any, 'clearLeaveChannelInterval');
+        // Simulate an armed timer.
+        (service as any).leaveChannelIntervalId = setTimeout(() => { }, 100000);
+        (service as any).activeTimeouts.add((service as any).leaveChannelIntervalId);
         (service as any).leaveChannelMap.set('m1', ['c']);
+
         service.removeFromLeaveMap('m1');
-        expect(clearSpy).toHaveBeenCalled();
+
+        // Timer handle cleared so no stray tick fires...
+        expect((service as any).leaveChannelIntervalId).toBeNull();
+        // ...but the re-entrancy guard is left untouched (only the owning interval resets it).
+        expect((service as any).isLeaveChannelProcessing).toBe(false); // default; not forced here
     });
 });
 
@@ -1654,6 +1679,22 @@ describe('availability needs calculation', () => {
         const r = await (service as any).calculateAvailabilityBasedNeedsForCurrentState('client-1');
         expect(r.readyActive).toBe(1);
         expect(r.warmingPipeline).toBe(1);
+    });
+
+    test('does NOT count a SESSION_ROTATED account with too few channels as ready supply (phantom supply)', async () => {
+        // Real scenario: a stalled account graduates to SESSION_ROTATED with only ~150 channels
+        // (warmup's relaxed target). The buffer-swap query requires channels > 200, so this
+        // account can NEVER be swapped in — but availability planning counted it as "ready",
+        // making the pool look healthy and suppressing replenishment. It must be treated as
+        // pipeline (not ready), so the deficit is visible and more accounts get enrolled.
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const docs = [
+            { mobile: 'lowch', warmupPhase: WarmupPhase.SESSION_ROTATED, availableDate: ClientHelperUtils.toDateString(today.getTime()), channels: 150 },
+        ];
+        const service = new TestBaseService(makeAvailabilityModel(docs), { minTotalClients: 10 });
+        const r = await (service as any).calculateAvailabilityBasedNeedsForCurrentState('client-1');
+        expect(r.readyActive).toBe(0);          // not swap-eligible -> not counted as ready
+        expect(r.totalNeeded).toBeGreaterThan(0); // deficit surfaced
     });
 
     test('calculateAvailabilityBasedNeeds self-heals then delegates', async () => {

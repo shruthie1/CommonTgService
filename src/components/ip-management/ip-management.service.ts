@@ -258,10 +258,26 @@ export class IpManagementService {
      * Picks the next IP from a sorted list using Redis atomic counter,
      * then updates lastUsed in the background.
      */
+    /**
+     * Stable signature for a candidate pool so round-robin counts per distinct pool, not
+     * globally. Built from the sorted ip:port members (independent of query order).
+     */
+    private poolSignature(ips: ProxyIp[]): string {
+        return ips
+            .map(ip => `${ip.ipAddress}:${ip.port}`)
+            .sort()
+            .join(',');
+    }
+
     private async _pickAndMark(ips: ProxyIp[]): Promise<ProxyIp> {
         let index = 0;
+        // Round-robin must be per-pool: a single global counter taken `% ips.length` against
+        // differently-sized candidate lists (full pool vs client/country/protocol-filtered)
+        // produces non-sequential indices, so some proxies are overused and others never served.
+        // Key the counter by the exact candidate set so each distinct pool rotates independently.
+        const poolKey = `${ROUND_ROBIN_KEY}:${this.poolSignature(ips)}`;
         try {
-            const counter = await RedisClient.incr(ROUND_ROBIN_KEY);
+            const counter = await RedisClient.incr(poolKey);
             index = (counter - 1) % ips.length;
         } catch (err) {
             index = Date.now() % ips.length;
@@ -416,6 +432,14 @@ export class IpManagementService {
             { $set: { status: 'inactive' } }
         );
         this.logger.log(`Marked proxy inactive: ${ipAddress}:${port}`);
+    }
+
+    async markActive(ipAddress: string, port: number): Promise<void> {
+        await this.proxyIpModel.updateOne(
+            { ipAddress, port },
+            { $set: { status: 'active' } }
+        );
+        this.logger.log(`Marked proxy active: ${ipAddress}:${port}`);
     }
 
     /**

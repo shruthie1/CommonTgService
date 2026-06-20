@@ -62,10 +62,27 @@ export class UsersController {
     @Query('gender') gender?: string,
     @Query('excludeTwoFA') excludeTwoFA?: string,
   ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    const minScoreNum = minScore ? parseFloat(minScore) : undefined;
+
+    // Guard against NaN from non-numeric query strings — an unguarded NaN flows into the
+    // Mongo query (e.g. {bestScore:{$gt:NaN}} matches nothing) and silently returns an empty
+    // leaderboard with no error. (Mirrors the guards already on /top-interacted.)
+    if (pageNum !== undefined && (isNaN(pageNum) || pageNum < 1)) {
+      throw new BadRequestException('Page must be a positive integer');
+    }
+    if (limitNum !== undefined && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+      throw new BadRequestException('Limit must be between 1 and 100');
+    }
+    if (minScoreNum !== undefined && (isNaN(minScoreNum) || minScoreNum < 0)) {
+      throw new BadRequestException('minScore must be a non-negative number');
+    }
+
     return this.usersService.topRelationships({
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      minScore: minScore ? parseFloat(minScore) : undefined,
+      page: pageNum,
+      limit: limitNum,
+      minScore: minScoreNum,
       gender,
       excludeTwoFA: excludeTwoFA === 'true' });
   }

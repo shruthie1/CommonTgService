@@ -541,16 +541,22 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
 
     let filteredMessages: MediaMetadataItem[];
 
+    // Pre-slice combined count for the multi-type branch: lets hasMore reflect whether the
+    // raw fetch genuinely had more than the page limit, instead of the post-slice length
+    // which is clamped to effectiveLimit and would make hasMore always true.
+    let multiTypeRawCount: number | undefined;
     if (typesToFetch.length === 1) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     } else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(
             typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit))
         );
+        const combined = resultsPerType.flat();
+        multiTypeRawCount = combined.length;
         if (hasAll) {
-            filteredMessages = resultsPerType.flat();
+            filteredMessages = combined;
         } else {
-            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
+            filteredMessages = combined.sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
         }
     } else {
         filteredMessages = [];
@@ -604,7 +610,12 @@ export async function getMediaMetadata(ctx: TgContext, params: MediaQueryParams)
         };
     } else {
         const total = filteredMessages.length;
-        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === effectiveLimit) && filteredMessages.length > 0;
+        // Single-type: a full page (>= queryLimit) implies more. Multi-type: use the PRE-slice
+        // combined count — only report hasMore if the raw fetch actually exceeded the page limit,
+        // otherwise the slice clamps length to effectiveLimit and hasMore would always be true.
+        const hasMore = (typesToFetch.length === 1
+            ? filteredMessages.length >= queryLimit
+            : (multiTypeRawCount ?? 0) > effectiveLimit) && filteredMessages.length > 0;
         const firstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
         const lastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
 
@@ -763,15 +774,20 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
     }
 
     let filteredMessages: Api.Message[];
+    // Pre-slice combined count (see getMediaMetadata) so hasMore reflects a genuinely-larger
+    // raw fetch instead of the slice-clamped length.
+    let multiTypeRawCount: number | undefined;
     if (typesToFetch.length === 1) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     } else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(
             typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit))
         );
+        const combined = resultsPerType.flat();
+        multiTypeRawCount = combined.length;
         filteredMessages = hasAll
-            ? resultsPerType.flat()
-            : resultsPerType.flat().sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
+            ? combined
+            : combined.sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
     } else {
         filteredMessages = [];
     }
@@ -857,7 +873,11 @@ export async function getFilteredMedia(ctx: TgContext, params: MediaQueryParams)
         };
     } else {
         const total = mediaData.length;
-        const hasMoreResult = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length >= effectiveLimit)
+        // Multi-type: use the PRE-slice combined count so hasMore isn't always true (the slice
+        // clamps filteredMessages.length to effectiveLimit). Single-type: a full page implies more.
+        const hasMoreResult = (typesToFetch.length === 1
+            ? filteredMessages.length >= queryLimit
+            : (multiTypeRawCount ?? 0) > effectiveLimit)
             && filteredMessages.length > 0;
         const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;

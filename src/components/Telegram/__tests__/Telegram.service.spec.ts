@@ -562,6 +562,21 @@ describe('TelegramService — forwardMedia & forwardMediaToBot', () => {
         expect(mockConnectionManager.unregisterClient).toHaveBeenCalledWith('m');
     });
 
+    test('forwardMediaToBot UNREGISTERS the client even when an inner op throws (no leaked connection)', async () => {
+        // Real scenario: forwardMedia/iterDialogs throws (flood-wait, banned chat, network).
+        // The error path must still release the live TG connection or it leaks — a live
+        // session lingering in connectionManager is exactly the anti-pattern SESSION-SURVIVAL warns about.
+        const fakeManager = makeFakeManager();
+        fakeManager.forwardMedia = jest.fn().mockRejectedValue(new Error('FLOOD_WAIT_30'));
+        mockConnectionManager.getClient.mockResolvedValue(fakeManager);
+        const services = makeServices();
+        const svc = new TelegramService(services.usersService, services.activeChannelsService, services.channelsService, services.bufferClientService, services.promoteClientService);
+
+        const result = await svc.forwardMediaToBot('m', 'from');
+        expect(result).toMatch(/failed/i);
+        expect(mockConnectionManager.unregisterClient).toHaveBeenCalledWith('m'); // released despite the throw
+    });
+
     test('forwardMediaToBot skips DMs, unresolved channels, and fills defaults for sparse facts', async () => {
         // Realistic mixed dialog set: a private chat (filtered out), a channel whose
         // live facts cannot be resolved (skipped), and a matching channel that omits

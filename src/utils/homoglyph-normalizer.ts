@@ -82,6 +82,9 @@ export function nameMatchesAssignment(
 ): boolean {
     const normalized = cleanDisplayName(tgFirstName).toLowerCase();
     const assigned = assignedFirstName.toLowerCase().trim();
+    // An empty assigned (or empty TG) name must never count as a match — includes('') is
+    // always true, which would falsely "verify" any profile against an unset assignment.
+    if (!assigned || !normalized) return false;
     return normalized.includes(assigned);
 }
 

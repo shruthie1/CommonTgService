@@ -234,9 +234,18 @@ export class EventManagerService implements OnModuleInit, OnModuleDestroy {
 
           if (!success) {
             try {
-              const newTime = Date.now() + 30000;
-              await this.eventModel.updateOne({ _id: event._id }, { $set: { time: newTime } });
-              this.logger.log(`Event '${event._id}' rescheduled for ${new Date(newTime).toISOString()}`);
+              const MAX_EVENT_ATTEMPTS = 5;
+              const attempts = (event.attempts || 0) + 1;
+              if (attempts >= MAX_EVENT_ATTEMPTS) {
+                // Give up: a permanently-failing event (e.g. dead profile.repl) must not
+                // reschedule forever — that's a stuck workflow generating perpetual load.
+                await this.eventModel.deleteOne({ _id: event._id });
+                this.logger.warn(`Event '${event._id}' dropped after ${attempts} failed attempts`);
+              } else {
+                const newTime = Date.now() + 30000;
+                await this.eventModel.updateOne({ _id: event._id }, { $set: { time: newTime, attempts } });
+                this.logger.log(`Event '${event._id}' rescheduled (attempt ${attempts}/${MAX_EVENT_ATTEMPTS}) for ${new Date(newTime).toISOString()}`);
+              }
             } catch (err) {
               this.logger.error(`Failed to reschedule event '${event._id}'`, err);
             }

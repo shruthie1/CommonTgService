@@ -32,14 +32,19 @@ export class SearchDto {
   @ApiPropertyOptional({ description: 'Access hash' })
   accessHash?: string;
 
+  // `boolean | string` design-type so the ValidationPipe's enableImplicitConversion can't run
+  // Boolean("false")===true (which would invert these filters). The @Transform yields the real boolean.
   @ApiPropertyOptional({ description: 'Paid reply status', type: Boolean })
-  paidReply?: boolean;
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
+  paidReply?: boolean | string;
 
   @ApiPropertyOptional({ description: 'Demo given status', type: Boolean })
-  demoGiven?: boolean;
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
+  demoGiven?: boolean | string;
 
   @ApiPropertyOptional({ description: 'Second show status', type: Boolean })
-  secondShow?: boolean;
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
+  secondShow?: boolean | string;
 
   @ApiPropertyOptional({ description: 'Profile name' })
   @Transform(({ value }: TransformFnParams) => value?.trim().toLowerCase())
@@ -49,5 +54,6 @@ export class SearchDto {
   chatId?: string;
 
   @ApiPropertyOptional({ description: 'Pics Sent status' })
-  picsSent?: boolean;
+  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
+  picsSent?: boolean | string;
 }

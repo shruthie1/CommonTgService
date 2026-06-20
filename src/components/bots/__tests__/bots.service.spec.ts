@@ -193,6 +193,21 @@ describe('BotsService - getBots', () => {
     const all2 = await service.getBots(); // now aggregated from caches
     expect(all2.length).toBe(2);
   });
+
+  test('getBots() returns the COMPLETE set even when only one category cache is warm', async () => {
+    // Real scenario: sendByCategoryWithFailover warms exactly one category at a time. A later
+    // getBots() must not return only that warm category and silently omit the rest.
+    await seedBot({ category: ChannelCategory.UNVDS });
+    await seedBot({ category: ChannelCategory.PROM_LOGS1 });
+
+    // Warm ONLY the UNVDS category cache (as a single-category fetch / failover would).
+    const oneCat = await service.getBots(ChannelCategory.UNVDS);
+    expect(oneCat.length).toBe(1);
+
+    // Now ask for all bots — must be 2, not just the 1 warm-category bot.
+    const all = await service.getBots();
+    expect(all.length).toBe(2);
+  });
 });
 
 describe('BotsService - getBotById', () => {

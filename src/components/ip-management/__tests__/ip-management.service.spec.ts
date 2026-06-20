@@ -319,6 +319,33 @@ describe('IpManagementService (real mongo)', () => {
             expect(ip.ipAddress).toBe('17.0.0.1');
         });
 
+        it('rotates each pool INDEPENDENTLY (a 2-IP filtered pool cycles even while the full pool is also used)', async () => {
+            // Real scenario: getNextIp is called for both the full pool (size 3) and a
+            // country-filtered pool (size 2). A single global counter % differing sizes makes
+            // the small pool skip/repeat. Each distinct pool must round-robin on its own.
+            await service.createProxyIp(baseProxy({ ipAddress: '19.0.0.1', port: 1, countryCode: 'US' }));
+            await service.createProxyIp(baseProxy({ ipAddress: '19.0.0.2', port: 2, countryCode: 'US' }));
+            await service.createProxyIp(baseProxy({ ipAddress: '19.0.0.3', port: 3, countryCode: 'IN' })); // full pool = 3, US pool = 2
+
+            // Real Redis INCR semantics: a separate counter PER KEY (not one global).
+            const counters = new Map<string, number>();
+            jest.spyOn(RedisClient, 'incr').mockImplementation(async (key: string) => {
+                const next = (counters.get(key) ?? 0) + 1;
+                counters.set(key, next);
+                return next;
+            });
+
+            // Interleave full-pool and US-pool calls; the US pool must cycle .1, .2, .1, .2.
+            const usSeq: string[] = [];
+            for (let i = 0; i < 4; i++) {
+                await service.getNextIp({});                       // full pool call (advances shared counter)
+                const us = await service.getNextIp({ countryCode: 'US' });
+                usSeq.push(us.ipAddress);
+            }
+            // Independent rotation => alternating; a shared global counter would NOT alternate cleanly.
+            expect(usSeq).toEqual(['19.0.0.1', '19.0.0.2', '19.0.0.1', '19.0.0.2']);
+        });
+
         it('lastUsed update failure is swallowed (fire-and-forget .catch)', async () => {
             await service.createProxyIp(baseProxy({ ipAddress: '18.0.0.1', port: 1300 }));
             jest.spyOn(RedisClient, 'incr').mockResolvedValue(1);

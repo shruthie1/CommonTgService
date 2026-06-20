@@ -737,6 +737,39 @@ describe('media-operations', () => {
             expect(r.data!.length).toBe(2);
             expect(r.data![0].messageId).toBe(30);
         });
+
+        test('multi-type hasMore is FALSE on the last page (exactly limit items, none beyond)', async () => {
+            // Real scenario: 2 media items total (1 photo + 1 video), limit=2. After the slice,
+            // filteredMessages.length === limit, which previously made hasMore always true and
+            // sent the dashboard paginating forever. Raw fetch had exactly 2 (not > 2) => no more.
+            const photoMsg = makePhotoMessage(20, [photoSize('m')]);
+            const videoMsg = makeDocMessage(30, makeDocument({ attributes: [new Api.DocumentAttributeVideo({ duration: 1, w: 1, h: 1 })], mimeType: 'video/mp4' }));
+            const getMessages = jest.fn(async (peer: any, opts: any) => {
+                if (opts.filter instanceof Api.InputMessagesFilterPhotos) return [photoMsg];
+                if (opts.filter instanceof Api.InputMessagesFilterVideo) return [videoMsg];
+                return [];
+            });
+            const ctx = makeCtx({ getMessages });
+            const r = await getMediaMetadata(ctx, { chatId: 'c', types: ['photo', 'video'], limit: 2 });
+            expect(r.data!.length).toBe(2);
+            expect(r.pagination.hasMore).toBe(false);
+            expect(r.pagination.nextMaxId).toBeUndefined();
+        });
+
+        test('multi-type hasMore is TRUE when the raw fetch exceeds the page limit', async () => {
+            const photos = [makePhotoMessage(20, [photoSize('m')]), makePhotoMessage(21, [photoSize('m')])];
+            const videos = [makeDocMessage(30, makeDocument({ attributes: [new Api.DocumentAttributeVideo({ duration: 1, w: 1, h: 1 })], mimeType: 'video/mp4' }))];
+            const getMessages = jest.fn(async (peer: any, opts: any) => {
+                if (opts.filter instanceof Api.InputMessagesFilterPhotos) return photos;
+                if (opts.filter instanceof Api.InputMessagesFilterVideo) return videos;
+                return [];
+            });
+            const ctx = makeCtx({ getMessages });
+            // 3 raw items, limit 2 -> there IS more.
+            const r = await getMediaMetadata(ctx, { chatId: 'c', types: ['photo', 'video'], limit: 2 });
+            expect(r.data!.length).toBe(2);
+            expect(r.pagination.hasMore).toBe(true);
+        });
         test('all types returns groups, with post-filter for sticker', async () => {
             const sticker = makeDocMessage(40, makeDocument({
                 attributes: [new Api.DocumentAttributeSticker({ alt: '', stickerset: new Api.InputStickerSetEmpty() })],

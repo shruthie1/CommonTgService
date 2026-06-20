@@ -246,8 +246,10 @@ export class TelegramService implements OnModuleDestroy {
     }
 
     async forwardMediaToBot(mobile: string, fromChatId: string): Promise<string> {
+        let clientObtained = false;
         try {
             const telegramClient = await connectionManager.getClient(mobile);
+            clientObtained = true;
             await telegramClient.forwardMedia('', fromChatId);
             const dialogs: any[] = [];
             // Use iterDialogs for memory-efficient iteration
@@ -287,13 +289,22 @@ export class TelegramService implements OnModuleDestroy {
                     }
             }
 
-            await connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
             return "Media forward initiated successfully";
         } catch (error) {
             this.logger.error(mobile, "Error forwarding media:", error);
             return `Media forward failed: ${error.message}`;
+        } finally {
+            // Always release the live TG connection — leaking it on the error path leaves a
+            // live session lingering in connectionManager (a fingerprint/resource liability).
+            if (clientObtained) {
+                try {
+                    await connectionManager.unregisterClient(mobile);
+                } catch (unregErr) {
+                    this.logger.error(mobile, "Error unregistering client after forwardMediaToBot:", unregErr);
+                }
+            }
         }
     }
 

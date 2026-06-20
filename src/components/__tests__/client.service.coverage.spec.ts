@@ -290,6 +290,24 @@ describe('ClientService coverage', () => {
             }));
         });
 
+        it('swap query accepts a candidate with EXACTLY the graduation channel threshold (200)', async () => {
+            // Warmup graduates an account to SESSION_ROTATED at channels >= 200, but the swap
+            // query used channels > 200, so an account sitting at exactly 200 graduated yet was
+            // never swap-eligible (phantom supply at the boundary). The two thresholds must agree.
+            process.env.AUTO_CLIENT_SETUP = 'true';
+            await service.onModuleInit();
+            await service.create(makeClientData({ clientId: 'swap-edge', mobile: '15558881000', session: 's' }));
+            bufferClientService.executeQuery.mockResolvedValue([]);
+            await service.setupClient('swap-edge', { reason: 'swap' } as any);
+
+            const query = bufferClientService.executeQuery.mock.calls[0][0];
+            // Build a doc at exactly 200 channels and assert the channel clause would ACCEPT it.
+            const clause = query.channels;
+            const accepts = (n: number) => clause.$gte !== undefined ? n >= clause.$gte : n > clause.$gt;
+            expect(accepts(200)).toBe(true);   // exactly-200 graduated account must be eligible
+            expect(accepts(199)).toBe(false);  // below threshold still excluded
+        });
+
         it('marks existing buffer inactive when no candidate and reason is permanent', async () => {
             process.env.AUTO_CLIENT_SETUP = 'true';
             await service.onModuleInit();

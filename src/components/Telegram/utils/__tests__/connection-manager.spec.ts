@@ -216,6 +216,32 @@ describe('ConnectionManager', () => {
         await clearAllClients();
     });
 
+    test('forceCleanup prefers evicting auto-disconnect/idle clients over in-use ones', async () => {
+        // Force-eviction ranked purely by lastUsed would evict the BUSIEST clients (their lastUsed
+        // is stale because it isn't refreshed during long ops). Prefer disposable candidates
+        // (autoDisconnect:true / errored) so an in-use autoDisconnect:false client survives.
+        const cm: any = connectionManager;
+        cm.clients.clear();
+        const destroyHeld = jest.fn().mockResolvedValue(undefined);
+        // The in-use client: oldest lastUsed, but explicitly keep-alive + connected.
+        cm.clients.set('inuse', {
+            client: { destroy: destroyHeld, connected: () => true },
+            lastUsed: 1, autoDisconnect: false, state: 'connected', connectionAttempts: 1,
+        });
+        // Plenty of disposable auto-disconnect clients (newer lastUsed, but safe to drop).
+        for (let i = 0; i < cm.MAX_CONNECTIONS; i++) {
+            cm.clients.set(`disp-${i}`, {
+                client: { destroy: jest.fn().mockResolvedValue(undefined), connected: () => true },
+                lastUsed: Date.now(), autoDisconnect: true, state: 'connected', connectionAttempts: 1,
+            });
+        }
+        await cm.forceCleanup();
+        // The in-use keep-alive client must NOT have been evicted while disposable ones existed.
+        expect(destroyHeld).not.toHaveBeenCalled();
+        expect(connectionManager.hasClient('inuse')).toBe(true);
+        cm.clients.clear();
+    });
+
     test('disconnectAll and shutdown clear all clients', async () => {
         await connectionManager.getClient('912');
         await connectionManager.disconnectAll();
@@ -326,6 +352,44 @@ describe('ConnectionManager', () => {
         // registered must not throw (the `if (clientInfo)` guard is false).
         const cm: any = connectionManager;
         expect(() => cm.updateLastUsed('not-registered')).not.toThrow();
+    });
+
+    test('cleanup does NOT destroy a STALE but healthy autoDisconnect:false client (long-held op)', async () => {
+        // A client acquired with autoDisconnect:false is explicitly "keep alive — I'm using it".
+        // lastUsed is only stamped at acquisition, so a warmup op held >10min (organic activity)
+        // looks stale. Destroying it mid-operation breaks 2FA/removeOtherAuths and can trip a
+        // false permanent account expiry. autoDisconnect:false must opt out of idle/stale cleanup.
+        const cm: any = connectionManager;
+        const destroy = jest.fn().mockResolvedValue(undefined);
+        cm.clients.set('held', {
+            client: { destroy, connected: () => true },
+            lastUsed: Date.now() - 30 * 60 * 1000, // 30 min ago (well past 2*IDLE_TIMEOUT)
+            autoDisconnect: false,
+            state: 'connected',
+            connectionAttempts: 1,
+        });
+        await cm.cleanup();
+        expect(connectionManager.hasClient('held')).toBe(true);
+        expect(destroy).not.toHaveBeenCalled();
+        cm.clients.delete('held');
+    });
+
+    test('cleanup reaps a DEAD-SOCKET keep-alive client (connected()===false) so it does not leak', async () => {
+        // The autoDisconnect:false exemption must not let a client whose MTProto socket has
+        // silently died linger forever (state stays 'connected', so isErrored is false). A dead
+        // socket is not "in use" — it must be reaped regardless of autoDisconnect.
+        const cm: any = connectionManager;
+        const destroy = jest.fn().mockResolvedValue(undefined);
+        cm.clients.set('deadkeep', {
+            client: { destroy, connected: () => false }, // socket dropped
+            lastUsed: Date.now() - 30 * 60 * 1000,
+            autoDisconnect: false,
+            state: 'connected', // never flipped to 'error' (the bug)
+            connectionAttempts: 1,
+        });
+        await cm.cleanup();
+        expect(connectionManager.hasClient('deadkeep')).toBe(false);
+        cm.clients.delete('deadkeep');
     });
 
     test('cleanup keeps a fresh, healthy, non-auto-disconnect client', async () => {

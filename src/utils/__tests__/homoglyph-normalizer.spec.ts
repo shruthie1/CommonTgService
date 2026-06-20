@@ -71,6 +71,17 @@ describe('nameMatchesAssignment', () => {
     test('handles names with leading/trailing whitespace after emoji strip', () => {
         expect(nameMatchesAssignment('  Anjali  ', 'anjali')).toBe(true);
     });
+
+    test('an EMPTY assigned name must NOT match every profile (warmup-verification guard)', () => {
+        // includes('') is always true — an unset assigned name would falsely "verify" any
+        // profile name, making the warmup engine believe the name step is done when it isn't.
+        expect(nameMatchesAssignment('Priya', '')).toBe(false);
+        expect(nameMatchesAssignment('Priya', '   ')).toBe(false);
+    });
+
+    test('an empty TG name does not match a real assigned name', () => {
+        expect(nameMatchesAssignment('', 'Priya')).toBe(false);
+    });
 });
 
 describe('lastNameMatches', () => {

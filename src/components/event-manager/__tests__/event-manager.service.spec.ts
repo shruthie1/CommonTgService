@@ -266,6 +266,21 @@ describe('EventManagerService', () => {
             const after = await model.findById(created._id).lean();
             expect(after).toBeTruthy();
             expect(after!.time).toBeGreaterThan(created.time);
+            expect(after!.attempts).toBe(1); // first failure increments the counter
+        });
+
+        it('a failing event increments attempts and is GIVEN UP (deleted) after the cap', async () => {
+            // Real scenario: a permanently-dead profile.repl. Without a cap the event reschedules
+            // every tick forever (background load + notification spam). After MAX attempts it must
+            // be dropped, not rescheduled again.
+            const MAX = 5;
+            // Event already at the last allowed attempt; the next failure should delete it.
+            const created = await model.create(evt({ type: 'call', time: Date.now() - 1000, attempts: MAX - 1 }));
+            clientStub.findOne.mockResolvedValue({ repl: 'https://x.repl/' });
+            mockedFetch.mockResolvedValue(null); // keeps failing
+            await tick();
+            const after = await model.findById(created._id).lean();
+            expect(after).toBeNull(); // given up & removed, not rescheduled forever
         });
 
         it('reschedule updateOne throwing -> error log (does not throw)', async () => {

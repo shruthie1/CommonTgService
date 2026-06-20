@@ -749,6 +749,22 @@ describe('session.service', () => {
                 expect(r.message).toMatch(/fallback/);
             });
 
+            it('counts ONE rate-limit slot per fallback request (not two)', async () => {
+                // getOldestSessionOrCreate calls checkRateLimit, then the fallback path calls the
+                // real SessionService.createSession which calls checkRateLimit AGAIN — double-billing
+                // a single request against the 20/hour budget, wrongly blocking healthy accounts.
+                audit.querySessionAudits.mockResolvedValue({ sessions: [], total: 0 });
+                // Let the inner manager create succeed so SessionService.createSession runs for real
+                // (its checkRateLimit included), without spying out SessionService.createSession.
+                jest.spyOn(service['sessionManager'], 'createSession').mockResolvedValue({ success: true, session: 'FALLBACK' } as any);
+
+                const r = await service.getOldestSessionOrCreate({ mobile: '918888888888', allowFallback: true });
+                expect(r.success).toBe(true);
+
+                const counter = (service as any).rateLimitMap.get('918888888888');
+                expect(counter.count).toBe(1); // one logical request => one slot
+            });
+
             it('returns FALLBACK_CREATION_FAILED when fallback fails', async () => {
                 audit.querySessionAudits.mockResolvedValue({ sessions: [], total: 0 });
                 jest.spyOn(service, 'createSession').mockResolvedValue({ success: false, error: 'no', retryable: true });
@@ -765,8 +781,10 @@ describe('session.service', () => {
                 expect(['FALLBACK_DISABLED', 'INTERNAL_ERROR']).toContain(r.code);
             });
 
-            it('handles INTERNAL_ERROR when checkRateLimit throws', async () => {
-                jest.spyOn(service as any, 'checkRateLimit').mockImplementation(() => { throw new Error('rl boom'); });
+            it('handles INTERNAL_ERROR when the rate-limit check throws', async () => {
+                // getOldestSessionOrCreate uses a non-incrementing peekRateLimit (so a request is
+                // billed once, not twice). Force it to throw to exercise the outer catch.
+                jest.spyOn(service as any, 'peekRateLimit').mockImplementation(() => { throw new Error('rl boom'); });
                 const r = await service.getOldestSessionOrCreate({ mobile: '919999999999' });
                 expect(r.code).toBe('INTERNAL_ERROR');
             });

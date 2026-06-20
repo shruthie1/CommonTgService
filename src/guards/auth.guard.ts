@@ -79,8 +79,15 @@ export class AuthGuard implements CanActivate {
             request.query['apikey']?.toString() ||
             request.query['api_key']?.toString();
 
-        // ✅ Step 1: Skip ignored paths early
-        if (this.isIgnoredPath(path, url, originalUrl)) {
+        // ✅ Step 1: Skip ignored paths early.
+        // Some ignored paths (e.g. /builds) are only meant to be PUBLIC for safe reads — the
+        // ignore match is path-only and would otherwise also exempt mutating verbs (PATCH/POST),
+        // letting an unauthenticated caller overwrite build/deploy config. Only honor the bypass
+        // for GET/HEAD/OPTIONS on those write-protected paths.
+        const method = (request.method || 'GET').toUpperCase();
+        const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+        const ignoredPathIsWriteProtected = this.isWriteProtectedIgnorePath(path, url, originalUrl);
+        if (this.isIgnoredPath(path, url, originalUrl) && (isSafeMethod || !ignoredPathIsWriteProtected)) {
             this.sanitizeQuery(request, queryApiKey);
             return true;
         }
@@ -176,6 +183,23 @@ export class AuthGuard implements CanActivate {
         } catch {
             return this.redactQuerySecret(url);
         }
+    }
+
+    // Ignored paths that expose a mutating route at the same URL (so the bypass must be
+    // restricted to safe HTTP methods only). e.g. GET /builds is public, PATCH /builds is not.
+    private static readonly WRITE_PROTECTED_IGNORE_PATHS: (string | RegExp)[] = ['/builds'];
+
+    private isWriteProtectedIgnorePath(...urls: string[]): boolean {
+        for (const urlToTest of urls.filter(Boolean)) {
+            for (const guarded of AuthGuard.WRITE_PROTECTED_IGNORE_PATHS) {
+                if (typeof guarded === 'string') {
+                    if (guarded.toLowerCase() === urlToTest.toLowerCase()) return true;
+                } else if (guarded.test(urlToTest)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private isIgnoredPath(...urls: string[]): boolean {

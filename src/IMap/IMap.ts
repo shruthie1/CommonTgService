@@ -278,7 +278,16 @@ export class MailReader {
                 });
             });
 
-            const match = candidates.sort((a, b) => a.order - b.order)[0];
+            // Prefer the NEWEST code by received date — sequence number tracks mailbox insertion,
+            // not the Date header, so a re-delivered/re-sent email can have a lower seqno than an
+            // older one. Selecting by seqno could return a stale OTP and delete the wrong message.
+            // Fall back to seqno order (most-recent first) only when dates are equal/missing.
+            const match = candidates.sort((a, b) => {
+                const da = a.receivedAt ? a.receivedAt.getTime() : -Infinity;
+                const db = b.receivedAt ? b.receivedAt.getTime() : -Infinity;
+                if (db !== da) return db - da; // newer date first
+                return a.order - b.order;       // tie-break: original (seqno) order
+            })[0];
             if (!match) {
                 console.log('No matching Telegram verification code found');
                 return null;

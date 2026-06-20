@@ -606,7 +606,10 @@ export class UsersService {
   }
 
   async search(filter: SearchUserDto): Promise<User[]> {
-    const query: QueryFilter<UserDocument> = { ...filter };
+    // SearchUserDto's boolean fields are typed `boolean | string` so the ValidationPipe's
+    // implicit conversion can't invert them (see the DTO); by the time we get here the
+    // @Transform has produced real booleans, so the spread is safe to treat as a query filter.
+    const query: QueryFilter<UserDocument> = { ...filter } as QueryFilter<UserDocument>;
     if (typeof query.mobile === 'string' && query.mobile) {
       query.mobile = this.canonicalMobile(query.mobile);
     }

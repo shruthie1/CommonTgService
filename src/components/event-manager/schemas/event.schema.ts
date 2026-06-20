@@ -22,6 +22,11 @@ export class Event {
 
   @Prop({ type: MongooseSchema.Types.Mixed, default: {} })
   payload: any;
+
+  // Number of failed execution attempts. Used to give up (delete) after a cap so a
+  // permanently-dead profile.repl doesn't reschedule forever every tick.
+  @Prop({ type: Number, default: 0 })
+  attempts: number;
 }
 
 export const EventSchema = SchemaFactory.createForClass(Event);

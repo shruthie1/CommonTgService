@@ -70,6 +70,19 @@ describe('UsersController', () => {
                 excludeTwoFA: false,
             });
         });
+
+        it('rejects non-numeric minScore instead of passing NaN into the query', async () => {
+            // parseFloat("abc")=NaN flowed into {bestScore:{$gt:NaN}} -> matched nothing ->
+            // silently empty leaderboard with no error. Must 400 like the sibling endpoint does.
+            await expect(controller.topRelationships(undefined, undefined, 'abc', undefined, undefined))
+                .rejects.toThrow(BadRequestException);
+            expect(stub.topRelationships).not.toHaveBeenCalled();
+        });
+
+        it('rejects non-numeric page', async () => {
+            await expect(controller.topRelationships('abc', undefined, undefined, undefined, undefined))
+                .rejects.toThrow(BadRequestException);
+        });
     });
 
     describe('getTopInteractionUsers', () => {

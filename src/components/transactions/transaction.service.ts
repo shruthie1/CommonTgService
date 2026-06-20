@@ -151,7 +151,8 @@ export class TransactionService {
       const remainingFilters = {};
       
       if (filters.profile) remainingFilters['profile'] = filters.profile;
-      if (filters.amount) remainingFilters['amount'] = filters.amount;
+      // amount can legitimately be 0 (zero-value / refund lookups) — check for presence, not truthiness.
+      if (filters.amount !== undefined && filters.amount !== null) remainingFilters['amount'] = filters.amount;
       if (filters.issue) remainingFilters['issue'] = filters.issue;
       if (filters.refundMethod) remainingFilters['refundMethod'] = filters.refundMethod;
       if (filters.status) remainingFilters['status'] = filters.status;
