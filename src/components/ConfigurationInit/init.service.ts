@@ -71,10 +71,10 @@ export class ConfigurationService implements OnModuleInit {
         }
 
         for (const [key, value] of Object.entries(configuration)) {
-            if (value !== undefined && value !== null) {
+            if (value !== undefined && value !== null && !ConfigurationService.NON_ENV_KEYS.has(key)) {
                 // Don't override existing environment variables
                 if (!process.env[key]) {
-                    process.env[key] = String(value);
+                    process.env[key] = this.serializeEnvValue(value);
                     this.logger.debug(`Set environment variable: ${key}`);
                 }
             }
@@ -99,8 +99,8 @@ export class ConfigurationService implements OnModuleInit {
 
             // Update environment variables with new values
             Object.entries(updateData).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    process.env[key] = String(value);
+                if (value !== undefined && value !== null && !ConfigurationService.NON_ENV_KEYS.has(key)) {
+                    process.env[key] = this.serializeEnvValue(value);
                 }
             });
 
@@ -108,6 +108,25 @@ export class ConfigurationService implements OnModuleInit {
         } catch (error) {
             this.logger.error('Failed to update configuration', error);
             throw error;
+        }
+    }
+
+    // Mongo storage metadata (timestamps:true) — not real config, must not pollute process.env.
+    private static readonly NON_ENV_KEYS = new Set(['createdAt', 'updatedAt', '__v', '_id']);
+
+    /**
+     * Env vars are strings. Primitives stringify cleanly; objects/arrays must be JSON-serialized
+     * (String({}) yields the useless "[object Object]"). Consumers JSON.parse non-primitive values.
+     */
+    private serializeEnvValue(value: unknown): string {
+        if (typeof value === 'string') return value;
+        if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+            return String(value);
+        }
+        try {
+            return JSON.stringify(value);
+        } catch {
+            return String(value);
         }
     }
 }

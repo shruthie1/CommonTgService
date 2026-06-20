@@ -110,4 +110,36 @@ describe('setProcessListeners', () => {
     process.emit('exit' as any, 0);
     expect(logSpy).toHaveBeenCalledWith('🛑 Application closed with exit code 0');
   });
+
+  it('awaits the onShutdown cleanup callback BEFORE exiting on SIGTERM', async () => {
+    // The signal handler must run graceful cleanup (e.g. app.close() -> onModuleDestroy:
+    // close Mongo, clear the health-check interval, send the shutdown notification) before
+    // process.exit. The old handler exited synchronously, so cleanup never ran on a PM2
+    // restart / buffer-swap restart.
+    let cleanupRan = false;
+    let exitedBeforeCleanup = false;
+    exitSpy.mockImplementation(((() => {
+      if (!cleanupRan) exitedBeforeCleanup = true;
+    }) as any));
+    const onShutdown = jest.fn(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      cleanupRan = true;
+    });
+
+    setProcessListeners(onShutdown);
+    process.emit('SIGTERM' as any);
+    // allow the async shutdown chain to settle
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(onShutdown).toHaveBeenCalled();
+    expect(cleanupRan).toBe(true);
+    expect(exitedBeforeCleanup).toBe(false); // exit only after cleanup completed
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('still exits if no onShutdown callback is provided (back-compat)', () => {
+    setProcessListeners();
+    process.emit('SIGINT' as any);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
 });

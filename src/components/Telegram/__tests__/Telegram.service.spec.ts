@@ -38,7 +38,12 @@ jest.mock('../TelegramManager', () => ({
 }));
 
 jest.mock('../../../cloudinary', () => ({
-    CloudinaryService: { getInstance: jest.fn().mockResolvedValue(undefined) },
+    CloudinaryService: {
+        getInstance: jest.fn().mockResolvedValue({
+            // per-call unique extract dir (the isolation fix)
+            getResourcesFromFolder: jest.fn().mockResolvedValue('/tmp/cloudinary-extract-test'),
+        }),
+    },
 }));
 
 jest.mock('../../../utils/fetchWithTimeout', () => ({
@@ -449,6 +454,8 @@ describe('TelegramService — setProfilePic', () => {
         expect(CloudinaryService.getInstance).toHaveBeenCalledWith('Name');
         expect(fakeManager.deleteProfilePhotos).toHaveBeenCalled();
         expect(fakeManager.updateProfilePic).toHaveBeenCalledTimes(3);
+        // pics are read from the per-call unique extract dir, NOT a shared cwd
+        expect(fakeManager.updateProfilePic).toHaveBeenCalledWith('/tmp/cloudinary-extract-test/dp1.jpg');
         expect(mockConnectionManager.unregisterClient).toHaveBeenCalledWith('m');
     });
 
@@ -457,6 +464,17 @@ describe('TelegramService — setProfilePic', () => {
         const { svc } = makeService();
         await expect(svc.setProfilePic('m', 'Name')).rejects.toBeInstanceOf(HttpException);
         expect(mockConnectionManager.unregisterClient).toHaveBeenCalledWith('m');
+    });
+
+    test('removes the per-call extract dir after use (no /tmp leak)', async () => {
+        // Each setProfilePic extracts pics into a UNIQUE tmp dir; if it isn't cleaned up, every
+        // warmup/rotation profile-pic op leaks a dir forever -> disk/inode exhaustion.
+        const fs = require('fs');
+        const rmSpy = jest.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+        const { svc } = makeService();
+        await svc.setProfilePic('m', 'Name');
+        expect(rmSpy).toHaveBeenCalledWith('/tmp/cloudinary-extract-test', expect.objectContaining({ recursive: true }));
+        rmSpy.mockRestore();
     });
 });
 

@@ -381,22 +381,30 @@ export class TelegramService implements OnModuleDestroy {
     ) {
         const telegramClient = await connectionManager.getClient(mobile)
         await telegramClient.deleteProfilePhotos();
+        let picsDir: string | undefined;
         try {
-            await CloudinaryService.getInstance(name);
+            const cloudinary = await CloudinaryService.getInstance(name);
+            // Extract this persona's pics into a UNIQUE per-call dir (returned) rather than a
+            // shared cwd — otherwise concurrent setProfilePic calls cross-contaminate accounts.
+            picsDir = await cloudinary.getResourcesFromFolder(name);
             await sleep(2000);
-            const rootPath = process.cwd();
-            this.logger.debug(mobile, "checking path", rootPath)
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
+            this.logger.debug(mobile, "profile pics dir", picsDir)
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp1.jpg'));
             await sleep(3000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp2.jpg'));
             await sleep(3000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp3.jpg'));
             await sleep(1000);
             return 'Profile pic set successfully'
         } catch (error) {
             const errorDetails = parseError(error, `Failed to Set Profile Pics: ${mobile}`)
             throw new HttpException(errorDetails.message, errorDetails.status)
         } finally {
+            // Remove the unique per-call extract dir — otherwise every profile-pic op leaks a
+            // /tmp directory forever (disk/inode exhaustion on a long-running process).
+            if (picsDir) {
+                try { fs.rmSync(picsDir, { recursive: true, force: true }); } catch { /* best-effort */ }
+            }
             await connectionManager.unregisterClient(mobile);
         }
     }

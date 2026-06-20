@@ -78,6 +78,23 @@ describe('createClient', () => {
         expect(lastClient.addEventHandler).not.toHaveBeenCalled();
     });
 
+    test('the registered _errorHandler reaps a TIMED-OUT, disconnected client', async () => {
+        // _errorHandler is set inside createClient; it must operate on the LIVE client, not a
+        // stale construction-time ctx whose client is still null (which would make the reap a
+        // no-op so a dead client never gets unregistered).
+        jest.useFakeTimers();
+        const ctx = makeCtx();
+        await createClient(ctx, new StringSession(''));
+        expect(typeof lastClient._errorHandler).toBe('function');
+
+        lastClient.connected = false; // socket died
+        await lastClient._errorHandler(new Error('TIMEOUT'));
+        await jest.advanceTimersByTimeAsync(10000);
+
+        expect(unregisterClient).toHaveBeenCalledWith('900');
+        jest.useRealTimers();
+    });
+
     test('throws and destroys when client not connected after handler attach', async () => {
         (withTimeout as jest.Mock).mockImplementationOnce(async (fn: any) => fn());
         const ctx = makeCtx();

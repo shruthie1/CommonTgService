@@ -26,7 +26,12 @@ export async function createClient(
         await withTimeout(async () => {
             client = new TelegramClient(session, apiId, apiHash, tgConfiguration);
             client.setLogLevel(LogLevel.ERROR);
-            (client as TelegramClient & { _errorHandler: (error: Error) => Promise<void> })._errorHandler = async (error: Error) => { handleClientError(ctx, error); };
+            const createdClient = client;
+            // The error handler must see the LIVE client. The passed-in `ctx.client` is the
+            // construction-time snapshot (still null here), so build a ctx that points at the
+            // client we just created — otherwise the timeout-reap can never see a live/dead
+            // socket and never unregisters a timed-out client.
+            (client as TelegramClient & { _errorHandler: (error: Error) => Promise<void> })._errorHandler = async (error: Error) => { handleClientError({ ...ctx, client: createdClient }, error); };
             await client.connect();
             ctx.logger.info(ctx.phoneNumber, 'Connected Client Succesfully');
         }, {

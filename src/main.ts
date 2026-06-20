@@ -1,4 +1,4 @@
-import { setProcessListeners } from './processListeners';
+import { setProcessListeners, setShutdownHandler } from './processListeners';
 setProcessListeners();
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
@@ -67,6 +67,15 @@ async function bootstrap() {
       // }
     }));
 
+
+    // Route OS signals through a SINGLE graceful shutdown: our processListeners handler awaits
+    // app.close() (which runs NestJS onModuleDestroy: Mongo close, interval cleanup, shutdown
+    // notification) before process.exit. We intentionally do NOT call app.enableShutdownHooks()
+    // — that registers Nest's own competing signal listeners, which would run onModuleDestroy a
+    // second time concurrently with ours. One deterministic path only.
+    setShutdownHandler(async () => {
+      await app.close();
+    });
 
     await app.init();
     await app.listen(process.env.PORT || 9002);

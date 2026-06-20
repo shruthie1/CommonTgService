@@ -99,6 +99,28 @@ describe('downloadAndExtractZip', () => {
             /Unable to download zip file/,
         );
     });
+
+    test('uses a UNIQUE zip + extract path per call (no shared temp.zip / cwd collision)', async () => {
+        // Concurrent setProfilePic for two different personas previously shared the fixed
+        // `temp.zip` and extracted to cwd over the same dp1/dp2/dp3.jpg, cross-contaminating
+        // accounts (account A could upload account B's photos). Each call must isolate its paths.
+        fetchWithTimeout.mockResolvedValue({ status: 200, data: Buffer.from('zip') });
+        const svc = new CloudinaryService();
+
+        const dirA = await svc.downloadAndExtractZip('https://cms/folders/A/files/download-all');
+        const dirB = await svc.downloadAndExtractZip('https://cms/folders/B/files/download-all');
+
+        // The method returns the per-call extract directory, and the two differ.
+        expect(typeof dirA).toBe('string');
+        expect(dirA).not.toBe(dirB);
+
+        // The zip files written are distinct paths (not a single shared temp.zip).
+        const writtenPaths = fsMock.writeFileSync.mock.calls.map((c: any[]) => c[0]);
+        expect(new Set(writtenPaths).size).toBe(writtenPaths.length);
+        // adm-zip extracted to two distinct dirs.
+        const extractDirs = extractAllTo.mock.calls.map((c: any[]) => c[0]);
+        expect(new Set(extractDirs).size).toBe(extractDirs.length);
+    });
 });
 
 describe('getResourcesFromFolder', () => {

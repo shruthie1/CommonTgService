@@ -97,6 +97,27 @@ describe('ConfigurationService (real Mongo)', () => {
         delete process.env.EXISTING_ENV_KEY;
     });
 
+    test('setEnv JSON-serializes object/array config values (not "[object Object]")', async () => {
+        // A non-primitive config field would otherwise become "[object Object]" via String(value),
+        // corrupting any consumer that JSON.parses it.
+        const service = makeService();
+        await model.create({ OBJ_CFG_TEST: { a: 1, b: ['x'] } } as any);
+        await service.setEnv();
+        expect(process.env.OBJ_CFG_TEST).toBe('{"a":1,"b":["x"]}');
+        expect(JSON.parse(process.env.OBJ_CFG_TEST!)).toEqual({ a: 1, b: ['x'] });
+        delete process.env.OBJ_CFG_TEST;
+    });
+
+    test('setEnv does not leak Mongo timestamp fields into process.env', async () => {
+        const service = makeService();
+        await model.create({ TS_CFG_TEST: 'v' } as any); // schema has timestamps:true
+        await service.setEnv();
+        // createdAt/updatedAt are storage metadata, not config — must not become env vars.
+        expect(process.env.createdAt).toBeUndefined();
+        expect(process.env.updatedAt).toBeUndefined();
+        delete process.env.TS_CFG_TEST;
+    });
+
     test('onModuleInit runs init flow and sends notification with clientId from env', async () => {
         process.env.clientId = 'env-client';
         const service = makeService();

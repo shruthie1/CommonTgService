@@ -4,14 +4,52 @@
 failing test asserting the real production scenario, then a minimal source fix, then
 green. Externals-only mocking; real MongoDB (mongodb-memory-server) for data paths.
 
-**Outcome:** 50 reproducible production bugs found and fixed.
-Final state — **3,723 tests pass** (119 suites); `tsc`, `lint`, `build` all clean.
+**Outcome:** 55 reproducible production bugs found and fixed across 17 audit rounds.
+Final state — **3,730 tests pass** (119 suites); `tsc`, `lint`, `build` all clean.
 Coverage rose from 39.8% → 96.7% lines and 21.5% → 92.9% branches.
-The hunt stopped after **3 consecutive clean audit rounds** across three distinct
-attack angles (workflows/edge-cases, cross-module contracts, idempotency/retries).
+The hunt converged twice on **3 consecutive clean audit rounds**: first across
+workflows/edge-cases, cross-module contracts, and idempotency/retries (rounds 10-12);
+then (after a re-invoked goal targeting fresh surface) across re-audit-of-changes,
+time/scale boundaries, and error-path/dependency-failure injection (rounds 15-17).
 
-Commits: `4d6448b` (coverage + scenario-audit fixes), `09eabde` (bug-hunt fixes),
-on branch `tests/coverage-and-bugfixes`.
+Commits: `4d6448b` (coverage + scenario-audit fixes), `09eabde` (bug-hunt rounds 4-9),
+`f80ac1b` (this report), and a final commit for rounds 13-14, on branch
+`tests/coverage-and-bugfixes`.
+
+### Phase 3 — config/lifecycle/upload bugs (rounds 13-14)
+- **🔴 Graceful shutdown was dead code** (`processListeners.ts`/`main.ts`): SIGTERM handler
+  `process.exit(0)`'d synchronously and `enableShutdownHooks` was never called, so
+  `InitModule.onModuleDestroy` (Mongo close, health-check interval clear, "Service Stopped"
+  alert) never ran on the frequent PM2/buffer-swap restarts → in-flight writes cut, leaked
+  interval, no shutdown visibility. Fixed: signal handler awaits `app.close()` (single
+  deterministic path, 20s cap) before exit.
+- **🔴 Concurrent profile-pic cross-contamination** (`cloudinary.ts`/`setProfilePic`): shared
+  `temp.zip` + extract to cwd over fixed dp1/dp2/dp3.jpg via a singleton → concurrent calls
+  (different personas) could make an account wear another account's photos (fingerprinting
+  risk) or hit an unlink race. Fixed: unique per-call extract dir, returned + read from it.
+- **🟠 Config value coercion** (`init.service.ts`): `String(value)` turned object/array config
+  into `"[object Object]"` and leaked Mongo `createdAt`/`updatedAt` into `process.env`. Fixed:
+  JSON-serialize non-primitives + skip storage-metadata keys.
+- **🟠 `/tmp` leak (regression from the cloudinary fix)**: the unique extract dir was never
+  removed → unbounded `/tmp` growth on every warmup/rotation profile-pic op. Fixed: `rmSync`
+  in `finally`. (Caught by re-auditing my own change — round 14.)
+- **🟠 Dead timeout-reap** (`client-operations.ts`): the GramJS `_errorHandler` closure captured
+  a construction-time `ctx` whose `.client` was still `null`, so the fast timeout-driven reap of
+  a dead/timed-out client never fired (only the periodic-cleanup backstop did). Fixed: closure
+  builds ctx from the live created client.
+
+Plus a cleanup: removed the redundant `enableShutdownHooks()` so shutdown runs `onModuleDestroy`
+once (not twice racing).
+
+### Surfaced, NOT auto-fixed (need a decision; documented in project memory)
+- **stats/stats2** `update`/`deleteOne` query `{chatId, profile}` while the unique key is
+  `{chatId, profile, client}` — can mutate/delete the wrong client's row. Fix is an API contract
+  change (add `client` to the route) with cross-repo (tg-aut) impact.
+- **proxy-ip conflicting unique indexes** — needs a DB migration (drop `ipAddress_1`).
+- **event-manager at-least-once retry** — duplicate effect lives in tg-aut (different repo).
+- **handleSetupClient** catch lacks a `!cutoverCommitted` guard (latent; no trigger today).
+- Low-sev: webshare rollback prior-status, `SessionStatus.ACTIVE` never written,
+  timestamp.service `push(undefined)`, `User.mobile unique` vs one-doc-per-session.
 
 Severity legend: 🔴 account-loss/security/data-loss · 🟠 incorrect-results/stuck/crash · 🟡 lower.
 
