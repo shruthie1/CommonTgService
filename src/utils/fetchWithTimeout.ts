@@ -271,7 +271,7 @@ export async function fetchWithTimeout(
     maxRetries:
       maxRetries !== undefined
         ? maxRetries
-        : options.retryConfig?.maxRetries || DEFAULT_RETRY_CONFIG.maxRetries,
+        : options.retryConfig?.maxRetries ?? DEFAULT_RETRY_CONFIG.maxRetries,
   };
 
   const notificationConfig: NotificationConfig = {

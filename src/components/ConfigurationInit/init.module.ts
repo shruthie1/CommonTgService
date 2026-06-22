@@ -168,7 +168,13 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
   private async sendNotification(message: string): Promise<void> {
     try {
       const url = `${notifbot()}&text=${encodeURIComponent(message)}`;
-      await fetchWithTimeout(url, { timeout: 5000 });
+      // Best-effort startup ping: no retries / no failure-channel notification so
+      // a cancelled or failed send doesn't loop 3x or spam the failures channel.
+      await fetchWithTimeout(url, {
+        timeout: 5000,
+        retryConfig: { maxRetries: 0 },
+        notificationConfig: { enabled: false },
+      });
     } catch (error) {
       console.warn('Failed to send notification:', error);
       // Don't throw - notification failure shouldn't break initialization

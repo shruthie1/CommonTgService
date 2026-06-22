@@ -150,6 +150,17 @@ describe('retry logic', () => {
         expect(axiosFn).toHaveBeenCalledTimes(2); // attempts 0 and 1
     });
 
+    test('maxRetries: 0 via options is honoured (single attempt, no retry)', async () => {
+        // Regression: `?? DEFAULT` (not `|| DEFAULT`) so an explicit 0 is not
+        // swallowed and silently turned into the default of 3.
+        axiosFn.mockRejectedValue(axiosError({ code: 'ETIMEDOUT' }));
+        const res = await fetchWithTimeout('https://api.example.com/x', {
+            retryConfig: { maxRetries: 0 },
+        });
+        expect(res).toBeUndefined();
+        expect(axiosFn).toHaveBeenCalledTimes(1); // attempt 0 only, no retry
+    });
+
     test('default maxRetries (3) when nothing provided -> 4 attempts', async () => {
         axiosFn.mockRejectedValue(axiosError({ code: 'ECONNREFUSED' }));
         const res = await fetchWithTimeout('https://api.example.com/x');
