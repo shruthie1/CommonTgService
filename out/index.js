@@ -1213,7 +1213,11 @@ let InitModule = InitModule_1 = class InitModule {
     async sendNotification(message) {
         try {
             const url = `${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(message)}`;
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { timeout: 5000 });
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(url, {
+                timeout: 5000,
+                retryConfig: { maxRetries: 0 },
+                notificationConfig: { enabled: false },
+            });
         }
         catch (error) {
             console.warn('Failed to send notification:', error);
@@ -42690,7 +42694,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
         ...options.retryConfig,
         maxRetries: maxRetries !== undefined
             ? maxRetries
-            : options.retryConfig?.maxRetries || DEFAULT_RETRY_CONFIG.maxRetries,
+            : options.retryConfig?.maxRetries ?? DEFAULT_RETRY_CONFIG.maxRetries,
     };
     const notificationConfig = {
         ...DEFAULT_NOTIFICATION_CONFIG,
