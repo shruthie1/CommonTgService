@@ -68,9 +68,7 @@ async function runWithTimeout(promise, timeoutMs, cancelSignal, errorMessage) {
         }
     }
 }
-function defaultShouldRetry(error, attempt) {
-    if (attempt >= 3)
-        return false;
+function defaultShouldRetry(error, _attempt) {
     if (error?.message?.toLowerCase().includes("cancelled"))
         return false;
     const msg = (error?.message || "").toLowerCase();

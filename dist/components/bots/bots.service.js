@@ -163,17 +163,14 @@ let BotsService = class BotsService {
             bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
             return bots;
         }
-        const allCategories = Object.values(ChannelCategory);
-        const allBots = [];
-        for (const cat of allCategories) {
-            const bots = this.cache.get(`category:${cat}`) || [];
-            allBots.push(...bots);
-        }
-        if (allBots.length > 0) {
-            return allBots;
+        const ALL_BOTS_KEY = 'all-bots';
+        const cachedAll = this.cache.get(ALL_BOTS_KEY);
+        if (cachedAll) {
+            return cachedAll;
         }
         console.warn('Cache miss for all bots');
         const bots = await this.botModel.find().lean().exec();
+        this.cache.set(ALL_BOTS_KEY, bots);
         bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
         const botsByCategory = bots.reduce((acc, bot) => {
             if (!acc[bot.category])

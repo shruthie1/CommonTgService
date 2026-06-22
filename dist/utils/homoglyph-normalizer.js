@@ -52,6 +52,8 @@ function cleanDisplayName(name) {
 function nameMatchesAssignment(tgFirstName, assignedFirstName) {
     const normalized = cleanDisplayName(tgFirstName).toLowerCase();
     const assigned = assignedFirstName.toLowerCase().trim();
+    if (!assigned || !normalized)
+        return false;
     return normalized.includes(assigned);
 }
 function lastNameMatches(tgLastName, assignedLastName) {

@@ -48,8 +48,11 @@ function scoreRelationship(chat) {
     const negativePenalty = Math.min(negativeKeywordCount, 200) * 8.0;
     const mutualScore = isMutualContact ? 50 : 0;
     const commonChatScore = Math.min(commonChats, 10) * 15.0;
-    const daysSinceLastMessage = lastMessageDate
+    const rawDaysSinceLastMessage = lastMessageDate
         ? (Date.now() - new Date(lastMessageDate).getTime()) / (1000 * 60 * 60 * 24)
+        : 999;
+    const daysSinceLastMessage = Number.isFinite(rawDaysSinceLastMessage)
+        ? Math.max(0, rawDaysSinceLastMessage)
         : 999;
     const recencyBonus = daysSinceLastMessage <= 90
         ? 100 * (1 - daysSinceLastMessage / 90)

@@ -32,10 +32,22 @@ let UsersController = class UsersController {
         return this.usersService.search(queryParams);
     }
     async topRelationships(page, limit, minScore, gender, excludeTwoFA) {
+        const pageNum = page ? parseInt(page, 10) : undefined;
+        const limitNum = limit ? parseInt(limit, 10) : undefined;
+        const minScoreNum = minScore ? parseFloat(minScore) : undefined;
+        if (pageNum !== undefined && (isNaN(pageNum) || pageNum < 1)) {
+            throw new common_1.BadRequestException('Page must be a positive integer');
+        }
+        if (limitNum !== undefined && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 100');
+        }
+        if (minScoreNum !== undefined && (isNaN(minScoreNum) || minScoreNum < 0)) {
+            throw new common_1.BadRequestException('minScore must be a non-negative number');
+        }
         return this.usersService.topRelationships({
-            page: page ? parseInt(page, 10) : undefined,
-            limit: limit ? parseInt(limit, 10) : undefined,
-            minScore: minScore ? parseFloat(minScore) : undefined,
+            page: pageNum,
+            limit: limitNum,
+            minScore: minScoreNum,
             gender,
             excludeTwoFA: excludeTwoFA === 'true'
         });
@@ -122,6 +134,12 @@ let UsersController = class UsersController {
         const order = sortOrder === 'asc' ? 1 : -1;
         const limitNum = limit ? parseInt(limit, 10) : 20;
         const skipNum = skip ? parseInt(skip, 10) : 0;
+        if (!Number.isInteger(limitNum) || limitNum < 1) {
+            throw new common_1.BadRequestException('Limit must be a positive integer');
+        }
+        if (!Number.isInteger(skipNum) || skipNum < 0) {
+            throw new common_1.BadRequestException('Skip must be a non-negative integer');
+        }
         return this.usersService.aggregateSort(field, order, limitNum, skipNum);
     }
     async aggregateSortQuery(requestBody) {

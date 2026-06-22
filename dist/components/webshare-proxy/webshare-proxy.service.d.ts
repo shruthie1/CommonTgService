@@ -10,6 +10,10 @@ export declare class WebshareProxyService implements OnModuleInit {
     onModuleInit(): void;
     isConfigured(): boolean;
     fetchAllProxies(): Promise<WebshareProxy[]>;
+    fetchAllProxiesWithStatus(): Promise<{
+        proxies: WebshareProxy[];
+        complete: boolean;
+    }>;
     syncProxies(removeStale?: boolean): Promise<WebshareSyncResult>;
     replaceProxy(ipAddress: string, port: number, preferredCountry?: string): Promise<{
         success: boolean;

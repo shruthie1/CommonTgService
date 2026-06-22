@@ -244,6 +244,14 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             if (!filter || Object.keys(filter).length === 0) {
                 throw new common_1.BadRequestException('Search filter is required');
             }
+            for (const [key, value] of Object.entries(filter)) {
+                if (key.startsWith('$')) {
+                    throw new common_1.BadRequestException(`Invalid search field: ${key}`);
+                }
+                if (value !== null && typeof value === 'object') {
+                    throw new common_1.BadRequestException(`Invalid search value for field: ${key}`);
+                }
+            }
             return await this.activeChannelModel.find(filter).lean().exec();
         }
         catch (error) {
@@ -586,11 +594,19 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         }
         if (search?.trim()) {
             const q = search.trim();
-            query.$or = [
-                { title: { $regex: q, $options: 'i' } },
-                { username: { $regex: q, $options: 'i' } },
+            const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const searchOr = [
+                { title: { $regex: escaped, $options: 'i' } },
+                { username: { $regex: escaped, $options: 'i' } },
                 { channelId: q },
             ];
+            if (query.$or) {
+                query.$and = [{ $or: query.$or }, { $or: searchOr }];
+                delete query.$or;
+            }
+            else {
+                query.$or = searchOr;
+            }
         }
         const total = await this.activeChannelModel.countDocuments(query).exec();
         const totalPages = Math.ceil(total / limitNum);

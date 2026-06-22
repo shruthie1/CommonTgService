@@ -57,15 +57,18 @@ __decorate([
 ], SearchDto.prototype, "accessHash", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Paid reply status', type: Boolean }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "paidReply", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Demo given status', type: Boolean }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "demoGiven", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Second show status', type: Boolean }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "secondShow", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Profile name' }),
@@ -78,6 +81,7 @@ __decorate([
 ], SearchDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Pics Sent status' }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "picsSent", void 0);
 //# sourceMappingURL=search-user-data.dto.js.map

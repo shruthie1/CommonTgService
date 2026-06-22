@@ -51,7 +51,7 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
                 this.logger.warn('No clientId found in environment or configuration');
                 return;
             }
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`, { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } });
         }
         catch (error) {
             this.logger.warn('Failed to send start notification', error);
@@ -72,9 +72,9 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
             return;
         }
         for (const [key, value] of Object.entries(configuration)) {
-            if (value !== undefined && value !== null) {
+            if (value !== undefined && value !== null && !ConfigurationService_1.NON_ENV_KEYS.has(key)) {
                 if (!process.env[key]) {
-                    process.env[key] = String(value);
+                    process.env[key] = this.serializeEnvValue(value);
                     this.logger.debug(`Set environment variable: ${key}`);
                 }
             }
@@ -89,8 +89,8 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
                 throw new common_1.NotFoundException('Failed to update configuration');
             }
             Object.entries(updateData).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    process.env[key] = String(value);
+                if (value !== undefined && value !== null && !ConfigurationService_1.NON_ENV_KEYS.has(key)) {
+                    process.env[key] = this.serializeEnvValue(value);
                 }
             });
             return updatedConfig;
@@ -100,9 +100,23 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
             throw error;
         }
     }
+    serializeEnvValue(value) {
+        if (typeof value === 'string')
+            return value;
+        if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+            return String(value);
+        }
+        try {
+            return JSON.stringify(value);
+        }
+        catch {
+            return String(value);
+        }
+    }
 };
 exports.ConfigurationService = ConfigurationService;
 ConfigurationService.initialized = false;
+ConfigurationService.NON_ENV_KEYS = new Set(['createdAt', 'updatedAt', '__v', '_id']);
 exports.ConfigurationService = ConfigurationService = ConfigurationService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('configurationModule')),

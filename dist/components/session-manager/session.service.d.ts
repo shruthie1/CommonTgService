@@ -69,6 +69,7 @@ export declare class SessionService {
     constructor(sessionAuditService: SessionAuditService);
     private getCredentials;
     private checkRateLimit;
+    private peekRateLimit;
     private isPermanentSessionValidationError;
     private extractMobileFromSession;
     createSession(options: SessionCreationOptions): Promise<SessionCreationResult>;

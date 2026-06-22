@@ -146,6 +146,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
                 this.logger.debug('Performing full data update');
                 doc.data = updateDto.value;
             }
+            doc.markModified('data');
             await doc.save({ session: useSession });
             this.logger.debug(`Successfully updated document with configKey: ${configKey}`);
             if (shouldEndSession) {
@@ -216,6 +217,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
                     throw new common_1.BadRequestException('Invalid array operation type');
             }
             (0, lodash_1.set)(doc.data, updateDto.path, array);
+            doc.markModified('data');
             await doc.save({ session });
             this.logger.debug('Array operation completed successfully');
         }
@@ -242,6 +244,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
                 }
                 this.logger.debug(`Removing data at path: ${path}`);
                 (0, lodash_1.unset)(doc.data, path);
+                doc.markModified('data');
                 await doc.save({ session });
             }
             else {

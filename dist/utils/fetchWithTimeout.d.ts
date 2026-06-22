@@ -12,8 +12,8 @@ interface NotificationConfig {
 }
 interface FetchWithTimeoutOptions extends AxiosRequestConfig {
     bypassUrl?: string;
-    retryConfig?: RetryConfig;
-    notificationConfig?: NotificationConfig;
+    retryConfig?: Partial<RetryConfig>;
+    notificationConfig?: Partial<NotificationConfig>;
 }
 export declare function fetchWithTimeout(url: string, options?: FetchWithTimeoutOptions, maxRetries?: number): Promise<AxiosResponse | undefined>;
 export {};

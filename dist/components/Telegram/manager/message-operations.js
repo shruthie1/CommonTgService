@@ -25,6 +25,8 @@ const Helpers_1 = require("telegram/Helpers");
 const big_integer_1 = __importDefault(require("big-integer"));
 const uploads_1 = require("telegram/client/uploads");
 const message_search_dto_1 = require("../dto/message-search.dto");
+const parseError_1 = require("../../../utils/parseError");
+const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentError"));
 const helpers_1 = require("./helpers");
 const chat_operations_1 = require("./chat-operations");
 async function sendMessageToChat(ctx, params) {
@@ -45,9 +47,10 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
     let offset = 0;
     const limit = 100;
     let forwardedCount = 0;
-    const messages = [];
+    let pageSize = 0;
     do {
         const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
+        pageSize = messages.length;
         const messageIds = messages.map((message) => {
             offset = message.id;
             if (message.id && message.media) {
@@ -71,7 +74,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
             }
             await (0, Helpers_1.sleep)(5000);
         }
-    } while (messages.length > 0);
+    } while (pageSize > 0);
     ctx.logger.info(ctx.phoneNumber, 'Left the channel with ID:', toChatId);
     return { forwardedCount };
 }
@@ -92,6 +95,10 @@ async function forwardMessages(ctx, fromChatId, toChatId, messageIds) {
         }
         catch (error) {
             ctx.logger.error(ctx.phoneNumber, 'Error occurred while forwarding messages:', error);
+            if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, 'Permanent error while forwarding; aborting remaining chunks', error);
+                throw error;
+            }
         }
     }
     return forwardedCount;

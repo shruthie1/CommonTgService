@@ -263,6 +263,10 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async update(clientId, updateClientDto) {
         this.ensureInitialized();
+        if (updateClientDto.session !== undefined &&
+            (updateClientDto.session === null || !String(updateClientDto.session).trim())) {
+            throw new common_1.BadRequestException('Cannot update client with a blank session');
+        }
         try {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
             if (cleanUpdateDto.mobile !== undefined) {
@@ -448,7 +452,7 @@ let ClientService = ClientService_1 = class ClientService {
             mobile: { $ne: existingClientMobile },
             createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
             availableDate: { $lte: today },
-            channels: { $gt: 200 },
+            channels: { $gte: warmup_phases_1.MIN_CHANNELS_FOR_MATURING },
             status: 'active',
             inUse: { $ne: true },
             warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
@@ -713,7 +717,16 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
             }
             else {
-                this.logger.log('Not Deleting user');
+                const retryAvailableDate = client_helper_utils_1.ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
+                await this.bufferClientService.update(existingMobile, {
+                    inUse: false,
+                    status: 'active',
+                    availableDate: retryAvailableDate,
+                    message: `Archival retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
+                }).catch((updateError) => {
+                    this.logger.error(`Failed to release stranded archival reservation for ${existingMobile}: ${(0, parseError_1.parseError)(updateError, '', false).message}`);
+                });
+                this.logger.log(`Released archival reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
             }
         }
     }

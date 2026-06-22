@@ -6,6 +6,8 @@ export declare class AuthGuard implements CanActivate {
     private sanitizeUrlField;
     private redactQuerySecret;
     private stripQuerySecret;
+    private static readonly WRITE_PROTECTED_IGNORE_PATHS;
+    private isWriteProtectedIgnorePath;
     private isIgnoredPath;
     private isOriginAllowed;
     private getHeaderValue;

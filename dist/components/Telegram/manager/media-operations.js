@@ -64,6 +64,11 @@ const missingThumbnailCache = new helpers_1.ByteLimitedLruCache({
     maxBytes: 64 * 1024,
     ttlMs: helpers_1.MISSING_THUMBNAIL_CACHE_TTL_MS,
 });
+function safeIsoString(date) {
+    if (!(date instanceof Date) || isNaN(date.getTime()))
+        return undefined;
+    return date.toISOString();
+}
 function normalizeMediaLimit(limit) {
     const numericLimit = Number(limit);
     if (!Number.isFinite(numericLimit) || numericLimit <= 0)
@@ -482,16 +487,19 @@ async function getMediaMetadata(ctx, params) {
         return results;
     }
     let filteredMessages;
+    let multiTypeRawCount;
     if (typesToFetch.length === 1) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     }
     else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
+        const combined = resultsPerType.flat();
+        multiTypeRawCount = combined.length;
         if (hasAll) {
-            filteredMessages = resultsPerType.flat();
+            filteredMessages = combined;
         }
         else {
-            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
+            filteredMessages = combined.sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
         }
     }
     else {
@@ -538,12 +546,14 @@ async function getMediaMetadata(ctx, params) {
                 firstMessageId: overallFirstMessageId,
                 lastMessageId: overallLastMessageId,
             },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
     else {
         const total = filteredMessages.length;
-        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === effectiveLimit) && filteredMessages.length > 0;
+        const hasMore = (typesToFetch.length === 1
+            ? filteredMessages.length >= queryLimit
+            : (multiTypeRawCount ?? 0) > effectiveLimit) && filteredMessages.length > 0;
         const firstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
         const lastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
         return {
@@ -555,7 +565,7 @@ async function getMediaMetadata(ctx, params) {
                 prevMaxId: maxId && filteredMessages.length > 0 ? firstMessageId : undefined,
                 firstMessageId, lastMessageId,
             },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -611,14 +621,14 @@ async function getAllMediaMetaData(ctx, params) {
                 pagination: { page: 1, limit: grouped[mediaType]?.length || 0, total: grouped[mediaType]?.length || 0, totalPages: 1, hasMore: false },
             })),
             pagination: { page: 1, limit: allMedia.length, total: allMedia.length, totalPages: 1, hasMore: false },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
     else {
         return {
             data: allMedia,
             pagination: { page: 1, limit: allMedia.length, total: allMedia.length, totalPages: 1, hasMore: false },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -691,14 +701,17 @@ async function getFilteredMedia(ctx, params) {
         return results;
     }
     let filteredMessages;
+    let multiTypeRawCount;
     if (typesToFetch.length === 1) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     }
     else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
+        const combined = resultsPerType.flat();
+        multiTypeRawCount = combined.length;
         filteredMessages = hasAll
-            ? resultsPerType.flat()
-            : resultsPerType.flat().sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
+            ? combined
+            : combined.sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
     }
     else {
         filteredMessages = [];
@@ -767,12 +780,14 @@ async function getFilteredMedia(ctx, params) {
                 prevMaxId: maxId && mediaData.length > 0 ? overallFirstMessageId : undefined,
                 firstMessageId: overallFirstMessageId, lastMessageId: overallLastMessageId,
             },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
     else {
         const total = mediaData.length;
-        const hasMoreResult = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length >= effectiveLimit)
+        const hasMoreResult = (typesToFetch.length === 1
+            ? filteredMessages.length >= queryLimit
+            : (multiTypeRawCount ?? 0) > effectiveLimit)
             && filteredMessages.length > 0;
         const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
@@ -784,7 +799,7 @@ async function getFilteredMedia(ctx, params) {
                 prevMaxId: maxId && mediaData.length > 0 ? firstMessageId : undefined,
                 firstMessageId, lastMessageId,
             },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }

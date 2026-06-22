@@ -240,8 +240,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return "Media forward initiated";
     }
     async forwardMediaToBot(mobile, fromChatId) {
+        let clientObtained = false;
         try {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+            clientObtained = true;
             await telegramClient.forwardMedia('', fromChatId);
             const dialogs = [];
             for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
@@ -277,7 +279,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     });
                 }
             }
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
             return "Media forward initiated successfully";
@@ -285,6 +286,16 @@ let TelegramService = TelegramService_1 = class TelegramService {
         catch (error) {
             this.logger.error(mobile, "Error forwarding media:", error);
             return `Media forward failed: ${error.message}`;
+        }
+        finally {
+            if (clientObtained) {
+                try {
+                    await connection_manager_1.connectionManager.unregisterClient(mobile);
+                }
+                catch (unregErr) {
+                    this.logger.error(mobile, "Error unregistering client after forwardMediaToBot:", unregErr);
+                }
+            }
         }
     }
     async blockUser(mobile, chatId) {
@@ -348,16 +359,17 @@ let TelegramService = TelegramService_1 = class TelegramService {
     async setProfilePic(mobile, name) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.deleteProfilePhotos();
+        let picsDir;
         try {
-            await cloudinary_1.CloudinaryService.getInstance(name);
+            const cloudinary = await cloudinary_1.CloudinaryService.getInstance(name);
+            picsDir = await cloudinary.getResourcesFromFolder(name);
             await (0, Helpers_1.sleep)(2000);
-            const rootPath = process.cwd();
-            this.logger.debug(mobile, "checking path", rootPath);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
+            this.logger.debug(mobile, "profile pics dir", picsDir);
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp2.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
             return 'Profile pic set successfully';
         }
@@ -366,6 +378,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
+            if (picsDir) {
+                try {
+                    fs.rmSync(picsDir, { recursive: true, force: true });
+                }
+                catch { }
+            }
             await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
     }

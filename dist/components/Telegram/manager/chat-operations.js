@@ -811,7 +811,7 @@ async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false, c
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = msgResult?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-            if (totalMessages < 10 && callData.callCountsByChat[chatId]?.totalCalls < 1) {
+            if (totalMessages < 10 && (callData.callCountsByChat[chatId]?.totalCalls ?? 0) < 1) {
                 ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
                 result[chatId] = null;
                 skipped++;

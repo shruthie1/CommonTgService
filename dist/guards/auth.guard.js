@@ -71,7 +71,10 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const queryApiKey = request.query['apiKey']?.toString() ||
             request.query['apikey']?.toString() ||
             request.query['api_key']?.toString();
-        if (this.isIgnoredPath(path, url, originalUrl)) {
+        const method = (request.method || 'GET').toUpperCase();
+        const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+        const ignoredPathIsWriteProtected = this.isWriteProtectedIgnorePath(path, url, originalUrl);
+        if (this.isIgnoredPath(path, url, originalUrl) && (isSafeMethod || !ignoredPathIsWriteProtected)) {
             this.sanitizeQuery(request, queryApiKey);
             return true;
         }
@@ -150,6 +153,20 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             return this.redactQuerySecret(url);
         }
     }
+    isWriteProtectedIgnorePath(...urls) {
+        for (const urlToTest of urls.filter(Boolean)) {
+            for (const guarded of AuthGuard_1.WRITE_PROTECTED_IGNORE_PATHS) {
+                if (typeof guarded === 'string') {
+                    if (guarded.toLowerCase() === urlToTest.toLowerCase())
+                        return true;
+                }
+                else if (guarded.test(urlToTest)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {
             for (const ignore of IGNORE_PATHS) {
@@ -176,18 +193,24 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         }
     }
     getHeaderValue(request, headerName) {
-        return request.headers[headerName.toLowerCase()];
+        const raw = request.headers[headerName.toLowerCase()];
+        if (Array.isArray(raw))
+            return raw[0];
+        return raw;
     }
     extractRealClientIP(request) {
-        const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
-        if (cfConnectingIP)
-            return cfConnectingIP;
-        const xRealIP = this.getHeaderValue(request, 'x-real-ip');
-        if (xRealIP)
-            return xRealIP;
-        const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
-        if (xForwardedFor)
-            return xForwardedFor.split(',')[0].trim();
+        const trustProxyHeaders = process.env.TRUST_PROXY_HEADERS !== 'false';
+        if (trustProxyHeaders) {
+            const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
+            if (cfConnectingIP)
+                return cfConnectingIP;
+            const xRealIP = this.getHeaderValue(request, 'x-real-ip');
+            if (xRealIP)
+                return xRealIP;
+            const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
+            if (xForwardedFor)
+                return xForwardedFor.split(',')[0].trim();
+        }
         if (request.ip)
             return request.ip.replace('::ffff:', '');
         if (request.connection?.remoteAddress)
@@ -260,6 +283,7 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
 };
 exports.AuthGuard = AuthGuard;
+AuthGuard.WRITE_PROTECTED_IGNORE_PATHS = ['/builds'];
 exports.AuthGuard = AuthGuard = AuthGuard_1 = __decorate([
     (0, common_1.Injectable)()
 ], AuthGuard);

@@ -254,7 +254,13 @@ class MailReader {
                     resolve();
                 });
             });
-            const match = candidates.sort((a, b) => a.order - b.order)[0];
+            const match = candidates.sort((a, b) => {
+                const da = a.receivedAt ? a.receivedAt.getTime() : -Infinity;
+                const db = b.receivedAt ? b.receivedAt.getTime() : -Infinity;
+                if (db !== da)
+                    return db - da;
+                return a.order - b.order;
+            })[0];
             if (!match) {
                 console.log('No matching Telegram verification code found');
                 return null;
@@ -770,6 +776,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CloudinaryService = void 0;
 const cloudinary = __importStar(__webpack_require__(/*! cloudinary */ "cloudinary"));
 const path = __importStar(__webpack_require__(/*! path */ "path"));
+const os = __importStar(__webpack_require__(/*! os */ "os"));
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const adm_zip_1 = __importDefault(__webpack_require__(/*! adm-zip */ "adm-zip"));
 const parseError_1 = __webpack_require__(/*! ./utils/parseError */ "./src/utils/parseError.ts");
@@ -783,29 +790,30 @@ class CloudinaryService {
             api_secret: process.env.CL_APISECRET
         });
     }
-    static async getInstance(name) {
+    static async getInstance(_name) {
         if (!CloudinaryService.instance) {
             CloudinaryService.instance = new CloudinaryService();
         }
-        await CloudinaryService.instance.getResourcesFromFolder(name);
         return CloudinaryService.instance;
     }
     async downloadAndExtractZip(url) {
-        const rootPath = process.cwd();
-        const zipPath = path.resolve(rootPath, 'temp.zip');
-        const extractPath = path.resolve(rootPath);
+        const unique = `${process.pid}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+        const extractPath = path.join(os.tmpdir(), `cloudinary-extract-${unique}`);
+        const zipPath = path.join(os.tmpdir(), `cloudinary-${unique}.zip`);
         console.log(`Starting download of zip file from ${url}`);
         const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
         if (response?.status === 200) {
             console.log('Zip file downloaded successfully.');
             fs.writeFileSync(zipPath, response.data);
-            console.log(`Zip file saved to ${zipPath}`);
             const zip = new adm_zip_1.default(zipPath);
             console.log(`Extracting zip file to ${extractPath}`);
             zip.extractAllTo(extractPath, true);
             console.log('Zip file extracted successfully.');
-            fs.unlinkSync(zipPath);
-            console.log(`Temporary zip file ${zipPath} deleted.`);
+            try {
+                fs.unlinkSync(zipPath);
+            }
+            catch { }
+            return extractPath;
         }
         else {
             const errorMessage = `Unable to download zip file from ${url}`;
@@ -815,7 +823,7 @@ class CloudinaryService {
     }
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
+        return this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
     }
     async createNewFolder(folderName) {
         await this.createFolder(folderName);
@@ -1361,7 +1369,7 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
                 this.logger.warn('No clientId found in environment or configuration');
                 return;
             }
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`, { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } });
         }
         catch (error) {
             this.logger.warn('Failed to send start notification', error);
@@ -1382,9 +1390,9 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
             return;
         }
         for (const [key, value] of Object.entries(configuration)) {
-            if (value !== undefined && value !== null) {
+            if (value !== undefined && value !== null && !ConfigurationService_1.NON_ENV_KEYS.has(key)) {
                 if (!process.env[key]) {
-                    process.env[key] = String(value);
+                    process.env[key] = this.serializeEnvValue(value);
                     this.logger.debug(`Set environment variable: ${key}`);
                 }
             }
@@ -1399,8 +1407,8 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
                 throw new common_1.NotFoundException('Failed to update configuration');
             }
             Object.entries(updateData).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    process.env[key] = String(value);
+                if (value !== undefined && value !== null && !ConfigurationService_1.NON_ENV_KEYS.has(key)) {
+                    process.env[key] = this.serializeEnvValue(value);
                 }
             });
             return updatedConfig;
@@ -1410,9 +1418,23 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
             throw error;
         }
     }
+    serializeEnvValue(value) {
+        if (typeof value === 'string')
+            return value;
+        if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+            return String(value);
+        }
+        try {
+            return JSON.stringify(value);
+        }
+        catch {
+            return String(value);
+        }
+    }
 };
 exports.ConfigurationService = ConfigurationService;
 ConfigurationService.initialized = false;
+ConfigurationService.NON_ENV_KEYS = new Set(['createdAt', 'updatedAt', '__v', '_id']);
 exports.ConfigurationService = ConfigurationService = ConfigurationService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)('configurationModule')),
@@ -4072,8 +4094,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         return "Media forward initiated";
     }
     async forwardMediaToBot(mobile, fromChatId) {
+        let clientObtained = false;
         try {
             const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+            clientObtained = true;
             await telegramClient.forwardMedia('', fromChatId);
             const dialogs = [];
             for await (const dialog of telegramClient.client.iterDialogs({ limit: 500 })) {
@@ -4109,7 +4133,6 @@ let TelegramService = TelegramService_1 = class TelegramService {
                     });
                 }
             }
-            await connection_manager_1.connectionManager.unregisterClient(mobile);
             await this.channelsService.createMultiple(channels);
             await this.activeChannelsService.createMultiple(channels);
             return "Media forward initiated successfully";
@@ -4117,6 +4140,16 @@ let TelegramService = TelegramService_1 = class TelegramService {
         catch (error) {
             this.logger.error(mobile, "Error forwarding media:", error);
             return `Media forward failed: ${error.message}`;
+        }
+        finally {
+            if (clientObtained) {
+                try {
+                    await connection_manager_1.connectionManager.unregisterClient(mobile);
+                }
+                catch (unregErr) {
+                    this.logger.error(mobile, "Error unregistering client after forwardMediaToBot:", unregErr);
+                }
+            }
         }
     }
     async blockUser(mobile, chatId) {
@@ -4180,16 +4213,17 @@ let TelegramService = TelegramService_1 = class TelegramService {
     async setProfilePic(mobile, name) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         await telegramClient.deleteProfilePhotos();
+        let picsDir;
         try {
-            await cloudinary_1.CloudinaryService.getInstance(name);
+            const cloudinary = await cloudinary_1.CloudinaryService.getInstance(name);
+            picsDir = await cloudinary.getResourcesFromFolder(name);
             await (0, Helpers_1.sleep)(2000);
-            const rootPath = process.cwd();
-            this.logger.debug(mobile, "checking path", rootPath);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp1.jpg'));
+            this.logger.debug(mobile, "profile pics dir", picsDir);
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp1.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp2.jpg'));
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp2.jpg'));
             await (0, Helpers_1.sleep)(3000);
-            await telegramClient.updateProfilePic(path.join(rootPath, 'dp3.jpg'));
+            await telegramClient.updateProfilePic(path.join(picsDir, 'dp3.jpg'));
             await (0, Helpers_1.sleep)(1000);
             return 'Profile pic set successfully';
         }
@@ -4198,6 +4232,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new common_1.HttpException(errorDetails.message, errorDetails.status);
         }
         finally {
+            if (picsDir) {
+                try {
+                    fs.rmSync(picsDir, { recursive: true, force: true });
+                }
+                catch { }
+            }
             await connection_manager_1.connectionManager.unregisterClient(mobile);
         }
     }
@@ -7725,7 +7765,7 @@ async function set2fa(ctx) {
                     },
                     onEmailCodeError: (e) => {
                         ctx.logger.error(ctx.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
-                        return Promise.resolve('error');
+                        return Promise.reject(e);
                     },
                 });
             }
@@ -7773,20 +7813,15 @@ async function waitForOtp(ctx) {
             if (isFresh) {
                 return message.text.split('.')[0].split('code:**')[1].trim();
             }
-            else {
-                const code = message.text.split('.')[0].split('code:**')[1].trim();
-                if (i == 2) {
-                    return code;
-                }
-                await (0, Helpers_1.sleep)(5000);
-            }
+            ctx.logger.warn(ctx.phoneNumber, `OTP found but stale (>${freshnessLimit / 1000}s); not submitting, awaiting a fresh code`);
+            await (0, Helpers_1.sleep)(5000);
         }
         catch (err) {
             ctx.logger.warn(ctx.phoneNumber, `OTP read attempt ${i + 1} failed: ${err instanceof Error ? err.message : String(err)}`);
             await (0, Helpers_1.sleep)(2000);
         }
     }
-    throw new Error('Failed to get OTP after 3 attempts');
+    throw new Error('Failed to get a fresh OTP after 3 attempts');
 }
 async function getSessionInfo(ctx) {
     if (!ctx.client)
@@ -7879,6 +7914,9 @@ const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../util
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
 const connection_manager_1 = __webpack_require__(/*! ../utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
 const dialog_chat_utils_1 = __webpack_require__(/*! ../../../utils/telegram-utils/dialog-chat-utils */ "./src/utils/telegram-utils/dialog-chat-utils.ts");
+const message_operations_1 = __webpack_require__(/*! ./message-operations */ "./src/components/Telegram/manager/message-operations.ts");
+const chat_operations_1 = __webpack_require__(/*! ./chat-operations */ "./src/components/Telegram/manager/chat-operations.ts");
+const message_search_dto_1 = __webpack_require__(/*! ../dto/message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts");
 async function createGroup(ctx) {
     const groupName = 'Saved Messages';
     const groupDescription = ctx.phoneNumber;
@@ -7939,20 +7977,16 @@ async function createOrJoinChannel(ctx, channel) {
     return { id: channelId, accesshash: channelAccessHash };
 }
 async function forwardMedia(ctx, channel, fromChatId) {
-    const { searchMessages, forwardMessages } = __webpack_require__(/*! ./message-operations */ "./src/components/Telegram/manager/message-operations.ts");
-    const { getTopPrivateChats } = __webpack_require__(/*! ./chat-operations */ "./src/components/Telegram/manager/chat-operations.ts");
-    const { MessageMediaType } = __webpack_require__(/*! ../dto/message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts");
     let channelId;
     try {
         ctx.logger.info(ctx.phoneNumber, `Forwarding media from chat to channel ${channel} from ${fromChatId}`);
         if (fromChatId) {
             const channelDetails = await createOrJoinChannel(ctx, channel);
             channelId = channelDetails.id;
-            const { forwardSecretMsgs } = __webpack_require__(/*! ./message-operations */ "./src/components/Telegram/manager/message-operations.ts");
-            await forwardSecretMsgs(ctx, fromChatId, channelId?.toString());
+            await (0, message_operations_1.forwardSecretMsgs)(ctx, fromChatId, channelId?.toString());
         }
         else {
-            const result = await getTopPrivateChats(ctx);
+            const result = await (0, chat_operations_1.getTopPrivateChats)(ctx);
             const chats = result.items;
             const me = await ctx.client.getMe();
             if (chats.length > 0) {
@@ -7961,10 +7995,10 @@ async function forwardMedia(ctx, channel, fromChatId) {
                 const finalChats = new Set(chats.map((chat) => chat.chatId));
                 finalChats.add(me.id?.toString());
                 for (const chatId of finalChats) {
-                    const mediaMessages = await searchMessages(ctx, { chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE] });
+                    const mediaMessages = await (0, message_operations_1.searchMessages)(ctx, { chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE] });
                     ctx.logger.info(ctx.phoneNumber, `Forwarding messages from chat: ${chatId} to channel: ${channelId}`);
-                    await forwardMessages(ctx, chatId, channelId, mediaMessages.photo.messages);
-                    await forwardMessages(ctx, chatId, channelId, mediaMessages.video.messages);
+                    await (0, message_operations_1.forwardMessages)(ctx, chatId, channelId.toString(), mediaMessages.photo.messages);
+                    await (0, message_operations_1.forwardMessages)(ctx, chatId, channelId.toString(), mediaMessages.video.messages);
                 }
             }
             ctx.logger.info(ctx.phoneNumber, 'Completed forwarding messages from top private chats to channel:', channelId);
@@ -8037,19 +8071,21 @@ async function leaveChannels(ctx, chats) {
                 chatType = entity.broadcast ? 'channel' : 'supergroup';
                 left = true;
             }
-            else if (entity instanceof telegram_1.Api.Chat) {
-                await ctx.client.invoke(new telegram_1.Api.messages.DeleteChatUser({
-                    chatId: entity.id,
-                    userId: me.id,
-                    revokeHistory: false,
-                }));
-                chatType = 'group';
-                left = true;
-            }
             else {
-                ctx.logger.warn(ctx.phoneNumber, `Unknown entity type for ${id}, skipping`);
-                skipCount++;
-                continue;
+                if (entity instanceof telegram_1.Api.Chat) {
+                    await ctx.client.invoke(new telegram_1.Api.messages.DeleteChatUser({
+                        chatId: entity.id,
+                        userId: me.id,
+                        revokeHistory: false,
+                    }));
+                    chatType = 'group';
+                    left = true;
+                }
+                else {
+                    ctx.logger.warn(ctx.phoneNumber, `Unknown entity type for ${id}, skipping`);
+                    skipCount++;
+                    continue;
+                }
             }
             if (left) {
                 ctx.logger.info(ctx.phoneNumber, `Left ${chatType}: ${id}`);
@@ -8088,9 +8124,11 @@ async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
             hash: (0, big_integer_1.default)(0),
         }));
         let totalCount = 0;
+        let consumedCount = 0;
         if (participants instanceof telegram_1.Api.channels.ChannelParticipants) {
             totalCount = participants.count;
             const users = participants.participants;
+            consumedCount = users.length;
             ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}, Total: ${totalCount}`);
             for (const user of users) {
                 const userInfo = user instanceof telegram_1.Api.ChannelParticipant ? user.userId : null;
@@ -8110,9 +8148,9 @@ async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
         else {
             ctx.logger.info(ctx.phoneNumber, 'No members found or invalid group.');
         }
-        const nextOffset = offset + result.length;
-        const hasMore = nextOffset < totalCount;
-        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length}, hasMore=${hasMore}`);
+        const nextOffset = offset + consumedCount;
+        const hasMore = consumedCount > 0 && nextOffset < totalCount;
+        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length} (consumed ${consumedCount}), hasMore=${hasMore}`);
         return {
             members: result,
             pagination: {
@@ -8250,8 +8288,10 @@ async function getGroupBannedUsers(ctx, groupId) {
         const participants = result.participants;
         return participants.map(participant => {
             const bannedRights = participant.bannedRights;
+            const peer = participant.peer;
+            const peerId = peer?.userId ?? peer?.channelId ?? peer?.chatId;
             return {
-                userId: participant.peer.chatId.toString(),
+                userId: peerId != null ? peerId.toString() : '',
                 bannedRights: {
                     viewMessages: bannedRights.viewMessages || false,
                     sendMessages: bannedRights.sendMessages || false,
@@ -9158,7 +9198,7 @@ async function fetchMessageMediaForChats(ctx, chatIds, skipMediaCount = false, c
             const msgResult = await ctx.client.getMessages(chatId, { limit: 1 });
             const totalMessages = msgResult?.total ?? 0;
             ctx.logger.info(ctx.phoneNumber, `(${i}/${chatIds.length}) Messages fetched for ${chatId}, Duration=${Date.now() - startTime}ms`);
-            if (totalMessages < 10 && callData.callCountsByChat[chatId]?.totalCalls < 1) {
+            if (totalMessages < 10 && (callData.callCountsByChat[chatId]?.totalCalls ?? 0) < 1) {
                 ctx.logger.info(ctx.phoneNumber, `Skipping ${chatId} because it has less than 10 messages`);
                 result[chatId] = null;
                 skipped++;
@@ -9532,6 +9572,7 @@ const events_1 = __webpack_require__(/*! telegram/events */ "telegram/events");
 const Logger_1 = __webpack_require__(/*! telegram/extensions/Logger */ "telegram/extensions/Logger");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
+const common_1 = __webpack_require__(/*! ../../../utils/common */ "./src/utils/common.ts");
 const fetchWithTimeout_1 = __webpack_require__(/*! ../../../utils/fetchWithTimeout */ "./src/utils/fetchWithTimeout.ts");
 const logbots_1 = __webpack_require__(/*! ../../../utils/logbots */ "./src/utils/logbots.ts");
 const generateTGConfig_1 = __webpack_require__(/*! ../utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
@@ -9544,7 +9585,8 @@ async function createClient(ctx, session, handler = true, handlerFn) {
         await (0, withTimeout_1.withTimeout)(async () => {
             client = new telegram_1.TelegramClient(session, apiId, apiHash, tgConfiguration);
             client.setLogLevel(Logger_1.LogLevel.ERROR);
-            client._errorHandler = async (error) => { handleClientError(ctx, error); };
+            const createdClient = client;
+            client._errorHandler = async (error) => { handleClientError({ ...ctx, client: createdClient }, error); };
             await client.connect();
             ctx.logger.info(ctx.phoneNumber, 'Connected Client Succesfully');
         }, {
@@ -9627,9 +9669,8 @@ async function destroyClient(ctx, session) {
     catch { }
 }
 function handleClientError(ctx, error) {
-    const { contains } = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
     const errorDetails = (0, parseError_1.parseError)(error, `${ctx.phoneNumber}: RPC Error`, false);
-    if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
+    if ((error.message && error.message == 'TIMEOUT') || (0, common_1.contains)(errorDetails.message, ['ETIMEDOUT'])) {
         ctx.logger.error(ctx.phoneNumber, `Timeout error occurred for ${ctx.phoneNumber}`, error);
         return setTimeout(async () => {
             if (ctx.client && !ctx.client.connected) {
@@ -9718,6 +9759,8 @@ const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const uploads_1 = __webpack_require__(/*! telegram/client/uploads */ "telegram/client/uploads");
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
+const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
+const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 function getFloodWaitSeconds(error) {
     if (error?.seconds != null)
         return error.seconds;
@@ -9743,6 +9786,10 @@ async function addContact(ctx, data, namePrefix) {
                     ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during addContact, stopping batch`);
                     break;
                 }
+                if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(err, '', false))) {
+                    ctx.logger.error(ctx.phoneNumber, `Permanent error during addContact, aborting batch`, err);
+                    throw err;
+                }
                 ctx.logger.info(ctx.phoneNumber, err);
             }
             if (i < data.length - 1) {
@@ -9752,8 +9799,10 @@ async function addContact(ctx, data, namePrefix) {
     }
     catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error adding contacts:', error);
-        const { parseError } = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
-        parseError(error, `Failed to save contacts`);
+        if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+            throw error;
+        }
+        (0, parseError_1.parseError)(error, `Failed to save contacts`);
     }
 }
 async function addContacts(ctx, mobiles, namePrefix) {
@@ -9772,8 +9821,7 @@ async function addContacts(ctx, mobiles, namePrefix) {
     }
     catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error adding contacts:', error);
-        const { parseError } = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
-        parseError(error, `Failed to save contacts`);
+        (0, parseError_1.parseError)(error, `Failed to save contacts`);
     }
 }
 async function getContacts(ctx) {
@@ -9810,7 +9858,7 @@ async function exportContacts(ctx, format, includeBlocked = false) {
             firstName: contact.firstName || '',
             lastName: contact.lastName || '',
             phone: contact.phone || '',
-            blocked: blockedContacts && 'peerBlocked' in blockedContacts
+            blocked: blockedContacts && 'blocked' in blockedContacts
                 ? (blockedContacts.blocked || []).some((p) => (p.peerId instanceof telegram_1.Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false)
                 : false,
         }));
@@ -9844,6 +9892,11 @@ async function importContacts(ctx, data) {
                 results.push({ success: false, phone: contact.phone, error: `FLOOD_WAIT_${floodWait}` });
                 break;
             }
+            if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, `Permanent error during importContacts, aborting batch`, error);
+                results.push({ success: false, phone: contact.phone, error: error.message });
+                break;
+            }
             results.push({ success: false, phone: contact.phone, error: error.message });
         }
         if (i < data.length - 1) {
@@ -9874,6 +9927,11 @@ async function manageBlockList(ctx, userIds, block) {
                 results.push({ success: false, userId, error: `FLOOD_WAIT_${floodWait}` });
                 break;
             }
+            if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, `Permanent error during ${block ? 'block' : 'unblock'}, aborting batch`, error);
+                results.push({ success: false, userId, error: error.message });
+                break;
+            }
             results.push({ success: false, userId, error: error.message });
         }
         if (i < userIds.length - 1) {
@@ -9887,13 +9945,14 @@ async function getContactStatistics(ctx) {
         throw new Error('Client not initialized');
     const contactsResult = await ctx.client.invoke(new telegram_1.Api.contacts.GetContacts({}));
     const contacts = ('users' in contactsResult ? contactsResult.users : []);
-    const onlineContacts = contacts.filter((c) => c.status && 'wasOnline' in c.status);
+    const onlineNowContacts = contacts.filter((c) => c.status instanceof telegram_1.Api.UserStatusOnline);
+    const recentlyOfflineContacts = contacts.filter((c) => c.status instanceof telegram_1.Api.UserStatusOffline);
     return {
         total: contacts.length,
-        online: onlineContacts.length,
+        online: onlineNowContacts.length,
         withPhone: contacts.filter((c) => c.phone).length,
         mutual: contacts.filter((c) => c.mutualContact).length,
-        lastWeekActive: onlineContacts.filter((c) => {
+        lastWeekActive: recentlyOfflineContacts.filter((c) => {
             const status = c.status;
             const lastSeen = new Date(status.wasOnline * 1000);
             const weekAgo = new Date();
@@ -10619,6 +10678,11 @@ const missingThumbnailCache = new helpers_1.ByteLimitedLruCache({
     maxBytes: 64 * 1024,
     ttlMs: helpers_1.MISSING_THUMBNAIL_CACHE_TTL_MS,
 });
+function safeIsoString(date) {
+    if (!(date instanceof Date) || isNaN(date.getTime()))
+        return undefined;
+    return date.toISOString();
+}
 function normalizeMediaLimit(limit) {
     const numericLimit = Number(limit);
     if (!Number.isFinite(numericLimit) || numericLimit <= 0)
@@ -11037,16 +11101,19 @@ async function getMediaMetadata(ctx, params) {
         return results;
     }
     let filteredMessages;
+    let multiTypeRawCount;
     if (typesToFetch.length === 1) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     }
     else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
+        const combined = resultsPerType.flat();
+        multiTypeRawCount = combined.length;
         if (hasAll) {
-            filteredMessages = resultsPerType.flat();
+            filteredMessages = combined;
         }
         else {
-            filteredMessages = resultsPerType.flat().sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
+            filteredMessages = combined.sort((a, b) => b.messageId - a.messageId).slice(0, effectiveLimit);
         }
     }
     else {
@@ -11093,12 +11160,14 @@ async function getMediaMetadata(ctx, params) {
                 firstMessageId: overallFirstMessageId,
                 lastMessageId: overallLastMessageId,
             },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
     else {
         const total = filteredMessages.length;
-        const hasMore = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length === effectiveLimit) && filteredMessages.length > 0;
+        const hasMore = (typesToFetch.length === 1
+            ? filteredMessages.length >= queryLimit
+            : (multiTypeRawCount ?? 0) > effectiveLimit) && filteredMessages.length > 0;
         const firstMessageId = filteredMessages.length > 0 ? filteredMessages[0].messageId : undefined;
         const lastMessageId = filteredMessages.length > 0 ? filteredMessages[filteredMessages.length - 1].messageId : undefined;
         return {
@@ -11110,7 +11179,7 @@ async function getMediaMetadata(ctx, params) {
                 prevMaxId: maxId && filteredMessages.length > 0 ? firstMessageId : undefined,
                 firstMessageId, lastMessageId,
             },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -11166,14 +11235,14 @@ async function getAllMediaMetaData(ctx, params) {
                 pagination: { page: 1, limit: grouped[mediaType]?.length || 0, total: grouped[mediaType]?.length || 0, totalPages: 1, hasMore: false },
             })),
             pagination: { page: 1, limit: allMedia.length, total: allMedia.length, totalPages: 1, hasMore: false },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
     else {
         return {
             data: allMedia,
             pagination: { page: 1, limit: allMedia.length, total: allMedia.length, totalPages: 1, hasMore: false },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -11246,14 +11315,17 @@ async function getFilteredMedia(ctx, params) {
         return results;
     }
     let filteredMessages;
+    let multiTypeRawCount;
     if (typesToFetch.length === 1) {
         filteredMessages = await fetchWithPostFilter(typesToFetch[0], queryLimit);
     }
     else if (typesToFetch.length > 1) {
         const resultsPerType = await Promise.all(typesToFetch.map(type => fetchWithPostFilter(type, effectiveLimit)));
+        const combined = resultsPerType.flat();
+        multiTypeRawCount = combined.length;
         filteredMessages = hasAll
-            ? resultsPerType.flat()
-            : resultsPerType.flat().sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
+            ? combined
+            : combined.sort((a, b) => b.id - a.id).slice(0, effectiveLimit);
     }
     else {
         filteredMessages = [];
@@ -11322,12 +11394,14 @@ async function getFilteredMedia(ctx, params) {
                 prevMaxId: maxId && mediaData.length > 0 ? overallFirstMessageId : undefined,
                 firstMessageId: overallFirstMessageId, lastMessageId: overallLastMessageId,
             },
-            filters: { chatId, types: ['all'], startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: ['all'], startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
     else {
         const total = mediaData.length;
-        const hasMoreResult = (typesToFetch.length === 1 ? filteredMessages.length >= queryLimit : filteredMessages.length >= effectiveLimit)
+        const hasMoreResult = (typesToFetch.length === 1
+            ? filteredMessages.length >= queryLimit
+            : (multiTypeRawCount ?? 0) > effectiveLimit)
             && filteredMessages.length > 0;
         const firstMessageId = mediaData.length > 0 ? mediaData[0].messageId : undefined;
         const lastMessageId = mediaData.length > 0 ? mediaData[mediaData.length - 1].messageId : undefined;
@@ -11339,7 +11413,7 @@ async function getFilteredMedia(ctx, params) {
                 prevMaxId: maxId && mediaData.length > 0 ? firstMessageId : undefined,
                 firstMessageId, lastMessageId,
             },
-            filters: { chatId, types: typesToFetch, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() },
+            filters: { chatId, types: typesToFetch, startDate: safeIsoString(startDate), endDate: safeIsoString(endDate) },
         };
     }
 }
@@ -11427,6 +11501,8 @@ const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers"
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const uploads_1 = __webpack_require__(/*! telegram/client/uploads */ "telegram/client/uploads");
 const message_search_dto_1 = __webpack_require__(/*! ../dto/message-search.dto */ "./src/components/Telegram/dto/message-search.dto.ts");
+const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
+const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
 const chat_operations_1 = __webpack_require__(/*! ./chat-operations */ "./src/components/Telegram/manager/chat-operations.ts");
 async function sendMessageToChat(ctx, params) {
@@ -11447,9 +11523,10 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
     let offset = 0;
     const limit = 100;
     let forwardedCount = 0;
-    const messages = [];
+    let pageSize = 0;
     do {
         const messages = await ctx.client.getMessages(fromChatId, { offsetId: offset, limit });
+        pageSize = messages.length;
         const messageIds = messages.map((message) => {
             offset = message.id;
             if (message.id && message.media) {
@@ -11473,7 +11550,7 @@ async function forwardSecretMsgs(ctx, fromChatId, toChatId) {
             }
             await (0, Helpers_1.sleep)(5000);
         }
-    } while (messages.length > 0);
+    } while (pageSize > 0);
     ctx.logger.info(ctx.phoneNumber, 'Left the channel with ID:', toChatId);
     return { forwardedCount };
 }
@@ -11494,6 +11571,10 @@ async function forwardMessages(ctx, fromChatId, toChatId, messageIds) {
         }
         catch (error) {
             ctx.logger.error(ctx.phoneNumber, 'Error occurred while forwarding messages:', error);
+            if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, 'Permanent error while forwarding; aborting remaining chunks', error);
+                throw error;
+            }
         }
     }
     return forwardedCount;
@@ -12533,10 +12614,11 @@ class ConnectionManager {
         for (const [mobile, clientInfo] of this.clients.entries()) {
             const isIdle = (now - clientInfo.lastUsed) > this.IDLE_TIMEOUT;
             const shouldAutoDisconnect = clientInfo.autoDisconnect && isIdle;
-            const isStale = (now - clientInfo.lastUsed) > (this.IDLE_TIMEOUT * 2);
+            const isStale = clientInfo.autoDisconnect && (now - clientInfo.lastUsed) > (this.IDLE_TIMEOUT * 2);
             const isErrored = clientInfo.state === 'error';
             const tooManyAttempts = clientInfo.connectionAttempts >= this.MAX_RETRY_ATTEMPTS;
-            if (shouldAutoDisconnect || isStale || isErrored || tooManyAttempts) {
+            const isDeadSocket = isIdle && clientInfo.client?.connected?.() === false;
+            if (shouldAutoDisconnect || isStale || isErrored || tooManyAttempts || isDeadSocket) {
                 this.logger.info(mobile, 'Marking for cleanup', {
                     shouldAutoDisconnect,
                     isStale,
@@ -12555,14 +12637,28 @@ class ConnectionManager {
     }
     async forceCleanup() {
         this.logger.info('Default', 'Force cleanup triggered');
-        const oldestClients = Array.from(this.clients.entries())
-            .sort(([, a], [, b]) => a.lastUsed - b.lastUsed)
-            .slice(0, Math.ceil(this.MAX_CONNECTIONS * 0.2))
+        const target = Math.ceil(this.MAX_CONNECTIONS * 0.2);
+        const entries = Array.from(this.clients.entries());
+        const evictionPriority = ([, info]) => {
+            if (info.state === 'error')
+                return 0;
+            if (info.autoDisconnect)
+                return 1;
+            if (info.state === 'disconnected')
+                return 2;
+            return 3;
+        };
+        const ordered = entries
+            .sort((a, b) => {
+            const pa = evictionPriority(a), pb = evictionPriority(b);
+            return pa !== pb ? pa - pb : a[1].lastUsed - b[1].lastUsed;
+        })
+            .slice(0, target)
             .map(([mobile]) => mobile);
-        for (const mobile of oldestClients) {
+        for (const mobile of ordered) {
             await this.unregisterClient(mobile);
         }
-        this.logger.info('Default', `Force cleanup completed - removed ${oldestClients.length} clients`);
+        this.logger.info('Default', `Force cleanup completed - removed ${ordered.length} clients`);
     }
     async forceReconnect(mobile) {
         this.logger.info(mobile, 'Force reconnect requested');
@@ -14214,34 +14310,35 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         }
     }
     async handle2FALogin(phone, client, password) {
+        let signInResult;
         try {
             this.logger.debug(`Fetching password SRP parameters for ${phone}`);
             const passwordSrpResult = await client.invoke(new tl_1.Api.account.GetPassword());
             this.logger.debug(`Computing password check for ${phone}`);
             const passwordCheck = await (0, Password_1.computeCheck)(passwordSrpResult, password);
             this.logger.debug(`Invoking CheckPassword API for ${phone}`);
-            const signInResult = await client.invoke(new tl_1.Api.auth.CheckPassword({
+            signInResult = await client.invoke(new tl_1.Api.auth.CheckPassword({
                 password: passwordCheck,
             }));
             if (!signInResult || !signInResult.user) {
                 throw new common_1.BadRequestException('Invalid response from Telegram server');
             }
-            this.logger.log(`2FA login successful for ${phone}`);
-            const sessionString = client.session.save();
-            if (!sessionString) {
-                throw new Error('Failed to generate session string');
-            }
-            const userData = await this.processLoginResult(signInResult.user, sessionString, password);
-            await this.disconnectClient(phone);
-            return userData;
         }
         catch (error) {
-            this.logger.error(`2FA login failed for ${phone}: ${error.message}`, error.stack);
+            this.logger.error(`2FA password check failed for ${phone}: ${error.message}`, error.stack);
             if (password) {
                 throw new common_1.BadRequestException('Incorrect 2FA password');
             }
             throw new common_1.BadRequestException('2FA password required');
         }
+        this.logger.log(`2FA login successful for ${phone}`);
+        const sessionString = client.session.save();
+        if (!sessionString) {
+            throw new Error('Failed to generate session string');
+        }
+        const userData = await this.processLoginResult(signInResult.user, sessionString, password);
+        await this.disconnectClient(phone);
+        return userData;
     }
     async handleNewUserRegistration(phone, client, phoneCodeHash) {
         try {
@@ -14812,6 +14909,14 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             if (!filter || Object.keys(filter).length === 0) {
                 throw new common_1.BadRequestException('Search filter is required');
             }
+            for (const [key, value] of Object.entries(filter)) {
+                if (key.startsWith('$')) {
+                    throw new common_1.BadRequestException(`Invalid search field: ${key}`);
+                }
+                if (value !== null && typeof value === 'object') {
+                    throw new common_1.BadRequestException(`Invalid search value for field: ${key}`);
+                }
+            }
             return await this.activeChannelModel.find(filter).lean().exec();
         }
         catch (error) {
@@ -15154,11 +15259,19 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         }
         if (search?.trim()) {
             const q = search.trim();
-            query.$or = [
-                { title: { $regex: q, $options: 'i' } },
-                { username: { $regex: q, $options: 'i' } },
+            const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const searchOr = [
+                { title: { $regex: escaped, $options: 'i' } },
+                { username: { $regex: escaped, $options: 'i' } },
                 { channelId: q },
             ];
+            if (query.$or) {
+                query.$and = [{ $or: query.$or }, { $or: searchOr }];
+                delete query.$or;
+            }
+            else {
+                query.$or = searchOr;
+            }
         }
         const total = await this.activeChannelModel.countDocuments(query).exec();
         const totalPages = Math.ceil(total / limitNum);
@@ -16426,17 +16539,14 @@ let BotsService = class BotsService {
             bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
             return bots;
         }
-        const allCategories = Object.values(ChannelCategory);
-        const allBots = [];
-        for (const cat of allCategories) {
-            const bots = this.cache.get(`category:${cat}`) || [];
-            allBots.push(...bots);
-        }
-        if (allBots.length > 0) {
-            return allBots;
+        const ALL_BOTS_KEY = 'all-bots';
+        const cachedAll = this.cache.get(ALL_BOTS_KEY);
+        if (cachedAll) {
+            return cachedAll;
         }
         console.warn('Cache miss for all bots');
         const bots = await this.botModel.find().lean().exec();
+        this.cache.set(ALL_BOTS_KEY, bots);
         bots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
         const botsByCategory = bots.reduce((acc, bot) => {
             if (!acc[bot.category])
@@ -18389,6 +18499,7 @@ const homoglyph_normalizer_1 = __webpack_require__(/*! ../../utils/homoglyph-nor
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const base_client_service_1 = __webpack_require__(/*! ../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
+const enrollment_lock_1 = __webpack_require__(/*! ../shared/enrollment-lock */ "./src/components/shared/enrollment-lock.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService extends base_client_service_1.BaseClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
@@ -18423,7 +18534,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
         if (enrolledAtMs > 0) {
             const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > 45) {
+            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
                 return false;
             }
         }
@@ -18581,6 +18692,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                         await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
+                    updateCount = Math.max(updateCount, 1);
                 }
             }
             else {
@@ -18683,18 +18795,18 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         if (status === 'active' && !session) {
             throw new common_1.BadRequestException('Active BufferClient requires a session');
         }
-        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
-        if (enrolledIn && enrolledIn !== 'bufferClients') {
-            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`);
-        }
-        const createData = {
-            ...bufferClient,
-            mobile: canonicalMobile,
-            ...(session ? { session } : {}),
-            status,
-        };
-        const result = await this.bufferClientModel.create({
-            ...createData,
+        const result = await (0, enrollment_lock_1.withEnrollmentLock)(canonicalMobile, async () => {
+            const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+            if (enrolledIn && enrolledIn !== 'bufferClients') {
+                throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`);
+            }
+            const createData = {
+                ...bufferClient,
+                mobile: canonicalMobile,
+                ...(session ? { session } : {}),
+                status,
+            };
+            return this.bufferClientModel.create({ ...createData });
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
@@ -18842,6 +18954,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async setPrimaryInUse(clientId, mobile) {
         const now = new Date();
+        const exists = await this.bufferClientModel.exists({ mobile, clientId });
+        if (!exists) {
+            throw new common_1.NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
+        }
         const revoked = await this.bufferClientModel.updateMany({
             clientId,
             mobile: { $ne: mobile },
@@ -18998,6 +19114,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const clientMobiles = clients.map((client) => client?.mobile);
         if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile)))
             throw new common_1.BadRequestException('Number is an Active Client');
+        if (await this.promoteClientService.existsByMobile(canonicalMobile)) {
+            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in promoteClients; refusing to create a cross-pool BufferClient`);
+        }
         const telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
             const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
@@ -19175,8 +19294,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
                 const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.createdAt);
                 const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                if (daysSinceEnrolled > 45 && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
-                    processSkipReason = `zombie_${Math.round(daysSinceEnrolled)}d`;
+                if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
+                    processSkipReason = `stuck_${Math.round(daysSinceEnrolled)}d`;
                 }
             }
             else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
@@ -19608,14 +19727,24 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 status: 'active',
                 message: 'Enrolled for warmup',
             };
-            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, {
-                $set: {
-                    ...bufferClient,
-                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
-                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
-                    enrolledAt: new Date(),
+            const enrolled = await (0, enrollment_lock_1.withEnrollmentLock)(this.canonicalMobile(document.mobile), async () => {
+                const already = await this.isMobileEnrolledAnywhere(document.mobile);
+                if (already && already !== 'bufferClients') {
+                    this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: now enrolled in ${already}`);
+                    return false;
                 }
-            }, { new: true, upsert: true }).exec();
+                await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, {
+                    $set: {
+                        ...bufferClient,
+                        warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                        warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                        enrolledAt: new Date(),
+                    }
+                }, { new: true, upsert: true }).exec();
+                return true;
+            });
+            if (!enrolled)
+                return false;
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
                 '<b>Buffer Client Enrolled</b>',
@@ -21477,6 +21606,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.SearchChannelDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_transformer_1 = __webpack_require__(/*! class-transformer */ "class-transformer");
 class SearchChannelDto {
 }
 exports.SearchChannelDto = SearchChannelDto;
@@ -21508,7 +21638,8 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Indicates if the channel can send messages'
     }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({
@@ -22314,6 +22445,10 @@ let ClientService = ClientService_1 = class ClientService {
     }
     async update(clientId, updateClientDto) {
         this.ensureInitialized();
+        if (updateClientDto.session !== undefined &&
+            (updateClientDto.session === null || !String(updateClientDto.session).trim())) {
+            throw new common_1.BadRequestException('Cannot update client with a blank session');
+        }
         try {
             const cleanUpdateDto = this.cleanUpdateObject(updateClientDto);
             if (cleanUpdateDto.mobile !== undefined) {
@@ -22500,7 +22635,7 @@ let ClientService = ClientService_1 = class ClientService {
             mobile: { $ne: existingClientMobile },
             createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
             availableDate: { $lte: today },
-            channels: { $gt: 200 },
+            channels: { $gte: warmup_phases_1.MIN_CHANNELS_FOR_MATURING },
             status: 'active',
             inUse: { $ne: true },
             warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
@@ -22765,7 +22900,16 @@ let ClientService = ClientService_1 = class ClientService {
                 await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
             }
             else {
-                this.logger.log('Not Deleting user');
+                const retryAvailableDate = client_helper_utils_1.ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
+                await this.bufferClientService.update(existingMobile, {
+                    inUse: false,
+                    status: 'active',
+                    availableDate: retryAvailableDate,
+                    message: `Archival retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
+                }).catch((updateError) => {
+                    this.logger.error(`Failed to release stranded archival reservation for ${existingMobile}: ${(0, parseError_1.parseError)(updateError, '', false).message}`);
+                });
+                this.logger.log(`Released archival reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
             }
         }
     }
@@ -24975,6 +25119,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
                 this.logger.debug('Performing full data update');
                 doc.data = updateDto.value;
             }
+            doc.markModified('data');
             await doc.save({ session: useSession });
             this.logger.debug(`Successfully updated document with configKey: ${configKey}`);
             if (shouldEndSession) {
@@ -25045,6 +25190,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
                     throw new common_1.BadRequestException('Invalid array operation type');
             }
             (0, lodash_1.set)(doc.data, updateDto.path, array);
+            doc.markModified('data');
             await doc.save({ session });
             this.logger.debug('Array operation completed successfully');
         }
@@ -25071,6 +25217,7 @@ let DynamicDataService = DynamicDataService_1 = class DynamicDataService {
                 }
                 this.logger.debug(`Removing data at path: ${path}`);
                 (0, lodash_1.unset)(doc.data, path);
+                doc.markModified('data');
                 await doc.save({ session });
             }
             else {
@@ -25638,9 +25785,17 @@ let EventManagerService = EventManagerService_1 = class EventManagerService {
                     }
                     if (!success) {
                         try {
-                            const newTime = Date.now() + 30000;
-                            await this.eventModel.updateOne({ _id: event._id }, { $set: { time: newTime } });
-                            this.logger.log(`Event '${event._id}' rescheduled for ${new Date(newTime).toISOString()}`);
+                            const MAX_EVENT_ATTEMPTS = 5;
+                            const attempts = (event.attempts || 0) + 1;
+                            if (attempts >= MAX_EVENT_ATTEMPTS) {
+                                await this.eventModel.deleteOne({ _id: event._id });
+                                this.logger.warn(`Event '${event._id}' dropped after ${attempts} failed attempts`);
+                            }
+                            else {
+                                const newTime = Date.now() + 30000;
+                                await this.eventModel.updateOne({ _id: event._id }, { $set: { time: newTime, attempts } });
+                                this.logger.log(`Event '${event._id}' rescheduled (attempt ${attempts}/${MAX_EVENT_ATTEMPTS}) for ${new Date(newTime).toISOString()}`);
+                            }
                         }
                         catch (err) {
                             this.logger.error(`Failed to reschedule event '${event._id}'`, err);
@@ -25745,6 +25900,10 @@ __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Mixed, default: {} }),
     __metadata("design:type", Object)
 ], Event.prototype, "payload", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], Event.prototype, "attempts", void 0);
 exports.Event = Event = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'events',
@@ -26617,10 +26776,17 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
         }
         return this._pickAndMark(allIps);
     }
+    poolSignature(ips) {
+        return ips
+            .map(ip => `${ip.ipAddress}:${ip.port}`)
+            .sort()
+            .join(',');
+    }
     async _pickAndMark(ips) {
         let index = 0;
+        const poolKey = `${ROUND_ROBIN_KEY}:${this.poolSignature(ips)}`;
         try {
-            const counter = await redisClient_1.RedisClient.incr(ROUND_ROBIN_KEY);
+            const counter = await redisClient_1.RedisClient.incr(poolKey);
             index = (counter - 1) % ips.length;
         }
         catch (err) {
@@ -26722,6 +26888,10 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
     async markInactive(ipAddress, port) {
         await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { status: 'inactive' } });
         this.logger.log(`Marked proxy inactive: ${ipAddress}:${port}`);
+    }
+    async markActive(ipAddress, port) {
+        await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { status: 'active' } });
+        this.logger.log(`Marked proxy active: ${ipAddress}:${port}`);
     }
     async findBySource(source) {
         return this.proxyIpModel.find({ source }).lean();
@@ -27881,6 +28051,7 @@ const homoglyph_normalizer_1 = __webpack_require__(/*! ../../utils/homoglyph-nor
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const base_client_service_1 = __webpack_require__(/*! ../shared/base-client.service */ "./src/components/shared/base-client.service.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
+const enrollment_lock_1 = __webpack_require__(/*! ../shared/enrollment-lock */ "./src/components/shared/enrollment-lock.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService extends base_client_service_1.BaseClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
@@ -27924,7 +28095,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
         if (enrolledAtMs > 0) {
             const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > 45) {
+            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
                 return false;
             }
         }
@@ -28059,6 +28230,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                         await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
+                    updateCount = Math.max(updateCount, 1);
                 }
             }
             else {
@@ -28148,19 +28320,21 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         if (status === 'active' && !session) {
             throw new common_1.BadRequestException('Active PromoteClient requires a session');
         }
-        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
-        if (enrolledIn && enrolledIn !== 'promoteClients') {
-            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`);
-        }
-        const promoteClientData = {
-            ...promoteClient,
-            mobile: canonicalMobile,
-            ...(session ? { session } : {}),
-            status,
-            message: promoteClient.message || 'Account is functioning properly',
-        };
-        const newUser = new this.promoteClientModel(promoteClientData);
-        const result = await newUser.save();
+        const result = await (0, enrollment_lock_1.withEnrollmentLock)(canonicalMobile, async () => {
+            const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+            if (enrolledIn && enrolledIn !== 'promoteClients') {
+                throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`);
+            }
+            const promoteClientData = {
+                ...promoteClient,
+                mobile: canonicalMobile,
+                ...(session ? { session } : {}),
+                status,
+                message: promoteClient.message || 'Account is functioning properly',
+            };
+            const newUser = new this.promoteClientModel(promoteClientData);
+            return newUser.save();
+        });
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Promote Client Created</b>',
             '',
@@ -28773,14 +28947,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 message: 'Enrolled for warmup',
                 lastUsed: null,
             };
-            await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, {
-                $set: {
-                    ...promoteClient,
-                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
-                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
-                    enrolledAt: new Date(),
+            const enrolled = await (0, enrollment_lock_1.withEnrollmentLock)(this.canonicalMobile(document.mobile), async () => {
+                const already = await this.isMobileEnrolledAnywhere(document.mobile);
+                if (already && already !== 'promoteClients') {
+                    this.logger.warn(`Skipping promote enrollment for ${document.mobile}: now enrolled in ${already}`);
+                    return false;
                 }
-            }, { new: true, upsert: true }).exec();
+                await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, {
+                    $set: {
+                        ...promoteClient,
+                        warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                        warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                        enrolledAt: new Date(),
+                    }
+                }, { new: true, upsert: true }).exec();
+                return true;
+            });
+            if (!enrolled)
+                return false;
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
                 '<b>Promote Client Enrolled</b>',
@@ -31611,6 +31795,17 @@ let SessionService = class SessionService {
         currentLimit.count++;
         return { allowed: true };
     }
+    peekRateLimit(mobile) {
+        const now = Date.now();
+        const rateLimit = this.rateLimitMap.get(mobile);
+        if (rateLimit && now > rateLimit.resetTime) {
+            return { allowed: true };
+        }
+        if (rateLimit && rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: rateLimit.resetTime };
+        }
+        return { allowed: true };
+    }
     isPermanentSessionValidationError(error) {
         const message = (error || '').toLowerCase();
         return message.includes('phone number mismatch')
@@ -31858,7 +32053,7 @@ let SessionService = class SessionService {
                 };
             }
             this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
-            const rateLimitCheck = this.checkRateLimit(mobile);
+            const rateLimitCheck = this.peekRateLimit(mobile);
             if (!rateLimitCheck.allowed) {
                 const resetTime = new Date(rateLimitCheck.resetTime || 0);
                 return {
@@ -32234,6 +32429,19 @@ class BaseClientService {
         this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
         return (repairedDoc?.mobile ? repairedDoc : Object.assign(doc, updateData));
     }
+    async retireIfStuck(doc, now) {
+        const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+        const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (daysSinceEnrolled <= this.STUCK_WARMUP_DAYS || phase === warmup_phases_1.WarmupPhase.READY || phase === warmup_phases_1.WarmupPhase.SESSION_ROTATED) {
+            return false;
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
+        const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
+        return true;
+    }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -32262,6 +32470,7 @@ class BaseClientService {
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
         this.MAX_UPDATES_PER_CYCLE = 20;
+        this.STUCK_WARMUP_DAYS = 45;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -32491,7 +32700,11 @@ class BaseClientService {
     removeFromLeaveMap(key) {
         this.leaveChannelMap.delete(key);
         if (this.leaveChannelMap.size === 0) {
-            this.clearLeaveChannelInterval();
+            if (this.leaveChannelIntervalId) {
+                clearTimeout(this.leaveChannelIntervalId);
+                this.activeTimeouts.delete(this.leaveChannelIntervalId);
+                this.leaveChannelIntervalId = null;
+            }
         }
     }
     clearJoinMap() {
@@ -32893,16 +33106,10 @@ class BaseClientService {
         }
         const failedAttempts = doc.failedUpdateAttempts || 0;
         const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+        if (await this.retireIfStuck(doc, now)) {
+            return { updateCount: 0 };
+        }
         if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-            const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-            const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-            if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
-                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
-                return { updateCount: 0 };
-            }
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
             const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
             const resetDoc1 = await this.update(doc.mobile, resetFields);
@@ -33285,6 +33492,14 @@ class BaseClientService {
                     await this.deactivateClient(mobile, reason, { permanent: true });
                 }
                 else {
+                    if (joinCount > 0) {
+                        try {
+                            await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                        }
+                        catch (incError) {
+                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${mobile} after transient error: ${this.getErrorText(incError)}`);
+                        }
+                    }
                     const channels = this.joinChannelMap.get(mobile);
                     if (currentChannel && channels) {
                         channels.unshift(currentChannel);
@@ -33381,7 +33596,9 @@ class BaseClientService {
                 this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
                 if (leftCount > 0) {
                     try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });
+                        await this.model.updateOne({ mobile }, [
+                            { $set: { channels: { $max: [0, { $subtract: [{ $ifNull: ['$channels', 0] }, leftCount] }] } } },
+                        ], { updatePipeline: true });
                     }
                     catch {
                     }
@@ -33672,7 +33889,8 @@ class BaseClientService {
                 continue;
             const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
             const isLegacyOperational = !doc.warmupPhase && client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed) > 0;
-            if (isLegacyOperational || (0, warmup_phases_1.isAccountReady)(phase)) {
+            const meetsSwapChannelThreshold = (doc.channels || 0) >= warmup_phases_1.MIN_CHANNELS_FOR_MATURING;
+            if ((isLegacyOperational || (0, warmup_phases_1.isAccountReady)(phase)) && meetsSwapChannelThreshold) {
                 readyOperationalDates.push(operationalDate);
             }
             else {
@@ -34454,6 +34672,36 @@ __decorate([
     (0, class_transformer_1.Transform)(({ value }) => parseInt(value)),
     __metadata("design:type", Number)
 ], ExecuteRequestDto.prototype, "maxRedirects", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/shared/enrollment-lock.ts"
+/*!**************************************************!*\
+  !*** ./src/components/shared/enrollment-lock.ts ***!
+  \**************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.withEnrollmentLock = withEnrollmentLock;
+exports.__resetEnrollmentLocks = __resetEnrollmentLocks;
+const chains = new Map();
+async function withEnrollmentLock(key, fn) {
+    const previous = chains.get(key) ?? Promise.resolve();
+    const run = previous.then(() => fn(), () => fn());
+    const tail = run.then(() => undefined, () => undefined);
+    chains.set(key, tail);
+    tail.finally(() => {
+        if (chains.get(key) === tail) {
+            chains.delete(key);
+        }
+    });
+    return run;
+}
+function __resetEnrollmentLocks() {
+    chains.clear();
+}
 
 
 /***/ },
@@ -36733,7 +36981,7 @@ let TransactionService = TransactionService_1 = class TransactionService {
             const remainingFilters = {};
             if (filters.profile)
                 remainingFilters['profile'] = filters.profile;
-            if (filters.amount)
+            if (filters.amount !== undefined && filters.amount !== null)
                 remainingFilters['amount'] = filters.amount;
             if (filters.issue)
                 remainingFilters['issue'] = filters.issue;
@@ -37387,15 +37635,18 @@ __decorate([
 ], SearchDto.prototype, "accessHash", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Paid reply status', type: Boolean }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "paidReply", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Demo given status', type: Boolean }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "demoGiven", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Second show status', type: Boolean }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "secondShow", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Profile name' }),
@@ -37408,7 +37659,8 @@ __decorate([
 ], SearchDto.prototype, "chatId", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Pics Sent status' }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchDto.prototype, "picsSent", void 0);
 
 
@@ -37954,7 +38206,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     async updateAll(chatId, updateUserDataDto) {
         delete updateUserDataDto._id;
         return this.userDataModel
-            .updateMany({ chatId }, { $set: updateUserDataDto }, { upsert: true })
+            .updateMany({ chatId }, { $set: updateUserDataDto })
             .exec();
     }
     async remove(profile, chatId) {
@@ -38445,17 +38697,17 @@ __decorate([
 ], SearchUserDto.prototype, "mobile", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: '2FA status' }),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], SearchUserDto.prototype, "twoFA", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Expiration status' }),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], SearchUserDto.prototype, "expired", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Session string' }),
@@ -38489,17 +38741,17 @@ __decorate([
 ], SearchUserDto.prototype, "gender", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Demo given status' }),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], SearchUserDto.prototype, "demoGiven", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Starred status' }),
-    (0, class_transformer_1.Transform)(({ value }) => value === 'true' || value === true),
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsBoolean)(),
-    __metadata("design:type", Boolean)
+    __metadata("design:type", Object)
 ], SearchUserDto.prototype, "starred", void 0);
 
 
@@ -38855,8 +39107,11 @@ function scoreRelationship(chat) {
     const negativePenalty = Math.min(negativeKeywordCount, 200) * 8.0;
     const mutualScore = isMutualContact ? 50 : 0;
     const commonChatScore = Math.min(commonChats, 10) * 15.0;
-    const daysSinceLastMessage = lastMessageDate
+    const rawDaysSinceLastMessage = lastMessageDate
         ? (Date.now() - new Date(lastMessageDate).getTime()) / (1000 * 60 * 60 * 24)
+        : 999;
+    const daysSinceLastMessage = Number.isFinite(rawDaysSinceLastMessage)
+        ? Math.max(0, rawDaysSinceLastMessage)
         : 999;
     const recencyBonus = daysSinceLastMessage <= 90
         ? 100 * (1 - daysSinceLastMessage / 90)
@@ -38918,10 +39173,22 @@ let UsersController = class UsersController {
         return this.usersService.search(queryParams);
     }
     async topRelationships(page, limit, minScore, gender, excludeTwoFA) {
+        const pageNum = page ? parseInt(page, 10) : undefined;
+        const limitNum = limit ? parseInt(limit, 10) : undefined;
+        const minScoreNum = minScore ? parseFloat(minScore) : undefined;
+        if (pageNum !== undefined && (isNaN(pageNum) || pageNum < 1)) {
+            throw new common_1.BadRequestException('Page must be a positive integer');
+        }
+        if (limitNum !== undefined && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+            throw new common_1.BadRequestException('Limit must be between 1 and 100');
+        }
+        if (minScoreNum !== undefined && (isNaN(minScoreNum) || minScoreNum < 0)) {
+            throw new common_1.BadRequestException('minScore must be a non-negative number');
+        }
         return this.usersService.topRelationships({
-            page: page ? parseInt(page, 10) : undefined,
-            limit: limit ? parseInt(limit, 10) : undefined,
-            minScore: minScore ? parseFloat(minScore) : undefined,
+            page: pageNum,
+            limit: limitNum,
+            minScore: minScoreNum,
             gender,
             excludeTwoFA: excludeTwoFA === 'true'
         });
@@ -39008,6 +39275,12 @@ let UsersController = class UsersController {
         const order = sortOrder === 'asc' ? 1 : -1;
         const limitNum = limit ? parseInt(limit, 10) : 20;
         const skipNum = skip ? parseInt(skip, 10) : 0;
+        if (!Number.isInteger(limitNum) || limitNum < 1) {
+            throw new common_1.BadRequestException('Limit must be a positive integer');
+        }
+        if (!Number.isInteger(skipNum) || skipNum < 0) {
+            throw new common_1.BadRequestException('Skip must be a non-negative integer');
+        }
         return this.usersService.aggregateSort(field, order, limitNum, skipNum);
     }
     async aggregateSortQuery(requestBody) {
@@ -41026,10 +41299,15 @@ let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
         return this.configured;
     }
     async fetchAllProxies() {
+        const { proxies } = await this.fetchAllProxiesWithStatus();
+        return proxies;
+    }
+    async fetchAllProxiesWithStatus() {
         this.ensureConfigured();
         const allProxies = [];
         let page = 1;
         const pageSize = 100;
+        let complete = true;
         this.logger.log('Fetching all proxies from Webshare...');
         while (true) {
             try {
@@ -41037,7 +41315,7 @@ let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
                 const { results, next, count } = response.data;
                 allProxies.push(...results);
                 this.logger.debug(`Fetched page ${page}: ${results.length} proxies (total so far: ${allProxies.length}/${count})`);
-                if (!next || allProxies.length >= count) {
+                if (!next || allProxies.length >= count || results.length === 0) {
                     break;
                 }
                 page++;
@@ -41045,26 +41323,31 @@ let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
             catch (error) {
                 this.logger.error(`Failed to fetch page ${page}: ${error.message}`);
                 if (allProxies.length > 0) {
-                    this.logger.warn(`Partial fetch: returning ${allProxies.length} proxies fetched before error`);
+                    this.logger.warn(`Partial fetch: returning ${allProxies.length} proxies fetched before error (INCOMPLETE)`);
+                    complete = false;
                     break;
                 }
                 throw error;
             }
         }
-        this.logger.log(`Fetched ${allProxies.length} proxies from Webshare`);
-        return allProxies;
+        this.logger.log(`Fetched ${allProxies.length} proxies from Webshare (complete=${complete})`);
+        return { proxies: allProxies, complete };
     }
     async syncProxies(removeStale = true) {
         this.ensureConfigured();
         const startTime = Date.now();
         try {
             this.logger.log(`Starting Webshare proxy sync (removeStale=${removeStale})`);
-            const webshareProxies = await this.fetchAllProxies();
+            const { proxies: webshareProxies, complete } = await this.fetchAllProxiesWithStatus();
             const dtos = webshareProxies
                 .filter(p => p.proxy_address && p.valid)
                 .map(p => this.webshareToDto(p));
+            const effectiveRemoveStale = removeStale && complete;
+            if (removeStale && !complete) {
+                this.logger.warn('Webshare fetch was incomplete; skipping stale-removal to avoid deleting valid proxies');
+            }
             this.logger.log(`Converting ${dtos.length} valid proxies (filtered from ${webshareProxies.length} total)`);
-            const result = await this.ipManagementService.syncFromExternal(SOURCE_NAME, dtos, removeStale);
+            const result = await this.ipManagementService.syncFromExternal(SOURCE_NAME, dtos, effectiveRemoveStale);
             const syncResult = {
                 totalFetched: webshareProxies.length,
                 created: result.created,
@@ -41102,6 +41385,7 @@ let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
     }
     async replaceProxy(ipAddress, port, preferredCountry) {
         this.ensureConfigured();
+        let markedInactive = false;
         try {
             const proxy = await this.ipManagementService.findProxyIpById(ipAddress, port);
             if (proxy.source !== SOURCE_NAME) {
@@ -41111,6 +41395,7 @@ let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
                 };
             }
             await this.ipManagementService.markInactive(ipAddress, port);
+            markedInactive = true;
             const body = {
                 proxy_address: ipAddress,
             };
@@ -41127,6 +41412,14 @@ let WebshareProxyService = WebshareProxyService_1 = class WebshareProxyService {
         }
         catch (error) {
             this.logger.error(`Failed to replace proxy ${ipAddress}:${port}: ${error.message}`);
+            if (markedInactive) {
+                try {
+                    await this.ipManagementService.markActive(ipAddress, port);
+                }
+                catch (rollbackErr) {
+                    this.logger.error(`Failed to roll back proxy ${ipAddress}:${port} to active: ${rollbackErr.message}`);
+                }
+            }
             return {
                 success: false,
                 message: `Replacement failed: ${error.message}`,
@@ -41369,7 +41662,10 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         const queryApiKey = request.query['apiKey']?.toString() ||
             request.query['apikey']?.toString() ||
             request.query['api_key']?.toString();
-        if (this.isIgnoredPath(path, url, originalUrl)) {
+        const method = (request.method || 'GET').toUpperCase();
+        const isSafeMethod = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+        const ignoredPathIsWriteProtected = this.isWriteProtectedIgnorePath(path, url, originalUrl);
+        if (this.isIgnoredPath(path, url, originalUrl) && (isSafeMethod || !ignoredPathIsWriteProtected)) {
             this.sanitizeQuery(request, queryApiKey);
             return true;
         }
@@ -41448,6 +41744,20 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
             return this.redactQuerySecret(url);
         }
     }
+    isWriteProtectedIgnorePath(...urls) {
+        for (const urlToTest of urls.filter(Boolean)) {
+            for (const guarded of AuthGuard_1.WRITE_PROTECTED_IGNORE_PATHS) {
+                if (typeof guarded === 'string') {
+                    if (guarded.toLowerCase() === urlToTest.toLowerCase())
+                        return true;
+                }
+                else if (guarded.test(urlToTest)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
     isIgnoredPath(...urls) {
         for (const urlToTest of urls.filter(Boolean)) {
             for (const ignore of IGNORE_PATHS) {
@@ -41474,18 +41784,24 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
         }
     }
     getHeaderValue(request, headerName) {
-        return request.headers[headerName.toLowerCase()];
+        const raw = request.headers[headerName.toLowerCase()];
+        if (Array.isArray(raw))
+            return raw[0];
+        return raw;
     }
     extractRealClientIP(request) {
-        const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
-        if (cfConnectingIP)
-            return cfConnectingIP;
-        const xRealIP = this.getHeaderValue(request, 'x-real-ip');
-        if (xRealIP)
-            return xRealIP;
-        const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
-        if (xForwardedFor)
-            return xForwardedFor.split(',')[0].trim();
+        const trustProxyHeaders = process.env.TRUST_PROXY_HEADERS !== 'false';
+        if (trustProxyHeaders) {
+            const cfConnectingIP = this.getHeaderValue(request, 'cf-connecting-ip');
+            if (cfConnectingIP)
+                return cfConnectingIP;
+            const xRealIP = this.getHeaderValue(request, 'x-real-ip');
+            if (xRealIP)
+                return xRealIP;
+            const xForwardedFor = this.getHeaderValue(request, 'x-forwarded-for');
+            if (xForwardedFor)
+                return xForwardedFor.split(',')[0].trim();
+        }
         if (request.ip)
             return request.ip.replace('::ffff:', '');
         if (request.connection?.remoteAddress)
@@ -41558,6 +41874,7 @@ let AuthGuard = AuthGuard_1 = class AuthGuard {
     }
 };
 exports.AuthGuard = AuthGuard;
+AuthGuard.WRITE_PROTECTED_IGNORE_PATHS = ['/builds'];
 exports.AuthGuard = AuthGuard = AuthGuard_1 = __decorate([
     (0, common_1.Injectable)()
 ], AuthGuard);
@@ -41624,6 +41941,10 @@ let ExceptionsFilter = class ExceptionsFilter {
                 typeof errorResponse === 'string'
                     ? errorResponse
                     : errorResponse.message || errorResponse;
+        }
+        if (response.headersSent) {
+            response.end();
+            return;
         }
         response.status(status).json({
             statusCode: status,
@@ -41859,6 +42180,9 @@ async function bootstrap() {
                 enableImplicitConversion: true
             },
         }));
+        (0, processListeners_1.setShutdownHandler)(async () => {
+            await app.close();
+        });
         await app.init();
         await app.listen(process.env.PORT || 9002);
         console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);
@@ -41971,8 +42295,13 @@ exports.LoggerMiddleware = LoggerMiddleware = __decorate([
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.setShutdownHandler = setShutdownHandler;
 exports.setProcessListeners = setProcessListeners;
-function setProcessListeners() {
+let shutdownHandler;
+function setShutdownHandler(fn) {
+    shutdownHandler = fn;
+}
+function setProcessListeners(onShutdown) {
     process.on('unhandledRejection', (reason, promise) => {
         console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
     });
@@ -41981,16 +42310,29 @@ function setProcessListeners() {
         process.exit(1);
     });
     let isShuttingDown = false;
-    const shutdown = (signal) => {
+    const SHUTDOWN_TIMEOUT_MS = 20000;
+    const shutdown = async (signal) => {
         if (isShuttingDown)
             return;
         isShuttingDown = true;
         console.log(`⚡ ${signal} received, shutting down...`);
+        const cleanup = onShutdown ?? shutdownHandler;
+        if (cleanup) {
+            try {
+                await Promise.race([
+                    cleanup(),
+                    new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+                ]);
+            }
+            catch (err) {
+                console.error('❌ Error during graceful shutdown:', err);
+            }
+        }
         process.exit(0);
     };
-    process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGQUIT', () => shutdown('SIGQUIT'));
+    process.on('SIGINT', () => { void shutdown('SIGINT'); });
+    process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+    process.on('SIGQUIT', () => { void shutdown('SIGQUIT'); });
     process.on('exit', (code) => {
         console.log(`🛑 Application closed with exit code ${code}`);
     });
@@ -42010,6 +42352,7 @@ function setProcessListeners() {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.setBotsServiceInstance = setBotsServiceInstance;
 exports.getBotsServiceInstance = getBotsServiceInstance;
+exports.tryGetBotsServiceInstance = tryGetBotsServiceInstance;
 let botsServiceInstance = null;
 function setBotsServiceInstance(instance) {
     botsServiceInstance = instance;
@@ -42018,6 +42361,9 @@ function getBotsServiceInstance() {
     if (!botsServiceInstance) {
         throw new Error('BotsService instance not initialized. Make sure to call setBotsServiceInstance first.');
     }
+    return botsServiceInstance;
+}
+function tryGetBotsServiceInstance() {
     return botsServiceInstance;
 }
 
@@ -42236,7 +42582,9 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `<b>${prefix}</b>\n\n<b>Error:</b> ${formattedMessage}`;
         try {
-            const botsService = (0, bot_service_instance_1.getBotsServiceInstance)();
+            const botsService = (0, bot_service_instance_1.tryGetBotsServiceInstance)();
+            if (!botsService)
+                return;
             await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
         }
         catch (error) {
@@ -42400,10 +42748,12 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                     error: 'ParseError',
                 };
             }
-            const message = parsedError.message;
+            const message = typeof parsedError.message === 'string'
+                ? parsedError.message
+                : JSON.stringify(parsedError.message);
             const isTimeout = axios_1.default.isAxiosError(error) &&
                 (error.code === 'ECONNABORTED' ||
-                    (message && message.includes('timeout')) ||
+                    message.includes('timeout') ||
                     parsedError.status === 408);
             if (parsedError.status === 403 || parsedError.status === 495) {
                 try {
@@ -42448,9 +42798,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                 await (0, common_1.sleep)(delay);
                 continue;
             }
-            if (attempt >= retryConfig.maxRetries) {
-                break;
-            }
+            break;
         }
     }
     try {
@@ -42578,6 +42926,8 @@ function cleanDisplayName(name) {
 function nameMatchesAssignment(tgFirstName, assignedFirstName) {
     const normalized = cleanDisplayName(tgFirstName).toLowerCase();
     const assigned = assignedFirstName.toLowerCase().trim();
+    if (!assigned || !normalized)
+        return false;
     return normalized.includes(assigned);
 }
 function lastNameMatches(tgLastName, assignedLastName) {
@@ -44314,9 +44664,7 @@ async function runWithTimeout(promise, timeoutMs, cancelSignal, errorMessage) {
         }
     }
 }
-function defaultShouldRetry(error, attempt) {
-    if (attempt >= 3)
-        return false;
+function defaultShouldRetry(error, _attempt) {
     if (error?.message?.toLowerCase().includes("cancelled"))
         return false;
     const msg = (error?.message || "").toLowerCase();
@@ -44699,6 +45047,16 @@ module.exports = require("fs");
 (module) {
 
 module.exports = require("http");
+
+/***/ },
+
+/***/ "os"
+/*!*********************!*\
+  !*** external "os" ***!
+  \*********************/
+(module) {
+
+module.exports = require("os");
 
 /***/ },
 

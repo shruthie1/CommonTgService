@@ -18,21 +18,6 @@ const safeAttemptReverse = (val) => {
     }
 };
 exports.safeAttemptReverse = safeAttemptReverse;
-const isSimilarEnough = (actual, expected) => {
-    const normalizedActual = normalize(actual);
-    const normalizedExpected = normalize(expected);
-    if (normalizedActual === normalizedExpected)
-        return true;
-    if (normalizedActual.includes(normalizedExpected) || normalizedExpected.includes(normalizedActual))
-        return true;
-    const longer = normalizedActual.length > normalizedExpected.length ? normalizedActual : normalizedExpected;
-    const shorter = normalizedActual.length > normalizedExpected.length ? normalizedExpected : normalizedActual;
-    if (longer.length === 0)
-        return true;
-    const editDistance = levenshteinDistance(normalizedActual, normalizedExpected);
-    const similarity = 1 - editDistance / longer.length;
-    return similarity >= 0.7;
-};
 const levenshteinDistance = (str1, str2) => {
     const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(0));
     for (let i = 0; i <= str1.length; i++)

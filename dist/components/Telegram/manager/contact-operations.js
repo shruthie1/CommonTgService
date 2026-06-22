@@ -50,6 +50,8 @@ const fs = __importStar(require("fs"));
 const big_integer_1 = __importDefault(require("big-integer"));
 const uploads_1 = require("telegram/client/uploads");
 const helpers_1 = require("./helpers");
+const parseError_1 = require("../../../utils/parseError");
+const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentError"));
 function getFloodWaitSeconds(error) {
     if (error?.seconds != null)
         return error.seconds;
@@ -75,6 +77,10 @@ async function addContact(ctx, data, namePrefix) {
                     ctx.logger.warn(ctx.phoneNumber, `FLOOD_WAIT ${floodWait}s during addContact, stopping batch`);
                     break;
                 }
+                if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(err, '', false))) {
+                    ctx.logger.error(ctx.phoneNumber, `Permanent error during addContact, aborting batch`, err);
+                    throw err;
+                }
                 ctx.logger.info(ctx.phoneNumber, err);
             }
             if (i < data.length - 1) {
@@ -84,8 +90,10 @@ async function addContact(ctx, data, namePrefix) {
     }
     catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error adding contacts:', error);
-        const { parseError } = require('../../../utils/parseError');
-        parseError(error, `Failed to save contacts`);
+        if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+            throw error;
+        }
+        (0, parseError_1.parseError)(error, `Failed to save contacts`);
     }
 }
 async function addContacts(ctx, mobiles, namePrefix) {
@@ -104,8 +112,7 @@ async function addContacts(ctx, mobiles, namePrefix) {
     }
     catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error adding contacts:', error);
-        const { parseError } = require('../../../utils/parseError');
-        parseError(error, `Failed to save contacts`);
+        (0, parseError_1.parseError)(error, `Failed to save contacts`);
     }
 }
 async function getContacts(ctx) {
@@ -142,7 +149,7 @@ async function exportContacts(ctx, format, includeBlocked = false) {
             firstName: contact.firstName || '',
             lastName: contact.lastName || '',
             phone: contact.phone || '',
-            blocked: blockedContacts && 'peerBlocked' in blockedContacts
+            blocked: blockedContacts && 'blocked' in blockedContacts
                 ? (blockedContacts.blocked || []).some((p) => (p.peerId instanceof telegram_1.Api.PeerUser) ? p.peerId.userId?.toString() === contact.id.toString() : false)
                 : false,
         }));
@@ -176,6 +183,11 @@ async function importContacts(ctx, data) {
                 results.push({ success: false, phone: contact.phone, error: `FLOOD_WAIT_${floodWait}` });
                 break;
             }
+            if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, `Permanent error during importContacts, aborting batch`, error);
+                results.push({ success: false, phone: contact.phone, error: error.message });
+                break;
+            }
             results.push({ success: false, phone: contact.phone, error: error.message });
         }
         if (i < data.length - 1) {
@@ -206,6 +218,11 @@ async function manageBlockList(ctx, userIds, block) {
                 results.push({ success: false, userId, error: `FLOOD_WAIT_${floodWait}` });
                 break;
             }
+            if ((0, isPermanentError_1.default)((0, parseError_1.parseError)(error, '', false))) {
+                ctx.logger.error(ctx.phoneNumber, `Permanent error during ${block ? 'block' : 'unblock'}, aborting batch`, error);
+                results.push({ success: false, userId, error: error.message });
+                break;
+            }
             results.push({ success: false, userId, error: error.message });
         }
         if (i < userIds.length - 1) {
@@ -219,13 +236,14 @@ async function getContactStatistics(ctx) {
         throw new Error('Client not initialized');
     const contactsResult = await ctx.client.invoke(new telegram_1.Api.contacts.GetContacts({}));
     const contacts = ('users' in contactsResult ? contactsResult.users : []);
-    const onlineContacts = contacts.filter((c) => c.status && 'wasOnline' in c.status);
+    const onlineNowContacts = contacts.filter((c) => c.status instanceof telegram_1.Api.UserStatusOnline);
+    const recentlyOfflineContacts = contacts.filter((c) => c.status instanceof telegram_1.Api.UserStatusOffline);
     return {
         total: contacts.length,
-        online: onlineContacts.length,
+        online: onlineNowContacts.length,
         withPhone: contacts.filter((c) => c.phone).length,
         mutual: contacts.filter((c) => c.mutualContact).length,
-        lastWeekActive: onlineContacts.filter((c) => {
+        lastWeekActive: recentlyOfflineContacts.filter((c) => {
             const status = c.status;
             const lastSeen = new Date(status.wasOnline * 1000);
             const weekAgo = new Date();

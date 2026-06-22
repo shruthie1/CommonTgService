@@ -9,10 +9,10 @@ export declare class SearchDto {
     payAmount?: number;
     username?: string;
     accessHash?: string;
-    paidReply?: boolean;
-    demoGiven?: boolean;
-    secondShow?: boolean;
+    paidReply?: boolean | string;
+    demoGiven?: boolean | string;
+    secondShow?: boolean | string;
     profile?: string;
     chatId?: string;
-    picsSent?: boolean;
+    picsSent?: boolean | string;
 }
