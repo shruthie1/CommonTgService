@@ -1,6 +1,7 @@
 import {
   setBotsServiceInstance,
   getBotsServiceInstance,
+  tryGetBotsServiceInstance,
 } from '../bot.service.instance';
 
 describe('bot.service.instance', () => {
@@ -10,6 +11,17 @@ describe('bot.service.instance', () => {
     expect(() => getBotsServiceInstance()).toThrow(
       'BotsService instance not initialized. Make sure to call setBotsServiceInstance first.',
     );
+  });
+
+  it('tryGet returns null when instance not initialized (no throw)', () => {
+    // Runs before any set(), so the non-throwing accessor yields null.
+    expect(tryGetBotsServiceInstance()).toBeNull();
+  });
+
+  it('tryGet returns the instance once set', () => {
+    const fake = { name: 'fake' } as any;
+    setBotsServiceInstance(fake);
+    expect(tryGetBotsServiceInstance()).toBe(fake);
   });
 
   it('set then get returns the same instance', () => {

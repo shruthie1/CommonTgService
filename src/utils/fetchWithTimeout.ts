@@ -3,7 +3,7 @@ import { extractMessage, parseError } from './parseError';
 import { clog } from './ChannelLogger';
 import { sleep } from './common';
 import { ChannelCategory } from '../components/bots/bots.service';
-import { getBotsServiceInstance } from './bot.service.instance';
+import { tryGetBotsServiceInstance } from './bot.service.instance';
 
 // Configuration types
 interface RetryConfig {
@@ -66,7 +66,10 @@ async function notifyInternal(
     const notificationText = `<b>${prefix}</b>\n\n<b>Error:</b> ${formattedMessage}`;
 
     try {
-      const botsService = getBotsServiceInstance();
+      // Best-effort: if BotsService isn't wired yet (e.g. early startup, before
+      // BotsModule.onModuleInit), short-circuit instead of throwing + spamming.
+      const botsService = tryGetBotsServiceInstance();
+      if (!botsService) return;
       await botsService.sendMessageByCategory(
         ChannelCategory.HTTP_FAILURES,
         notificationText,
@@ -239,8 +242,8 @@ function parseUrl(url: string): { host: string; endpoint: string } | null {
  */
 interface FetchWithTimeoutOptions extends AxiosRequestConfig {
   bypassUrl?: string;
-  retryConfig?: RetryConfig;
-  notificationConfig?: NotificationConfig;
+  retryConfig?: Partial<RetryConfig>;
+  notificationConfig?: Partial<NotificationConfig>;
 }
 
 /**

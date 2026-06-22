@@ -45,8 +45,11 @@ export class ConfigurationService implements OnModuleInit {
                 this.logger.warn('No clientId found in environment or configuration');
                 return;
             }
+            // Startup ping is best-effort: disable retries and notifications so a
+            // failed/cancelled send doesn't loop 3x or spam the failures channel.
             await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`
+                `${notifbot()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`,
+                { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } },
             );
         } catch (error) {
             this.logger.warn('Failed to send start notification', error);

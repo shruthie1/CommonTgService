@@ -30,16 +30,22 @@ jest.mock('../common', () => ({
 
 // ---- mock the bots notification sink ----------------------------------------
 const sendMessageByCategory = jest.fn().mockResolvedValue(undefined);
-jest.mock('../bot.service.instance', () => ({
-    getBotsServiceInstance: jest.fn(() => ({ sendMessageByCategory })),
-}));
+// Production code reads the sink via tryGetBotsServiceInstance (non-throwing,
+// returns null when unset). Mock both accessors to the same factory.
+jest.mock('../bot.service.instance', () => {
+    const factory = jest.fn(() => ({ sendMessageByCategory }));
+    return {
+        getBotsServiceInstance: factory,
+        tryGetBotsServiceInstance: factory,
+    };
+});
 
 import { fetchWithTimeout } from '../fetchWithTimeout';
 import { sleep } from '../common';
-import { getBotsServiceInstance } from '../bot.service.instance';
+import { tryGetBotsServiceInstance } from '../bot.service.instance';
 
 const sleepMock = sleep as jest.Mock;
-const getBots = getBotsServiceInstance as jest.Mock;
+const getBots = tryGetBotsServiceInstance as jest.Mock;
 
 // Helper to build an axios-style error.
 function axiosError(opts: { code?: string; status?: number; message?: string }) {

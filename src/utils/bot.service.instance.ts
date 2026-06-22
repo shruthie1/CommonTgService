@@ -13,3 +13,10 @@ export function getBotsServiceInstance(): BotsService {
     }
     return botsServiceInstance;
 }
+
+// Non-throwing variant for best-effort callers (e.g. failure notifications
+// during startup, before BotsModule.onModuleInit has wired the instance).
+// Returns null instead of throwing so the caller can short-circuit silently.
+export function tryGetBotsServiceInstance(): BotsService | null {
+    return botsServiceInstance;
+}
