@@ -18683,6 +18683,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         if (status === 'active' && !session) {
             throw new common_1.BadRequestException('Active BufferClient requires a session');
         }
+        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+        if (enrolledIn && enrolledIn !== 'bufferClients') {
+            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`);
+        }
         const createData = {
             ...bufferClient,
             mobile: canonicalMobile,
@@ -28143,6 +28147,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const session = this.normalizeSessionForWrite(promoteClient.session);
         if (status === 'active' && !session) {
             throw new common_1.BadRequestException('Active PromoteClient requires a session');
+        }
+        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+        if (enrolledIn && enrolledIn !== 'promoteClients') {
+            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`);
         }
         const promoteClientData = {
             ...promoteClient,
