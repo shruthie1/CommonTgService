@@ -42,8 +42,7 @@ export interface MediaOptions extends Omit<SendMessageOptions, 'disableWebPagePr
     caption?: string;
     hasSpoiler?: boolean;
 }
-export interface PhotoOptions extends MediaOptions {
-}
+export type PhotoOptions = MediaOptions;
 export interface VideoOptions extends MediaOptions {
     duration?: number;
     width?: number;
@@ -93,8 +92,7 @@ export interface MediaGroupItem {
     title?: string;
     thumbnail?: Buffer;
 }
-export interface MediaGroupOptions extends Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'> {
-}
+export type MediaGroupOptions = Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'>;
 export declare class BotsService implements OnModuleInit {
     private botModel;
     private cache;

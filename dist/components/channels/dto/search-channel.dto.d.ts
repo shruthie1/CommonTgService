@@ -3,7 +3,7 @@ export declare class SearchChannelDto {
     title?: string;
     private?: string;
     username?: string;
-    canSendMsgs?: boolean;
+    canSendMsgs?: boolean | string;
     minParticipantsCount?: number;
     maxParticipantsCount?: number;
 }

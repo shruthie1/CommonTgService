@@ -35,6 +35,10 @@ __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Mixed, default: {} }),
     __metadata("design:type", Object)
 ], Event.prototype, "payload", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
+    __metadata("design:type", Number)
+], Event.prototype, "attempts", void 0);
 exports.Event = Event = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'events',

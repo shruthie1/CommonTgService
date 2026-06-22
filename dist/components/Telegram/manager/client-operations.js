@@ -9,6 +9,7 @@ const events_1 = require("telegram/events");
 const Logger_1 = require("telegram/extensions/Logger");
 const Helpers_1 = require("telegram/Helpers");
 const parseError_1 = require("../../../utils/parseError");
+const common_1 = require("../../../utils/common");
 const fetchWithTimeout_1 = require("../../../utils/fetchWithTimeout");
 const logbots_1 = require("../../../utils/logbots");
 const generateTGConfig_1 = require("../utils/generateTGConfig");
@@ -21,7 +22,8 @@ async function createClient(ctx, session, handler = true, handlerFn) {
         await (0, withTimeout_1.withTimeout)(async () => {
             client = new telegram_1.TelegramClient(session, apiId, apiHash, tgConfiguration);
             client.setLogLevel(Logger_1.LogLevel.ERROR);
-            client._errorHandler = async (error) => { handleClientError(ctx, error); };
+            const createdClient = client;
+            client._errorHandler = async (error) => { handleClientError({ ...ctx, client: createdClient }, error); };
             await client.connect();
             ctx.logger.info(ctx.phoneNumber, 'Connected Client Succesfully');
         }, {
@@ -104,9 +106,8 @@ async function destroyClient(ctx, session) {
     catch { }
 }
 function handleClientError(ctx, error) {
-    const { contains } = require('../../../utils');
     const errorDetails = (0, parseError_1.parseError)(error, `${ctx.phoneNumber}: RPC Error`, false);
-    if ((error.message && error.message == 'TIMEOUT') || contains(errorDetails.message, ['ETIMEDOUT'])) {
+    if ((error.message && error.message == 'TIMEOUT') || (0, common_1.contains)(errorDetails.message, ['ETIMEDOUT'])) {
         ctx.logger.error(ctx.phoneNumber, `Timeout error occurred for ${ctx.phoneNumber}`, error);
         return setTimeout(async () => {
             if (ctx.client && !ctx.client.connected) {

@@ -25,6 +25,10 @@ let ExceptionsFilter = class ExceptionsFilter {
                     ? errorResponse
                     : errorResponse.message || errorResponse;
         }
+        if (response.headersSent) {
+            response.end();
+            return;
+        }
         response.status(status).json({
             statusCode: status,
             message,

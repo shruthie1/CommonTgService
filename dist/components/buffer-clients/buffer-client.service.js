@@ -40,6 +40,7 @@ const homoglyph_normalizer_1 = require("../../utils/homoglyph-normalizer");
 const bots_1 = require("../bots");
 const base_client_service_1 = require("../shared/base-client.service");
 const client_helper_utils_1 = require("../shared/client-helper.utils");
+const enrollment_lock_1 = require("../shared/enrollment-lock");
 let BufferClientService = BufferClientService_1 = class BufferClientService extends base_client_service_1.BaseClientService {
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
@@ -74,7 +75,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
         if (enrolledAtMs > 0) {
             const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > 45) {
+            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
                 return false;
             }
         }
@@ -232,6 +233,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                         await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
+                    updateCount = Math.max(updateCount, 1);
                 }
             }
             else {
@@ -334,18 +336,18 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         if (status === 'active' && !session) {
             throw new common_1.BadRequestException('Active BufferClient requires a session');
         }
-        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
-        if (enrolledIn && enrolledIn !== 'bufferClients') {
-            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`);
-        }
-        const createData = {
-            ...bufferClient,
-            mobile: canonicalMobile,
-            ...(session ? { session } : {}),
-            status,
-        };
-        const result = await this.bufferClientModel.create({
-            ...createData,
+        const result = await (0, enrollment_lock_1.withEnrollmentLock)(canonicalMobile, async () => {
+            const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+            if (enrolledIn && enrolledIn !== 'bufferClients') {
+                throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`);
+            }
+            const createData = {
+                ...bufferClient,
+                mobile: canonicalMobile,
+                ...(session ? { session } : {}),
+                status,
+            };
+            return this.bufferClientModel.create({ ...createData });
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
@@ -493,6 +495,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async setPrimaryInUse(clientId, mobile) {
         const now = new Date();
+        const exists = await this.bufferClientModel.exists({ mobile, clientId });
+        if (!exists) {
+            throw new common_1.NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
+        }
         const revoked = await this.bufferClientModel.updateMany({
             clientId,
             mobile: { $ne: mobile },
@@ -649,6 +655,9 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const clientMobiles = clients.map((client) => client?.mobile);
         if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile)))
             throw new common_1.BadRequestException('Number is an Active Client');
+        if (await this.promoteClientService.existsByMobile(canonicalMobile)) {
+            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in promoteClients; refusing to create a cross-pool BufferClient`);
+        }
         const telegramClient = await connection_manager_1.connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
         try {
             const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
@@ -826,8 +835,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
                 const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.createdAt);
                 const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                if (daysSinceEnrolled > 45 && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
-                    processSkipReason = `zombie_${Math.round(daysSinceEnrolled)}d`;
+                if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
+                    processSkipReason = `stuck_${Math.round(daysSinceEnrolled)}d`;
                 }
             }
             else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
@@ -1259,14 +1268,24 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 status: 'active',
                 message: 'Enrolled for warmup',
             };
-            await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, {
-                $set: {
-                    ...bufferClient,
-                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
-                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
-                    enrolledAt: new Date(),
+            const enrolled = await (0, enrollment_lock_1.withEnrollmentLock)(this.canonicalMobile(document.mobile), async () => {
+                const already = await this.isMobileEnrolledAnywhere(document.mobile);
+                if (already && already !== 'bufferClients') {
+                    this.logger.warn(`Skipping buffer enrollment for ${document.mobile}: now enrolled in ${already}`);
+                    return false;
                 }
-            }, { new: true, upsert: true }).exec();
+                await this.bufferClientModel.findOneAndUpdate({ mobile: document.mobile }, {
+                    $set: {
+                        ...bufferClient,
+                        warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                        warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                        enrolledAt: new Date(),
+                    }
+                }, { new: true, upsert: true }).exec();
+                return true;
+            });
+            if (!enrolled)
+                return false;
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
                 '<b>Buffer Client Enrolled</b>',

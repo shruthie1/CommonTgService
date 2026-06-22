@@ -22,6 +22,7 @@ export declare class IpManagementService {
     isIpAvailable(ipAddress: string, port: number): Promise<boolean>;
     getAvailableIpCount(): Promise<number>;
     getNextIp(filters?: GetNextIpDto): Promise<ProxyIp>;
+    private poolSignature;
     private _pickAndMark;
     syncFromExternal(source: string, proxies: CreateProxyIpDto[], removeStale?: boolean): Promise<{
         created: number;
@@ -33,6 +34,7 @@ export declare class IpManagementService {
     markLastUsed(ipAddress: string, port: number): Promise<void>;
     updateHealthStatus(ipAddress: string, port: number, healthy: boolean): Promise<void>;
     markInactive(ipAddress: string, port: number): Promise<void>;
+    markActive(ipAddress: string, port: number): Promise<void>;
     findBySource(source: string): Promise<ProxyIp[]>;
     countBySource(source: string): Promise<number>;
     getStats(): Promise<{

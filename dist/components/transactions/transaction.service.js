@@ -129,7 +129,7 @@ let TransactionService = TransactionService_1 = class TransactionService {
             const remainingFilters = {};
             if (filters.profile)
                 remainingFilters['profile'] = filters.profile;
-            if (filters.amount)
+            if (filters.amount !== undefined && filters.amount !== null)
                 remainingFilters['amount'] = filters.amount;
             if (filters.issue)
                 remainingFilters['issue'] = filters.issue;

@@ -88,6 +88,9 @@ async function bootstrap() {
                 enableImplicitConversion: true
             },
         }));
+        (0, processListeners_1.setShutdownHandler)(async () => {
+            await app.close();
+        });
         await app.init();
         await app.listen(process.env.PORT || 9002);
         console.log(`Application is running on: http://localhost:${process.env.PORT || 9002}`);

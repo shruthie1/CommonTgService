@@ -41,6 +41,7 @@ const homoglyph_normalizer_1 = require("../../utils/homoglyph-normalizer");
 const bots_1 = require("../bots");
 const base_client_service_1 = require("../shared/base-client.service");
 const client_helper_utils_1 = require("../shared/client-helper.utils");
+const enrollment_lock_1 = require("../shared/enrollment-lock");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService extends base_client_service_1.BaseClientService {
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
@@ -84,7 +85,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
         if (enrolledAtMs > 0) {
             const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > 45) {
+            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
                 return false;
             }
         }
@@ -219,6 +220,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                         await telegramClient.client.invoke(new telegram_1.Api.account.UpdateProfile({ about: assignment.assignedBio }));
                         updateCount++;
                     }
+                    updateCount = Math.max(updateCount, 1);
                 }
             }
             else {
@@ -308,19 +310,21 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         if (status === 'active' && !session) {
             throw new common_1.BadRequestException('Active PromoteClient requires a session');
         }
-        const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
-        if (enrolledIn && enrolledIn !== 'promoteClients') {
-            throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`);
-        }
-        const promoteClientData = {
-            ...promoteClient,
-            mobile: canonicalMobile,
-            ...(session ? { session } : {}),
-            status,
-            message: promoteClient.message || 'Account is functioning properly',
-        };
-        const newUser = new this.promoteClientModel(promoteClientData);
-        const result = await newUser.save();
+        const result = await (0, enrollment_lock_1.withEnrollmentLock)(canonicalMobile, async () => {
+            const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
+            if (enrolledIn && enrolledIn !== 'promoteClients') {
+                throw new common_1.BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool PromoteClient`);
+            }
+            const promoteClientData = {
+                ...promoteClient,
+                mobile: canonicalMobile,
+                ...(session ? { session } : {}),
+                status,
+                message: promoteClient.message || 'Account is functioning properly',
+            };
+            const newUser = new this.promoteClientModel(promoteClientData);
+            return newUser.save();
+        });
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Promote Client Created</b>',
             '',
@@ -933,14 +937,24 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 message: 'Enrolled for warmup',
                 lastUsed: null,
             };
-            await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, {
-                $set: {
-                    ...promoteClient,
-                    warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
-                    warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
-                    enrolledAt: new Date(),
+            const enrolled = await (0, enrollment_lock_1.withEnrollmentLock)(this.canonicalMobile(document.mobile), async () => {
+                const already = await this.isMobileEnrolledAnywhere(document.mobile);
+                if (already && already !== 'promoteClients') {
+                    this.logger.warn(`Skipping promote enrollment for ${document.mobile}: now enrolled in ${already}`);
+                    return false;
                 }
-            }, { new: true, upsert: true }).exec();
+                await this.promoteClientModel.findOneAndUpdate({ mobile: document.mobile }, {
+                    $set: {
+                        ...promoteClient,
+                        warmupPhase: base_client_service_1.WarmupPhase.ENROLLED,
+                        warmupJitter: client_helper_utils_1.ClientHelperUtils.generateWarmupJitter(),
+                        enrolledAt: new Date(),
+                    }
+                }, { new: true, upsert: true }).exec();
+                return true;
+            });
+            if (!enrolled)
+                return false;
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
                 '<b>Promote Client Enrolled</b>',

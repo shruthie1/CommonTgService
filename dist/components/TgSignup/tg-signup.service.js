@@ -265,34 +265,35 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
         }
     }
     async handle2FALogin(phone, client, password) {
+        let signInResult;
         try {
             this.logger.debug(`Fetching password SRP parameters for ${phone}`);
             const passwordSrpResult = await client.invoke(new tl_1.Api.account.GetPassword());
             this.logger.debug(`Computing password check for ${phone}`);
             const passwordCheck = await (0, Password_1.computeCheck)(passwordSrpResult, password);
             this.logger.debug(`Invoking CheckPassword API for ${phone}`);
-            const signInResult = await client.invoke(new tl_1.Api.auth.CheckPassword({
+            signInResult = await client.invoke(new tl_1.Api.auth.CheckPassword({
                 password: passwordCheck,
             }));
             if (!signInResult || !signInResult.user) {
                 throw new common_1.BadRequestException('Invalid response from Telegram server');
             }
-            this.logger.log(`2FA login successful for ${phone}`);
-            const sessionString = client.session.save();
-            if (!sessionString) {
-                throw new Error('Failed to generate session string');
-            }
-            const userData = await this.processLoginResult(signInResult.user, sessionString, password);
-            await this.disconnectClient(phone);
-            return userData;
         }
         catch (error) {
-            this.logger.error(`2FA login failed for ${phone}: ${error.message}`, error.stack);
+            this.logger.error(`2FA password check failed for ${phone}: ${error.message}`, error.stack);
             if (password) {
                 throw new common_1.BadRequestException('Incorrect 2FA password');
             }
             throw new common_1.BadRequestException('2FA password required');
         }
+        this.logger.log(`2FA login successful for ${phone}`);
+        const sessionString = client.session.save();
+        if (!sessionString) {
+            throw new Error('Failed to generate session string');
+        }
+        const userData = await this.processLoginResult(signInResult.user, sessionString, password);
+        await this.disconnectClient(phone);
+        return userData;
     }
     async handleNewUserRegistration(phone, client, phoneCodeHash) {
         try {

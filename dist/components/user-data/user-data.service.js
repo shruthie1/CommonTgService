@@ -81,7 +81,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     async updateAll(chatId, updateUserDataDto) {
         delete updateUserDataDto._id;
         return this.userDataModel
-            .updateMany({ chatId }, { $set: updateUserDataDto }, { upsert: true })
+            .updateMany({ chatId }, { $set: updateUserDataDto })
             .exec();
     }
     async remove(profile, chatId) {

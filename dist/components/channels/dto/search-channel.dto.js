@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SearchChannelDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
+const class_transformer_1 = require("class-transformer");
 class SearchChannelDto {
 }
 exports.SearchChannelDto = SearchChannelDto;
@@ -42,7 +43,8 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({
         description: 'Indicates if the channel can send messages'
     }),
-    __metadata("design:type", Boolean)
+    (0, class_transformer_1.Transform)(({ value }) => value === undefined ? undefined : (value === 'true' || value === true)),
+    __metadata("design:type", Object)
 ], SearchChannelDto.prototype, "canSendMsgs", void 0);
 __decorate([
     (0, swagger_1.ApiPropertyOptional)({

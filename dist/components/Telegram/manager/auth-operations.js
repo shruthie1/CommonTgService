@@ -185,7 +185,7 @@ async function set2fa(ctx) {
                     },
                     onEmailCodeError: (e) => {
                         ctx.logger.error(ctx.phoneNumber, 'Email code error:', (0, parseError_1.parseError)(e));
-                        return Promise.resolve('error');
+                        return Promise.reject(e);
                     },
                 });
             }
@@ -233,20 +233,15 @@ async function waitForOtp(ctx) {
             if (isFresh) {
                 return message.text.split('.')[0].split('code:**')[1].trim();
             }
-            else {
-                const code = message.text.split('.')[0].split('code:**')[1].trim();
-                if (i == 2) {
-                    return code;
-                }
-                await (0, Helpers_1.sleep)(5000);
-            }
+            ctx.logger.warn(ctx.phoneNumber, `OTP found but stale (>${freshnessLimit / 1000}s); not submitting, awaiting a fresh code`);
+            await (0, Helpers_1.sleep)(5000);
         }
         catch (err) {
             ctx.logger.warn(ctx.phoneNumber, `OTP read attempt ${i + 1} failed: ${err instanceof Error ? err.message : String(err)}`);
             await (0, Helpers_1.sleep)(2000);
         }
     }
-    throw new Error('Failed to get OTP after 3 attempts');
+    throw new Error('Failed to get a fresh OTP after 3 attempts');
 }
 async function getSessionInfo(ctx) {
     if (!ctx.client)

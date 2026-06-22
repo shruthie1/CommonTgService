@@ -247,10 +247,11 @@ class ConnectionManager {
         for (const [mobile, clientInfo] of this.clients.entries()) {
             const isIdle = (now - clientInfo.lastUsed) > this.IDLE_TIMEOUT;
             const shouldAutoDisconnect = clientInfo.autoDisconnect && isIdle;
-            const isStale = (now - clientInfo.lastUsed) > (this.IDLE_TIMEOUT * 2);
+            const isStale = clientInfo.autoDisconnect && (now - clientInfo.lastUsed) > (this.IDLE_TIMEOUT * 2);
             const isErrored = clientInfo.state === 'error';
             const tooManyAttempts = clientInfo.connectionAttempts >= this.MAX_RETRY_ATTEMPTS;
-            if (shouldAutoDisconnect || isStale || isErrored || tooManyAttempts) {
+            const isDeadSocket = isIdle && clientInfo.client?.connected?.() === false;
+            if (shouldAutoDisconnect || isStale || isErrored || tooManyAttempts || isDeadSocket) {
                 this.logger.info(mobile, 'Marking for cleanup', {
                     shouldAutoDisconnect,
                     isStale,
@@ -269,14 +270,28 @@ class ConnectionManager {
     }
     async forceCleanup() {
         this.logger.info('Default', 'Force cleanup triggered');
-        const oldestClients = Array.from(this.clients.entries())
-            .sort(([, a], [, b]) => a.lastUsed - b.lastUsed)
-            .slice(0, Math.ceil(this.MAX_CONNECTIONS * 0.2))
+        const target = Math.ceil(this.MAX_CONNECTIONS * 0.2);
+        const entries = Array.from(this.clients.entries());
+        const evictionPriority = ([, info]) => {
+            if (info.state === 'error')
+                return 0;
+            if (info.autoDisconnect)
+                return 1;
+            if (info.state === 'disconnected')
+                return 2;
+            return 3;
+        };
+        const ordered = entries
+            .sort((a, b) => {
+            const pa = evictionPriority(a), pb = evictionPriority(b);
+            return pa !== pb ? pa - pb : a[1].lastUsed - b[1].lastUsed;
+        })
+            .slice(0, target)
             .map(([mobile]) => mobile);
-        for (const mobile of oldestClients) {
+        for (const mobile of ordered) {
             await this.unregisterClient(mobile);
         }
-        this.logger.info('Default', `Force cleanup completed - removed ${oldestClients.length} clients`);
+        this.logger.info('Default', `Force cleanup completed - removed ${ordered.length} clients`);
     }
     async forceReconnect(mobile) {
         this.logger.info(mobile, 'Force reconnect requested');

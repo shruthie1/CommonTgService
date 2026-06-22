@@ -79,33 +79,29 @@ export interface ProcessClientResult {
 }
 type ObjectPathSegment = string | number;
 type MongoQuery = Record<string, unknown>;
+export interface WindowNeed {
+    window: string;
+    available: number;
+    needed: number;
+    targetDate: string;
+    minRequired: number;
+}
+export interface ProjectedWindowCount {
+    window: string;
+    available: number;
+    targetDate: string;
+}
 export interface AvailabilityNeeds {
     totalNeeded: number;
-    windowNeeds: Array<{
-        window: string;
-        available: number;
-        needed: number;
-        targetDate: string;
-        minRequired: number;
-    }>;
+    windowNeeds: WindowNeed[];
     totalActive: number;
     totalNeededForCount: number;
     calculationReason: string;
     priority: number;
     readyActive: number;
     warmingPipeline: number;
-    replenishmentWindowNeeds: Array<{
-        window: string;
-        available: number;
-        needed: number;
-        targetDate: string;
-        minRequired: number;
-    }>;
-    projectedWindowCounts: Array<{
-        window: string;
-        available: number;
-        targetDate: string;
-    }>;
+    replenishmentWindowNeeds: WindowNeed[];
+    projectedWindowCounts: ProjectedWindowCount[];
 }
 export { WarmupPhase, WarmupAction, isAccountReady, isAccountWarmingUp, getWarmupPhaseAction, performOrganicActivity };
 export declare abstract class BaseClientService<TDoc extends BaseClientDocument> implements OnModuleDestroy {
@@ -136,6 +132,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
     protected readonly MAX_UPDATES_PER_CYCLE = 20;
+    protected readonly STUCK_WARMUP_DAYS = 45;
     protected dailyJoinCounts: Map<string, number>;
     protected dailyJoinDate: string;
     protected joinFailureCounts: Map<string, number>;
@@ -155,6 +152,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     } | null;
     protected getRecoveryEnrolledAt(phase: WarmupPhaseType, jitter: number, now: number): Date;
     protected repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc>;
+    protected retireIfStuck(doc: TDoc, now: number): Promise<boolean>;
     constructor(telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, sessionService: SessionService, botsService: BotsService, loggerName: string);
     abstract get model(): Model<TDoc>;
     abstract get clientType(): 'buffer' | 'promote';

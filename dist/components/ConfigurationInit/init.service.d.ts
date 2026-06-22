@@ -14,4 +14,6 @@ export declare class ConfigurationService implements OnModuleInit {
     findOne(): Promise<Configuration>;
     setEnv(): Promise<void>;
     update(updateDto: Partial<Configuration>): Promise<Configuration>;
+    private static readonly NON_ENV_KEYS;
+    private serializeEnvValue;
 }

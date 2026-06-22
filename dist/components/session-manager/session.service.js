@@ -384,6 +384,17 @@ let SessionService = class SessionService {
         currentLimit.count++;
         return { allowed: true };
     }
+    peekRateLimit(mobile) {
+        const now = Date.now();
+        const rateLimit = this.rateLimitMap.get(mobile);
+        if (rateLimit && now > rateLimit.resetTime) {
+            return { allowed: true };
+        }
+        if (rateLimit && rateLimit.count >= this.MAX_SESSIONS_PER_HOUR) {
+            return { allowed: false, resetTime: rateLimit.resetTime };
+        }
+        return { allowed: true };
+    }
     isPermanentSessionValidationError(error) {
         const message = (error || '').toLowerCase();
         return message.includes('phone number mismatch')
@@ -631,7 +642,7 @@ let SessionService = class SessionService {
                 };
             }
             this.logger.info(mobile, `Starting getOldestSessionOrCreate with maxAge: ${maxAgeDays} days, fallback: ${allowFallback}`);
-            const rateLimitCheck = this.checkRateLimit(mobile);
+            const rateLimitCheck = this.peekRateLimit(mobile);
             if (!rateLimitCheck.allowed) {
                 const resetTime = new Date(rateLimitCheck.resetTime || 0);
                 return {

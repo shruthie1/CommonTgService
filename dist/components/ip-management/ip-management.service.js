@@ -207,10 +207,17 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
         }
         return this._pickAndMark(allIps);
     }
+    poolSignature(ips) {
+        return ips
+            .map(ip => `${ip.ipAddress}:${ip.port}`)
+            .sort()
+            .join(',');
+    }
     async _pickAndMark(ips) {
         let index = 0;
+        const poolKey = `${ROUND_ROBIN_KEY}:${this.poolSignature(ips)}`;
         try {
-            const counter = await redisClient_1.RedisClient.incr(ROUND_ROBIN_KEY);
+            const counter = await redisClient_1.RedisClient.incr(poolKey);
             index = (counter - 1) % ips.length;
         }
         catch (err) {
@@ -312,6 +319,10 @@ let IpManagementService = IpManagementService_1 = class IpManagementService {
     async markInactive(ipAddress, port) {
         await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { status: 'inactive' } });
         this.logger.log(`Marked proxy inactive: ${ipAddress}:${port}`);
+    }
+    async markActive(ipAddress, port) {
+        await this.proxyIpModel.updateOne({ ipAddress, port }, { $set: { status: 'active' } });
+        this.logger.log(`Marked proxy active: ${ipAddress}:${port}`);
     }
     async findBySource(source) {
         return this.proxyIpModel.find({ source }).lean();

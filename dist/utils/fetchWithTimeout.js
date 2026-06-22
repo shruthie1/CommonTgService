@@ -38,7 +38,9 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             return;
         const notificationText = `<b>${prefix}</b>\n\n<b>Error:</b> ${formattedMessage}`;
         try {
-            const botsService = (0, bot_service_instance_1.getBotsServiceInstance)();
+            const botsService = (0, bot_service_instance_1.tryGetBotsServiceInstance)();
+            if (!botsService)
+                return;
             await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
         }
         catch (error) {
@@ -202,10 +204,12 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                     error: 'ParseError',
                 };
             }
-            const message = parsedError.message;
+            const message = typeof parsedError.message === 'string'
+                ? parsedError.message
+                : JSON.stringify(parsedError.message);
             const isTimeout = axios_1.default.isAxiosError(error) &&
                 (error.code === 'ECONNABORTED' ||
-                    (message && message.includes('timeout')) ||
+                    message.includes('timeout') ||
                     parsedError.status === 408);
             if (parsedError.status === 403 || parsedError.status === 495) {
                 try {
@@ -250,9 +254,7 @@ async function fetchWithTimeout(url, options = {}, maxRetries) {
                 await (0, common_1.sleep)(delay);
                 continue;
             }
-            if (attempt >= retryConfig.maxRetries) {
-                break;
-            }
+            break;
         }
     }
     try {

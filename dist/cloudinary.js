@@ -39,6 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CloudinaryService = void 0;
 const cloudinary = __importStar(require("cloudinary"));
 const path = __importStar(require("path"));
+const os = __importStar(require("os"));
 const fs = __importStar(require("fs"));
 const adm_zip_1 = __importDefault(require("adm-zip"));
 const parseError_1 = require("./utils/parseError");
@@ -52,29 +53,30 @@ class CloudinaryService {
             api_secret: process.env.CL_APISECRET
         });
     }
-    static async getInstance(name) {
+    static async getInstance(_name) {
         if (!CloudinaryService.instance) {
             CloudinaryService.instance = new CloudinaryService();
         }
-        await CloudinaryService.instance.getResourcesFromFolder(name);
         return CloudinaryService.instance;
     }
     async downloadAndExtractZip(url) {
-        const rootPath = process.cwd();
-        const zipPath = path.resolve(rootPath, 'temp.zip');
-        const extractPath = path.resolve(rootPath);
+        const unique = `${process.pid}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+        const extractPath = path.join(os.tmpdir(), `cloudinary-extract-${unique}`);
+        const zipPath = path.join(os.tmpdir(), `cloudinary-${unique}.zip`);
         console.log(`Starting download of zip file from ${url}`);
         const response = await (0, fetchWithTimeout_1.fetchWithTimeout)(url, { responseType: 'arraybuffer' });
         if (response?.status === 200) {
             console.log('Zip file downloaded successfully.');
             fs.writeFileSync(zipPath, response.data);
-            console.log(`Zip file saved to ${zipPath}`);
             const zip = new adm_zip_1.default(zipPath);
             console.log(`Extracting zip file to ${extractPath}`);
             zip.extractAllTo(extractPath, true);
             console.log('Zip file extracted successfully.');
-            fs.unlinkSync(zipPath);
-            console.log(`Temporary zip file ${zipPath} deleted.`);
+            try {
+                fs.unlinkSync(zipPath);
+            }
+            catch { }
+            return extractPath;
         }
         else {
             const errorMessage = `Unable to download zip file from ${url}`;
@@ -84,7 +86,7 @@ class CloudinaryService {
     }
     async getResourcesFromFolder(folderName) {
         console.log('FETCHING NEW FILES!! from CLOUDINARY');
-        await this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
+        return this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
     }
     async createNewFolder(folderName) {
         await this.createFolder(folderName);

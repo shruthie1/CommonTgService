@@ -214,6 +214,19 @@ class BaseClientService {
         this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
         return (repairedDoc?.mobile ? repairedDoc : Object.assign(doc, updateData));
     }
+    async retireIfStuck(doc, now) {
+        const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
+        const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
+        const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
+        if (daysSinceEnrolled <= this.STUCK_WARMUP_DAYS || phase === warmup_phases_1.WarmupPhase.READY || phase === warmup_phases_1.WarmupPhase.SESSION_ROTATED) {
+            return false;
+        }
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
+        const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
+        return true;
+    }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -242,6 +255,7 @@ class BaseClientService {
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
         this.MAX_UPDATES_PER_CYCLE = 20;
+        this.STUCK_WARMUP_DAYS = 45;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -471,7 +485,11 @@ class BaseClientService {
     removeFromLeaveMap(key) {
         this.leaveChannelMap.delete(key);
         if (this.leaveChannelMap.size === 0) {
-            this.clearLeaveChannelInterval();
+            if (this.leaveChannelIntervalId) {
+                clearTimeout(this.leaveChannelIntervalId);
+                this.activeTimeouts.delete(this.leaveChannelIntervalId);
+                this.leaveChannelIntervalId = null;
+            }
         }
     }
     clearJoinMap() {
@@ -873,16 +891,10 @@ class BaseClientService {
         }
         const failedAttempts = doc.failedUpdateAttempts || 0;
         const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
+        if (await this.retireIfStuck(doc, now)) {
+            return { updateCount: 0 };
+        }
         if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-            const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-            const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-            const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-            if (daysSinceEnrolled > 45 && phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED && phase !== warmup_phases_1.WarmupPhase.READY) {
-                this.logger.error(`Zombie account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} with repeated failures — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Zombie: ${Math.round(daysSinceEnrolled)}d in ${phase} with repeated failures`);
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>ZOMBIE ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
-                return { updateCount: 0 };
-            }
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
             const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
             const resetDoc1 = await this.update(doc.mobile, resetFields);
@@ -1265,6 +1277,14 @@ class BaseClientService {
                     await this.deactivateClient(mobile, reason, { permanent: true });
                 }
                 else {
+                    if (joinCount > 0) {
+                        try {
+                            await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                        }
+                        catch (incError) {
+                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${mobile} after transient error: ${this.getErrorText(incError)}`);
+                        }
+                    }
                     const channels = this.joinChannelMap.get(mobile);
                     if (currentChannel && channels) {
                         channels.unshift(currentChannel);
@@ -1361,7 +1381,9 @@ class BaseClientService {
                 this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);
                 if (leftCount > 0) {
                     try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: -leftCount } });
+                        await this.model.updateOne({ mobile }, [
+                            { $set: { channels: { $max: [0, { $subtract: [{ $ifNull: ['$channels', 0] }, leftCount] }] } } },
+                        ], { updatePipeline: true });
                     }
                     catch {
                     }
@@ -1652,7 +1674,8 @@ class BaseClientService {
                 continue;
             const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
             const isLegacyOperational = !doc.warmupPhase && client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed) > 0;
-            if (isLegacyOperational || (0, warmup_phases_1.isAccountReady)(phase)) {
+            const meetsSwapChannelThreshold = (doc.channels || 0) >= warmup_phases_1.MIN_CHANNELS_FOR_MATURING;
+            if ((isLegacyOperational || (0, warmup_phases_1.isAccountReady)(phase)) && meetsSwapChannelThreshold) {
                 readyOperationalDates.push(operationalDate);
             }
             else {
