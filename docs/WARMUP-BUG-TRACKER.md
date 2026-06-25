@@ -76,6 +76,43 @@ Severity: **CRIT** (account silently lost/stuck forever) · **HIGH** (stuck unti
 - **Concurrent rotation/heal for same mobile** (agent MED) — real hazard but a design-level locking change; out of minimal-fix scope.
 - **`getAvailablePromoteMobile` non-atomic hand-out** (agent MED) — lives in sibling promote-clients repo; known multi-process property, not a CommonTgService warmup bug.
 
+## DB Repair — stuck-account reactivation (2026-06-25)
+
+Read-only analysis + guarded repair scripts (committed under `scripts/`):
+- `scripts/analyze-stuck-accounts.ts` — READ-ONLY. Classifies every buffer+promote account into a stuck taxonomy (STUCK_DEACTIVATED / INUSE_ORPHAN / OVER_AGE_NONTERMINAL / PHASE_AHEAD_OF_PROGRESS / SUBSTEP_FAILED / GROWING_STALLED), separates REPAIRABLE vs NEEDS_REVIEW, writes `.stuck-report.json`.
+- `scripts/repair-stuck-accounts.ts` — DRY-RUN by default, `--apply` to write. Reactivates only the SAFE set.
+
+**Analysis (1,855 pool accounts):** 1,395 stuck findings. Crucially, **1,037 were permanently DEAD** (`SESSION_REVOKED` / `USER_DEACTIVATED` / `FROZEN_METHOD_INVALID` / banned) — NOT stuck, and never revived (reactivating a dead session = fingerprinting a lost account, violates the #1 session-survival rule).
+
+**Repair scope (owner-approved, SAFE only):** `Stuck: Nd in <phase>` (retireIfStuck/zombie step-stuck) + bland/empty reasons + active phase-drift + active over-age. Excluded all session-fetch/heal/client-creation failures and all death reasons. Skipped accounts with no `clientId` (can't resume).
+
+**Repair method:** mirrors `repairWarmupMetadata` — `status=active`, `warmupPhase` reset from completed-timestamp progress (`inferWarmupPhaseFromProgress`), `failedUpdateAttempts=0`, `lastUpdateFailure/lastUpdateAttempt=null`, `inUse=false`, `enrolledAt` back-dated to the phase recovery floor.
+
+**Applied:** 295 accounts reactivated (88 buffer, 207 promote), 0 errors. Safety assertion: 0 death-signal reasons in the applied set.
+**Verified after:** active buffer 243→330, active promote 221→425; OVER_AGE_NONTERMINAL and PHASE_AHEAD_OF_PROGRESS → 0; the 1,037 dead accounts untouched.
+
+## Self-heal — auto-reactivate step-stuck accounts (FEATURE)
+
+`retireIfStuck` deactivates step-stuck accounts with reason `"Stuck: Nd in <phase>"`. These aren't dead sessions — just stalled steps. Added `reactivateOwnStuckAccounts()` to the base service, wired into `selfHealLegacyOperationalState()` so it runs **by default** every warmup cycle (no env flag). Replaces the manual repair scripts for this case going forward.
+
+**Safety gates (only revives accounts THIS service stuck):**
+- reason matches the `retireIfStuck` signature `^Stuck: \d+d in <phase>` (never an account Telegram killed),
+- `session` present (no session ⇒ can't resume ⇒ left for manual review),
+- `clientId` present (no parent client ⇒ can't be processed).
+
+**Anti-ping-pong:** reactivation resets `warmupPhase` from progress, clears failures, and **back-dates `enrolledAt` to the phase recovery floor** so age is under `STUCK_WARMUP_DAYS` — `retireIfStuck` will NOT immediately re-stick it. Explicitly tested.
+
+**Robustness:** the call is wrapped try/catch in the hook — a heal failure can never crash `checkBufferClients`/`checkPromoteClients`.
+
+**Tests (TDD):** `service-flows.spec.ts` → "Self-heal: reactivateOwnStuckAccounts" (5 cases incl. PING-PONG GUARD, dead-account rejection, no-session rejection, no-clientId rejection). Fixed 10 query-shape mock branches to remain chainable so the heal path is genuinely exercised in the `check*Clients` flow tests.
+**Status:** ✅ Done, tsc clean, `nest build` clean, **3774/3774 tests pass**.
+
+## Empirical check — does back-dated `enrolledAt` let repaired accounts progress?
+Simulated `getWarmupPhaseAction` over all 237 repaired accounts: **230/237 (97%) take a concrete warmup step on the next cycle**; only 7 idle (cooldown not yet elapsed). Confirmed `enrolledAt` back-dating is proper — it satisfies the `daysSinceEnrolled` gates; the per-step cooldown gates (`daysSince(stepTimestamp)`) are already satisfied because these are aged accounts.
+
+## Session backfill from session_audits
+69 active-but-sessionless promote accounts backfilled with their most-recent `isActive` session string from `session_audits` (DB-only, reversible). Verified: active+sessionless promote = 0. Sessions are 104–208d old & unvalidated — production warmup validates on next touch.
+
 ## Final state
 
 - **Full project suite: 659/659 tests pass, 29/29 suites green.** (updated after BUG-6)

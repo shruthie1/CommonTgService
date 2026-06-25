@@ -106,6 +106,14 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     public async availabilityNeeds(clientId: string) {
         return this.calculateAvailabilityBasedNeeds(clientId);
     }
+
+    public async reactivateStuck(clientId?: string, limit?: number): Promise<number> {
+        return this.reactivateOwnStuckAccounts(clientId, limit);
+    }
+
+    public async stuckRetire(doc: BaseClientDocument, now: number): Promise<boolean> {
+        return this.retireIfStuck(doc as any, now);
+    }
 }
 
 function createQueryChain(executor: () => any) {
@@ -507,7 +515,7 @@ describe('Service flow reliability', () => {
                     if (query?.clientId?.$ne === null) {
                         return { exec: jest.fn().mockResolvedValue([warmDoc]) };
                     }
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -552,7 +560,7 @@ describe('Service flow reliability', () => {
                     if (query?.clientId?.$ne === null) {
                         return { exec: jest.fn().mockResolvedValue([readyDoc]) };
                     }
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -597,7 +605,7 @@ describe('Service flow reliability', () => {
                     if (query?.clientId?.$ne === null) {
                         return { exec: jest.fn().mockResolvedValue([rotatedDoc]) };
                     }
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -658,7 +666,7 @@ describe('Service flow reliability', () => {
                             ]),
                         };
                     }
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -710,7 +718,7 @@ describe('Service flow reliability', () => {
                     if (query?.clientId?.$ne === null) {
                         return { exec: jest.fn().mockResolvedValue(cappedDocs) };
                     }
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -761,7 +769,7 @@ describe('Service flow reliability', () => {
                     if (query?.clientId?.$ne === null) {
                         return { exec: jest.fn().mockResolvedValue(staleDocs) };
                     }
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -852,7 +860,7 @@ describe('Service flow reliability', () => {
                     return { exec: jest.fn().mockResolvedValue([readyDoc]) };
                 }
                 if (query?.clientId?.$exists === true) {
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -922,7 +930,7 @@ describe('Service flow reliability', () => {
                     };
                 }
                 if (query?.clientId?.$exists === true) {
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -979,7 +987,7 @@ describe('Service flow reliability', () => {
                     return { exec: jest.fn().mockResolvedValue(cappedDocs) };
                 }
                 if (query?.clientId?.$exists === true) {
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -1030,7 +1038,7 @@ describe('Service flow reliability', () => {
                     return { exec: jest.fn().mockResolvedValue(staleDocs) };
                 }
                 if (query?.clientId?.$exists === true) {
-                    return { distinct: jest.fn().mockResolvedValue([]) };
+                    return Object.assign(createQueryChain(() => []), { distinct: jest.fn().mockResolvedValue([]) });
                 }
                 return createQueryChain(() => []);
             }),
@@ -1761,6 +1769,105 @@ describe('Service flow reliability', () => {
                 '919990007772',
                 expect.objectContaining({ failedUpdateAttempts: 0 }),
             );
+        });
+    });
+
+    // ======= SELF-HEAL: auto-reactivate accounts this service itself stuck =======
+    describe('Self-heal: reactivateOwnStuckAccounts', () => {
+        const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
+
+        // Returns a query-chain-backed model whose find() yields the given docs.
+        const modelWith = (docs: any[]) => ({ find: jest.fn(() => createQueryChain(() => docs)) });
+
+        test('reactivates a step-stuck account (own "Stuck:" reason) that has session + clientId', async () => {
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const stuck = {
+                mobile: '919990010001', clientId: 'client-1', status: 'inactive',
+                message: 'Stuck: 71d in settling', session: 'live-session-1',
+                warmupPhase: WarmupPhase.SETTLING,
+                enrolledAt: new Date('2026-01-15T00:00:00.000Z'), // ~86d ago
+                privacyUpdatedAt: new Date('2026-01-20T00:00:00.000Z'),
+                twoFASetAt: new Date('2026-01-25T00:00:00.000Z'),
+                failedUpdateAttempts: 3, channels: 80,
+            };
+            const service = new TestBaseService(modelWith([stuck]));
+            const updateSpy = jest.spyOn(service, 'update');
+
+            const healed = await service.reactivateStuck('client-1');
+
+            expect(healed).toBe(1);
+            const [mobile, set] = updateSpy.mock.calls[0];
+            expect(mobile).toBe('919990010001');
+            expect(set.status).toBe('active');
+            expect(set.failedUpdateAttempts).toBe(0);
+            expect(set.lastUpdateFailure).toBeNull();
+            // enrolledAt MUST be reset so it isn't > STUCK_WARMUP_DAYS — prevents retire ping-pong.
+            expect(set.enrolledAt).toBeInstanceOf(Date);
+            const ageDays = (mockNow - (set.enrolledAt as Date).getTime()) / (24 * 60 * 60 * 1000);
+            expect(ageDays).toBeLessThanOrEqual(45);
+        });
+
+        test('does NOT reactivate a DEAD account (SESSION_REVOKED)', async () => {
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const dead = {
+                mobile: '919990010002', clientId: 'client-1', status: 'inactive',
+                message: '401: SESSION_REVOKED (caused by users.GetUsers)', session: 'dead-session',
+                warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date('2026-01-15T00:00:00.000Z'),
+            };
+            const service = new TestBaseService(modelWith([dead]));
+            const updateSpy = jest.spyOn(service, 'update');
+            const healed = await service.reactivateStuck('client-1');
+            expect(healed).toBe(0);
+            expect(updateSpy).not.toHaveBeenCalled();
+        });
+
+        test('does NOT reactivate a step-stuck account that has NO session', async () => {
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const noSession = {
+                mobile: '919990010003', clientId: 'client-1', status: 'inactive',
+                message: 'Stuck: 60d in identity', session: '',
+                warmupPhase: WarmupPhase.IDENTITY, enrolledAt: new Date('2026-01-15T00:00:00.000Z'),
+            };
+            const service = new TestBaseService(modelWith([noSession]));
+            const updateSpy = jest.spyOn(service, 'update');
+            const healed = await service.reactivateStuck('client-1');
+            expect(healed).toBe(0);
+            expect(updateSpy).not.toHaveBeenCalled();
+        });
+
+        test('does NOT reactivate a step-stuck account with no clientId', async () => {
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const noClient = {
+                mobile: '919990010004', clientId: null, status: 'inactive',
+                message: 'Stuck: 55d in settling', session: 'has-session',
+                warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date('2026-01-15T00:00:00.000Z'),
+            };
+            const service = new TestBaseService(modelWith([noClient]));
+            const updateSpy = jest.spyOn(service, 'update');
+            const healed = await service.reactivateStuck();
+            expect(healed).toBe(0);
+            expect(updateSpy).not.toHaveBeenCalled();
+        });
+
+        test('PING-PONG GUARD: a reactivated account is NOT immediately re-stuck by retireIfStuck', async () => {
+            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            const stuck = {
+                mobile: '919990010005', clientId: 'client-1', status: 'inactive',
+                message: 'Stuck: 90d in settling', session: 'live-session-5',
+                warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date('2026-01-01T00:00:00.000Z'),
+                privacyUpdatedAt: new Date('2026-01-05T00:00:00.000Z'),
+                twoFASetAt: new Date('2026-01-10T00:00:00.000Z'),
+                failedUpdateAttempts: 3,
+            };
+            const service = new TestBaseService(modelWith([stuck]));
+            const updateSpy = jest.spyOn(service, 'update');
+            await service.reactivateStuck('client-1');
+            const [, set] = updateSpy.mock.calls[0];
+
+            // Feed the post-reactivation doc back into retireIfStuck — must NOT re-deactivate.
+            const reactivatedDoc = { ...stuck, ...set } as any;
+            const retired = await service.stuckRetire(reactivatedDoc, mockNow);
+            expect(retired).toBe(false);
         });
     });
 

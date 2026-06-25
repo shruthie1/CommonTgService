@@ -427,6 +427,69 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return true;
     }
 
+    /** Reason signature written by retireIfStuck — the ONLY inactive reason this service self-heals. */
+    private static readonly OWN_STUCK_REASON = /^Stuck:\s*\d+d in (enrolled|settling|identity|growing|maturing)/i;
+
+    /**
+     * Self-heal: reactivate accounts THIS service itself stuck.
+     *
+     * retireIfStuck() deactivates step-stuck accounts with reason "Stuck: Nd in <phase>".
+     * Those are not proven-dead sessions — they just stalled on a warmup step. Bring them
+     * back into warmup automatically, but ONLY when it is safe and won't ping-pong:
+     *   - reason matches our own retireIfStuck signature (never an account Telegram killed),
+     *   - a session string is present (no session = cannot resume; leave for manual review),
+     *   - a clientId is present (no parent client = cannot be processed).
+     *
+     * The reactivation resets warmupPhase from completed-timestamp progress, clears failure
+     * state, and back-dates enrolledAt to the phase recovery floor — critically, this puts
+     * age back under STUCK_WARMUP_DAYS so retireIfStuck does NOT immediately re-stick it.
+     */
+    protected async reactivateOwnStuckAccounts(clientId?: string, limit: number = 100): Promise<number> {
+        const query: MongoQuery = {
+            status: ClientStatus.INACTIVE,
+            message: { $regex: '^Stuck: \\d+d in ', $options: 'i' },
+            session: { $exists: true, $nin: [null, ''] },
+            clientId: { $exists: true, $nin: [null, ''] },
+        };
+        if (clientId) query.clientId = clientId;
+
+        const docs = await this.model.find(query).limit(limit).exec();
+        if (!docs.length) return 0;
+
+        const now = Date.now();
+        let healed = 0;
+        for (const doc of docs) {
+            const message = (doc.message as string) || '';
+            // Defence-in-depth: re-validate the reason signature and required fields in code,
+            // not just via the Mongo regex.
+            if (!BaseClientService.OWN_STUCK_REASON.test(message)) continue;
+            if (!doc.session || !String(doc.session).trim()) continue;
+            if (!doc.clientId || !String(doc.clientId).trim()) continue;
+
+            const targetPhase = this.inferWarmupPhaseFromProgress(doc, false);
+            const enrolledAt = this.getRecoveryEnrolledAt(targetPhase, doc.warmupJitter || 0, now);
+            try {
+                await this.update(doc.mobile, {
+                    status: ClientStatus.ACTIVE,
+                    warmupPhase: targetPhase,
+                    failedUpdateAttempts: 0,
+                    lastUpdateFailure: null,
+                    lastUpdateAttempt: null,
+                    enrolledAt,
+                    message: `Self-healed: reactivated into warmup at ${targetPhase} (was "${message.slice(0, 80)}")`,
+                });
+                healed++;
+            } catch (err) {
+                this.logger.warn(`Failed to self-heal stuck account ${doc.mobile}:`, err);
+            }
+        }
+
+        if (healed > 0) {
+            this.logger.log(`Self-healed ${healed} step-stuck ${this.clientType} accounts back into warmup${clientId ? ` for ${clientId}` : ''}`);
+        }
+        return healed;
+    }
+
     constructor(
         protected readonly telegramService: TelegramService,
         protected readonly usersService: UsersService,
@@ -1982,6 +2045,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected async selfHealLegacyOperationalState(clientId?: string): Promise<void> {
         await this.selfHealLegacyUsedAccounts(clientId);
         await this.selfHealLegacyWarmupAccounts(clientId);
+        // Non-fatal: reactivation is a best-effort heal — a failure here must never
+        // crash the surrounding warmup cycle (checkBufferClients / checkPromoteClients).
+        try {
+            await this.reactivateOwnStuckAccounts(clientId);
+        } catch (err) {
+            this.logger.warn(`reactivateOwnStuckAccounts failed${clientId ? ` for ${clientId}` : ''}:`, err);
+        }
     }
 
     // ---- Availability Calculations ----
