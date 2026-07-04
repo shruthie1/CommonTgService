@@ -40195,7 +40195,7 @@ const user_schema_1 = __webpack_require__(/*! ./schemas/user.schema */ "./src/co
 const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
 const client_module_1 = __webpack_require__(/*! ../clients/client.module */ "./src/components/clients/client.module.ts");
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
-const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const bots_module_1 = __webpack_require__(/*! ../bots/bots.module */ "./src/components/bots/bots.module.ts");
 const buffer_client_module_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts");
 const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
 let UsersModule = class UsersModule {
@@ -40210,7 +40210,7 @@ exports.UsersModule = UsersModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
-            (0, common_1.forwardRef)(() => bots_1.BotsModule)
+            (0, common_1.forwardRef)(() => bots_module_1.BotsModule)
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],

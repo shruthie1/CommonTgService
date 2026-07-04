@@ -15,7 +15,7 @@ const user_schema_1 = require("./schemas/user.schema");
 const Telegram_module_1 = require("../Telegram/Telegram.module");
 const client_module_1 = require("../clients/client.module");
 const init_module_1 = require("../ConfigurationInit/init.module");
-const bots_1 = require("../bots");
+const bots_module_1 = require("../bots/bots.module");
 const buffer_client_module_1 = require("../buffer-clients/buffer-client.module");
 const promote_client_module_1 = require("../promote-clients/promote-client.module");
 let UsersModule = class UsersModule {
@@ -30,7 +30,7 @@ exports.UsersModule = UsersModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
-            (0, common_1.forwardRef)(() => bots_1.BotsModule)
+            (0, common_1.forwardRef)(() => bots_module_1.BotsModule)
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],
