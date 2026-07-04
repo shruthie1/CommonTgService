@@ -1,6 +1,8 @@
-import { OnModuleInit } from '@nestjs/common';
+import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Bot, BotDocument } from './schemas/bot.schema';
+import { TelegramService } from '../Telegram/Telegram.service';
+import { UsersService } from '../users/users.service';
 export declare enum ChannelCategory {
     CLIENT_UPDATES = "CLIENT_UPDATES",
     USER_WARNINGS = "USER_WARNINGS",
@@ -22,6 +24,12 @@ export declare enum ChannelCategory {
     UNAUTH_CALLS = "UNAUTH_CALLS",
     CLIENT_PROMOTIONS_1 = "CLIENT_PROMOTIONS_1",
     CLIENT_PROMOTIONS_2 = "CLIENT_PROMOTIONS_2"
+}
+export interface DeadBotInfo {
+    username: string;
+    category: ChannelCategory;
+    channelId: string;
+    token: string;
 }
 export interface SendMessageOptions {
     parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';
@@ -93,13 +101,26 @@ export interface MediaGroupItem {
     thumbnail?: Buffer;
 }
 export type MediaGroupOptions = Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'>;
-export declare class BotsService implements OnModuleInit {
+export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private botModel;
+    private readonly telegramService;
+    private readonly usersService;
     private cache;
     private readonly flushInterval;
     private readonly maxPendingUpdates;
-    constructor(botModel: Model<BotDocument>);
+    private static readonly HEALTH_JOB_NAME;
+    private static readonly HEALTH_JOB_CRON;
+    private static readonly HEALTH_JOB_TZ;
+    private readonly maxReplacementsPerRun;
+    private healthCheckJob;
+    private flushTimer;
+    private destroyed;
+    private replaceInProgress;
+    constructor(botModel: Model<BotDocument>, telegramService: TelegramService, usersService: UsersService);
     onModuleInit(): Promise<void>;
+    private isBotHealthJobEnabled;
+    private scheduleBotHealthCheck;
+    onModuleDestroy(): void;
     private initializeCache;
     private startPeriodicFlush;
     private flushPendingStats;
@@ -140,4 +161,28 @@ export declare class BotsService implements OnModuleInit {
     private getDefaultExtension;
     private addMethodSpecificOptions;
     getBotStatsByCategory(category: ChannelCategory): Promise<any>;
+    private readonly BOT_TOKEN_REGEX;
+    private sleep;
+    private humanDelay;
+    private isFloodSignal;
+    private checkBotToken;
+    validateAndReplaceBots(): Promise<{
+        checked: number;
+        alive: number;
+        dead: number;
+        unknown: number;
+        replaced: number;
+        failures: string[];
+    }>;
+    private replaceDeadBot;
+    private addBotToChannelAsAdmin;
+    private verifyBotIsChannelAdmin;
+    private getChannelManagerMobiles;
+    private resolveChannelAdminMobile;
+    private matchOwnMobileToAdminIds;
+    private shuffle;
+    private pickRandomHealthyUser;
+    private getHealthyAccountMobiles;
+    private notify;
+    private sendHealthSummary;
 }

@@ -47,6 +47,36 @@ __decorate([
     __metadata("design:type", Date)
 ], Bot.prototype, "lastUsed", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ enum: ['active', 'inactive'], default: 'active' }),
+    (0, mongoose_1.Prop)({ default: 'active', enum: ['active', 'inactive'] }),
+    __metadata("design:type", String)
+], Bot.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Why the bot was marked inactive' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "deadReason", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'When the bot was last verified dead' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Bot.prototype, "deadAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'When the bot token was last successfully validated' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Bot.prototype, "lastValidatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Mobile of the account that created this bot via BotFather' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "createdByMobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'username/token id of the bot this one replaced' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "replacedBotUsername", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)({ type: Object }),
     __metadata("design:type", Object)

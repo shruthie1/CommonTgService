@@ -10,6 +10,14 @@ export declare class BotsController {
     private readonly botsService;
     constructor(botsService: BotsService);
     createBot(createBotDto: CreateBotDto): Promise<import("./schemas/bot.schema").BotDocument>;
+    validateAndReplace(): Promise<{
+        checked: number;
+        alive: number;
+        dead: number;
+        unknown: number;
+        replaced: number;
+        failures: string[];
+    }>;
     getBots(category?: ChannelCategory): Promise<import("./schemas/bot.schema").BotDocument[]>;
     getBotById(id: string): Promise<import("./schemas/bot.schema").BotDocument>;
     updateBot(id: string, updateBotDto: Partial<Bot>): Promise<import("./schemas/bot.schema").BotDocument>;

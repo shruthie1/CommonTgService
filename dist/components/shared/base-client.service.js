@@ -231,7 +231,6 @@ class BaseClientService {
         const query = {
             status: exports.ClientStatus.INACTIVE,
             message: { $regex: '^Stuck: \\d+d in ', $options: 'i' },
-            session: { $exists: true, $nin: [null, ''] },
             clientId: { $exists: true, $nin: [null, ''] },
         };
         if (clientId)
@@ -245,14 +244,29 @@ class BaseClientService {
             const message = doc.message || '';
             if (!BaseClientService.OWN_STUCK_REASON.test(message))
                 continue;
-            if (!doc.session || !String(doc.session).trim())
-                continue;
             if (!doc.clientId || !String(doc.clientId).trim())
+                continue;
+            let session = doc.session && String(doc.session).trim() ? String(doc.session).trim() : '';
+            let backfilledSession = false;
+            if (!session) {
+                try {
+                    const users = await this.usersService.findByMobileAnyStatus(doc.mobile);
+                    const userSession = users?.[0]?.session && String(users[0].session).trim() ? String(users[0].session).trim() : '';
+                    if (userSession) {
+                        session = userSession;
+                        backfilledSession = true;
+                    }
+                }
+                catch (err) {
+                    this.logger.warn(`Session backfill lookup failed for stuck account ${doc.mobile}:`, err);
+                }
+            }
+            if (!session)
                 continue;
             const targetPhase = this.inferWarmupPhaseFromProgress(doc, false);
             const enrolledAt = this.getRecoveryEnrolledAt(targetPhase, doc.warmupJitter || 0, now);
             try {
-                await this.update(doc.mobile, {
+                const update = {
                     status: exports.ClientStatus.ACTIVE,
                     warmupPhase: targetPhase,
                     failedUpdateAttempts: 0,
@@ -260,7 +274,10 @@ class BaseClientService {
                     lastUpdateAttempt: null,
                     enrolledAt,
                     message: `Self-healed: reactivated into warmup at ${targetPhase} (was "${message.slice(0, 80)}")`,
-                });
+                };
+                if (backfilledSession)
+                    update.session = session;
+                await this.update(doc.mobile, update);
                 healed++;
             }
             catch (err) {
@@ -1597,11 +1614,22 @@ class BaseClientService {
         const active = activeSession?.trim();
         if (!active)
             return null;
-        const users = await this.usersService.search({ mobile });
-        if (!users.length) {
-            throw new common_1.NotFoundException(`User not found for ${mobile}`);
+        const users = await this.usersService.findByMobileAnyStatus(mobile);
+        let user = users[0];
+        if (!user) {
+            const poolDoc = await this.model.findOne({ mobile }).lean().exec();
+            const seedSession = (poolDoc?.session && String(poolDoc.session).trim()) || active;
+            const healed = await this.usersService.backfillFromPool({
+                mobile,
+                tgId: poolDoc?.tgId != null ? String(poolDoc.tgId) : null,
+                session: seedSession,
+            });
+            if (!healed) {
+                throw new common_1.NotFoundException(`User not found for ${mobile} (orphaned pool record; backfill not possible — missing tgId/session)`);
+            }
+            this.logger.warn(`Self-healed orphaned pool record: recreated missing user for ${mobile}`);
+            user = healed;
         }
-        const user = users[0];
         const currentBackup = user.session?.trim();
         if (currentBackup && currentBackup !== active) {
             return user;
