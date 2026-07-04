@@ -14,7 +14,7 @@ import { InitModule } from '../ConfigurationInit';
     imports: [
         InitModule,
         forwardRef(() => UsersModule),
-        BufferClientModule,
+        forwardRef(() => BufferClientModule),
         forwardRef(() => PromoteClientModule),
         forwardRef(() => ActiveChannelsModule),
         forwardRef(() => ChannelsModule)
