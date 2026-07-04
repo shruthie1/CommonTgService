@@ -2157,11 +2157,26 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (!active) return null;
 
         const users = await this.usersService.search({ mobile });
-        if (!users.length) {
-            throw new NotFoundException(`User not found for ${mobile}`);
+        let user = users[0] as User | undefined;
+        if (!user) {
+            // Self-heal: the pool record outlived its users doc (orphan). Rather than
+            // throwing "user not found" and breaking session rotation, recreate the user
+            // from the pool doc's own identity (mobile + tgId + a session to seed with).
+            // Prefer the pool doc's stored session; fall back to the active session so the
+            // required unique `session` field is always populated.
+            const poolDoc = await this.model.findOne({ mobile }).lean<{ tgId?: string | number | null; session?: string | null }>().exec();
+            const seedSession = (poolDoc?.session && String(poolDoc.session).trim()) || active;
+            const healed = await this.usersService.backfillFromPool({
+                mobile,
+                tgId: poolDoc?.tgId != null ? String(poolDoc.tgId) : null,
+                session: seedSession,
+            });
+            if (!healed) {
+                throw new NotFoundException(`User not found for ${mobile} (orphaned pool record; backfill not possible — missing tgId/session)`);
+            }
+            this.logger.warn(`Self-healed orphaned pool record: recreated missing user for ${mobile}`);
+            user = healed;
         }
-
-        const user = users[0] as User;
         const currentBackup = user.session?.trim();
         if (currentBackup && currentBackup !== active) {
             return user;

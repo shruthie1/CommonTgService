@@ -559,6 +559,61 @@ export class UsersService {
     return doc.toJSON();
   }
 
+  /**
+   * Self-heal a missing users doc from a pool record's own data.
+   *
+   * Pool records (bufferClients / promoteClients) can outlive their users doc: the
+   * user gets pruned/expired but the pool record persists, so any code that does
+   * `usersService.search({ mobile })` then throws "user not found" — breaking
+   * session rotation and warmup for an otherwise-usable account.
+   *
+   * This recreates the minimal, required user identity (mobile, session, tgId) with a
+   * plain upsert — NO bot notifications, NO relationship scoring, NO client-session
+   * side effects (unlike create()). Idempotent: an existing user is left untouched.
+   * Returns the resulting user, or null if the inputs are insufficient/invalid.
+   */
+  async backfillFromPool(input: { mobile: string; tgId?: string | null; session?: string | null }): Promise<User | null> {
+    const session = input.session?.trim();
+    const tgId = input.tgId != null ? String(input.tgId).trim() : '';
+    if (!session || !tgId) return null; // required unique fields — cannot create a valid user without them
+
+    let canonicalMobile: string;
+    try {
+      canonicalMobile = this.canonicalMobile(input.mobile);
+    } catch {
+      return null;
+    }
+
+    try {
+      const existing = await this.userModel
+        .findOne({ $or: [{ mobile: canonicalMobile }, { tgId }] })
+        .exec();
+      if (existing) return existing.toJSON();
+
+      const created = await this.userModel.findOneAndUpdate(
+        { tgId },
+        {
+          $setOnInsert: {
+            mobile: canonicalMobile,
+            session,
+            tgId,
+            twoFA: true,
+            expired: false,
+            password: 'Ajtdmwajt1@',
+          },
+        },
+        { new: true, upsert: true },
+      ).exec();
+      this.logger.log(`backfillFromPool: recreated missing user for ${canonicalMobile} (tgId ${tgId})`);
+      return created ? created.toJSON() : null;
+    } catch (error) {
+      // A concurrent insert / unique-index race is fine — re-read and return.
+      this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or failed: ${error instanceof Error ? error.message : String(error)}`);
+      const fallback = await this.userModel.findOne({ tgId }).exec();
+      return fallback ? fallback.toJSON() : null;
+    }
+  }
+
   async update(tgId: string, updateDto: UpdateUserDto): Promise<User> {
     const updateData: UpdateUserDto = { ...updateDto };
     if (updateData.mobile !== undefined) {
