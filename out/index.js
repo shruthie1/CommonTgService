@@ -18835,7 +18835,7 @@ const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module *
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const promote_client_module_1 = __webpack_require__(/*! ../promote-clients/promote-client.module */ "./src/components/promote-clients/promote-client.module.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
-const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const bots_module_1 = __webpack_require__(/*! ../bots/bots.module */ "./src/components/bots/bots.module.ts");
 let BufferClientModule = class BufferClientModule {
 };
 exports.BufferClientModule = BufferClientModule;
@@ -18851,7 +18851,7 @@ exports.BufferClientModule = BufferClientModule = __decorate([
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
-            bots_1.BotsModule
+            (0, common_1.forwardRef)(() => bots_module_1.BotsModule),
         ],
         controllers: [buffer_client_controller_1.BufferClientController],
         providers: [buffer_client_service_1.BufferClientService],
@@ -28386,7 +28386,7 @@ const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module *
 const channels_module_1 = __webpack_require__(/*! ../channels/channels.module */ "./src/components/channels/channels.module.ts");
 const buffer_client_module_1 = __webpack_require__(/*! ../buffer-clients/buffer-client.module */ "./src/components/buffer-clients/buffer-client.module.ts");
 const session_manager_1 = __webpack_require__(/*! ../session-manager */ "./src/components/session-manager/index.ts");
-const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const bots_module_1 = __webpack_require__(/*! ../bots/bots.module */ "./src/components/bots/bots.module.ts");
 let PromoteClientModule = class PromoteClientModule {
 };
 exports.PromoteClientModule = PromoteClientModule;
@@ -28402,7 +28402,7 @@ exports.PromoteClientModule = PromoteClientModule = __decorate([
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => session_manager_1.SessionModule),
-            bots_1.BotsModule
+            (0, common_1.forwardRef)(() => bots_module_1.BotsModule),
         ],
         controllers: [promote_client_controller_1.PromoteClientController],
         providers: [promote_client_service_1.PromoteClientService],
