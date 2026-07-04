@@ -31,6 +31,32 @@ export class Bot {
   @Prop({ default: Date.now })
   lastUsed: Date;
 
+  // Health lifecycle. 'active' bots are eligible for selection; 'inactive' ones
+  // (token revoked — getMe returned 401) are excluded and queued for replacement.
+  @ApiProperty({ enum: ['active', 'inactive'], default: 'active' })
+  @Prop({ default: 'active', enum: ['active', 'inactive'] })
+  status: 'active' | 'inactive';
+
+  @ApiProperty({ required: false, description: 'Why the bot was marked inactive' })
+  @Prop()
+  deadReason?: string;
+
+  @ApiProperty({ required: false, description: 'When the bot was last verified dead' })
+  @Prop()
+  deadAt?: Date;
+
+  @ApiProperty({ required: false, description: 'When the bot token was last successfully validated' })
+  @Prop()
+  lastValidatedAt?: Date;
+
+  @ApiProperty({ required: false, description: 'Mobile of the account that created this bot via BotFather' })
+  @Prop()
+  createdByMobile?: string;
+
+  @ApiProperty({ required: false, description: 'username/token id of the bot this one replaced' })
+  @Prop()
+  replacedBotUsername?: string;
+
   @ApiProperty()
   @Prop({ type: Object })
   stats: {

@@ -18,7 +18,7 @@ import { PromoteClientModule } from '../promote-clients/promote-client.module';
     forwardRef(() => ClientModule),
     forwardRef(() => BufferClientModule),
     forwardRef(() => PromoteClientModule),
-    BotsModule
+    forwardRef(() => BotsModule)
   ],
   controllers: [UsersController],
   providers: [UsersService],

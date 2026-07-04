@@ -476,7 +476,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             let backfilledSession = false;
             if (!session) {
                 try {
-                    const users = await this.usersService.search({ mobile: doc.mobile });
+                    // Look regardless of expired status (search() hides expired docs) and prefer
+                    // a session-bearing doc — a stuck-but-alive account may have an expired user row.
+                    const users = await this.usersService.findByMobileAnyStatus(doc.mobile);
                     const userSession = users?.[0]?.session && String(users[0].session).trim() ? String(users[0].session).trim() : '';
                     if (userSession) {
                         session = userSession;
@@ -2156,7 +2158,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const active = activeSession?.trim();
         if (!active) return null;
 
-        const users = await this.usersService.search({ mobile });
+        // Include expired docs: search() would hide an expired-but-present user, causing us to
+        // wrongly enter the "orphan" backfill path and try to recreate a user that already exists.
+        const users = await this.usersService.findByMobileAnyStatus(mobile);
         let user = users[0] as User | undefined;
         if (!user) {
             // Self-heal: the pool record outlived its users doc (orphan). Rather than

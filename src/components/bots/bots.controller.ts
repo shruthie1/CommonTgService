@@ -38,6 +38,15 @@ export class BotsController {
     return this.botsService.createBot(createBotDto);
   }
 
+  @Post('validate-and-replace')
+  @ApiOperation({
+    summary: 'Validate all bots and auto-replace dead ones',
+    description: 'Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.' })
+  @ApiResponse({ status: 201, description: 'Validation + replacement summary' })
+  async validateAndReplace() {
+    return this.botsService.validateAndReplaceBots();
+  }
+
   @Get()
   @ApiOperation({
     summary: 'Get all bots or filter by category',

@@ -36,6 +36,9 @@ export class UsersService {
     private telegramService: TelegramService,
     @Inject(forwardRef(() => ClientService))
     private clientsService: ClientService,
+    // forwardRef REQUIRED: BotsService now injects UsersService (bot-health auto-replace),
+    // making this a true circular dep — Nest needs forwardRef on BOTH sides or boot fails.
+    @Inject(forwardRef(() => BotsService))
     private readonly botsService: BotsService,
     // NOT @Optional(): these power the expireAccount cascade. If the forwardRef
     // cycle ever fails to resolve, we want a loud bootstrap failure — a silent
@@ -572,6 +575,25 @@ export class UsersService {
    * side effects (unlike create()). Idempotent: an existing user is left untouched.
    * Returns the resulting user, or null if the inputs are insufficient/invalid.
    */
+  /**
+   * Find users by mobile REGARDLESS of expired status, newest first. `search()` injects an
+   * `expired: {$ne:true}` filter, which hides expired docs — but self-heal / session-recovery
+   * flows must see them (a stuck-but-alive account whose only user doc is expired still needs
+   * its session). Prefer a non-empty-session doc if any exists.
+   */
+  async findByMobileAnyStatus(mobile: string): Promise<User[]> {
+    let canonicalMobile: string;
+    try {
+      canonicalMobile = this.canonicalMobile(mobile);
+    } catch {
+      return [];
+    }
+    const docs = await this.userModel.find({ mobile: canonicalMobile }).sort({ updatedAt: -1 }).limit(50).exec();
+    const withSession = docs.filter(d => d.session && String(d.session).trim());
+    const ordered = [...withSession, ...docs.filter(d => !withSession.includes(d))];
+    return ordered.map(d => d.toJSON());
+  }
+
   async backfillFromPool(input: { mobile: string; tgId?: string | null; session?: string | null }): Promise<User | null> {
     const session = input.session?.trim();
     const tgId = input.tgId != null ? String(input.tgId).trim() : '';
@@ -584,10 +606,11 @@ export class UsersService {
       return null;
     }
 
+    // mobile, session AND tgId are each independently unique — check all three so we don't
+    // attempt an insert that collides on a key the pre-check didn't cover.
+    const conflictQuery = { $or: [{ mobile: canonicalMobile }, { tgId }, { session }] };
     try {
-      const existing = await this.userModel
-        .findOne({ $or: [{ mobile: canonicalMobile }, { tgId }] })
-        .exec();
+      const existing = await this.userModel.findOne(conflictQuery).exec();
       if (existing) return existing.toJSON();
 
       const created = await this.userModel.findOneAndUpdate(
@@ -607,9 +630,11 @@ export class UsersService {
       this.logger.log(`backfillFromPool: recreated missing user for ${canonicalMobile} (tgId ${tgId})`);
       return created ? created.toJSON() : null;
     } catch (error) {
-      // A concurrent insert / unique-index race is fine — re-read and return.
-      this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or failed: ${error instanceof Error ? error.message : String(error)}`);
-      const fallback = await this.userModel.findOne({ tgId }).exec();
+      // A concurrent insert or a unique-index conflict on ANY of mobile/tgId/session — re-read
+      // by all three keys (not just tgId) so we resolve to the real conflicting doc rather than
+      // returning null when the collision was on mobile or session.
+      this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or conflicted: ${error instanceof Error ? error.message : String(error)}`);
+      const fallback = await this.userModel.findOne(conflictQuery).exec();
       return fallback ? fallback.toJSON() : null;
     }
   }
