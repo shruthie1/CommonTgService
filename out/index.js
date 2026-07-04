@@ -32446,6 +32446,51 @@ class BaseClientService {
         this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
         return true;
     }
+    async reactivateOwnStuckAccounts(clientId, limit = 100) {
+        const query = {
+            status: exports.ClientStatus.INACTIVE,
+            message: { $regex: '^Stuck: \\d+d in ', $options: 'i' },
+            session: { $exists: true, $nin: [null, ''] },
+            clientId: { $exists: true, $nin: [null, ''] },
+        };
+        if (clientId)
+            query.clientId = clientId;
+        const docs = await this.model.find(query).limit(limit).exec();
+        if (!docs.length)
+            return 0;
+        const now = Date.now();
+        let healed = 0;
+        for (const doc of docs) {
+            const message = doc.message || '';
+            if (!BaseClientService.OWN_STUCK_REASON.test(message))
+                continue;
+            if (!doc.session || !String(doc.session).trim())
+                continue;
+            if (!doc.clientId || !String(doc.clientId).trim())
+                continue;
+            const targetPhase = this.inferWarmupPhaseFromProgress(doc, false);
+            const enrolledAt = this.getRecoveryEnrolledAt(targetPhase, doc.warmupJitter || 0, now);
+            try {
+                await this.update(doc.mobile, {
+                    status: exports.ClientStatus.ACTIVE,
+                    warmupPhase: targetPhase,
+                    failedUpdateAttempts: 0,
+                    lastUpdateFailure: null,
+                    lastUpdateAttempt: null,
+                    enrolledAt,
+                    message: `Self-healed: reactivated into warmup at ${targetPhase} (was "${message.slice(0, 80)}")`,
+                });
+                healed++;
+            }
+            catch (err) {
+                this.logger.warn(`Failed to self-heal stuck account ${doc.mobile}:`, err);
+            }
+        }
+        if (healed > 0) {
+            this.logger.log(`Self-healed ${healed} step-stuck ${this.clientType} accounts back into warmup${clientId ? ` for ${clientId}` : ''}`);
+        }
+        return healed;
+    }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
         this.usersService = usersService;
@@ -33705,6 +33750,12 @@ class BaseClientService {
     async selfHealLegacyOperationalState(clientId) {
         await this.selfHealLegacyUsedAccounts(clientId);
         await this.selfHealLegacyWarmupAccounts(clientId);
+        try {
+            await this.reactivateOwnStuckAccounts(clientId);
+        }
+        catch (err) {
+            this.logger.warn(`reactivateOwnStuckAccounts failed${clientId ? ` for ${clientId}` : ''}:`, err);
+        }
     }
     async getStoredActiveSession(mobile) {
         const doc = await this.model.findOne({ mobile }, { session: 1 }).lean().exec();
@@ -34377,6 +34428,7 @@ class BaseClientService {
     }
 }
 exports.BaseClientService = BaseClientService;
+BaseClientService.OWN_STUCK_REASON = /^Stuck:\s*\d+d in (enrolled|settling|identity|growing|maturing)/i;
 
 
 /***/ },

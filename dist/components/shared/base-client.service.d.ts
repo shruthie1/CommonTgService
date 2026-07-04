@@ -153,6 +153,8 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected getRecoveryEnrolledAt(phase: WarmupPhaseType, jitter: number, now: number): Date;
     protected repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc>;
     protected retireIfStuck(doc: TDoc, now: number): Promise<boolean>;
+    private static readonly OWN_STUCK_REASON;
+    protected reactivateOwnStuckAccounts(clientId?: string, limit?: number): Promise<number>;
     constructor(telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, sessionService: SessionService, botsService: BotsService, loggerName: string);
     abstract get model(): Model<TDoc>;
     abstract get clientType(): 'buffer' | 'promote';
