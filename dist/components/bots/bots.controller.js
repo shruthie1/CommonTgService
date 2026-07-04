@@ -29,6 +29,9 @@ let BotsController = class BotsController {
     async createBot(createBotDto) {
         return this.botsService.createBot(createBotDto);
     }
+    async validateAndReplace() {
+        return this.botsService.validateAndReplaceBots();
+    }
     async getBots(category) {
         return this.botsService.getBots(category);
     }
@@ -143,6 +146,17 @@ __decorate([
     __metadata("design:paramtypes", [create_bot_dto_1.CreateBotDto]),
     __metadata("design:returntype", Promise)
 ], BotsController.prototype, "createBot", null);
+__decorate([
+    (0, common_1.Post)('validate-and-replace'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Validate all bots and auto-replace dead ones',
+        description: 'Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "validateAndReplace", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({

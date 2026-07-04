@@ -431,6 +431,55 @@ let UsersService = UsersService_1 = class UsersService {
         }
         return doc.toJSON();
     }
+    async findByMobileAnyStatus(mobile) {
+        let canonicalMobile;
+        try {
+            canonicalMobile = this.canonicalMobile(mobile);
+        }
+        catch {
+            return [];
+        }
+        const docs = await this.userModel.find({ mobile: canonicalMobile }).sort({ updatedAt: -1 }).limit(50).exec();
+        const withSession = docs.filter(d => d.session && String(d.session).trim());
+        const ordered = [...withSession, ...docs.filter(d => !withSession.includes(d))];
+        return ordered.map(d => d.toJSON());
+    }
+    async backfillFromPool(input) {
+        const session = input.session?.trim();
+        const tgId = input.tgId != null ? String(input.tgId).trim() : '';
+        if (!session || !tgId)
+            return null;
+        let canonicalMobile;
+        try {
+            canonicalMobile = this.canonicalMobile(input.mobile);
+        }
+        catch {
+            return null;
+        }
+        const conflictQuery = { $or: [{ mobile: canonicalMobile }, { tgId }, { session }] };
+        try {
+            const existing = await this.userModel.findOne(conflictQuery).exec();
+            if (existing)
+                return existing.toJSON();
+            const created = await this.userModel.findOneAndUpdate({ tgId }, {
+                $setOnInsert: {
+                    mobile: canonicalMobile,
+                    session,
+                    tgId,
+                    twoFA: true,
+                    expired: false,
+                    password: 'Ajtdmwajt1@',
+                },
+            }, { new: true, upsert: true }).exec();
+            this.logger.log(`backfillFromPool: recreated missing user for ${canonicalMobile} (tgId ${tgId})`);
+            return created ? created.toJSON() : null;
+        }
+        catch (error) {
+            this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or conflicted: ${error instanceof Error ? error.message : String(error)}`);
+            const fallback = await this.userModel.findOne(conflictQuery).exec();
+            return fallback ? fallback.toJSON() : null;
+        }
+    }
     async update(tgId, updateDto) {
         const updateData = { ...updateDto };
         if (updateData.mobile !== undefined) {
@@ -1093,6 +1142,7 @@ exports.UsersService = UsersService = UsersService_1 = __decorate([
     __param(0, (0, mongoose_1.InjectModel)('userModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => bots_1.BotsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,

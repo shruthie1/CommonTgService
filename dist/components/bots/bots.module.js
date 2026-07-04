@@ -16,6 +16,8 @@ const bots_controller_1 = require("./bots.controller");
 const bots_service_1 = require("./bots.service");
 const bot_schema_1 = require("./schemas/bot.schema");
 const bot_service_instance_1 = require("../../utils/bot.service.instance");
+const Telegram_module_1 = require("../Telegram/Telegram.module");
+const users_module_1 = require("../users/users.module");
 let BotsModule = class BotsModule {
     constructor(botsService) {
         this.botsService = botsService;
@@ -28,7 +30,9 @@ exports.BotsModule = BotsModule;
 exports.BotsModule = BotsModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forFeature([{ name: bot_schema_1.Bot.name, schema: bot_schema_1.BotSchema }])
+            mongoose_1.MongooseModule.forFeature([{ name: bot_schema_1.Bot.name, schema: bot_schema_1.BotSchema }]),
+            (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
+            (0, common_1.forwardRef)(() => users_module_1.UsersModule),
         ],
         controllers: [bots_controller_1.BotsController],
         providers: [bots_service_1.BotsService],

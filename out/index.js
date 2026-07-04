@@ -15853,6 +15853,9 @@ let BotsController = class BotsController {
     async createBot(createBotDto) {
         return this.botsService.createBot(createBotDto);
     }
+    async validateAndReplace() {
+        return this.botsService.validateAndReplaceBots();
+    }
     async getBots(category) {
         return this.botsService.getBots(category);
     }
@@ -15967,6 +15970,17 @@ __decorate([
     __metadata("design:paramtypes", [create_bot_dto_1.CreateBotDto]),
     __metadata("design:returntype", Promise)
 ], BotsController.prototype, "createBot", null);
+__decorate([
+    (0, common_1.Post)('validate-and-replace'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Validate all bots and auto-replace dead ones',
+        description: 'Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.'
+    }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], BotsController.prototype, "validateAndReplace", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({
@@ -16348,6 +16362,8 @@ const bots_controller_1 = __webpack_require__(/*! ./bots.controller */ "./src/co
 const bots_service_1 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
 const bot_schema_1 = __webpack_require__(/*! ./schemas/bot.schema */ "./src/components/bots/schemas/bot.schema.ts");
 const bot_service_instance_1 = __webpack_require__(/*! ../../utils/bot.service.instance */ "./src/utils/bot.service.instance.ts");
+const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
+const users_module_1 = __webpack_require__(/*! ../users/users.module */ "./src/components/users/users.module.ts");
 let BotsModule = class BotsModule {
     constructor(botsService) {
         this.botsService = botsService;
@@ -16360,7 +16376,9 @@ exports.BotsModule = BotsModule;
 exports.BotsModule = BotsModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forFeature([{ name: bot_schema_1.Bot.name, schema: bot_schema_1.BotSchema }])
+            mongoose_1.MongooseModule.forFeature([{ name: bot_schema_1.Bot.name, schema: bot_schema_1.BotSchema }]),
+            (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
+            (0, common_1.forwardRef)(() => users_module_1.UsersModule),
         ],
         controllers: [bots_controller_1.BotsController],
         providers: [bots_service_1.BotsService],
@@ -16379,12 +16397,45 @@ exports.BotsModule = BotsModule = __decorate([
 (__unused_webpack_module, exports, __webpack_require__) {
 
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
     if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
@@ -16394,6 +16445,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var BotsService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotsService = exports.ChannelCategory = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -16402,8 +16454,11 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const form_data_1 = __importDefault(__webpack_require__(/*! form-data */ "form-data"));
 const node_cache_1 = __importDefault(__webpack_require__(/*! node-cache */ "node-cache"));
+const schedule = __importStar(__webpack_require__(/*! node-schedule-tz */ "node-schedule-tz"));
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const bot_schema_1 = __webpack_require__(/*! ./schemas/bot.schema */ "./src/components/bots/schemas/bot.schema.ts");
+const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
+const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
 var ChannelCategory;
 (function (ChannelCategory) {
     ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
@@ -16427,16 +16482,60 @@ var ChannelCategory;
     ChannelCategory["CLIENT_PROMOTIONS_1"] = "CLIENT_PROMOTIONS_1";
     ChannelCategory["CLIENT_PROMOTIONS_2"] = "CLIENT_PROMOTIONS_2";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
-let BotsService = class BotsService {
-    constructor(botModel) {
+let BotsService = BotsService_1 = class BotsService {
+    constructor(botModel, telegramService, usersService) {
         this.botModel = botModel;
+        this.telegramService = telegramService;
+        this.usersService = usersService;
         this.flushInterval = 300000;
         this.maxPendingUpdates = 100;
+        this.maxReplacementsPerRun = 1;
+        this.healthCheckJob = null;
+        this.flushTimer = null;
+        this.destroyed = false;
+        this.replaceInProgress = false;
+        this.BOT_TOKEN_REGEX = /^\d+:[A-Za-z0-9_-]+$/;
         this.cache = new node_cache_1.default({ stdTTL: 300, checkperiod: 60 });
     }
     async onModuleInit() {
         await this.initializeCache();
         this.startPeriodicFlush();
+        if (this.isBotHealthJobEnabled()) {
+            console.log('[BotHealth] BOT_HEALTH_JOB_ENABLED is set on this pod — scheduling daily job');
+            this.scheduleBotHealthCheck();
+        }
+        else {
+            console.log('[BotHealth] daily job disabled on this pod (set BOT_HEALTH_JOB_ENABLED=true on ONE pod to enable)');
+        }
+    }
+    isBotHealthJobEnabled() {
+        const v = (process.env.BOT_HEALTH_JOB_ENABLED || '').trim().toLowerCase();
+        return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+    }
+    scheduleBotHealthCheck() {
+        this.healthCheckJob = schedule.scheduleJob(BotsService_1.HEALTH_JOB_NAME, BotsService_1.HEALTH_JOB_CRON, BotsService_1.HEALTH_JOB_TZ, async () => {
+            if (this.destroyed)
+                return;
+            try {
+                await this.validateAndReplaceBots();
+            }
+            catch (err) {
+                (0, utils_1.parseError)(err, '[BotHealth] daily validateAndReplaceBots failed', true);
+            }
+        });
+        console.log(`[BotHealth] daily bot health-check scheduled (cron '${BotsService_1.HEALTH_JOB_CRON}' ${BotsService_1.HEALTH_JOB_TZ})`);
+    }
+    onModuleDestroy() {
+        this.destroyed = true;
+        try {
+            this.healthCheckJob?.cancel?.();
+        }
+        catch { }
+        this.healthCheckJob = null;
+        if (this.flushTimer) {
+            clearInterval(this.flushTimer);
+            this.flushTimer = null;
+        }
     }
     async initializeCache() {
         try {
@@ -16460,9 +16559,10 @@ let BotsService = class BotsService {
         }
     }
     startPeriodicFlush() {
-        setInterval(async () => {
+        this.flushTimer = setInterval(async () => {
             await this.flushPendingStats();
         }, this.flushInterval);
+        this.flushTimer.unref?.();
     }
     async flushPendingStats() {
         const pendingUpdates = this.cache.get('pendingStats') || {};
@@ -16622,6 +16722,10 @@ let BotsService = class BotsService {
                 .exec();
             this.cache.set(`category:${category}`, availableBots);
             availableBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
+        }
+        const liveBots = availableBots.filter(b => b.status !== 'inactive');
+        if (liveBots.length > 0) {
+            availableBots = liveBots;
         }
         if (availableBots.length === 0) {
             console.error(`No bots found for category: ${category}`);
@@ -16989,12 +17093,285 @@ let BotsService = class BotsService {
         this.cache.set(cacheKey, result);
         return result;
     }
+    sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+    humanDelay(minMs = 60_000, maxMs = 180_000) {
+        const jitter = minMs + Math.floor(Math.random() * Math.max(1, maxMs - minMs));
+        return this.sleep(jitter);
+    }
+    isFloodSignal(err) {
+        const m = [err?.message, err?.errorMessage, err?.code, String(err || '')].filter(Boolean).join(' ').toLowerCase();
+        return /flood|too many|spam|420|peer_flood|slowmode/.test(m);
+    }
+    async checkBotToken(token) {
+        try {
+            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, { timeout: 12000 });
+            return res.data?.ok === true ? 'alive' : 'unknown';
+        }
+        catch (error) {
+            const status = error?.response?.status;
+            if (status === 401 || status === 403 || status === 404)
+                return 'dead';
+            return 'unknown';
+        }
+    }
+    async validateAndReplaceBots() {
+        if (this.replaceInProgress) {
+            console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
+            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, failures: ['already running (this pod)'] };
+        }
+        this.replaceInProgress = true;
+        const failures = [];
+        let alive = 0, dead = 0, unknown = 0, replaced = 0;
+        const deadBots = [];
+        try {
+            const bots = await this.botModel.find().lean().exec();
+            for (const bot of bots) {
+                const verdict = await this.checkBotToken(bot.token);
+                if (verdict === 'alive') {
+                    alive++;
+                    if (bot.status === 'inactive') {
+                        await this.botModel.updateOne({ _id: bot._id }, { $set: { status: 'active', deadReason: null }, $unset: { deadAt: '' } }).exec();
+                    }
+                    else {
+                        await this.botModel.updateOne({ _id: bot._id }, { $set: { lastValidatedAt: new Date() } }).exec();
+                    }
+                }
+                else if (verdict === 'dead') {
+                    dead++;
+                    if (bot.status !== 'inactive') {
+                        await this.botModel.updateOne({ _id: bot._id }, { $set: { status: 'inactive', deadReason: 'getMe 401 Unauthorized (token revoked)', deadAt: new Date() } }).exec();
+                        console.warn(`[BotHealth] marked dead: @${bot.username} (${bot.category})`);
+                    }
+                    deadBots.push({ username: bot.username, category: bot.category, channelId: bot.channelId, token: bot.token });
+                }
+                else {
+                    unknown++;
+                }
+                await this.sleep(1200);
+            }
+            await this.flushPendingStats();
+            this.cache.flushAll();
+            const toReplace = deadBots.slice(0, this.maxReplacementsPerRun);
+            for (const deadBot of toReplace) {
+                try {
+                    const newBot = await this.replaceDeadBot(deadBot);
+                    if (newBot)
+                        replaced++;
+                }
+                catch (err) {
+                    const msg = `replace @${deadBot.username} (${deadBot.category}): ${err?.message || err}`;
+                    failures.push(msg);
+                    (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, true);
+                    if (/flood|too many|rate/i.test(err?.message || '')) {
+                        failures.push('BotFather rate-limit hit — aborting further replacements this run');
+                        break;
+                    }
+                }
+            }
+            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, deadRemaining: deadBots.length - replaced, failures });
+            return { checked: bots.length, alive, dead, unknown, replaced, failures };
+        }
+        finally {
+            this.replaceInProgress = false;
+        }
+    }
+    async replaceDeadBot(deadBot) {
+        const category = deadBot.category;
+        const channelId = deadBot.channelId;
+        const creator = await this.pickRandomHealthyUser();
+        if (!creator) {
+            throw new Error('no healthy user account available to create bot');
+        }
+        const creatorHandle = creator.username ? `@${creator.username}` : (creator.firstName || 'unknown');
+        const description = `${creator.mobile} ${creatorHandle}`.slice(0, 512);
+        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
+        const { botToken, username } = await this.telegramService.createBot(creator.mobile, {
+            name: `${category}`,
+            username: usernameSeed,
+            description,
+            aboutText: description,
+        });
+        if (!botToken || !this.BOT_TOKEN_REGEX.test(botToken)) {
+            throw new Error(`BotFather did not return a valid token (got: ${String(botToken).slice(0, 20)})`);
+        }
+        const saved = await this.createBot({ token: botToken, category, channelId, description });
+        await this.botModel.updateOne({ _id: saved._id }, { $set: { createdByMobile: creator.mobile, replacedBotUsername: deadBot.username, status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } }).exec();
+        try {
+            const botId = await this.addBotToChannelAsAdmin(channelId, botToken, username);
+            const verified = await this.verifyBotIsChannelAdmin(channelId, botId);
+            if (!verified) {
+                throw new Error('post-add verification failed: bot is not listed as an admin of the channel');
+            }
+            await this.botModel.updateOne({ _id: saved._id }, { $set: { status: 'active' }, $unset: { deadReason: '' } }).exec();
+            try {
+                await this.botModel.deleteOne({ token: deadBot.token }).exec();
+            }
+            catch { }
+            await this.flushPendingStats();
+            this.cache.flushAll();
+        }
+        catch (err) {
+            (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, true);
+            await this.notify(`⚠️ <b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${err?.message || err}`);
+            console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) — created but NOT yet admin (inactive)`);
+            return null;
+        }
+        console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) via ${creator.mobile} — active`);
+        return saved;
+    }
+    async addBotToChannelAsAdmin(channelId, botToken, botUsername) {
+        const botInfo = await this.telegramService.getBotInfo(botToken);
+        const botId = String(botInfo?.id ?? '');
+        if (!botId)
+            throw new Error('could not resolve new bot id from getBotInfo');
+        const adminMobile = await this.resolveChannelAdminMobile(channelId);
+        if (!adminMobile)
+            throw new Error(`no controllable admin account found for channel ${channelId}`);
+        await this.humanDelay();
+        try {
+            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, {
+                changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
+                banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
+                anonymous: true, manageCall: true,
+            });
+        }
+        catch (err) {
+            if (this.isFloodSignal(err)) {
+                throw new Error(`FLOOD/spam signal promoting via ${adminMobile} in ${channelId} — aborting to protect the manager account: ${err?.message || err}`);
+            }
+            throw err;
+        }
+        console.log(`[BotHealth] attempted add of @${botUsername} to channel ${channelId} via ${adminMobile}`);
+        return botId;
+    }
+    async verifyBotIsChannelAdmin(channelId, botId) {
+        await this.sleep(3000);
+        for (const viewerMobile of [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(10))]) {
+            try {
+                const admins = await this.telegramService.getGroupAdmins(viewerMobile, channelId);
+                const ids = new Set((Array.isArray(admins) ? admins : []).map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
+                if (ids.size > 0)
+                    return ids.has(String(botId));
+            }
+            catch {
+                continue;
+            }
+        }
+        return false;
+    }
+    getChannelManagerMobiles() {
+        return [process.env.channelManagerPrimary, process.env.channelManagerBackup]
+            .map(m => (m || '').trim())
+            .filter(Boolean);
+    }
+    async resolveChannelAdminMobile(channelId) {
+        for (const managerMobile of this.getChannelManagerMobiles()) {
+            try {
+                const admins = await this.telegramService.getGroupAdmins(managerMobile, channelId);
+                const adminIds = new Set((Array.isArray(admins) ? admins : []).map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
+                const mgrUser = (await this.usersService.search({ mobile: managerMobile }))[0];
+                const mgrTgId = mgrUser?.tgId ? String(mgrUser.tgId) : null;
+                if (mgrTgId && adminIds.has(mgrTgId)) {
+                    return managerMobile;
+                }
+            }
+            catch {
+            }
+        }
+        const candidates = await this.getHealthyAccountMobiles(15);
+        for (const mobile of candidates) {
+            try {
+                const admins = await this.telegramService.getGroupAdmins(mobile, channelId);
+                if (!Array.isArray(admins) || admins.length === 0)
+                    continue;
+                const adminIds = new Set(admins.map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
+                const ownMobile = await this.matchOwnMobileToAdminIds(adminIds);
+                if (ownMobile)
+                    return ownMobile;
+            }
+            catch {
+                continue;
+            }
+        }
+        return null;
+    }
+    async matchOwnMobileToAdminIds(adminIds) {
+        if (adminIds.size === 0)
+            return null;
+        const users = await this.usersService.search({ expired: false });
+        for (const u of users) {
+            if (u.tgId && adminIds.has(String(u.tgId)) && u.session && String(u.session).trim()) {
+                return u.mobile;
+            }
+        }
+        return null;
+    }
+    shuffle(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+    async pickRandomHealthyUser() {
+        for (const managerMobile of this.getChannelManagerMobiles()) {
+            const u = (await this.usersService.search({ mobile: managerMobile }))[0];
+            if (u && u.session && String(u.session).trim()) {
+                return { mobile: u.mobile, username: u.username, firstName: u.firstName };
+            }
+        }
+        const users = await this.usersService.search({ expired: false });
+        const healthy = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
+        if (healthy.length === 0)
+            return null;
+        const pick = healthy[0];
+        return { mobile: pick.mobile, username: pick.username, firstName: pick.firstName };
+    }
+    async getHealthyAccountMobiles(limit) {
+        const managers = this.getChannelManagerMobiles();
+        const users = await this.usersService.search({ expired: false });
+        const others = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile).map(u => u.mobile));
+        const ordered = [];
+        for (const m of [...managers, ...others]) {
+            if (m && !ordered.includes(m))
+                ordered.push(m);
+            if (ordered.length >= limit)
+                break;
+        }
+        return ordered;
+    }
+    async notify(html) {
+        try {
+            await this.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, html, { parseMode: 'HTML' });
+        }
+        catch (err) {
+            console.error('[BotHealth] failed to send notification:', err);
+        }
+    }
+    async sendHealthSummary(s) {
+        const lines = [
+            '<b>Bot Health Check</b>',
+            `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
+            `Replaced this run: ${s.replaced} | Dead remaining: ${s.deadRemaining}`,
+        ];
+        if (s.failures.length)
+            lines.push(`<b>Failures:</b>\n${s.failures.map(f => `• ${f}`).join('\n')}`);
+        await this.notify(lines.join('\n'));
+    }
 };
 exports.BotsService = BotsService;
-exports.BotsService = BotsService = __decorate([
+BotsService.HEALTH_JOB_NAME = 'bot-health-check';
+BotsService.HEALTH_JOB_CRON = '30 3 * * *';
+BotsService.HEALTH_JOB_TZ = 'Asia/Kolkata';
+exports.BotsService = BotsService = BotsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(bot_schema_1.Bot.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        Telegram_service_1.TelegramService,
+        users_service_1.UsersService])
 ], BotsService);
 
 
@@ -17883,6 +18260,36 @@ __decorate([
     (0, mongoose_1.Prop)({ default: Date.now }),
     __metadata("design:type", Date)
 ], Bot.prototype, "lastUsed", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ enum: ['active', 'inactive'], default: 'active' }),
+    (0, mongoose_1.Prop)({ default: 'active', enum: ['active', 'inactive'] }),
+    __metadata("design:type", String)
+], Bot.prototype, "status", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Why the bot was marked inactive' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "deadReason", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'When the bot was last verified dead' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Bot.prototype, "deadAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'When the bot token was last successfully validated' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Bot.prototype, "lastValidatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Mobile of the account that created this bot via BotFather' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "createdByMobile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'username/token id of the bot this one replaced' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "replacedBotUsername", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)(),
     (0, mongoose_1.Prop)({ type: Object }),
@@ -32450,7 +32857,6 @@ class BaseClientService {
         const query = {
             status: exports.ClientStatus.INACTIVE,
             message: { $regex: '^Stuck: \\d+d in ', $options: 'i' },
-            session: { $exists: true, $nin: [null, ''] },
             clientId: { $exists: true, $nin: [null, ''] },
         };
         if (clientId)
@@ -32464,14 +32870,29 @@ class BaseClientService {
             const message = doc.message || '';
             if (!BaseClientService.OWN_STUCK_REASON.test(message))
                 continue;
-            if (!doc.session || !String(doc.session).trim())
-                continue;
             if (!doc.clientId || !String(doc.clientId).trim())
+                continue;
+            let session = doc.session && String(doc.session).trim() ? String(doc.session).trim() : '';
+            let backfilledSession = false;
+            if (!session) {
+                try {
+                    const users = await this.usersService.findByMobileAnyStatus(doc.mobile);
+                    const userSession = users?.[0]?.session && String(users[0].session).trim() ? String(users[0].session).trim() : '';
+                    if (userSession) {
+                        session = userSession;
+                        backfilledSession = true;
+                    }
+                }
+                catch (err) {
+                    this.logger.warn(`Session backfill lookup failed for stuck account ${doc.mobile}:`, err);
+                }
+            }
+            if (!session)
                 continue;
             const targetPhase = this.inferWarmupPhaseFromProgress(doc, false);
             const enrolledAt = this.getRecoveryEnrolledAt(targetPhase, doc.warmupJitter || 0, now);
             try {
-                await this.update(doc.mobile, {
+                const update = {
                     status: exports.ClientStatus.ACTIVE,
                     warmupPhase: targetPhase,
                     failedUpdateAttempts: 0,
@@ -32479,7 +32900,10 @@ class BaseClientService {
                     lastUpdateAttempt: null,
                     enrolledAt,
                     message: `Self-healed: reactivated into warmup at ${targetPhase} (was "${message.slice(0, 80)}")`,
-                });
+                };
+                if (backfilledSession)
+                    update.session = session;
+                await this.update(doc.mobile, update);
                 healed++;
             }
             catch (err) {
@@ -33816,11 +34240,22 @@ class BaseClientService {
         const active = activeSession?.trim();
         if (!active)
             return null;
-        const users = await this.usersService.search({ mobile });
-        if (!users.length) {
-            throw new common_1.NotFoundException(`User not found for ${mobile}`);
+        const users = await this.usersService.findByMobileAnyStatus(mobile);
+        let user = users[0];
+        if (!user) {
+            const poolDoc = await this.model.findOne({ mobile }).lean().exec();
+            const seedSession = (poolDoc?.session && String(poolDoc.session).trim()) || active;
+            const healed = await this.usersService.backfillFromPool({
+                mobile,
+                tgId: poolDoc?.tgId != null ? String(poolDoc.tgId) : null,
+                session: seedSession,
+            });
+            if (!healed) {
+                throw new common_1.NotFoundException(`User not found for ${mobile} (orphaned pool record; backfill not possible — missing tgId/session)`);
+            }
+            this.logger.warn(`Self-healed orphaned pool record: recreated missing user for ${mobile}`);
+            user = healed;
         }
-        const user = users[0];
         const currentBackup = user.session?.trim();
         if (currentBackup && currentBackup !== active) {
             return user;
@@ -39775,7 +40210,7 @@ exports.UsersModule = UsersModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
-            bots_1.BotsModule
+            (0, common_1.forwardRef)(() => bots_1.BotsModule)
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],
@@ -40224,6 +40659,55 @@ let UsersService = UsersService_1 = class UsersService {
             throw new common_1.NotFoundException(`User with tgId ${tgId} not found`);
         }
         return doc.toJSON();
+    }
+    async findByMobileAnyStatus(mobile) {
+        let canonicalMobile;
+        try {
+            canonicalMobile = this.canonicalMobile(mobile);
+        }
+        catch {
+            return [];
+        }
+        const docs = await this.userModel.find({ mobile: canonicalMobile }).sort({ updatedAt: -1 }).limit(50).exec();
+        const withSession = docs.filter(d => d.session && String(d.session).trim());
+        const ordered = [...withSession, ...docs.filter(d => !withSession.includes(d))];
+        return ordered.map(d => d.toJSON());
+    }
+    async backfillFromPool(input) {
+        const session = input.session?.trim();
+        const tgId = input.tgId != null ? String(input.tgId).trim() : '';
+        if (!session || !tgId)
+            return null;
+        let canonicalMobile;
+        try {
+            canonicalMobile = this.canonicalMobile(input.mobile);
+        }
+        catch {
+            return null;
+        }
+        const conflictQuery = { $or: [{ mobile: canonicalMobile }, { tgId }, { session }] };
+        try {
+            const existing = await this.userModel.findOne(conflictQuery).exec();
+            if (existing)
+                return existing.toJSON();
+            const created = await this.userModel.findOneAndUpdate({ tgId }, {
+                $setOnInsert: {
+                    mobile: canonicalMobile,
+                    session,
+                    tgId,
+                    twoFA: true,
+                    expired: false,
+                    password: 'Ajtdmwajt1@',
+                },
+            }, { new: true, upsert: true }).exec();
+            this.logger.log(`backfillFromPool: recreated missing user for ${canonicalMobile} (tgId ${tgId})`);
+            return created ? created.toJSON() : null;
+        }
+        catch (error) {
+            this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or conflicted: ${error instanceof Error ? error.message : String(error)}`);
+            const fallback = await this.userModel.findOne(conflictQuery).exec();
+            return fallback ? fallback.toJSON() : null;
+        }
     }
     async update(tgId, updateDto) {
         const updateData = { ...updateDto };
@@ -40887,6 +41371,7 @@ exports.UsersService = UsersService = UsersService_1 = __decorate([
     __param(0, (0, mongoose_1.InjectModel)('userModule')),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => client_service_1.ClientService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => bots_1.BotsService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
@@ -44943,6 +45428,16 @@ module.exports = require("multer");
 (module) {
 
 module.exports = require("node-cache");
+
+/***/ },
+
+/***/ "node-schedule-tz"
+/*!***********************************!*\
+  !*** external "node-schedule-tz" ***!
+  \***********************************/
+(module) {
+
+module.exports = require("node-schedule-tz");
 
 /***/ },
 

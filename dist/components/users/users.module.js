@@ -30,7 +30,7 @@ exports.UsersModule = UsersModule = __decorate([
             (0, common_1.forwardRef)(() => client_module_1.ClientModule),
             (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
-            bots_1.BotsModule
+            (0, common_1.forwardRef)(() => bots_1.BotsModule)
         ],
         controllers: [users_controller_1.UsersController],
         providers: [users_service_1.UsersService],

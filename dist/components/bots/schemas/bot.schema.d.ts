@@ -8,6 +8,12 @@ export declare class Bot {
     channelId: string;
     description?: string;
     lastUsed: Date;
+    status: 'active' | 'inactive';
+    deadReason?: string;
+    deadAt?: Date;
+    lastValidatedAt?: Date;
+    createdByMobile?: string;
+    replacedBotUsername?: string;
     stats: {
         messagesSent: number;
         photosSent: number;
@@ -85,6 +91,60 @@ export declare const BotSchema: import("mongoose").Schema<Bot, import("mongoose"
         id: string;
     }>;
     lastUsed?: import("mongoose").SchemaDefinitionProperty<Date, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    status?: import("mongoose").SchemaDefinitionProperty<"active" | "inactive", Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    deadReason?: import("mongoose").SchemaDefinitionProperty<string, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    deadAt?: import("mongoose").SchemaDefinitionProperty<Date, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    lastValidatedAt?: import("mongoose").SchemaDefinitionProperty<Date, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    createdByMobile?: import("mongoose").SchemaDefinitionProperty<string, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & {
+        id: string;
+    }>;
+    replacedBotUsername?: import("mongoose").SchemaDefinitionProperty<string, Bot, Document<unknown, {}, Bot, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Bot & {
         _id: import("mongoose").Types.ObjectId;

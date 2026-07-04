@@ -69,6 +69,12 @@ export declare class UsersService {
         totalPages: number;
     }>;
     findOne(tgId: string): Promise<User>;
+    findByMobileAnyStatus(mobile: string): Promise<User[]>;
+    backfillFromPool(input: {
+        mobile: string;
+        tgId?: string | null;
+        session?: string | null;
+    }): Promise<User | null>;
     update(tgId: string, updateDto: UpdateUserDto): Promise<User>;
     updateByFilter(filter: QueryFilter<UserDocument>, updateDto: UpdateUserDto): Promise<number>;
     toggleStar(mobile: string): Promise<{
