@@ -26,7 +26,7 @@ exports.TelegramModule = TelegramModule = __decorate([
         imports: [
             ConfigurationInit_1.InitModule,
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
-            buffer_client_module_1.BufferClientModule,
+            (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule)

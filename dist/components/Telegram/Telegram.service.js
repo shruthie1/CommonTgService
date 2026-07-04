@@ -1012,6 +1012,7 @@ exports.TelegramService = TelegramService = TelegramService_1 = __decorate([
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,

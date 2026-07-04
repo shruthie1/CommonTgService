@@ -3829,7 +3829,7 @@ exports.TelegramModule = TelegramModule = __decorate([
         imports: [
             ConfigurationInit_1.InitModule,
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),
-            buffer_client_module_1.BufferClientModule,
+            (0, common_1.forwardRef)(() => buffer_client_module_1.BufferClientModule),
             (0, common_1.forwardRef)(() => promote_client_module_1.PromoteClientModule),
             (0, common_1.forwardRef)(() => active_channels_module_1.ActiveChannelsModule),
             (0, common_1.forwardRef)(() => channels_module_1.ChannelsModule)
@@ -4870,6 +4870,7 @@ exports.TelegramService = TelegramService = TelegramService_1 = __decorate([
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => active_channels_service_1.ActiveChannelsService))),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => channels_service_1.ChannelsService))),
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => buffer_client_service_1.BufferClientService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_client_service_1.PromoteClientService))),
     __metadata("design:paramtypes", [users_service_1.UsersService,
         active_channels_service_1.ActiveChannelsService,
@@ -16362,8 +16363,6 @@ const bots_controller_1 = __webpack_require__(/*! ./bots.controller */ "./src/co
 const bots_service_1 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
 const bot_schema_1 = __webpack_require__(/*! ./schemas/bot.schema */ "./src/components/bots/schemas/bot.schema.ts");
 const bot_service_instance_1 = __webpack_require__(/*! ../../utils/bot.service.instance */ "./src/utils/bot.service.instance.ts");
-const Telegram_module_1 = __webpack_require__(/*! ../Telegram/Telegram.module */ "./src/components/Telegram/Telegram.module.ts");
-const users_module_1 = __webpack_require__(/*! ../users/users.module */ "./src/components/users/users.module.ts");
 let BotsModule = class BotsModule {
     constructor(botsService) {
         this.botsService = botsService;
@@ -16377,8 +16376,6 @@ exports.BotsModule = BotsModule = __decorate([
     (0, common_1.Module)({
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: bot_schema_1.Bot.name, schema: bot_schema_1.BotSchema }]),
-            (0, common_1.forwardRef)(() => Telegram_module_1.TelegramModule),
-            (0, common_1.forwardRef)(() => users_module_1.UsersModule),
         ],
         controllers: [bots_controller_1.BotsController],
         providers: [bots_service_1.BotsService],
@@ -16449,6 +16446,7 @@ var BotsService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotsService = exports.ChannelCategory = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
 const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
@@ -16483,10 +16481,9 @@ var ChannelCategory;
     ChannelCategory["CLIENT_PROMOTIONS_2"] = "CLIENT_PROMOTIONS_2";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 let BotsService = BotsService_1 = class BotsService {
-    constructor(botModel, telegramService, usersService) {
+    constructor(botModel, moduleRef) {
         this.botModel = botModel;
-        this.telegramService = telegramService;
-        this.usersService = usersService;
+        this.moduleRef = moduleRef;
         this.flushInterval = 300000;
         this.maxPendingUpdates = 100;
         this.maxReplacementsPerRun = 1;
@@ -16496,6 +16493,12 @@ let BotsService = BotsService_1 = class BotsService {
         this.replaceInProgress = false;
         this.BOT_TOKEN_REGEX = /^\d+:[A-Za-z0-9_-]+$/;
         this.cache = new node_cache_1.default({ stdTTL: 300, checkperiod: 60 });
+    }
+    get telegramService() {
+        return this.moduleRef.get(Telegram_service_1.TelegramService, { strict: false });
+    }
+    get usersService() {
+        return this.moduleRef.get(users_service_1.UsersService, { strict: false });
     }
     async onModuleInit() {
         await this.initializeCache();
@@ -17367,11 +17370,8 @@ BotsService.HEALTH_JOB_TZ = 'Asia/Kolkata';
 exports.BotsService = BotsService = BotsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(bot_schema_1.Bot.name)),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        Telegram_service_1.TelegramService,
-        users_service_1.UsersService])
+        core_1.ModuleRef])
 ], BotsService);
 
 

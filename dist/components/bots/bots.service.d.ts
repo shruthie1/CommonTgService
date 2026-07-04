@@ -1,8 +1,7 @@
 import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Model } from 'mongoose';
 import { Bot, BotDocument } from './schemas/bot.schema';
-import { TelegramService } from '../Telegram/Telegram.service';
-import { UsersService } from '../users/users.service';
 export declare enum ChannelCategory {
     CLIENT_UPDATES = "CLIENT_UPDATES",
     USER_WARNINGS = "USER_WARNINGS",
@@ -103,8 +102,7 @@ export interface MediaGroupItem {
 export type MediaGroupOptions = Omit<SendMessageOptions, 'parseMode' | 'disableWebPagePreview' | 'linkPreviewOptions'>;
 export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private botModel;
-    private readonly telegramService;
-    private readonly usersService;
+    private readonly moduleRef;
     private cache;
     private readonly flushInterval;
     private readonly maxPendingUpdates;
@@ -116,7 +114,9 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private flushTimer;
     private destroyed;
     private replaceInProgress;
-    constructor(botModel: Model<BotDocument>, telegramService: TelegramService, usersService: UsersService);
+    constructor(botModel: Model<BotDocument>, moduleRef: ModuleRef);
+    private get telegramService();
+    private get usersService();
     onModuleInit(): Promise<void>;
     private isBotHealthJobEnabled;
     private scheduleBotHealthCheck;
