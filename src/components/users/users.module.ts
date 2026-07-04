@@ -6,7 +6,7 @@ import { UserSchema } from './schemas/user.schema';
 import { TelegramModule } from '../Telegram/Telegram.module';
 import { ClientModule } from '../clients/client.module';
 import { InitModule } from '../ConfigurationInit/init.module';
-import { BotsModule } from '../bots';
+import { BotsModule } from '../bots/bots.module';
 import { BufferClientModule } from '../buffer-clients/buffer-client.module';
 import { PromoteClientModule } from '../promote-clients/promote-client.module';
 
