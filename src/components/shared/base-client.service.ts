@@ -437,7 +437,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * Those are not proven-dead sessions — they just stalled on a warmup step. Bring them
      * back into warmup automatically, but ONLY when it is safe and won't ping-pong:
      *   - reason matches our own retireIfStuck signature (never an account Telegram killed),
-     *   - a session string is present (no session = cannot resume; leave for manual review),
+     *   - a session is resolvable — from the pool doc OR backfilled from the users record
+     *     (no session anywhere = cannot resume; leave for manual review),
      *   - a clientId is present (no parent client = cannot be processed).
      *
      * The reactivation resets warmupPhase from completed-timestamp progress, clears failure
@@ -445,10 +446,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * age back under STUCK_WARMUP_DAYS so retireIfStuck does NOT immediately re-stick it.
      */
     protected async reactivateOwnStuckAccounts(clientId?: string, limit: number = 100): Promise<number> {
+        // NOTE: we deliberately do NOT require `session` on the pool doc here. Some stuck
+        // accounts carry no session on the pool record because their live session lives on
+        // the `users` doc (e.g. promote accounts whose session was only ever persisted to
+        // users). Those were silently skipped before, so they never self-healed. We now
+        // backfill the session from `users` when the pool doc lacks one.
         const query: MongoQuery = {
             status: ClientStatus.INACTIVE,
             message: { $regex: '^Stuck: \\d+d in ', $options: 'i' },
-            session: { $exists: true, $nin: [null, ''] },
             clientId: { $exists: true, $nin: [null, ''] },
         };
         if (clientId) query.clientId = clientId;
@@ -463,13 +468,30 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // Defence-in-depth: re-validate the reason signature and required fields in code,
             // not just via the Mongo regex.
             if (!BaseClientService.OWN_STUCK_REASON.test(message)) continue;
-            if (!doc.session || !String(doc.session).trim()) continue;
             if (!doc.clientId || !String(doc.clientId).trim()) continue;
+
+            // Resolve a session: prefer the pool doc, else backfill from the users record.
+            // No session anywhere = cannot resume; leave for manual review (as before).
+            let session = doc.session && String(doc.session).trim() ? String(doc.session).trim() : '';
+            let backfilledSession = false;
+            if (!session) {
+                try {
+                    const users = await this.usersService.search({ mobile: doc.mobile });
+                    const userSession = users?.[0]?.session && String(users[0].session).trim() ? String(users[0].session).trim() : '';
+                    if (userSession) {
+                        session = userSession;
+                        backfilledSession = true;
+                    }
+                } catch (err) {
+                    this.logger.warn(`Session backfill lookup failed for stuck account ${doc.mobile}:`, err);
+                }
+            }
+            if (!session) continue;
 
             const targetPhase = this.inferWarmupPhaseFromProgress(doc, false);
             const enrolledAt = this.getRecoveryEnrolledAt(targetPhase, doc.warmupJitter || 0, now);
             try {
-                await this.update(doc.mobile, {
+                const update: BaseClientUpdate = {
                     status: ClientStatus.ACTIVE,
                     warmupPhase: targetPhase,
                     failedUpdateAttempts: 0,
@@ -477,7 +499,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     lastUpdateAttempt: null,
                     enrolledAt,
                     message: `Self-healed: reactivated into warmup at ${targetPhase} (was "${message.slice(0, 80)}")`,
-                });
+                };
+                // Persist the backfilled session onto the pool doc so the client is usable and
+                // future self-heal passes don't need to look it up again.
+                if (backfilledSession) update.session = session;
+                await this.update(doc.mobile, update);
                 healed++;
             } catch (err) {
                 this.logger.warn(`Failed to self-heal stuck account ${doc.mobile}:`, err);
