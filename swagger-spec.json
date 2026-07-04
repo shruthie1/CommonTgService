@@ -4546,7 +4546,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -4561,6 +4563,22 @@
           }
         },
         "summary": "Get all bots or filter by category",
+        "tags": [
+          "Bots"
+        ]
+      }
+    },
+    "/bots/validate-and-replace": {
+      "post": {
+        "description": "Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.",
+        "operationId": "BotsController_validateAndReplace",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Validation + replacement summary"
+          }
+        },
+        "summary": "Validate all bots and auto-replace dead ones",
         "tags": [
           "Bots"
         ]
@@ -4678,7 +4696,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -4750,7 +4770,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -4822,7 +4844,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -4894,7 +4918,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -4966,7 +4992,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -5038,7 +5066,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -5110,7 +5140,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -5182,7 +5214,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -5254,7 +5288,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -5326,7 +5362,9 @@
                 "UNVDS",
                 "PROM_LOGS1",
                 "PROM_LOGS2",
-                "UNAUTH_CALLS"
+                "UNAUTH_CALLS",
+                "CLIENT_PROMOTIONS_1",
+                "CLIENT_PROMOTIONS_2"
               ],
               "type": "string"
             }
@@ -5407,6 +5445,21 @@
           }
         },
         "summary": "Create multiple channels",
+        "tags": [
+          "Active Channels"
+        ]
+      }
+    },
+    "/active-channels/auto-heal": {
+      "post": {
+        "operationId": "ActiveChannelsController_autoHeal",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Clear time-expired reactRestricted / tempBan flags so channels can recover",
         "tags": [
           "Active Channels"
         ]
@@ -7263,7 +7316,7 @@
             "in": "query",
             "description": "Pics Sent status",
             "schema": {
-              "type": "boolean"
+              "$ref": "#/components/schemas/Object"
             }
           },
           {
@@ -8379,6 +8432,78 @@
           }
         },
         "summary": "Sort users by computed/nested fields with a MongoDB filter",
+        "tags": [
+          "Telegram Users"
+        ]
+      }
+    },
+    "/user/composite-rank": {
+      "post": {
+        "description": "composite = Σ weight·ln(1+value) over the selected signals, sorted descending. With one signal it is equivalent to sorting by that field. Optional query pre-filters (e.g. createdAt range, starred). Signals: relScore, intimate, voice, media, calls, videoCalls, callPartners, msgs, contacts.",
+        "operationId": "UsersController_compositeRank",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "signals"
+                ],
+                "properties": {
+                  "signals": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "field"
+                      ],
+                      "properties": {
+                        "field": {
+                          "type": "string"
+                        },
+                        "weight": {
+                          "type": "number",
+                          "description": "Optional; defaults to a per-signal weight"
+                        }
+                      }
+                    }
+                  },
+                  "query": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "limit": {
+                    "type": "number"
+                  },
+                  "skip": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No signals, unknown signal, or invalid pagination."
+          }
+        },
+        "summary": "Rank users by a weighted composite of multiple stat signals",
         "tags": [
           "Telegram Users"
         ]
@@ -13222,7 +13347,9 @@
               "UNVDS",
               "PROM_LOGS1",
               "PROM_LOGS2",
-              "UNAUTH_CALLS"
+              "UNAUTH_CALLS",
+              "CLIENT_PROMOTIONS_1",
+              "CLIENT_PROMOTIONS_2"
             ]
           },
           "channelId": {
@@ -15631,7 +15758,7 @@
           },
           "availableDate": {
             "type": "string",
-            "description": "Date when this client becomes available for assignment."
+            "description": "Date when this client becomes available for assignment (UTC YYYY-MM-DD)."
           },
           "channels": {
             "type": "number",
@@ -16313,7 +16440,7 @@
           },
           "availableDate": {
             "type": "string",
-            "description": "Date when this client becomes available for assignment."
+            "description": "Date when this client becomes available for assignment (UTC YYYY-MM-DD)."
           },
           "channels": {
             "type": "number",

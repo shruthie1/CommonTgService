@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, OnModuleInit, OnModuleDestroy, forwardRef, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios from 'axios';
@@ -141,11 +142,21 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
     constructor(
         @InjectModel(Bot.name) private botModel: Model<BotDocument>,
-        @Inject(forwardRef(() => TelegramService)) private readonly telegramService: TelegramService,
-        @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
+        private readonly moduleRef: ModuleRef,
     ) {
         // Initialize cache with a TTL of 5 minutes (300 seconds) and check period of 60 seconds
         this.cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+    }
+
+    // Lazy, cycle-free access to Telegram/Users services. Injecting them via the constructor
+    // creates a DI cycle (BotsModule<->TelegramModule/UsersModule) that NestJS can't resolve.
+    // Resolving lazily through ModuleRef (strict:false) keeps BotsModule OUT of that cycle,
+    // so BotsModule imports neither module. Only the bot-health path uses these.
+    private get telegramService(): TelegramService {
+        return this.moduleRef.get(TelegramService, { strict: false });
+    }
+    private get usersService(): UsersService {
+        return this.moduleRef.get(UsersService, { strict: false });
     }
 
     async onModuleInit(): Promise<void> {

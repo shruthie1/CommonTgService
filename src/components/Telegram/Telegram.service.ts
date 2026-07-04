@@ -47,6 +47,7 @@ export class TelegramService implements OnModuleDestroy {
         private activeChannelsService: ActiveChannelsService,
         @Inject(forwardRef(() => ChannelsService))
         private channelsService: ChannelsService,
+        @Inject(forwardRef(() => BufferClientService))
         private bufferClientService: BufferClientService,
         @Inject(forwardRef(() => PromoteClientService))
         private promoteClientService: PromoteClientService,
