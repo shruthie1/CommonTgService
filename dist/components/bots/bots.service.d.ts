@@ -89,6 +89,8 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private static readonly HEALTH_JOB_CRON;
     private static readonly HEALTH_JOB_TZ;
     private readonly maxReplacementsPerRun;
+    private readonly minHealthyBotsPerCategory;
+    private readonly maxTopUpsPerRun;
     private healthCheckJob;
     private flushTimer;
     private destroyed;
@@ -151,9 +153,12 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
         dead: number;
         unknown: number;
         replaced: number;
+        toppedUp: number;
         failures: string[];
     }>;
+    private provisionBotForCategory;
     private replaceDeadBot;
+    private topUpCategoriesToMinHealthy;
     private addBotToChannelAsAdmin;
     private verifyBotIsChannelAdmin;
     private getChannelManagerMobiles;
