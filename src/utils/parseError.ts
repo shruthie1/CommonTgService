@@ -335,7 +335,7 @@ export function parseError(
         const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
 
         if (!ignoreError) {
-          const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
+          const notificationMessage = (err.errorMessage ? err.errorMessage : extractedMessage)?.slice(0, 500);
           const notifUrl = `${notifbot()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
 
           // Use Promise but don't await to avoid delaying the response

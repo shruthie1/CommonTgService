@@ -48,7 +48,7 @@ export class ConfigurationService implements OnModuleInit {
             // Startup ping is best-effort: disable retries and notifications so a
             // failed/cancelled send doesn't loop 3x or spam the failures channel.
             await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`,
+                `${notifbot()}&text=${encodeURIComponent(`Service started: ${clientId}`)}`,
                 { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } },
             );
         } catch (error) {

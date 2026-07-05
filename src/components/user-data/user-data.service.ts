@@ -99,9 +99,8 @@ export class UserDataService {
         const botsService = getBotsServiceInstance();
         if (botsService) {
             botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                `<b>Deleting UserData</b>\n\n<b>Profile:</b> ${profile}\n<b>Chat ID:</b> ${chatId}`,
-                { parseMode: 'HTML' }
+                ChannelCategory.PROM_LOGS2,
+                `Deleting UserData: ${profile} (chat ${chatId})`,
             );
         }
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();

@@ -779,7 +779,7 @@ export class ActiveChannelsService implements OnModuleInit {
 
   async resetWordRestrictions(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Word Restrictions\nStatus: Processing`)}`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: reset word restrictions`)}`);
       await this.activeChannelModel.updateMany(
         { banned: false },
         { $set: { wordRestriction: 0, dMRestriction: 0, updatedAt: new Date() } }
@@ -791,7 +791,7 @@ export class ActiveChannelsService implements OnModuleInit {
 
   async resetAvailableMsgs(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Available Messages\nStatus: Processing`)}`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: reset available messages`)}`);
       const availableMsgs = await this.getAvailableMessages();
 
       await this.activeChannelModel.updateMany(
@@ -816,7 +816,7 @@ export class ActiveChannelsService implements OnModuleInit {
 
   async updateBannedChannels(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Update Banned Channels\nStatus: Processing`)}`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: update banned channels`)}`);
       await this.activeChannelModel.updateMany(
         { $or: [{ banned: true }, { private: true }] },
         {

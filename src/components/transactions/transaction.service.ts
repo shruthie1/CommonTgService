@@ -184,7 +184,14 @@ export class TransactionService {
   // Helper method to send notification
   private async sendNotification(filters: any, total: number): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot(process.env.accountsChannel)}&text=${encodeURIComponent(`Transaction Search\n\nResults: ${total}\nIP: ${filters.ip || 'N/A'}\nChat ID: ${filters.chatId || 'N/A'}\nTransaction ID: ${filters.transactionId || 'N/A'}\nProfile: ${filters.profile || 'N/A'}`)}`);
+      const parts = [
+        filters.ip && `ip=${filters.ip}`,
+        filters.chatId && `chat=${filters.chatId}`,
+        filters.transactionId && `txn=${filters.transactionId}`,
+        filters.profile && `profile=${filters.profile}`,
+      ].filter(Boolean);
+      const summary = `Txn search: ${total} results${parts.length ? ` — ${parts.join(', ')}` : ''}`;
+      await fetchWithTimeout(`${notifbot(process.env.accountsChannel)}&text=${encodeURIComponent(summary)}`);
     } catch (error) {
       this.logger.error(`Failed to send notification: ${error.message}`);
     }

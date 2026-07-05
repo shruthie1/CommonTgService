@@ -124,7 +124,7 @@ export class ChannelsService implements OnModuleInit {
     if (botsService) {
       botsService.sendMessageByCategory(
         ChannelCategory.PROM_LOGS2,
-        `<b>Removing Channel</b>\n\n<b>Channel ID:</b> ${channelId}`,
+        `Removing channel ${channelId}`,
         { parseMode: 'HTML' }
       );
     }

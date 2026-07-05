@@ -647,7 +647,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`,
+                `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage.substring(0, 120)}`,
                 { parseMode: 'HTML' }
             ).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
             throw error;
@@ -1993,16 +1993,23 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         createdEntries: string[],
     ): Promise<void> {
         const distribution = await this.getBufferClientDistribution();
-        const lines = distribution.distributionPerClient
-            .sort((a, b) => a.clientId.localeCompare(b.clientId))
-            .map((item) =>
-                `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
-            );
+        const capLines = (entries: string[]): string[] => {
+            const capped = entries.slice(0, 10);
+            if (entries.length > 10) capped.push(`(+${entries.length - 10} more)`);
+            return capped;
+        };
+        const lines = capLines(
+            distribution.distributionPerClient
+                .sort((a, b) => a.clientId.localeCompare(b.clientId))
+                .map((item) =>
+                    `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
+                ),
+        );
         const updatedLines = updatedEntries.length > 0
-            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            ? ['UpdatedThisRun:', ...capLines(updatedEntries.map((entry) => `- ${entry}`)), '']
             : ['UpdatedThisRun: none', ''];
         const createdLines = createdEntries.length > 0
-            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            ? ['CreatedThisRunDetails:', ...capLines(createdEntries.map((entry) => `- ${entry}`)), '']
             : ['CreatedThisRunDetails: none', ''];
 
         await this.botsService.sendMessageByCategory(

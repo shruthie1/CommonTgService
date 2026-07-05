@@ -1011,8 +1011,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             await this.flushPendingStats(); // don't lose counters when we drop the cache next
             this.cache.flushAll(); // refresh caches so the now-active bot becomes selectable
         } catch (err: any) {
-            parseError(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, true);
-            await this.notify(`⚠️ <b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${err?.message || err}`);
+            parseError(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
+            await this.notify(`<b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
             console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) — created but NOT yet admin (inactive)`);
             // Return null: the bot exists but is INACTIVE/unusable, so the caller must NOT count
             // it as a successful replacement (else the summary overstates success + under-reports
@@ -1218,7 +1218,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
             `Replaced this run: ${s.replaced} | Dead remaining: ${s.deadRemaining}`,
         ];
-        if (s.failures.length) lines.push(`<b>Failures:</b>\n${s.failures.map(f => `• ${f}`).join('\n')}`);
+        if (s.failures.length) {
+            const shown = s.failures.slice(0, 10).map(f => `• ${f}`);
+            if (s.failures.length > 10) shown.push(`(+${s.failures.length - 10} more)`);
+            lines.push(`<b>Failures:</b>\n${shown.join('\n')}`);
+        }
         await this.notify(lines.join('\n'));
     }
 }
