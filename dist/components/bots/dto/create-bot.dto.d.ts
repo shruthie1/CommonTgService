@@ -1,4 +1,4 @@
-import { ChannelCategory } from '../bots.service';
+import { ChannelCategory } from '../channel-category.enum';
 export declare class CreateBotDto {
     token: string;
     category: ChannelCategory;

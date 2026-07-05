@@ -8,13 +8,13 @@ import { ClientService } from '../clients/client.service';
 import { ChannelsService } from '../channels/channels.service';
 import { parseError } from '../../utils/parseError';
 import { SessionService } from '../session-manager';
-import { Logger } from '../../utils';
+import { Logger } from '../../utils/logger';
 import { ActiveChannel } from '../active-channels';
 import TelegramManager from '../Telegram/TelegramManager';
 import { Client } from '../clients';
 import { User } from '../users';
 import { TelegramClient } from 'telegram';
-import { BotsService } from '../bots';
+import type { BotsService } from '../bots/bots.service';
 import { performOrganicActivity } from './organic-activity';
 import { getWarmupPhaseAction, WarmupPhase, WarmupPhaseType, WarmupAction, isAccountReady, isAccountWarmingUp } from './warmup-phases';
 export interface ClientConfig {

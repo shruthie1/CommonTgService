@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateBotDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
-const bots_service_1 = require("../bots.service");
+const channel_category_enum_1 = require("../channel-category.enum");
 class CreateBotDto {
 }
 exports.CreateBotDto = CreateBotDto;
@@ -26,9 +26,9 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Channel category the bot belongs to',
-        enum: bots_service_1.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
-    (0, class_validator_1.IsEnum)(bots_service_1.ChannelCategory),
+    (0, class_validator_1.IsEnum)(channel_category_enum_1.ChannelCategory),
     __metadata("design:type", String)
 ], CreateBotDto.prototype, "category", void 0);
 __decorate([

@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.performOrganicActivity = performOrganicActivity;
 const Helpers_1 = require("telegram/Helpers");
 const client_helper_utils_1 = require("./client-helper.utils");
-const utils_1 = require("../../utils");
-const logger = new utils_1.Logger('OrganicActivity');
+const logger_1 = require("../../utils/logger");
+const logger = new logger_1.Logger('OrganicActivity');
 const FATAL_ERROR_PATTERNS = [
     'auth_key_unregistered', 'session_revoked', 'session_expired',
     'user_deactivated_ban', 'user_deactivated', 'phone_number_banned',

@@ -7,7 +7,7 @@ exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(require("axios"));
 const parseError_1 = require("./parseError");
 const common_1 = require("./common");
-const bots_service_1 = require("../components/bots/bots.service");
+const channel_category_enum_1 = require("../components/bots/channel-category.enum");
 const bot_service_instance_1 = require("./bot.service.instance");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
@@ -41,7 +41,7 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             const botsService = (0, bot_service_instance_1.tryGetBotsServiceInstance)();
             if (!botsService)
                 return;
-            await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
+            await botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
         }
         catch (error) {
             console.error('Failed to send notification:', error.response?.data || error.message || error.code);

@@ -1,5 +1,5 @@
 import { Document } from 'mongoose';
-import { ChannelCategory } from '../bots.service';
+import { ChannelCategory } from '../channel-category.enum';
 export type BotDocument = Bot & Document;
 export declare class Bot {
     token: string;

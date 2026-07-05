@@ -12,7 +12,7 @@ const common_1 = require("@nestjs/common");
 const withTimeout_1 = require("../../../utils/withTimeout");
 const Helpers_1 = require("telegram/Helpers");
 const utils_1 = require("../../../utils");
-const bots_service_1 = require("../../bots/bots.service");
+const channel_category_enum_1 = require("../../bots/channel-category.enum");
 const isPermanentError_1 = __importDefault(require("../../../utils/isPermanentError"));
 class ConnectionManager {
     constructor() {
@@ -178,7 +178,7 @@ class ConnectionManager {
             const botsService = (0, utils_1.getBotsServiceInstance)();
             if (botsService) {
                 const botMessage = `<b>Client Connection Error</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Marked Expired:</b> ${markedAsExpired}`;
-                await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage, { parseMode: 'HTML' });
+                await botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage, { parseMode: 'HTML' });
             }
         }
         catch (notificationError) {

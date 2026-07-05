@@ -41,7 +41,7 @@ const common_1 = require("@nestjs/common");
 const Helpers_1 = require("telegram/Helpers");
 const parseError_1 = require("../../utils/parseError");
 const connection_manager_1 = require("../Telegram/utils/connection-manager");
-const utils_1 = require("../../utils");
+const logger_1 = require("../../utils/logger");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
 const fs = __importStar(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -50,7 +50,8 @@ const telegram_2 = require("telegram");
 const Password_1 = require("telegram/Password");
 const sessions_1 = require("telegram/sessions");
 const isPermanentError_1 = __importDefault(require("../../utils/isPermanentError"));
-const bots_1 = require("../bots");
+const isDeadChannelError_1 = __importDefault(require("../../utils/isDeadChannelError"));
+const channel_category_enum_1 = require("../bots/channel-category.enum");
 const helpers_1 = require("../Telegram/manager/helpers");
 const generateTGConfig_1 = require("../Telegram/utils/generateTGConfig");
 const client_helper_utils_1 = require("./client-helper.utils");
@@ -224,7 +225,7 @@ class BaseClientService {
         const failedAttempts = doc.failedUpdateAttempts || 0;
         this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
         const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
-        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
+        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
         return true;
     }
     async reactivateOwnStuckAccounts(clientId, limit = 100) {
@@ -324,7 +325,7 @@ class BaseClientService {
         this.MAX_JOIN_FAILURES_PER_MOBILE = 3;
         this.joinScopeClientId = null;
         this.KNOWN_2FA_PASSWORD = 'Ajtdmwajt1@';
-        this.logger = new utils_1.Logger(loggerName);
+        this.logger = new logger_1.Logger(loggerName);
     }
     async onModuleDestroy() {
         await this.cleanup();
@@ -859,7 +860,7 @@ class BaseClientService {
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b> ${this.clientType} ${doc.mobile} — unrecoverable, ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
+                    this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b> ${this.clientType} ${doc.mobile} — unrecoverable, ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
                     return 0;
                 }
                 throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
@@ -916,7 +917,7 @@ class BaseClientService {
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
                 return 0;
             }
             await this.update(doc.mobile, {
@@ -1016,7 +1017,7 @@ class BaseClientService {
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
-            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b> ${this.clientType} ${doc.mobile} — ${doc.channels || 0} channels, eligible for rotation`, { parseMode: 'HTML' });
+            this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b> ${this.clientType} ${doc.mobile} — ${doc.channels || 0} channels, eligible for rotation`, { parseMode: 'HTML' });
             return { updateCount: 0, updateSummary: 'advance_to_ready' };
         }
         try {
@@ -1051,7 +1052,7 @@ class BaseClientService {
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
                     if (updateCount === 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: set_2fa — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: set_2fa — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
@@ -1063,14 +1064,14 @@ class BaseClientService {
                     });
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     if (updateCount === 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: remove_other_auths — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: remove_other_auths — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
                     }
                     this.logger.log(`Finished remove_other_auths for ${doc.mobile}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`, { parseMode: 'HTML' });
                     }
                     else {
                         await this.update(doc.mobile, {
@@ -1078,7 +1079,7 @@ class BaseClientService {
                             failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
                             lastUpdateFailure: new Date(),
                         });
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${(doc.failedUpdateAttempts || 0) + 1} fails`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${(doc.failedUpdateAttempts || 0) + 1} fails`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
                 default:
@@ -1102,10 +1103,10 @@ class BaseClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorDetails.message?.substring(0, 120)}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorDetails.message?.substring(0, 120)}`, { parseMode: 'HTML' });
             }
             else {
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails?.message?.substring(0, 120) || 'unknown'}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails?.message?.substring(0, 120) || 'unknown'}`, { parseMode: 'HTML' });
             }
             return { updateCount: 0 };
         }
@@ -1298,7 +1299,20 @@ class BaseClientService {
             catch (error) {
                 const errorDetails = this.handleError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`, mobile);
                 const rawErrorMessage = this.getErrorText(error);
-                if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
+                if (rawErrorMessage === 'INVITE_REQUEST_SENT') {
+                    this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
+                    this.incrementDailyJoinCount(mobile);
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: 1 } });
+                    }
+                    catch (incError) {
+                        this.logger.warn(`Failed to persist invite-request join for ${mobile}: ${this.getErrorText(incError)}`);
+                    }
+                }
+                else if ((0, isDeadChannelError_1.default)(error)) {
+                    this.logger.warn(`${mobile} dead channel @${currentChannel?.username ?? 'unknown'} (${rawErrorMessage}) — dropped from queue`);
+                }
+                else if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
