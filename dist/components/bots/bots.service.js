@@ -51,6 +51,7 @@ var BotsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BotsService = exports.ChannelCategory = void 0;
 const common_1 = require("@nestjs/common");
+const core_1 = require("@nestjs/core");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const axios_1 = __importDefault(require("axios"));
@@ -85,10 +86,9 @@ var ChannelCategory;
     ChannelCategory["CLIENT_PROMOTIONS_2"] = "CLIENT_PROMOTIONS_2";
 })(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
 let BotsService = BotsService_1 = class BotsService {
-    constructor(botModel, telegramService, usersService) {
+    constructor(botModel, moduleRef) {
         this.botModel = botModel;
-        this.telegramService = telegramService;
-        this.usersService = usersService;
+        this.moduleRef = moduleRef;
         this.flushInterval = 300000;
         this.maxPendingUpdates = 100;
         this.maxReplacementsPerRun = 1;
@@ -98,6 +98,12 @@ let BotsService = BotsService_1 = class BotsService {
         this.replaceInProgress = false;
         this.BOT_TOKEN_REGEX = /^\d+:[A-Za-z0-9_-]+$/;
         this.cache = new node_cache_1.default({ stdTTL: 300, checkperiod: 60 });
+    }
+    get telegramService() {
+        return this.moduleRef.get(Telegram_service_1.TelegramService, { strict: false });
+    }
+    get usersService() {
+        return this.moduleRef.get(users_service_1.UsersService, { strict: false });
     }
     async onModuleInit() {
         await this.initializeCache();
@@ -969,10 +975,7 @@ BotsService.HEALTH_JOB_TZ = 'Asia/Kolkata';
 exports.BotsService = BotsService = BotsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(bot_schema_1.Bot.name)),
-    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => Telegram_service_1.TelegramService))),
-    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => users_service_1.UsersService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        Telegram_service_1.TelegramService,
-        users_service_1.UsersService])
+        core_1.ModuleRef])
 ], BotsService);
 //# sourceMappingURL=bots.service.js.map
