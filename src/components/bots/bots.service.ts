@@ -839,9 +839,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     /**
      * Human-paced delay: a randomized gap so privileged actions (promoting a bot to admin via
      * a manager account) never look like a scripted burst — bursts are what trip Telegram's
-     * anti-abuse and can get the manager account (@myvcacc) flagged/banned. Default 60–180s.
+     * anti-abuse. A short 10–20s jitter is enough to avoid a scripted-burst pattern while keeping
+     * a run responsive (the per-run replacement/top-up caps already bound total volume).
      */
-    private humanDelay(minMs = 60_000, maxMs = 180_000): Promise<void> {
+    private humanDelay(minMs = 10_000, maxMs = 20_000): Promise<void> {
         const jitter = minMs + Math.floor(Math.random() * Math.max(1, maxMs - minMs));
         return this.sleep(jitter);
     }
@@ -972,26 +973,60 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         channelId: string,
         opts: { replacesUsername?: string } = {},
     ): Promise<{ saved: BotDocument; username: string; active: boolean }> {
-        // 1. Pick a random healthy creator account (alive session, not expired, our 2FA).
-        const creator = await this.pickRandomHealthyUser();
-        if (!creator) {
+        // 1. Get several random healthy creator candidates (NOT channel managers; foreign numbers
+        //    preferred). We try them in order because any given account may be BotFather-restricted
+        //    ("cannot create new bots") — we skip those and move to the next rather than failing.
+        const candidates = await this.pickHealthyCreatorCandidates(5);
+        if (candidates.length === 0) {
             throw new Error('no healthy user account available to create bot');
         }
 
-        // 2. Create the bot via the existing BotFather automation.
+        // 2. Create the bot via the existing BotFather automation, trying candidates until one works.
         //    Title = category; description = "<mobile> @<username>".
+        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24); // BotFather appends _xxx_bot
+        let creator: { mobile: string; username?: string | null; firstName?: string | null } | null = null;
+        let botToken = '';
+        let username = '';
+        let lastErr: any = null;
+        for (const cand of candidates) {
+            const creatorHandle = cand.username ? `@${cand.username}` : (cand.firstName || 'unknown');
+            const description = `${cand.mobile} ${creatorHandle}`.slice(0, 512);
+            try {
+                const res = await this.telegramService.createBot(cand.mobile, {
+                    name: `${category}`,
+                    username: usernameSeed,
+                    description,
+                    aboutText: description,
+                });
+                if (res?.botToken && this.BOT_TOKEN_REGEX.test(res.botToken)) {
+                    creator = cand;
+                    botToken = res.botToken;
+                    username = res.username;
+                    break;
+                }
+                lastErr = new Error(`BotFather did not return a valid token (got: ${String(res?.botToken).slice(0, 20)})`);
+            } catch (err: any) {
+                lastErr = err;
+                const msg = err?.message || String(err);
+                // Account is BotFather-restricted → skip to the next candidate.
+                if (/BOTFATHER_CANNOT_CREATE|cannot create new bots|too many attempts/i.test(msg)) {
+                    console.warn(`[BotHealth] creator ${cand.mobile} cannot create bots — trying next candidate`);
+                    continue;
+                }
+                // Flood on the account → abort entirely (don't hammer more accounts).
+                if (this.isFloodSignal(err) || /flood|peer_flood/i.test(msg)) {
+                    throw err;
+                }
+                // Other error (e.g. dead session, sync issue) → try the next candidate.
+                console.warn(`[BotHealth] createBot via ${cand.mobile} failed (${msg.slice(0, 80)}) — trying next`);
+                continue;
+            }
+        }
+        if (!creator || !botToken) {
+            throw lastErr || new Error('all creator candidates failed to create a bot');
+        }
         const creatorHandle = creator.username ? `@${creator.username}` : (creator.firstName || 'unknown');
         const description = `${creator.mobile} ${creatorHandle}`.slice(0, 512);
-        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24); // BotFather appends _xxx_bot
-        const { botToken, username } = await this.telegramService.createBot(creator.mobile, {
-            name: `${category}`,
-            username: usernameSeed,
-            description,
-            aboutText: description,
-        });
-        if (!botToken || !this.BOT_TOKEN_REGEX.test(botToken)) {
-            throw new Error(`BotFather did not return a valid token (got: ${String(botToken).slice(0, 20)})`);
-        }
 
         // 3. Persist the new bot as INACTIVE first. We only flip it to 'active' once it is
         //    VERIFIED admin in the channel (step 4). Persisting active-then-adding would leave
@@ -1115,15 +1150,22 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const adminMobile = await this.resolveChannelAdminMobile(channelId);
         if (!adminMobile) throw new Error(`no controllable admin account found for channel ${channelId}`);
 
+        // Only request rights the PROMOTER actually holds. Telegram's EditAdmin returns
+        // RIGHT_FORBIDDEN if you try to grant a right you don't have yourself — e.g. our channel
+        // manager has addAdmins but NOT postMessages in some channels, so a blanket postMessages:true
+        // fails the whole promotion. Intersecting with the promoter's own rights keeps it robust.
+        const desired = {
+            changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
+            banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
+            anonymous: true, manageCall: true,
+        };
+        const granted = await this.intersectWithPromoterRights(adminMobile, channelId, desired);
+
         // Human-paced: wait a randomized gap BEFORE the privileged promote so the manager
         // account's admin actions don't cluster into a scripted burst (ban risk).
         await this.humanDelay();
         try {
-            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, {
-                changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
-                banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
-                anonymous: true, manageCall: true,
-            });
+            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, granted);
         } catch (err) {
             if (this.isFloodSignal(err)) {
                 // Do NOT retry — a flood/spam signal on the manager account means back off entirely.
@@ -1181,52 +1223,94 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      *   2. otherwise scan healthy accounts and match one against the channel's admin set.
      */
     private async resolveChannelAdminMobile(channelId: string): Promise<string | null> {
-        // 1. Configured managers first — confirm the manager can see the channel AND is admin there.
-        for (const managerMobile of this.getChannelManagerMobiles()) {
+        // Read the channel's admin list ONCE via any account that can see it (managers first,
+        // then healthy accounts), then pick the BEST of OUR controllable admins to promote with —
+        // preferring one that has `addAdmins` (required to promote a bot) AND `postMessages` (so the
+        // bot can be granted post). This avoids RIGHT_FORBIDDEN and naturally selects a
+        // full-rights/creator account (e.g. @Saurabh) over a limited manager.
+        const viewers = [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(15))];
+        let admins: any[] | null = null;
+        for (const viewer of viewers) {
             try {
-                const admins = await this.telegramService.getGroupAdmins(managerMobile, channelId);
-                const adminIds = new Set((Array.isArray(admins) ? admins : []).map((a: any) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
-                // Confirm the manager account itself is among the admins (so it can promote).
-                const mgrUser = (await this.usersService.search({ mobile: managerMobile }))[0];
-                const mgrTgId = mgrUser?.tgId ? String(mgrUser.tgId) : null;
-                if (mgrTgId && adminIds.has(mgrTgId)) {
-                    return managerMobile;
-                }
+                const res = await this.telegramService.getGroupAdmins(viewer, channelId);
+                if (Array.isArray(res) && res.length > 0) { admins = res; break; }
             } catch {
-                // this manager can't act on this channel — try the next / fall through to scan
+                continue; // this viewer can't see the channel — try next
             }
         }
 
-        // 2. Fallback: try each healthy account as the "viewer" to read admins; return the
-        //    first one of our accounts that appears among the channel's admin set.
-        const candidates = await this.getHealthyAccountMobiles(15);
-        for (const mobile of candidates) {
-            try {
-                const admins = await this.telegramService.getGroupAdmins(mobile, channelId);
-                if (!Array.isArray(admins) || admins.length === 0) continue;
-                const adminIds = new Set(admins.map((a: any) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
-                // Match any of our accounts (with a live session) against the admin set — that
-                // account can then promote the new bot.
-                const ownMobile = await this.matchOwnMobileToAdminIds(adminIds);
-                if (ownMobile) return ownMobile;
-            } catch {
-                continue; // this account can't see the channel — try next
+        const healthy = await this.getHealthyAccounts();
+        const byMobile = new Map(healthy.map(u => [u.mobile, u]));
+
+        // DESCRIPTION-FIRST: our channels record the creator's mobile in the channel About
+        // (e.g. "917306148704"). If that account is one we control with a live session, it's the
+        // creator → the ideal promoter (full rights, incl. post). Try it before the admin scan; it
+        // also rescues channels our admin-list scan can't cover.
+        try {
+            for (const viewer of viewers) {
+                let about = '';
+                try { about = await this.telegramService.getChannelAbout(viewer, channelId); }
+                catch { continue; }
+                if (!about) continue;
+                for (const m of about.match(/\d{10,13}/g) || []) {
+                    if (byMobile.has(m)) return m; // controllable creator account named in the description
+                }
+                break; // got the about (even if no controllable mobile) — no need to re-read via others
             }
+        } catch { /* best-effort — fall through to the admin scan */ }
+
+        if (!admins) return null;
+
+        // Map admin tgId → our controllable account (has a live session).
+        const byTgId = new Map(healthy.filter(u => u.tgId).map(u => [String(u.tgId), u]));
+
+        // Score OUR admins by usefulness for promoting a bot with full rights.
+        const scored: Array<{ mobile: string; score: number }> = [];
+        for (const a of admins) {
+            const tgId = String(a?.userId ?? a?.id ?? '');
+            const ours = byTgId.get(tgId);
+            if (!ours) continue;
+            const perms = a?.permissions || {};
+            const isCreator = a?.rank === 'creator';
+            if (!isCreator && !perms.addAdmins) continue; // can't promote a bot without addAdmins
+            // Prefer creator > addAdmins+post > addAdmins-only.
+            const score = isCreator ? 3 : (perms.postMessages ? 2 : 1);
+            scored.push({ mobile: ours.mobile, score });
         }
-        return null;
+        if (scored.length === 0) return null;
+        scored.sort((x, y) => y.score - x.score);
+        return scored[0].mobile;
     }
 
-    /** Map a set of admin telegram-ids back to one of our controllable account mobiles. */
-    private async matchOwnMobileToAdminIds(adminIds: Set<string>): Promise<string | null> {
-        if (adminIds.size === 0) return null;
-        // Our accounts live in users (tgId) — find one whose tgId is an admin AND has a session.
-        const users = await this.usersService.search({ expired: false });
-        for (const u of users) {
-            if (u.tgId && adminIds.has(String(u.tgId)) && u.session && String(u.session).trim()) {
-                return u.mobile;
+    /**
+     * Cap the desired bot-admin rights to what the PROMOTER account itself holds in the channel.
+     * Telegram's EditAdmin returns RIGHT_FORBIDDEN if you grant a right you don't have — e.g. our
+     * manager has addAdmins but not postMessages in some channels, so a blanket postMessages:true
+     * fails the whole promotion. A creator (all rights) passes everything through unchanged.
+     */
+    private async intersectWithPromoterRights(
+        promoterMobile: string,
+        channelId: string,
+        desired: Record<string, boolean>,
+    ): Promise<Record<string, boolean>> {
+        try {
+            const promoterUser = (await this.usersService.search({ mobile: promoterMobile }))[0];
+            const promoterTgId = promoterUser?.tgId ? String(promoterUser.tgId) : null;
+            if (!promoterTgId) return desired;
+            const admins = await this.telegramService.getGroupAdmins(promoterMobile, channelId);
+            const me = (Array.isArray(admins) ? admins : []).find((a: any) => String(a?.userId ?? a?.id) === promoterTgId);
+            // Creator (rank 'creator' or all-perms) → keep desired as-is.
+            const perms = (me as any)?.permissions;
+            if (!perms || (me as any)?.rank === 'creator') return desired;
+            const capped: Record<string, boolean> = {};
+            for (const [k, v] of Object.entries(desired)) {
+                // Grant a right only if desired AND the promoter holds it (anonymous is cosmetic — keep).
+                capped[k] = k === 'anonymous' ? v : Boolean(v && perms[k]);
             }
+            return capped;
+        } catch {
+            return desired; // best-effort — if we can't read rights, try the full set
         }
-        return null;
     }
 
     private shuffle<T>(arr: T[]): T[] {
@@ -1239,26 +1323,34 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
-     * Pick a healthy account to drive BotFather. Prefers the CONFIGURED channel-manager
-     * accounts (known-good, controllable) — falling back to a random users-collection account
-     * only if no manager is usable. NOTE: a non-empty `session` string in the DB is a weak
-     * signal (dead sessions linger), so managers-first materially improves the odds the
-     * BotFather connect actually succeeds. (search() caps at 200 rows, so this is best-effort.)
+     * SINGLE source of "our usable accounts" for channel-admin viewing/matching: expired=false, has
+     * a non-empty session + mobile, shuffled. Used by the channel-admin flows (viewers, admin-id
+     * matching) where any healthy account works. Bot CREATION uses a separate, foreign-first query
+     * (pickHealthyCreatorCandidates → usersService.getBotCreatorAccounts) because search()'s 200-row
+     * cap only surfaces the newest (mostly Indian) accounts.
      */
-    private async pickRandomHealthyUser(): Promise<{ mobile: string; username?: string | null; firstName?: string | null } | null> {
-        // 1. Prefer configured managers, resolving their identity from the users collection.
-        for (const managerMobile of this.getChannelManagerMobiles()) {
-            const u = (await this.usersService.search({ mobile: managerMobile }))[0];
-            if (u && u.session && String(u.session).trim()) {
-                return { mobile: u.mobile, username: u.username, firstName: u.firstName };
-            }
-        }
-        // 2. Fallback: random healthy user (shuffled so we don't always try the same stale one).
+    private async getHealthyAccounts(): Promise<Array<{ mobile: string; username?: string | null; firstName?: string | null; tgId?: string | null; session?: string | null }>> {
         const users = await this.usersService.search({ expired: false });
-        const healthy = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
-        if (healthy.length === 0) return null;
-        const pick = healthy[0];
-        return { mobile: pick.mobile, username: pick.username, firstName: pick.firstName };
+        return this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
+    }
+
+    /**
+     * Return up to `n` DISTINCT healthy creator candidates for BotFather bot creation. Deliberately
+     * does NOT use the channel-manager accounts (managers do heavy admin activity → most likely to
+     * be BotFather-restricted "cannot create new bots"). Ordering preference:
+     *   1. FOREIGN numbers first (non +91 India) — e.g. Pakistan +92 — they're less bot-flagged and
+     *      spread creation across accounts/countries,
+     *   2. then remaining (Indian) non-manager accounts,
+     *   3. managers only as an absolute last resort.
+     * The provision flow tries these in order, skipping any BotFather has banned from creating.
+     */
+    private async pickHealthyCreatorCandidates(n: number): Promise<Array<{ mobile: string; username?: string | null; firstName?: string | null }>> {
+        const managerMobiles = new Set(this.getChannelManagerMobiles());
+        // Foreign-first, server-side sampled (bypasses search()'s 200-row India-heavy cap).
+        const accounts = await this.usersService.getBotCreatorAccounts(Math.max(n * 3, 30));
+        // Never use a channel-manager to CREATE bots (they're the most BotFather-restricted).
+        const usable = accounts.filter(u => u.mobile && !managerMobiles.has(u.mobile));
+        return usable.slice(0, Math.max(1, n)).map(u => ({ mobile: u.mobile, username: u.username, firstName: u.firstName }));
     }
 
     /**
@@ -1267,10 +1359,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      */
     private async getHealthyAccountMobiles(limit: number): Promise<string[]> {
         const managers = this.getChannelManagerMobiles();
-        const users = await this.usersService.search({ expired: false });
-        const others = this.shuffle(
-            users.filter(u => u.session && String(u.session).trim() && u.mobile).map(u => u.mobile),
-        );
+        const others = (await this.getHealthyAccounts()).map(u => u.mobile);
         // Dedupe while preserving manager-first order.
         const ordered: string[] = [];
         for (const m of [...managers, ...others]) {

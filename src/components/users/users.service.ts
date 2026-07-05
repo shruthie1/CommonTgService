@@ -333,6 +333,41 @@ export class UsersService {
     return this.userModel.find().limit(limit).skip(skip).exec();
   }
 
+  /**
+   * Healthy accounts suitable for driving BotFather bot creation. Unlike search() (capped at 200,
+   * sorted by updatedAt — which only ever surfaces the newest, mostly-Indian accounts), this
+   * queries the model directly with a server-side mobile filter so FOREIGN accounts actually get
+   * returned. Foreign numbers (non +91) are preferred for bot creation: they're less likely to be
+   * BotFather-restricted and spread creation across countries. Randomised via $sample so we don't
+   * hammer the same accounts.
+   *
+   * @param limit  max accounts to return (default 40)
+   * @param foreignOnly  when true, ONLY non-+91 numbers; when false, non-+91 first then +91 fill-in
+   */
+  async getBotCreatorAccounts(limit: number = 40, foreignOnly: boolean = false): Promise<User[]> {
+    const base: Record<string, unknown> = {
+      expired: { $ne: true },
+      session: { $exists: true, $nin: [null, ''] },
+      mobile: { $exists: true, $nin: [null, ''] },
+    };
+    const sample = async (matchExtra: Record<string, unknown>, n: number): Promise<User[]> => {
+      if (n <= 0) return [];
+      return this.userModel.aggregate([
+        { $match: { ...base, ...matchExtra } },
+        { $sample: { size: n } },
+      ]).exec() as unknown as User[];
+    };
+
+    // Foreign = mobile does NOT start with 91 (India). Regex anchored at start.
+    const foreign = await sample({ mobile: { ...(base.mobile as object), $not: /^\+?91/ } }, limit);
+    if (foreignOnly || foreign.length >= limit) return foreign.slice(0, limit);
+
+    // Top up with any healthy account (may include Indian) to reach the limit.
+    const seen = new Set(foreign.map(u => u.mobile));
+    const fill = (await sample({}, limit)).filter(u => !seen.has(u.mobile));
+    return [...foreign, ...fill].slice(0, limit);
+  }
+
   private hasQueryConstraint(query: any, field: string): boolean {
     if (!query || typeof query !== 'object') return false;
     if (Object.prototype.hasOwnProperty.call(query, field)) return true;

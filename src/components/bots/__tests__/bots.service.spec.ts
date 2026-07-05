@@ -615,9 +615,11 @@ describe('BotsService - addMethodSpecificOptions videonote branch', () => {
 });
 
 describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
-  // A fake creator/admin account + telegram service that always succeeds, so the
-  // provision (create → add → verify) path completes and the new bot goes active.
-  const CREATOR = { mobile: '910000000001', username: 'creator1', tgId: '111', session: 'sess' };
+  // Two distinct fake accounts: MANAGER promotes the new bot to channel admin (set as
+  // channelManagerPrimary in tests); CREATOR is a separate foreign account that drives BotFather.
+  // They must differ because bot CREATION deliberately excludes channel-manager accounts.
+  const MANAGER = { mobile: '910000000001', username: 'manager1', tgId: '111', session: 'sess' };
+  const CREATOR = { mobile: '920000000002', username: 'creator1', tgId: '222', session: 'sess' };
   let createdCount = 0;
 
   function wireHealthyDeps() {
@@ -630,14 +632,21 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
       }),
       getBotInfo: jest.fn(async () => ({ id: `${900 + createdCount}`, username: `newbot_${createdCount}` })),
       setupBotInChannel: jest.fn(async () => undefined),
-      // verify reads admins back — return the creator + whatever bot id we just made so verify passes.
-      getGroupAdmins: jest.fn(async () => [{ id: CREATOR.tgId }, { id: `${900 + createdCount}` }]),
+      // resolveChannelAdminMobile scores admins by permissions and matches userId → our accounts;
+      // verifyBotIsChannelAdmin checks the bot id is present. Return the MANAGER as a full-rights
+      // admin (addAdmins+post so it's selected as promoter) + the just-created bot id.
+      getGroupAdmins: jest.fn(async () => [
+        { userId: MANAGER.tgId, rank: 'manager', permissions: { addAdmins: true, postMessages: true } },
+        { userId: `${900 + createdCount}` },
+      ]),
+      // Description-first resolver reads channel About; empty → falls through to the admin scan.
+      getChannelAbout: jest.fn(async () => ''),
     };
     const usersService = {
-      search: jest.fn(async (q: any) => {
-        // resolveChannelAdminMobile / pickRandomHealthyUser both call search — return the creator.
-        return [CREATOR];
-      }),
+      // resolveChannelAdminMobile / getHealthyAccounts call search() — return the manager (admin).
+      search: jest.fn(async (_q: any) => [MANAGER]),
+      // provisionBotForCategory picks creators via getBotCreatorAccounts (foreign-first sample).
+      getBotCreatorAccounts: jest.fn(async (_limit?: number) => [CREATOR]),
     };
     mockModuleRef.get.mockImplementation((token: any) => {
       const name = token?.name || String(token);
@@ -658,7 +667,7 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
 
   test('category below floor (1 live) → tops up to 2 by provisioning a new bot', async () => {
     // Use configured channel-manager so resolveChannelAdminMobile finds an admin.
-    process.env.channelManagerPrimary = CREATOR.mobile;
+    process.env.channelManagerPrimary = MANAGER.mobile;
     wireHealthyDeps();
     await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100999', status: 'active' });
 
@@ -682,7 +691,7 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
   });
 
   test('top-up is capped per run across categories', async () => {
-    process.env.channelManagerPrimary = CREATOR.mobile;
+    process.env.channelManagerPrimary = MANAGER.mobile;
     wireHealthyDeps();
     // Three different categories each with only 1 live bot → deficit of 3, but cap is 2.
     await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100a', status: 'active' });

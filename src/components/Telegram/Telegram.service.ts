@@ -808,6 +808,11 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.getGroupAdmins(groupId);
     }
 
+    async getChannelAbout(mobile: string, groupId: string): Promise<string> {
+        const telegramClient = await connectionManager.getClient(mobile);
+        return await telegramClient.getChannelAbout(groupId);
+    }
+
     async getGroupBannedUsers(mobile: string, groupId: string) {
         const telegramClient = await connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get group banned users', { groupId });

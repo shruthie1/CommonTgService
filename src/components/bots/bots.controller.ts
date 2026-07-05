@@ -41,9 +41,17 @@ export class BotsController {
   @Post('validate-and-replace')
   @ApiOperation({
     summary: 'Validate all bots and auto-replace dead ones',
-    description: 'Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.' })
-  @ApiResponse({ status: 201, description: 'Validation + replacement summary' })
-  async validateAndReplace() {
+    description: 'Runs the health check now: getMe every bot, mark 401s inactive, conservatively replace dead bots via BotFather, and top up any category below 2 healthy bots (create → add to channel as admin → verify). Also runs daily on a schedule. Pass ?async=true to start it in the BACKGROUND and return immediately (the full run takes minutes due to human-paced admin promotes); default awaits the summary.' })
+  @ApiQuery({ name: 'async', required: false, description: 'true = fire-and-forget (returns immediately), false/omitted = await the full summary' })
+  @ApiResponse({ status: 201, description: 'Validation + replacement summary (or {started:true} when async)' })
+  async validateAndReplace(@Query('async') async?: string) {
+    const runInBackground = String(async ?? '').toLowerCase() === 'true' || async === '1';
+    if (runInBackground) {
+      // Fire-and-forget: the run can take minutes (human-paced promotes) — don't hold the HTTP
+      // client open. Errors are already caught + reported inside validateAndReplaceBots.
+      void this.botsService.validateAndReplaceBots().catch(() => undefined);
+      return { started: true, mode: 'async', note: 'running in background; see the Bot Health Check summary notification' };
+    }
     return this.botsService.validateAndReplaceBots();
   }
 

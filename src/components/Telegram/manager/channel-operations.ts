@@ -386,6 +386,15 @@ export async function unblockGroupUser(ctx: TgContext, groupId: string, userId: 
     }));
 }
 
+/** Fetch a channel's About/description text (empty string if none/unreadable). */
+export async function getChannelAbout(ctx: TgContext, groupId: string): Promise<string> {
+    if (!ctx.client) throw new Error('Client not initialized');
+    const full = await ctx.client.invoke(new Api.channels.GetFullChannel({
+        channel: await ctx.client.getInputEntity(groupId),
+    }));
+    return (full.fullChat as any)?.about || '';
+}
+
 export async function getGroupAdmins(ctx: TgContext, groupId: string): Promise<AdminInfo[]> {
     if (!ctx.client) throw new Error('Client not initialized');
 

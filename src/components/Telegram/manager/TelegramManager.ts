@@ -364,6 +364,10 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return channelOps.getGroupAdmins(this.ctx, groupId);
         }
 
+        async getChannelAbout(groupId: string): Promise<string> {
+            return channelOps.getChannelAbout(this.ctx, groupId);
+        }
+
         async getGroupBannedUsers(groupId: string): Promise<BannedUserInfo[]> {
             return channelOps.getGroupBannedUsers(this.ctx, groupId);
         }
