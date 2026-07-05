@@ -3927,6 +3927,7 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const telegram_1 = __webpack_require__(/*! telegram */ "telegram");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
+const isDeadChannelError_1 = __importDefault(__webpack_require__(/*! ../../utils/isDeadChannelError */ "./src/utils/isDeadChannelError.ts"));
 const channel_live_facts_1 = __webpack_require__(/*! ../../utils/telegram-utils/channel-live-facts */ "./src/utils/telegram-utils/channel-live-facts.ts");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService, bufferClientService, promoteClientService) {
@@ -4036,7 +4037,25 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     ;
     async removeChannels(error, channelId, username, mobile) {
-        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
+        if ((0, isDeadChannelError_1.default)(error)) {
+            try {
+                let deadId = channelId;
+                if (!deadId && username) {
+                    const found = (await this.channelsService.search({ username }))[0];
+                    deadId = found?.channelId;
+                }
+                if (deadId) {
+                    await this.channelsService.remove(deadId);
+                    await this.activeChannelsService.remove(deadId);
+                    this.logger.debug(mobile, `Removed dead channel [${deadId}] @${username}`);
+                }
+                else {
+                    this.logger.debug(mobile, `Dead channel @${username} but no channelId to remove`);
+                }
+            }
+            catch (searchError) {
+                this.logger.debug(mobile, "Failed to remove dead channel: ", (0, parseError_1.parseError)(searchError));
+            }
         }
         else if (error.errorMessage === "CHANNEL_PRIVATE") {
             await this.channelsService.update(channelId, { private: true });
@@ -12384,7 +12403,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const withTimeout_1 = __webpack_require__(/*! ../../../utils/withTimeout */ "./src/utils/withTimeout.ts");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
-const bots_service_1 = __webpack_require__(/*! ../../bots/bots.service */ "./src/components/bots/bots.service.ts");
+const channel_category_enum_1 = __webpack_require__(/*! ../../bots/channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 class ConnectionManager {
     constructor() {
@@ -12550,7 +12569,7 @@ class ConnectionManager {
             const botsService = (0, utils_1.getBotsServiceInstance)();
             if (botsService) {
                 const botMessage = `<b>Client Connection Error</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Marked Expired:</b> ${markedAsExpired}`;
-                await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage, { parseMode: 'HTML' });
+                await botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_LOGIN_FAILURES, botMessage, { parseMode: 'HTML' });
             }
         }
         catch (notificationError) {
@@ -12758,9 +12777,9 @@ const tg_config_1 = __webpack_require__(/*! ./tg-config */ "./src/components/Tel
 const socks_1 = __webpack_require__(/*! socks */ "socks");
 const https_1 = __importDefault(__webpack_require__(/*! https */ "https"));
 const http_1 = __importDefault(__webpack_require__(/*! http */ "http"));
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
+const logger_1 = __webpack_require__(/*! ../../../utils/logger */ "./src/utils/logger.ts");
 const redisClient_1 = __webpack_require__(/*! ../../../utils/redisClient */ "./src/utils/redisClient.ts");
-const logger = new utils_1.Logger("TGConfig");
+const logger = new logger_1.Logger("TGConfig");
 const PROXY_MAP_PREFIX = "tg:proxy_map:";
 const CONFIG_PREFIX = "tg:config:";
 const CONFIG_TTL_SECONDS = 60 * 60 * 24 * 400;
@@ -13385,10 +13404,10 @@ exports.RateLimiter = RateLimiter;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.TelegramLogger = void 0;
-const utils_1 = __webpack_require__(/*! ../../../utils */ "./src/utils/index.ts");
+const logger_1 = __webpack_require__(/*! ../../../utils/logger */ "./src/utils/logger.ts");
 class TelegramLogger {
     constructor(serviceName = 'TelegramService') {
-        this.logger = new utils_1.Logger(serviceName);
+        this.logger = new logger_1.Logger(serviceName);
     }
     info(mobile, operation, details) {
         this.logger.log(`[${mobile}] ${operation}`, details);
@@ -15841,7 +15860,7 @@ exports.BotsController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const bots_service_1 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
-const bots_service_2 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
+const channel_category_enum_1 = __webpack_require__(/*! ./channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 const create_bot_dto_1 = __webpack_require__(/*! ./dto/create-bot.dto */ "./src/components/bots/dto/create-bot.dto.ts");
 const send_message_dto_1 = __webpack_require__(/*! ./dto/send-message.dto */ "./src/components/bots/dto/send-message.dto.ts");
 const media_dto_1 = __webpack_require__(/*! ./dto/media.dto */ "./src/components/bots/dto/media.dto.ts");
@@ -15992,7 +16011,7 @@ __decorate([
         name: 'category',
         required: false,
         description: 'Optional category filter to return only bots of a specific category',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'List of bots retrieved successfully' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid category provided' }),
@@ -16051,7 +16070,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the message',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16081,7 +16100,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the photo',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16111,7 +16130,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the video',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16141,7 +16160,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the audio',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16171,7 +16190,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the document',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16201,7 +16220,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the voice message',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16231,7 +16250,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the animation',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16261,7 +16280,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the sticker',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16291,7 +16310,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the media group',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -16321,7 +16340,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to get statistics for',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Statistics retrieved successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Category not found' }),
@@ -16444,7 +16463,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 var BotsService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BotsService = exports.ChannelCategory = void 0;
+exports.BotsService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const core_1 = __webpack_require__(/*! @nestjs/core */ "@nestjs/core");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
@@ -16457,29 +16476,7 @@ const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const bot_schema_1 = __webpack_require__(/*! ./schemas/bot.schema */ "./src/components/bots/schemas/bot.schema.ts");
 const Telegram_service_1 = __webpack_require__(/*! ../Telegram/Telegram.service */ "./src/components/Telegram/Telegram.service.ts");
 const users_service_1 = __webpack_require__(/*! ../users/users.service */ "./src/components/users/users.service.ts");
-var ChannelCategory;
-(function (ChannelCategory) {
-    ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
-    ChannelCategory["USER_WARNINGS"] = "USER_WARNINGS";
-    ChannelCategory["VC_WARNINGS"] = "VC_WARNINGS";
-    ChannelCategory["USER_REQUESTS"] = "USER_REQUESTS";
-    ChannelCategory["VC_NOTIFICATIONS"] = "VC_NOTIFICATIONS";
-    ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
-    ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
-    ChannelCategory["ACCOUNT_LOGIN_FAILURES"] = "ACCOUNT_LOGIN_FAILURES";
-    ChannelCategory["ACCOUNT_LOGINS"] = "ACCOUNT_LOGINS";
-    ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
-    ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
-    ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
-    ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
-    ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
-    ChannelCategory["UNVDS"] = "UNVDS";
-    ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
-    ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
-    ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
-    ChannelCategory["CLIENT_PROMOTIONS_1"] = "CLIENT_PROMOTIONS_1";
-    ChannelCategory["CLIENT_PROMOTIONS_2"] = "CLIENT_PROMOTIONS_2";
-})(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
+const channel_category_enum_1 = __webpack_require__(/*! ./channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 let BotsService = BotsService_1 = class BotsService {
     constructor(botModel, moduleRef) {
         this.botModel = botModel;
@@ -17346,7 +17343,7 @@ let BotsService = BotsService_1 = class BotsService {
     }
     async notify(html) {
         try {
-            await this.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, html, { parseMode: 'HTML' });
+            await this.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, html, { parseMode: 'HTML' });
         }
         catch (err) {
             console.error('[BotHealth] failed to send notification:', err);
@@ -17381,6 +17378,42 @@ exports.BotsService = BotsService = BotsService_1 = __decorate([
 
 /***/ },
 
+/***/ "./src/components/bots/channel-category.enum.ts"
+/*!******************************************************!*\
+  !*** ./src/components/bots/channel-category.enum.ts ***!
+  \******************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ChannelCategory = void 0;
+var ChannelCategory;
+(function (ChannelCategory) {
+    ChannelCategory["CLIENT_UPDATES"] = "CLIENT_UPDATES";
+    ChannelCategory["USER_WARNINGS"] = "USER_WARNINGS";
+    ChannelCategory["VC_WARNINGS"] = "VC_WARNINGS";
+    ChannelCategory["USER_REQUESTS"] = "USER_REQUESTS";
+    ChannelCategory["VC_NOTIFICATIONS"] = "VC_NOTIFICATIONS";
+    ChannelCategory["CHANNEL_NOTIFICATIONS"] = "CHANNEL_NOTIFICATIONS";
+    ChannelCategory["ACCOUNT_NOTIFICATIONS"] = "ACCOUNT_NOTIFICATIONS";
+    ChannelCategory["ACCOUNT_LOGIN_FAILURES"] = "ACCOUNT_LOGIN_FAILURES";
+    ChannelCategory["ACCOUNT_LOGINS"] = "ACCOUNT_LOGINS";
+    ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
+    ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
+    ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
+    ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
+    ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
+    ChannelCategory["UNVDS"] = "UNVDS";
+    ChannelCategory["PROM_LOGS1"] = "PROM_LOGS1";
+    ChannelCategory["PROM_LOGS2"] = "PROM_LOGS2";
+    ChannelCategory["UNAUTH_CALLS"] = "UNAUTH_CALLS";
+    ChannelCategory["CLIENT_PROMOTIONS_1"] = "CLIENT_PROMOTIONS_1";
+    ChannelCategory["CLIENT_PROMOTIONS_2"] = "CLIENT_PROMOTIONS_2";
+})(ChannelCategory || (exports.ChannelCategory = ChannelCategory = {}));
+
+
+/***/ },
+
 /***/ "./src/components/bots/dto/create-bot.dto.ts"
 /*!***************************************************!*\
   !*** ./src/components/bots/dto/create-bot.dto.ts ***!
@@ -17401,7 +17434,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.CreateBotDto = void 0;
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
-const bots_service_1 = __webpack_require__(/*! ../bots.service */ "./src/components/bots/bots.service.ts");
+const channel_category_enum_1 = __webpack_require__(/*! ../channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 class CreateBotDto {
 }
 exports.CreateBotDto = CreateBotDto;
@@ -17415,9 +17448,9 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({
         description: 'Channel category the bot belongs to',
-        enum: bots_service_1.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
-    (0, class_validator_1.IsEnum)(bots_service_1.ChannelCategory),
+    (0, class_validator_1.IsEnum)(channel_category_enum_1.ChannelCategory),
     __metadata("design:type", String)
 ], CreateBotDto.prototype, "category", void 0);
 __decorate([
@@ -18201,6 +18234,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+__exportStar(__webpack_require__(/*! ./channel-category.enum */ "./src/components/bots/channel-category.enum.ts"), exports);
 __exportStar(__webpack_require__(/*! ./bots.controller */ "./src/components/bots/bots.controller.ts"), exports);
 __exportStar(__webpack_require__(/*! ./bots.module */ "./src/components/bots/bots.module.ts"), exports);
 __exportStar(__webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts"), exports);
@@ -18229,7 +18263,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.BotSchema = exports.Bot = void 0;
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
-const bots_service_1 = __webpack_require__(/*! ../bots.service */ "./src/components/bots/bots.service.ts");
+const channel_category_enum_1 = __webpack_require__(/*! ../channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 let Bot = class Bot {
 };
@@ -18245,8 +18279,8 @@ __decorate([
     __metadata("design:type", String)
 ], Bot.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ enum: bots_service_1.ChannelCategory }),
-    (0, mongoose_1.Prop)({ required: true, enum: bots_service_1.ChannelCategory }),
+    (0, swagger_1.ApiProperty)({ enum: channel_category_enum_1.ChannelCategory }),
+    (0, mongoose_1.Prop)({ required: true, enum: channel_category_enum_1.ChannelCategory }),
     __metadata("design:type", String)
 ], Bot.prototype, "category", void 0);
 __decorate([
@@ -32683,7 +32717,7 @@ const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
 const connection_manager_1 = __webpack_require__(/*! ../Telegram/utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const logger_1 = __webpack_require__(/*! ../../utils/logger */ "./src/utils/logger.ts");
 const channelinfo_1 = __webpack_require__(/*! ../../utils/telegram-utils/channelinfo */ "./src/utils/telegram-utils/channelinfo.ts");
 const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
 const path_1 = __importDefault(__webpack_require__(/*! path */ "path"));
@@ -32692,7 +32726,8 @@ const telegram_2 = __webpack_require__(/*! telegram */ "telegram");
 const Password_1 = __webpack_require__(/*! telegram/Password */ "telegram/Password");
 const sessions_1 = __webpack_require__(/*! telegram/sessions */ "telegram/sessions");
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
-const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
+const isDeadChannelError_1 = __importDefault(__webpack_require__(/*! ../../utils/isDeadChannelError */ "./src/utils/isDeadChannelError.ts"));
+const channel_category_enum_1 = __webpack_require__(/*! ../bots/channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 const helpers_1 = __webpack_require__(/*! ../Telegram/manager/helpers */ "./src/components/Telegram/manager/helpers.ts");
 const generateTGConfig_1 = __webpack_require__(/*! ../Telegram/utils/generateTGConfig */ "./src/components/Telegram/utils/generateTGConfig.ts");
 const client_helper_utils_1 = __webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
@@ -32866,7 +32901,7 @@ class BaseClientService {
         const failedAttempts = doc.failedUpdateAttempts || 0;
         this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
         const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
-        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
+        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
         return true;
     }
     async reactivateOwnStuckAccounts(clientId, limit = 100) {
@@ -32966,7 +33001,7 @@ class BaseClientService {
         this.MAX_JOIN_FAILURES_PER_MOBILE = 3;
         this.joinScopeClientId = null;
         this.KNOWN_2FA_PASSWORD = 'Ajtdmwajt1@';
-        this.logger = new utils_1.Logger(loggerName);
+        this.logger = new logger_1.Logger(loggerName);
     }
     async onModuleDestroy() {
         await this.cleanup();
@@ -33501,7 +33536,7 @@ class BaseClientService {
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b> ${this.clientType} ${doc.mobile} — unrecoverable, ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
+                    this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b> ${this.clientType} ${doc.mobile} — unrecoverable, ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
                     return 0;
                 }
                 throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
@@ -33558,7 +33593,7 @@ class BaseClientService {
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
                 return 0;
             }
             await this.update(doc.mobile, {
@@ -33658,7 +33693,7 @@ class BaseClientService {
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
-            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b> ${this.clientType} ${doc.mobile} — ${doc.channels || 0} channels, eligible for rotation`, { parseMode: 'HTML' });
+            this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b> ${this.clientType} ${doc.mobile} — ${doc.channels || 0} channels, eligible for rotation`, { parseMode: 'HTML' });
             return { updateCount: 0, updateSummary: 'advance_to_ready' };
         }
         try {
@@ -33693,7 +33728,7 @@ class BaseClientService {
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
                     if (updateCount === 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: set_2fa — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: set_2fa — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
@@ -33705,14 +33740,14 @@ class BaseClientService {
                     });
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     if (updateCount === 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: remove_other_auths — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: remove_other_auths — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
                     }
                     this.logger.log(`Finished remove_other_auths for ${doc.mobile}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`, { parseMode: 'HTML' });
                     }
                     else {
                         await this.update(doc.mobile, {
@@ -33720,7 +33755,7 @@ class BaseClientService {
                             failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
                             lastUpdateFailure: new Date(),
                         });
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${(doc.failedUpdateAttempts || 0) + 1} fails`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${(doc.failedUpdateAttempts || 0) + 1} fails`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
                 default:
@@ -33744,10 +33779,10 @@ class BaseClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorDetails.message?.substring(0, 120)}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorDetails.message?.substring(0, 120)}`, { parseMode: 'HTML' });
             }
             else {
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails?.message?.substring(0, 120) || 'unknown'}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails?.message?.substring(0, 120) || 'unknown'}`, { parseMode: 'HTML' });
             }
             return { updateCount: 0 };
         }
@@ -33940,7 +33975,20 @@ class BaseClientService {
             catch (error) {
                 const errorDetails = this.handleError(error, `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`, mobile);
                 const rawErrorMessage = this.getErrorText(error);
-                if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
+                if (rawErrorMessage === 'INVITE_REQUEST_SENT') {
+                    this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
+                    this.incrementDailyJoinCount(mobile);
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: 1 } });
+                    }
+                    catch (incError) {
+                        this.logger.warn(`Failed to persist invite-request join for ${mobile}: ${this.getErrorText(incError)}`);
+                    }
+                }
+                else if ((0, isDeadChannelError_1.default)(error)) {
+                    this.logger.warn(`${mobile} dead channel @${currentChannel?.username ?? 'unknown'} (${rawErrorMessage}) — dropped from queue`);
+                }
+                else if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
                     await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
@@ -35272,8 +35320,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.performOrganicActivity = performOrganicActivity;
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const client_helper_utils_1 = __webpack_require__(/*! ./client-helper.utils */ "./src/components/shared/client-helper.utils.ts");
-const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-const logger = new utils_1.Logger('OrganicActivity');
+const logger_1 = __webpack_require__(/*! ../../utils/logger */ "./src/utils/logger.ts");
+const logger = new logger_1.Logger('OrganicActivity');
 const FATAL_ERROR_PATTERNS = [
     'auth_key_unregistered', 'session_revoked', 'session_expired',
     'user_deactivated_ban', 'user_deactivated', 'phone_number_banned',
@@ -43094,7 +43142,7 @@ exports.fetchWithTimeout = fetchWithTimeout;
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const parseError_1 = __webpack_require__(/*! ./parseError */ "./src/utils/parseError.ts");
 const common_1 = __webpack_require__(/*! ./common */ "./src/utils/common.ts");
-const bots_service_1 = __webpack_require__(/*! ../components/bots/bots.service */ "./src/components/bots/bots.service.ts");
+const channel_category_enum_1 = __webpack_require__(/*! ../components/bots/channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 const bot_service_instance_1 = __webpack_require__(/*! ./bot.service.instance */ "./src/utils/bot.service.instance.ts");
 const DEFAULT_RETRY_CONFIG = {
     maxRetries: 3,
@@ -43128,7 +43176,7 @@ async function notifyInternal(prefix, errorDetails, config = DEFAULT_NOTIFICATIO
             const botsService = (0, bot_service_instance_1.tryGetBotsServiceInstance)();
             if (!botsService)
                 return;
-            await botsService.sendMessageByCategory(bots_service_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
+            await botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.HTTP_FAILURES, notificationText, { parseMode: 'HTML' });
         }
         catch (error) {
             console.error('Failed to send notification:', error.response?.data || error.message || error.code);
@@ -43524,6 +43572,66 @@ __exportStar(__webpack_require__(/*! ./bot.service.instance */ "./src/utils/bot.
 __exportStar(__webpack_require__(/*! ./getRandomEmoji */ "./src/utils/getRandomEmoji.ts"), exports);
 __exportStar(__webpack_require__(/*! ./isPermanentError */ "./src/utils/isPermanentError.ts"), exports);
 __exportStar(__webpack_require__(/*! ./readbleTimeDifference */ "./src/utils/readbleTimeDifference.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/utils/isDeadChannelError.ts"
+/*!*****************************************!*\
+  !*** ./src/utils/isDeadChannelError.ts ***!
+  \*****************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports["default"] = isDeadChannelError;
+const DEAD_CHANNEL_TOKENS = [
+    'USERNAME_INVALID',
+    'USERNAME_NOT_OCCUPIED',
+];
+const DEAD_CHANNEL_PHRASES = [
+    'no user has',
+];
+function containsToken(text, token) {
+    const haystack = text.toUpperCase();
+    const needle = token.toUpperCase();
+    let from = 0;
+    while (true) {
+        const idx = haystack.indexOf(needle, from);
+        if (idx === -1)
+            return false;
+        const before = idx === 0 ? '' : haystack[idx - 1];
+        const after = idx + needle.length >= haystack.length ? '' : haystack[idx + needle.length];
+        const isWordChar = (c) => c !== '' && /[A-Z0-9_]/.test(c);
+        if (!isWordChar(before) && !isWordChar(after))
+            return true;
+        from = idx + 1;
+    }
+}
+function classify(text) {
+    if (typeof text !== 'string' || text.trim() === '')
+        return false;
+    if (DEAD_CHANNEL_TOKENS.some((token) => containsToken(text, token)))
+        return true;
+    const lower = text.toLowerCase();
+    return DEAD_CHANNEL_PHRASES.some((phrase) => lower.includes(phrase));
+}
+function isDeadChannelError(error) {
+    if (error == null)
+        return false;
+    if (typeof error === 'string')
+        return classify(error);
+    if (typeof error === 'object') {
+        const e = error;
+        if (classify(typeof e.errorMessage === 'string' ? e.errorMessage : null))
+            return true;
+        if (classify(typeof e.message === 'string' ? e.message : null))
+            return true;
+        if (e.error && classify(typeof e.error.errorMessage === 'string' ? e.error.errorMessage : e.error.message))
+            return true;
+    }
+    return classify(String(error));
+}
 
 
 /***/ },

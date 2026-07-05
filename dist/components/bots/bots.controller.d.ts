@@ -1,6 +1,6 @@
 import { BotsService } from './bots.service';
 import { Bot } from './schemas/bot.schema';
-import { ChannelCategory } from './bots.service';
+import { ChannelCategory } from './channel-category.enum';
 import { CreateBotDto } from './dto/create-bot.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { SendPhotoDto, SendVideoDto, SendAudioDto, SendDocumentDto } from './dto/media.dto';

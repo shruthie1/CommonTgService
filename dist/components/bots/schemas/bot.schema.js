@@ -11,7 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BotSchema = exports.Bot = void 0;
 const mongoose_1 = require("@nestjs/mongoose");
-const bots_service_1 = require("../bots.service");
+const channel_category_enum_1 = require("../channel-category.enum");
 const swagger_1 = require("@nestjs/swagger");
 let Bot = class Bot {
 };
@@ -27,8 +27,8 @@ __decorate([
     __metadata("design:type", String)
 ], Bot.prototype, "username", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ enum: bots_service_1.ChannelCategory }),
-    (0, mongoose_1.Prop)({ required: true, enum: bots_service_1.ChannelCategory }),
+    (0, swagger_1.ApiProperty)({ enum: channel_category_enum_1.ChannelCategory }),
+    (0, mongoose_1.Prop)({ required: true, enum: channel_category_enum_1.ChannelCategory }),
     __metadata("design:type", String)
 ], Bot.prototype, "category", void 0);
 __decorate([

@@ -1,3 +1,4 @@
+export * from './channel-category.enum';
 export * from './bots.controller';
 export * from './bots.module';
 export * from './bots.service';

@@ -16,7 +16,7 @@ exports.BotsController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const bots_service_1 = require("./bots.service");
-const bots_service_2 = require("./bots.service");
+const channel_category_enum_1 = require("./channel-category.enum");
 const create_bot_dto_1 = require("./dto/create-bot.dto");
 const send_message_dto_1 = require("./dto/send-message.dto");
 const media_dto_1 = require("./dto/media.dto");
@@ -167,7 +167,7 @@ __decorate([
         name: 'category',
         required: false,
         description: 'Optional category filter to return only bots of a specific category',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'List of bots retrieved successfully' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid category provided' }),
@@ -226,7 +226,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the message',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -256,7 +256,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the photo',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -286,7 +286,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the video',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -316,7 +316,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the audio',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -346,7 +346,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the document',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -376,7 +376,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the voice message',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -406,7 +406,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the animation',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -436,7 +436,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the sticker',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -466,7 +466,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to use for sending the media group',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiQuery)({
         name: 'botId',
@@ -496,7 +496,7 @@ __decorate([
     (0, swagger_1.ApiParam)({
         name: 'category',
         description: 'Category of bots to get statistics for',
-        enum: bots_service_2.ChannelCategory
+        enum: channel_category_enum_1.ChannelCategory
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Statistics retrieved successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Category not found' }),

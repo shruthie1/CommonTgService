@@ -69,6 +69,7 @@ const logbots_1 = require("../../utils/logbots");
 const telegram_1 = require("telegram");
 const utils_1 = require("../../utils");
 const channelinfo_1 = require("../../utils/telegram-utils/channelinfo");
+const isDeadChannelError_1 = __importDefault(require("../../utils/isDeadChannelError"));
 const channel_live_facts_1 = require("../../utils/telegram-utils/channel-live-facts");
 let TelegramService = TelegramService_1 = class TelegramService {
     constructor(usersService, activeChannelsService, channelsService, bufferClientService, promoteClientService) {
@@ -178,7 +179,25 @@ let TelegramService = TelegramService_1 = class TelegramService {
     }
     ;
     async removeChannels(error, channelId, username, mobile) {
-        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
+        if ((0, isDeadChannelError_1.default)(error)) {
+            try {
+                let deadId = channelId;
+                if (!deadId && username) {
+                    const found = (await this.channelsService.search({ username }))[0];
+                    deadId = found?.channelId;
+                }
+                if (deadId) {
+                    await this.channelsService.remove(deadId);
+                    await this.activeChannelsService.remove(deadId);
+                    this.logger.debug(mobile, `Removed dead channel [${deadId}] @${username}`);
+                }
+                else {
+                    this.logger.debug(mobile, `Dead channel @${username} but no channelId to remove`);
+                }
+            }
+            catch (searchError) {
+                this.logger.debug(mobile, "Failed to remove dead channel: ", (0, parseError_1.parseError)(searchError));
+            }
         }
         else if (error.errorMessage === "CHANNEL_PRIVATE") {
             await this.channelsService.update(channelId, { private: true });

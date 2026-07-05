@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TelegramLogger = void 0;
-const utils_1 = require("../../../utils");
+const logger_1 = require("../../../utils/logger");
 class TelegramLogger {
     constructor(serviceName = 'TelegramService') {
-        this.logger = new utils_1.Logger(serviceName);
+        this.logger = new logger_1.Logger(serviceName);
     }
     info(mobile, operation, details) {
         this.logger.log(`[${mobile}] ${operation}`, details);
