@@ -157,6 +157,7 @@ export declare class TelegramService implements OnModuleDestroy {
     demoteAdmin(mobile: string, groupId: string, userId: string): Promise<void>;
     unblockGroupUser(mobile: string, groupId: string, userId: string): Promise<void>;
     getGroupAdmins(mobile: string, groupId: string): Promise<import("./TelegramManager").AdminInfo[]>;
+    getChannelAbout(mobile: string, groupId: string): Promise<string>;
     getGroupBannedUsers(mobile: string, groupId: string): Promise<import("./TelegramManager").BannedUserInfo[]>;
     searchMessages(mobile: string, params: SearchMessagesDto): Promise<import("./dto/message-search.dto").SearchMessagesResponseDto>;
     getFilteredMedia(mobile: string, params: {

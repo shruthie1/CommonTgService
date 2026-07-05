@@ -134,6 +134,7 @@ declare class TelegramManager {
     demoteAdmin(groupId: string, userId: string): Promise<void>;
     unblockGroupUser(groupId: string, userId: string): Promise<void>;
     getGroupAdmins(groupId: string): Promise<AdminInfo[]>;
+    getChannelAbout(groupId: string): Promise<string>;
     getGroupBannedUsers(groupId: string): Promise<BannedUserInfo[]>;
     createGroupOrChannel(options: GroupOptions): Promise<Api.TypeUpdates>;
     createGroupWithOptions(options: GroupOptions): Promise<Api.Chat | Api.Channel>;

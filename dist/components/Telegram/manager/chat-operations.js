@@ -1098,31 +1098,80 @@ async function createBot(ctx, options) {
         throw new Error('Client not initialized');
     const botFatherUsername = 'BotFather';
     ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
+    const client = ctx.client;
+    const looksLikeHelp = (t) => /you can control me by sending these commands|please see the manual|\/newbot - create a new bot/i.test(t || '');
     try {
         const entity = await ctx.client.getEntity(botFatherUsername);
         ctx.logger.info(ctx.phoneNumber, '[BOT CREATION] Successfully connected to BotFather');
+        const waitForBotFatherReply = async (afterId, timeoutMs = 15000) => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                await (0, Helpers_1.sleep)(1000);
+                const msgs = await client.getMessages(entity, { limit: 5 });
+                const reply = (msgs || [])
+                    .filter((m) => !m.out && typeof m.id === 'number' && m.id > afterId && m.message)
+                    .sort((a, b) => b.id - a.id)[0];
+                if (reply)
+                    return reply.message;
+            }
+            return '';
+        };
+        const currentLastId = async () => {
+            const msgs = await client.getMessages(entity, { limit: 1 });
+            return msgs && msgs[0] && typeof msgs[0].id === 'number' ? msgs[0].id : 0;
+        };
+        let baseline = await currentLastId();
+        await ctx.client.sendMessage(entity, { message: '/cancel' });
+        await waitForBotFatherReply(baseline, 8000);
+        baseline = await currentLastId();
         await ctx.client.sendMessage(entity, { message: '/newbot' });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        await ctx.client.sendMessage(entity, { message: options.name });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        let botUsername = options.username;
-        if (!/_bot$/.test(botUsername)) {
-            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-            let uniqueSuffix = '';
-            for (let i = 0; i < 3; i++)
-                uniqueSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
-            botUsername = botUsername.replace(/_?bot$/, '') + `_${uniqueSuffix}_bot`;
-            ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] Modified username: ${botUsername}`);
+        const namePrompt = await waitForBotFatherReply(baseline);
+        if (!namePrompt)
+            throw new Error('No response from BotFather after /newbot');
+        if (/cannot create new bots|can't create new bots|too many attempts|try again later|20 bots/i.test(namePrompt)) {
+            throw new Error(`BOTFATHER_CANNOT_CREATE: ${namePrompt.slice(0, 160)}`);
         }
-        await ctx.client.sendMessage(entity, { message: botUsername });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const messages = await ctx.client.getMessages(entity, { limit: 1 });
-        if (!messages || messages.length === 0)
-            throw new Error('No response received from BotFather');
-        const lastMessage = messages[0].message;
-        if (!lastMessage.toLowerCase().includes('use this token'))
-            throw new Error(`Bot creation failed: ${lastMessage}`);
-        const tokenMatch = lastMessage.match(/(\d+:[A-Za-z0-9_-]+)/);
+        if (looksLikeHelp(namePrompt)) {
+            throw new Error(`BotFather out of sync after /newbot: ${namePrompt.slice(0, 160)}`);
+        }
+        baseline = await currentLastId();
+        await ctx.client.sendMessage(entity, { message: options.name });
+        const usernamePrompt = await waitForBotFatherReply(baseline);
+        if (!usernamePrompt)
+            throw new Error('No response from BotFather after sending name');
+        if (looksLikeHelp(usernamePrompt))
+            throw new Error(`BotFather out of sync after name: ${usernamePrompt.slice(0, 160)}`);
+        let botUsername = options.username;
+        const withSuffix = (base) => {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let s = '';
+            for (let i = 0; i < 3; i++)
+                s += chars.charAt(Math.floor(Math.random() * chars.length));
+            return base.replace(/_?bot$/, '') + `_${s}_bot`;
+        };
+        if (!/_bot$/.test(botUsername))
+            botUsername = withSuffix(botUsername);
+        let tokenReply = '';
+        for (let attempt = 0; attempt < 4; attempt++) {
+            baseline = await currentLastId();
+            await ctx.client.sendMessage(entity, { message: botUsername });
+            const reply = await waitForBotFatherReply(baseline);
+            if (!reply)
+                throw new Error('No response from BotFather after sending username');
+            if (reply.toLowerCase().includes('use this token')) {
+                tokenReply = reply;
+                break;
+            }
+            if (/taken|already in use|invalid|try (again|something)|different|sorry/i.test(reply)) {
+                ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] username @${botUsername} rejected, retrying: ${reply.slice(0, 100)}`);
+                botUsername = withSuffix(options.username);
+                continue;
+            }
+            throw new Error(`Bot creation failed: ${reply.slice(0, 200)}`);
+        }
+        if (!tokenReply)
+            throw new Error('Could not obtain bot token after username retries');
+        const tokenMatch = tokenReply.match(/(\d+:[A-Za-z0-9_-]+)/);
         if (!tokenMatch)
             throw new Error('Could not extract bot token from BotFather response');
         const botToken = tokenMatch[0];

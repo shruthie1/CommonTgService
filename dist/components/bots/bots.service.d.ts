@@ -163,9 +163,10 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private verifyBotIsChannelAdmin;
     private getChannelManagerMobiles;
     private resolveChannelAdminMobile;
-    private matchOwnMobileToAdminIds;
+    private intersectWithPromoterRights;
     private shuffle;
-    private pickRandomHealthyUser;
+    private getHealthyAccounts;
+    private pickHealthyCreatorCandidates;
     private getHealthyAccountMobiles;
     private notify;
     private sendHealthSummary;

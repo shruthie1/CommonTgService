@@ -29,7 +29,12 @@ let BotsController = class BotsController {
     async createBot(createBotDto) {
         return this.botsService.createBot(createBotDto);
     }
-    async validateAndReplace() {
+    async validateAndReplace(async) {
+        const runInBackground = String(async ?? '').toLowerCase() === 'true' || async === '1';
+        if (runInBackground) {
+            void this.botsService.validateAndReplaceBots().catch(() => undefined);
+            return { started: true, mode: 'async', note: 'running in background; see the Bot Health Check summary notification' };
+        }
         return this.botsService.validateAndReplaceBots();
     }
     async getBots(category) {
@@ -150,11 +155,13 @@ __decorate([
     (0, common_1.Post)('validate-and-replace'),
     (0, swagger_1.ApiOperation)({
         summary: 'Validate all bots and auto-replace dead ones',
-        description: 'Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.'
+        description: 'Runs the health check now: getMe every bot, mark 401s inactive, conservatively replace dead bots via BotFather, and top up any category below 2 healthy bots (create → add to channel as admin → verify). Also runs daily on a schedule. Pass ?async=true to start it in the BACKGROUND and return immediately (the full run takes minutes due to human-paced admin promotes); default awaits the summary.'
     }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary' }),
+    (0, swagger_1.ApiQuery)({ name: 'async', required: false, description: 'true = fire-and-forget (returns immediately), false/omitted = await the full summary' }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary (or {started:true} when async)' }),
+    __param(0, (0, common_1.Query)('async')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], BotsController.prototype, "validateAndReplace", null);
 __decorate([

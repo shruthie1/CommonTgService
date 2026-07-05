@@ -682,7 +682,7 @@ let BotsService = BotsService_1 = class BotsService {
         return result;
     }
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-    humanDelay(minMs = 60_000, maxMs = 180_000) {
+    humanDelay(minMs = 10_000, maxMs = 20_000) {
         const jitter = minMs + Math.floor(Math.random() * Math.max(1, maxMs - minMs));
         return this.sleep(jitter);
     }
@@ -775,22 +775,52 @@ let BotsService = BotsService_1 = class BotsService {
         }
     }
     async provisionBotForCategory(category, channelId, opts = {}) {
-        const creator = await this.pickRandomHealthyUser();
-        if (!creator) {
+        const candidates = await this.pickHealthyCreatorCandidates(5);
+        if (candidates.length === 0) {
             throw new Error('no healthy user account available to create bot');
+        }
+        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
+        let creator = null;
+        let botToken = '';
+        let username = '';
+        let lastErr = null;
+        for (const cand of candidates) {
+            const creatorHandle = cand.username ? `@${cand.username}` : (cand.firstName || 'unknown');
+            const description = `${cand.mobile} ${creatorHandle}`.slice(0, 512);
+            try {
+                const res = await this.telegramService.createBot(cand.mobile, {
+                    name: `${category}`,
+                    username: usernameSeed,
+                    description,
+                    aboutText: description,
+                });
+                if (res?.botToken && this.BOT_TOKEN_REGEX.test(res.botToken)) {
+                    creator = cand;
+                    botToken = res.botToken;
+                    username = res.username;
+                    break;
+                }
+                lastErr = new Error(`BotFather did not return a valid token (got: ${String(res?.botToken).slice(0, 20)})`);
+            }
+            catch (err) {
+                lastErr = err;
+                const msg = err?.message || String(err);
+                if (/BOTFATHER_CANNOT_CREATE|cannot create new bots|too many attempts/i.test(msg)) {
+                    console.warn(`[BotHealth] creator ${cand.mobile} cannot create bots — trying next candidate`);
+                    continue;
+                }
+                if (this.isFloodSignal(err) || /flood|peer_flood/i.test(msg)) {
+                    throw err;
+                }
+                console.warn(`[BotHealth] createBot via ${cand.mobile} failed (${msg.slice(0, 80)}) — trying next`);
+                continue;
+            }
+        }
+        if (!creator || !botToken) {
+            throw lastErr || new Error('all creator candidates failed to create a bot');
         }
         const creatorHandle = creator.username ? `@${creator.username}` : (creator.firstName || 'unknown');
         const description = `${creator.mobile} ${creatorHandle}`.slice(0, 512);
-        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
-        const { botToken, username } = await this.telegramService.createBot(creator.mobile, {
-            name: `${category}`,
-            username: usernameSeed,
-            description,
-            aboutText: description,
-        });
-        if (!botToken || !this.BOT_TOKEN_REGEX.test(botToken)) {
-            throw new Error(`BotFather did not return a valid token (got: ${String(botToken).slice(0, 20)})`);
-        }
         const saved = await this.createBot({ token: botToken, category, channelId, description });
         await this.botModel.updateOne({ _id: saved._id }, { $set: { createdByMobile: creator.mobile, ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}), status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } }).exec();
         try {
@@ -882,13 +912,15 @@ let BotsService = BotsService_1 = class BotsService {
         const adminMobile = await this.resolveChannelAdminMobile(channelId);
         if (!adminMobile)
             throw new Error(`no controllable admin account found for channel ${channelId}`);
+        const desired = {
+            changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
+            banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
+            anonymous: true, manageCall: true,
+        };
+        const granted = await this.intersectWithPromoterRights(adminMobile, channelId, desired);
         await this.humanDelay();
         try {
-            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, {
-                changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
-                banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
-                anonymous: true, manageCall: true,
-            });
+            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, granted);
         }
         catch (err) {
             if (this.isFloodSignal(err)) {
@@ -920,46 +952,82 @@ let BotsService = BotsService_1 = class BotsService {
             .filter(Boolean);
     }
     async resolveChannelAdminMobile(channelId) {
-        for (const managerMobile of this.getChannelManagerMobiles()) {
+        const viewers = [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(15))];
+        let admins = null;
+        for (const viewer of viewers) {
             try {
-                const admins = await this.telegramService.getGroupAdmins(managerMobile, channelId);
-                const adminIds = new Set((Array.isArray(admins) ? admins : []).map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
-                const mgrUser = (await this.usersService.search({ mobile: managerMobile }))[0];
-                const mgrTgId = mgrUser?.tgId ? String(mgrUser.tgId) : null;
-                if (mgrTgId && adminIds.has(mgrTgId)) {
-                    return managerMobile;
+                const res = await this.telegramService.getGroupAdmins(viewer, channelId);
+                if (Array.isArray(res) && res.length > 0) {
+                    admins = res;
+                    break;
                 }
-            }
-            catch {
-            }
-        }
-        const candidates = await this.getHealthyAccountMobiles(15);
-        for (const mobile of candidates) {
-            try {
-                const admins = await this.telegramService.getGroupAdmins(mobile, channelId);
-                if (!Array.isArray(admins) || admins.length === 0)
-                    continue;
-                const adminIds = new Set(admins.map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
-                const ownMobile = await this.matchOwnMobileToAdminIds(adminIds);
-                if (ownMobile)
-                    return ownMobile;
             }
             catch {
                 continue;
             }
         }
-        return null;
-    }
-    async matchOwnMobileToAdminIds(adminIds) {
-        if (adminIds.size === 0)
-            return null;
-        const users = await this.usersService.search({ expired: false });
-        for (const u of users) {
-            if (u.tgId && adminIds.has(String(u.tgId)) && u.session && String(u.session).trim()) {
-                return u.mobile;
+        const healthy = await this.getHealthyAccounts();
+        const byMobile = new Map(healthy.map(u => [u.mobile, u]));
+        try {
+            for (const viewer of viewers) {
+                let about = '';
+                try {
+                    about = await this.telegramService.getChannelAbout(viewer, channelId);
+                }
+                catch {
+                    continue;
+                }
+                if (!about)
+                    continue;
+                for (const m of about.match(/\d{10,13}/g) || []) {
+                    if (byMobile.has(m))
+                        return m;
+                }
+                break;
             }
         }
-        return null;
+        catch { }
+        if (!admins)
+            return null;
+        const byTgId = new Map(healthy.filter(u => u.tgId).map(u => [String(u.tgId), u]));
+        const scored = [];
+        for (const a of admins) {
+            const tgId = String(a?.userId ?? a?.id ?? '');
+            const ours = byTgId.get(tgId);
+            if (!ours)
+                continue;
+            const perms = a?.permissions || {};
+            const isCreator = a?.rank === 'creator';
+            if (!isCreator && !perms.addAdmins)
+                continue;
+            const score = isCreator ? 3 : (perms.postMessages ? 2 : 1);
+            scored.push({ mobile: ours.mobile, score });
+        }
+        if (scored.length === 0)
+            return null;
+        scored.sort((x, y) => y.score - x.score);
+        return scored[0].mobile;
+    }
+    async intersectWithPromoterRights(promoterMobile, channelId, desired) {
+        try {
+            const promoterUser = (await this.usersService.search({ mobile: promoterMobile }))[0];
+            const promoterTgId = promoterUser?.tgId ? String(promoterUser.tgId) : null;
+            if (!promoterTgId)
+                return desired;
+            const admins = await this.telegramService.getGroupAdmins(promoterMobile, channelId);
+            const me = (Array.isArray(admins) ? admins : []).find((a) => String(a?.userId ?? a?.id) === promoterTgId);
+            const perms = me?.permissions;
+            if (!perms || me?.rank === 'creator')
+                return desired;
+            const capped = {};
+            for (const [k, v] of Object.entries(desired)) {
+                capped[k] = k === 'anonymous' ? v : Boolean(v && perms[k]);
+            }
+            return capped;
+        }
+        catch {
+            return desired;
+        }
     }
     shuffle(arr) {
         const a = [...arr];
@@ -969,24 +1037,19 @@ let BotsService = BotsService_1 = class BotsService {
         }
         return a;
     }
-    async pickRandomHealthyUser() {
-        for (const managerMobile of this.getChannelManagerMobiles()) {
-            const u = (await this.usersService.search({ mobile: managerMobile }))[0];
-            if (u && u.session && String(u.session).trim()) {
-                return { mobile: u.mobile, username: u.username, firstName: u.firstName };
-            }
-        }
+    async getHealthyAccounts() {
         const users = await this.usersService.search({ expired: false });
-        const healthy = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
-        if (healthy.length === 0)
-            return null;
-        const pick = healthy[0];
-        return { mobile: pick.mobile, username: pick.username, firstName: pick.firstName };
+        return this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
+    }
+    async pickHealthyCreatorCandidates(n) {
+        const managerMobiles = new Set(this.getChannelManagerMobiles());
+        const accounts = await this.usersService.getBotCreatorAccounts(Math.max(n * 3, 30));
+        const usable = accounts.filter(u => u.mobile && !managerMobiles.has(u.mobile));
+        return usable.slice(0, Math.max(1, n)).map(u => ({ mobile: u.mobile, username: u.username, firstName: u.firstName }));
     }
     async getHealthyAccountMobiles(limit) {
         const managers = this.getChannelManagerMobiles();
-        const users = await this.usersService.search({ expired: false });
-        const others = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile).map(u => u.mobile));
+        const others = (await this.getHealthyAccounts()).map(u => u.mobile);
         const ordered = [];
         for (const m of [...managers, ...others]) {
             if (m && !ordered.includes(m))

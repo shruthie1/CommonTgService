@@ -674,6 +674,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         this.logger.info(mobile, 'Get group admins', { groupId });
         return await telegramClient.getGroupAdmins(groupId);
     }
+    async getChannelAbout(mobile, groupId) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        return await telegramClient.getChannelAbout(groupId);
+    }
     async getGroupBannedUsers(mobile, groupId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get group banned users', { groupId });

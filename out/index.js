@@ -4532,6 +4532,10 @@ let TelegramService = TelegramService_1 = class TelegramService {
         this.logger.info(mobile, 'Get group admins', { groupId });
         return await telegramClient.getGroupAdmins(groupId);
     }
+    async getChannelAbout(mobile, groupId) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        return await telegramClient.getChannelAbout(groupId);
+    }
     async getGroupBannedUsers(mobile, groupId) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Get group banned users', { groupId });
@@ -7496,6 +7500,9 @@ class TelegramManager {
     async getGroupAdmins(groupId) {
         return channelOps.getGroupAdmins(this.ctx, groupId);
     }
+    async getChannelAbout(groupId) {
+        return channelOps.getChannelAbout(this.ctx, groupId);
+    }
     async getGroupBannedUsers(groupId) {
         return channelOps.getGroupBannedUsers(this.ctx, groupId);
     }
@@ -7924,6 +7931,7 @@ exports.removeGroupMembers = removeGroupMembers;
 exports.promoteToAdmin = promoteToAdmin;
 exports.demoteAdmin = demoteAdmin;
 exports.unblockGroupUser = unblockGroupUser;
+exports.getChannelAbout = getChannelAbout;
 exports.getGroupAdmins = getGroupAdmins;
 exports.getGroupBannedUsers = getGroupBannedUsers;
 exports.createGroupOrChannel = createGroupOrChannel;
@@ -8267,6 +8275,14 @@ async function unblockGroupUser(ctx, groupId, userId) {
             sendInline: false, embedLinks: false,
         }),
     }));
+}
+async function getChannelAbout(ctx, groupId) {
+    if (!ctx.client)
+        throw new Error('Client not initialized');
+    const full = await ctx.client.invoke(new telegram_1.Api.channels.GetFullChannel({
+        channel: await ctx.client.getInputEntity(groupId),
+    }));
+    return full.fullChat?.about || '';
 }
 async function getGroupAdmins(ctx, groupId) {
     if (!ctx.client)
@@ -9509,31 +9525,80 @@ async function createBot(ctx, options) {
         throw new Error('Client not initialized');
     const botFatherUsername = 'BotFather';
     ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] Starting bot creation process for "${options.name}" (${options.username})`);
+    const client = ctx.client;
+    const looksLikeHelp = (t) => /you can control me by sending these commands|please see the manual|\/newbot - create a new bot/i.test(t || '');
     try {
         const entity = await ctx.client.getEntity(botFatherUsername);
         ctx.logger.info(ctx.phoneNumber, '[BOT CREATION] Successfully connected to BotFather');
+        const waitForBotFatherReply = async (afterId, timeoutMs = 15000) => {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                await (0, Helpers_1.sleep)(1000);
+                const msgs = await client.getMessages(entity, { limit: 5 });
+                const reply = (msgs || [])
+                    .filter((m) => !m.out && typeof m.id === 'number' && m.id > afterId && m.message)
+                    .sort((a, b) => b.id - a.id)[0];
+                if (reply)
+                    return reply.message;
+            }
+            return '';
+        };
+        const currentLastId = async () => {
+            const msgs = await client.getMessages(entity, { limit: 1 });
+            return msgs && msgs[0] && typeof msgs[0].id === 'number' ? msgs[0].id : 0;
+        };
+        let baseline = await currentLastId();
+        await ctx.client.sendMessage(entity, { message: '/cancel' });
+        await waitForBotFatherReply(baseline, 8000);
+        baseline = await currentLastId();
         await ctx.client.sendMessage(entity, { message: '/newbot' });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        await ctx.client.sendMessage(entity, { message: options.name });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        let botUsername = options.username;
-        if (!/_bot$/.test(botUsername)) {
-            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-            let uniqueSuffix = '';
-            for (let i = 0; i < 3; i++)
-                uniqueSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
-            botUsername = botUsername.replace(/_?bot$/, '') + `_${uniqueSuffix}_bot`;
-            ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] Modified username: ${botUsername}`);
+        const namePrompt = await waitForBotFatherReply(baseline);
+        if (!namePrompt)
+            throw new Error('No response from BotFather after /newbot');
+        if (/cannot create new bots|can't create new bots|too many attempts|try again later|20 bots/i.test(namePrompt)) {
+            throw new Error(`BOTFATHER_CANNOT_CREATE: ${namePrompt.slice(0, 160)}`);
         }
-        await ctx.client.sendMessage(entity, { message: botUsername });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const messages = await ctx.client.getMessages(entity, { limit: 1 });
-        if (!messages || messages.length === 0)
-            throw new Error('No response received from BotFather');
-        const lastMessage = messages[0].message;
-        if (!lastMessage.toLowerCase().includes('use this token'))
-            throw new Error(`Bot creation failed: ${lastMessage}`);
-        const tokenMatch = lastMessage.match(/(\d+:[A-Za-z0-9_-]+)/);
+        if (looksLikeHelp(namePrompt)) {
+            throw new Error(`BotFather out of sync after /newbot: ${namePrompt.slice(0, 160)}`);
+        }
+        baseline = await currentLastId();
+        await ctx.client.sendMessage(entity, { message: options.name });
+        const usernamePrompt = await waitForBotFatherReply(baseline);
+        if (!usernamePrompt)
+            throw new Error('No response from BotFather after sending name');
+        if (looksLikeHelp(usernamePrompt))
+            throw new Error(`BotFather out of sync after name: ${usernamePrompt.slice(0, 160)}`);
+        let botUsername = options.username;
+        const withSuffix = (base) => {
+            const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+            let s = '';
+            for (let i = 0; i < 3; i++)
+                s += chars.charAt(Math.floor(Math.random() * chars.length));
+            return base.replace(/_?bot$/, '') + `_${s}_bot`;
+        };
+        if (!/_bot$/.test(botUsername))
+            botUsername = withSuffix(botUsername);
+        let tokenReply = '';
+        for (let attempt = 0; attempt < 4; attempt++) {
+            baseline = await currentLastId();
+            await ctx.client.sendMessage(entity, { message: botUsername });
+            const reply = await waitForBotFatherReply(baseline);
+            if (!reply)
+                throw new Error('No response from BotFather after sending username');
+            if (reply.toLowerCase().includes('use this token')) {
+                tokenReply = reply;
+                break;
+            }
+            if (/taken|already in use|invalid|try (again|something)|different|sorry/i.test(reply)) {
+                ctx.logger.info(ctx.phoneNumber, `[BOT CREATION] username @${botUsername} rejected, retrying: ${reply.slice(0, 100)}`);
+                botUsername = withSuffix(options.username);
+                continue;
+            }
+            throw new Error(`Bot creation failed: ${reply.slice(0, 200)}`);
+        }
+        if (!tokenReply)
+            throw new Error('Could not obtain bot token after username retries');
+        const tokenMatch = tokenReply.match(/(\d+:[A-Za-z0-9_-]+)/);
         if (!tokenMatch)
             throw new Error('Could not extract bot token from BotFather response');
         const botToken = tokenMatch[0];
@@ -15873,7 +15938,12 @@ let BotsController = class BotsController {
     async createBot(createBotDto) {
         return this.botsService.createBot(createBotDto);
     }
-    async validateAndReplace() {
+    async validateAndReplace(async) {
+        const runInBackground = String(async ?? '').toLowerCase() === 'true' || async === '1';
+        if (runInBackground) {
+            void this.botsService.validateAndReplaceBots().catch(() => undefined);
+            return { started: true, mode: 'async', note: 'running in background; see the Bot Health Check summary notification' };
+        }
         return this.botsService.validateAndReplaceBots();
     }
     async getBots(category) {
@@ -15994,11 +16064,13 @@ __decorate([
     (0, common_1.Post)('validate-and-replace'),
     (0, swagger_1.ApiOperation)({
         summary: 'Validate all bots and auto-replace dead ones',
-        description: 'Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.'
+        description: 'Runs the health check now: getMe every bot, mark 401s inactive, conservatively replace dead bots via BotFather, and top up any category below 2 healthy bots (create → add to channel as admin → verify). Also runs daily on a schedule. Pass ?async=true to start it in the BACKGROUND and return immediately (the full run takes minutes due to human-paced admin promotes); default awaits the summary.'
     }),
-    (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary' }),
+    (0, swagger_1.ApiQuery)({ name: 'async', required: false, description: 'true = fire-and-forget (returns immediately), false/omitted = await the full summary' }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary (or {started:true} when async)' }),
+    __param(0, (0, common_1.Query)('async')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], BotsController.prototype, "validateAndReplace", null);
 __decorate([
@@ -17096,7 +17168,7 @@ let BotsService = BotsService_1 = class BotsService {
         return result;
     }
     sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-    humanDelay(minMs = 60_000, maxMs = 180_000) {
+    humanDelay(minMs = 10_000, maxMs = 20_000) {
         const jitter = minMs + Math.floor(Math.random() * Math.max(1, maxMs - minMs));
         return this.sleep(jitter);
     }
@@ -17189,22 +17261,52 @@ let BotsService = BotsService_1 = class BotsService {
         }
     }
     async provisionBotForCategory(category, channelId, opts = {}) {
-        const creator = await this.pickRandomHealthyUser();
-        if (!creator) {
+        const candidates = await this.pickHealthyCreatorCandidates(5);
+        if (candidates.length === 0) {
             throw new Error('no healthy user account available to create bot');
+        }
+        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
+        let creator = null;
+        let botToken = '';
+        let username = '';
+        let lastErr = null;
+        for (const cand of candidates) {
+            const creatorHandle = cand.username ? `@${cand.username}` : (cand.firstName || 'unknown');
+            const description = `${cand.mobile} ${creatorHandle}`.slice(0, 512);
+            try {
+                const res = await this.telegramService.createBot(cand.mobile, {
+                    name: `${category}`,
+                    username: usernameSeed,
+                    description,
+                    aboutText: description,
+                });
+                if (res?.botToken && this.BOT_TOKEN_REGEX.test(res.botToken)) {
+                    creator = cand;
+                    botToken = res.botToken;
+                    username = res.username;
+                    break;
+                }
+                lastErr = new Error(`BotFather did not return a valid token (got: ${String(res?.botToken).slice(0, 20)})`);
+            }
+            catch (err) {
+                lastErr = err;
+                const msg = err?.message || String(err);
+                if (/BOTFATHER_CANNOT_CREATE|cannot create new bots|too many attempts/i.test(msg)) {
+                    console.warn(`[BotHealth] creator ${cand.mobile} cannot create bots — trying next candidate`);
+                    continue;
+                }
+                if (this.isFloodSignal(err) || /flood|peer_flood/i.test(msg)) {
+                    throw err;
+                }
+                console.warn(`[BotHealth] createBot via ${cand.mobile} failed (${msg.slice(0, 80)}) — trying next`);
+                continue;
+            }
+        }
+        if (!creator || !botToken) {
+            throw lastErr || new Error('all creator candidates failed to create a bot');
         }
         const creatorHandle = creator.username ? `@${creator.username}` : (creator.firstName || 'unknown');
         const description = `${creator.mobile} ${creatorHandle}`.slice(0, 512);
-        const usernameSeed = `${category}`.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
-        const { botToken, username } = await this.telegramService.createBot(creator.mobile, {
-            name: `${category}`,
-            username: usernameSeed,
-            description,
-            aboutText: description,
-        });
-        if (!botToken || !this.BOT_TOKEN_REGEX.test(botToken)) {
-            throw new Error(`BotFather did not return a valid token (got: ${String(botToken).slice(0, 20)})`);
-        }
         const saved = await this.createBot({ token: botToken, category, channelId, description });
         await this.botModel.updateOne({ _id: saved._id }, { $set: { createdByMobile: creator.mobile, ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}), status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } }).exec();
         try {
@@ -17296,13 +17398,15 @@ let BotsService = BotsService_1 = class BotsService {
         const adminMobile = await this.resolveChannelAdminMobile(channelId);
         if (!adminMobile)
             throw new Error(`no controllable admin account found for channel ${channelId}`);
+        const desired = {
+            changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
+            banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
+            anonymous: true, manageCall: true,
+        };
+        const granted = await this.intersectWithPromoterRights(adminMobile, channelId, desired);
         await this.humanDelay();
         try {
-            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, {
-                changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
-                banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
-                anonymous: true, manageCall: true,
-            });
+            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, granted);
         }
         catch (err) {
             if (this.isFloodSignal(err)) {
@@ -17334,46 +17438,82 @@ let BotsService = BotsService_1 = class BotsService {
             .filter(Boolean);
     }
     async resolveChannelAdminMobile(channelId) {
-        for (const managerMobile of this.getChannelManagerMobiles()) {
+        const viewers = [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(15))];
+        let admins = null;
+        for (const viewer of viewers) {
             try {
-                const admins = await this.telegramService.getGroupAdmins(managerMobile, channelId);
-                const adminIds = new Set((Array.isArray(admins) ? admins : []).map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
-                const mgrUser = (await this.usersService.search({ mobile: managerMobile }))[0];
-                const mgrTgId = mgrUser?.tgId ? String(mgrUser.tgId) : null;
-                if (mgrTgId && adminIds.has(mgrTgId)) {
-                    return managerMobile;
+                const res = await this.telegramService.getGroupAdmins(viewer, channelId);
+                if (Array.isArray(res) && res.length > 0) {
+                    admins = res;
+                    break;
                 }
-            }
-            catch {
-            }
-        }
-        const candidates = await this.getHealthyAccountMobiles(15);
-        for (const mobile of candidates) {
-            try {
-                const admins = await this.telegramService.getGroupAdmins(mobile, channelId);
-                if (!Array.isArray(admins) || admins.length === 0)
-                    continue;
-                const adminIds = new Set(admins.map((a) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
-                const ownMobile = await this.matchOwnMobileToAdminIds(adminIds);
-                if (ownMobile)
-                    return ownMobile;
             }
             catch {
                 continue;
             }
         }
-        return null;
-    }
-    async matchOwnMobileToAdminIds(adminIds) {
-        if (adminIds.size === 0)
-            return null;
-        const users = await this.usersService.search({ expired: false });
-        for (const u of users) {
-            if (u.tgId && adminIds.has(String(u.tgId)) && u.session && String(u.session).trim()) {
-                return u.mobile;
+        const healthy = await this.getHealthyAccounts();
+        const byMobile = new Map(healthy.map(u => [u.mobile, u]));
+        try {
+            for (const viewer of viewers) {
+                let about = '';
+                try {
+                    about = await this.telegramService.getChannelAbout(viewer, channelId);
+                }
+                catch {
+                    continue;
+                }
+                if (!about)
+                    continue;
+                for (const m of about.match(/\d{10,13}/g) || []) {
+                    if (byMobile.has(m))
+                        return m;
+                }
+                break;
             }
         }
-        return null;
+        catch { }
+        if (!admins)
+            return null;
+        const byTgId = new Map(healthy.filter(u => u.tgId).map(u => [String(u.tgId), u]));
+        const scored = [];
+        for (const a of admins) {
+            const tgId = String(a?.userId ?? a?.id ?? '');
+            const ours = byTgId.get(tgId);
+            if (!ours)
+                continue;
+            const perms = a?.permissions || {};
+            const isCreator = a?.rank === 'creator';
+            if (!isCreator && !perms.addAdmins)
+                continue;
+            const score = isCreator ? 3 : (perms.postMessages ? 2 : 1);
+            scored.push({ mobile: ours.mobile, score });
+        }
+        if (scored.length === 0)
+            return null;
+        scored.sort((x, y) => y.score - x.score);
+        return scored[0].mobile;
+    }
+    async intersectWithPromoterRights(promoterMobile, channelId, desired) {
+        try {
+            const promoterUser = (await this.usersService.search({ mobile: promoterMobile }))[0];
+            const promoterTgId = promoterUser?.tgId ? String(promoterUser.tgId) : null;
+            if (!promoterTgId)
+                return desired;
+            const admins = await this.telegramService.getGroupAdmins(promoterMobile, channelId);
+            const me = (Array.isArray(admins) ? admins : []).find((a) => String(a?.userId ?? a?.id) === promoterTgId);
+            const perms = me?.permissions;
+            if (!perms || me?.rank === 'creator')
+                return desired;
+            const capped = {};
+            for (const [k, v] of Object.entries(desired)) {
+                capped[k] = k === 'anonymous' ? v : Boolean(v && perms[k]);
+            }
+            return capped;
+        }
+        catch {
+            return desired;
+        }
     }
     shuffle(arr) {
         const a = [...arr];
@@ -17383,24 +17523,19 @@ let BotsService = BotsService_1 = class BotsService {
         }
         return a;
     }
-    async pickRandomHealthyUser() {
-        for (const managerMobile of this.getChannelManagerMobiles()) {
-            const u = (await this.usersService.search({ mobile: managerMobile }))[0];
-            if (u && u.session && String(u.session).trim()) {
-                return { mobile: u.mobile, username: u.username, firstName: u.firstName };
-            }
-        }
+    async getHealthyAccounts() {
         const users = await this.usersService.search({ expired: false });
-        const healthy = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
-        if (healthy.length === 0)
-            return null;
-        const pick = healthy[0];
-        return { mobile: pick.mobile, username: pick.username, firstName: pick.firstName };
+        return this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
+    }
+    async pickHealthyCreatorCandidates(n) {
+        const managerMobiles = new Set(this.getChannelManagerMobiles());
+        const accounts = await this.usersService.getBotCreatorAccounts(Math.max(n * 3, 30));
+        const usable = accounts.filter(u => u.mobile && !managerMobiles.has(u.mobile));
+        return usable.slice(0, Math.max(1, n)).map(u => ({ mobile: u.mobile, username: u.username, firstName: u.firstName }));
     }
     async getHealthyAccountMobiles(limit) {
         const managers = this.getChannelManagerMobiles();
-        const users = await this.usersService.search({ expired: false });
-        const others = this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile).map(u => u.mobile));
+        const others = (await this.getHealthyAccounts()).map(u => u.mobile);
         const ordered = [];
         for (const m of [...managers, ...others]) {
             if (m && !ordered.includes(m))
@@ -40592,6 +40727,27 @@ let UsersService = UsersService_1 = class UsersService {
     }
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
+    }
+    async getBotCreatorAccounts(limit = 40, foreignOnly = false) {
+        const base = {
+            expired: { $ne: true },
+            session: { $exists: true, $nin: [null, ''] },
+            mobile: { $exists: true, $nin: [null, ''] },
+        };
+        const sample = async (matchExtra, n) => {
+            if (n <= 0)
+                return [];
+            return this.userModel.aggregate([
+                { $match: { ...base, ...matchExtra } },
+                { $sample: { size: n } },
+            ]).exec();
+        };
+        const foreign = await sample({ mobile: { ...base.mobile, $not: /^\+?91/ } }, limit);
+        if (foreignOnly || foreign.length >= limit)
+            return foreign.slice(0, limit);
+        const seen = new Set(foreign.map(u => u.mobile));
+        const fill = (await sample({}, limit)).filter(u => !seen.has(u.mobile));
+        return [...foreign, ...fill].slice(0, limit);
     }
     hasQueryConstraint(query, field) {
         if (!query || typeof query !== 'object')
