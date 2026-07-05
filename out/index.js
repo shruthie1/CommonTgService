@@ -16484,6 +16484,8 @@ let BotsService = BotsService_1 = class BotsService {
         this.flushInterval = 300000;
         this.maxPendingUpdates = 100;
         this.maxReplacementsPerRun = 1;
+        this.minHealthyBotsPerCategory = 2;
+        this.maxTopUpsPerRun = 2;
         this.healthCheckJob = null;
         this.flushTimer = null;
         this.destroyed = false;
@@ -17117,7 +17119,7 @@ let BotsService = BotsService_1 = class BotsService {
     async validateAndReplaceBots() {
         if (this.replaceInProgress) {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
-            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, failures: ['already running (this pod)'] };
+            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0, failures: ['already running (this pod)'] };
         }
         this.replaceInProgress = true;
         const failures = [];
@@ -17168,16 +17170,25 @@ let BotsService = BotsService_1 = class BotsService {
                     }
                 }
             }
-            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, deadRemaining: deadBots.length - replaced, failures });
-            return { checked: bots.length, alive, dead, unknown, replaced, failures };
+            let toppedUp = 0;
+            try {
+                const topUp = await this.topUpCategoriesToMinHealthy();
+                toppedUp = topUp.toppedUp;
+                failures.push(...topUp.topUpFailures);
+            }
+            catch (err) {
+                const msg = `top-up pass failed: ${err?.message || err}`;
+                failures.push(msg);
+                (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, false);
+            }
+            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures };
         }
         finally {
             this.replaceInProgress = false;
         }
     }
-    async replaceDeadBot(deadBot) {
-        const category = deadBot.category;
-        const channelId = deadBot.channelId;
+    async provisionBotForCategory(category, channelId, opts = {}) {
         const creator = await this.pickRandomHealthyUser();
         if (!creator) {
             throw new Error('no healthy user account available to create bot');
@@ -17195,7 +17206,7 @@ let BotsService = BotsService_1 = class BotsService {
             throw new Error(`BotFather did not return a valid token (got: ${String(botToken).slice(0, 20)})`);
         }
         const saved = await this.createBot({ token: botToken, category, channelId, description });
-        await this.botModel.updateOne({ _id: saved._id }, { $set: { createdByMobile: creator.mobile, replacedBotUsername: deadBot.username, status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } }).exec();
+        await this.botModel.updateOne({ _id: saved._id }, { $set: { createdByMobile: creator.mobile, ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}), status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } }).exec();
         try {
             const botId = await this.addBotToChannelAsAdmin(channelId, botToken, username);
             const verified = await this.verifyBotIsChannelAdmin(channelId, botId);
@@ -17203,21 +17214,79 @@ let BotsService = BotsService_1 = class BotsService {
                 throw new Error('post-add verification failed: bot is not listed as an admin of the channel');
             }
             await this.botModel.updateOne({ _id: saved._id }, { $set: { status: 'active' }, $unset: { deadReason: '' } }).exec();
-            try {
-                await this.botModel.deleteOne({ token: deadBot.token }).exec();
-            }
-            catch { }
             await this.flushPendingStats();
             this.cache.flushAll();
+            console.log(`[BotHealth] provisioned @${username} (${category}) via ${creator.mobile} — active`);
+            return { saved, username, active: true };
         }
         catch (err) {
             (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
-            await this.notify(`<b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
-            console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) — created but NOT yet admin (inactive)`);
+            await this.notify(`<b>Bot created but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
+            console.log(`[BotHealth] provisioned @${username} (${category}) — created but NOT yet admin (inactive)`);
+            return { saved, username, active: false };
+        }
+    }
+    async replaceDeadBot(deadBot) {
+        const { saved, active } = await this.provisionBotForCategory(deadBot.category, deadBot.channelId, {
+            replacesUsername: deadBot.username,
+        });
+        if (!active) {
             return null;
         }
-        console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) via ${creator.mobile} — active`);
+        try {
+            await this.botModel.deleteOne({ token: deadBot.token }).exec();
+        }
+        catch { }
+        console.log(`[BotHealth] replaced dead @${deadBot.username} (${deadBot.category}) — active`);
         return saved;
+    }
+    async topUpCategoriesToMinHealthy() {
+        const topUpFailures = [];
+        let toppedUp = 0;
+        const all = await this.botModel.find().lean().exec();
+        const byCategory = all.reduce((acc, b) => {
+            (acc[b.category] = acc[b.category] || []).push(b);
+            return acc;
+        }, {});
+        for (const [category, list] of Object.entries(byCategory)) {
+            if (toppedUp >= this.maxTopUpsPerRun) {
+                topUpFailures.push(`top-up cap (${this.maxTopUpsPerRun}) reached — remaining low categories deferred to next run`);
+                break;
+            }
+            const liveCount = list.filter(b => b.status !== 'inactive').length;
+            const deficit = this.minHealthyBotsPerCategory - liveCount;
+            if (deficit <= 0)
+                continue;
+            const channelId = list[0]?.channelId;
+            if (!channelId) {
+                topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
+                continue;
+            }
+            const need = Math.min(deficit, this.maxTopUpsPerRun - toppedUp);
+            for (let i = 0; i < need; i++) {
+                try {
+                    const { active, username } = await this.provisionBotForCategory(category, channelId);
+                    if (active) {
+                        toppedUp++;
+                        console.log(`[BotHealth] topped up ${category}: added @${username} (was ${liveCount}/${this.minHealthyBotsPerCategory})`);
+                    }
+                    else {
+                        topUpFailures.push(`${category}: created @${username} but not yet admin (inactive)`);
+                    }
+                }
+                catch (err) {
+                    const msg = `top-up ${category}: ${err?.message || err}`;
+                    topUpFailures.push(msg);
+                    (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, false);
+                    if (this.isFloodSignal(err) || /flood|too many|rate/i.test(err?.message || '')) {
+                        topUpFailures.push('flood/rate signal — aborting further top-ups this run');
+                        return { toppedUp, topUpFailures };
+                    }
+                    break;
+                }
+            }
+        }
+        return { toppedUp, topUpFailures };
     }
     async addBotToChannelAsAdmin(channelId, botToken, botUsername) {
         const botInfo = await this.telegramService.getBotInfo(botToken);
@@ -17353,7 +17422,7 @@ let BotsService = BotsService_1 = class BotsService {
         const lines = [
             '<b>Bot Health Check</b>',
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
-            `Replaced this run: ${s.replaced} | Dead remaining: ${s.deadRemaining}`,
+            `Replaced: ${s.replaced} | Topped up: ${s.toppedUp} | Dead remaining: ${s.deadRemaining}`,
         ];
         if (s.failures.length) {
             const shown = s.failures.slice(0, 10).map(f => `• ${f}`);

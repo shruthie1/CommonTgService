@@ -16,6 +16,7 @@ export declare class BotsController {
         dead: number;
         unknown: number;
         replaced: number;
+        toppedUp: number;
         failures: string[];
     }>;
     getBots(category?: ChannelCategory): Promise<import("./schemas/bot.schema").BotDocument[]>;
