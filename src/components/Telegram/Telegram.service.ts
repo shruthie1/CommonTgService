@@ -27,6 +27,7 @@ import { ConnectionStatusDto, GetClientOptionsDto } from './dto/connection-manag
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import isPermanentError from '../../utils/isPermanentError';
+import isDeadChannelError from '../../utils/isDeadChannelError';
 import { SendTgMessageDto } from './dto/send-message.dto';
 import { getDialogs } from 'telegram/client/dialogs';
 import { getTelegramChannelLiveFacts } from '../../utils/telegram-utils/channel-live-facts';
@@ -168,22 +169,27 @@ export class TelegramService implements OnModuleDestroy {
     };
 
     async removeChannels(error: any, channelId: string, username: string, mobile: string) {
-        if (error.errorMessage == "USERNAME_INVALID" || error.errorMessage == 'CHAT_INVALID' || error.errorMessage == 'USERS_TOO_MUCH' || error.toString().includes("No user has")) {
-            // try {
-            //     if (channelId) {
-            //         await this.channelsService.remove(channelId)
-            //         await this.activeChannelsService.remove(channelId);
-            //         this.logger.debug(mobile, `Removed Channel:  [${channelId}]`);
-            //     } else {
-            //         const channelDetails = (await this.channelsService.search({ username: username }))[0];
-            //         await this.channelsService.remove(channelDetails.channelId)
-            //         await this.activeChannelsService.remove(channelDetails.channelId);
-            //         this.logger.debug(mobile, `Removed Channel: [${channelDetails.channelId}]`);
-            //     }
-            // } catch (searchError) {
-            //     this.logger.debug(mobile, "Failed to search/remove channel: ", searchError);
-            // }
-
+        // Dead channel: username no longer resolves (USERNAME_INVALID / USERNAME_NOT_OCCUPIED /
+        // "No user has X as username"). Permanent at the channel level — delete from both
+        // collections so it is never re-queued. Central choke point: every join path
+        // (queue + /joinchannel endpoint) routes through tryJoiningChannel -> here.
+        if (isDeadChannelError(error)) {
+            try {
+                let deadId = channelId;
+                if (!deadId && username) {
+                    const found = (await this.channelsService.search({ username }))[0];
+                    deadId = found?.channelId;
+                }
+                if (deadId) {
+                    await this.channelsService.remove(deadId);
+                    await this.activeChannelsService.remove(deadId);
+                    this.logger.debug(mobile, `Removed dead channel [${deadId}] @${username}`);
+                } else {
+                    this.logger.debug(mobile, `Dead channel @${username} but no channelId to remove`);
+                }
+            } catch (searchError) {
+                this.logger.debug(mobile, "Failed to remove dead channel: ", parseError(searchError));
+            }
         } else if (error.errorMessage === "CHANNEL_PRIVATE") {
             await this.channelsService.update(channelId, { private: true })
             await this.activeChannelsService.update(channelId, { private: true });

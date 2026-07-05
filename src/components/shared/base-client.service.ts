@@ -23,6 +23,7 @@ import { TelegramClient } from 'telegram';
 import { computeCheck } from 'telegram/Password';
 import { StringSession } from 'telegram/sessions';
 import isPermanentError from '../../utils/isPermanentError';
+import isDeadChannelError from '../../utils/isDeadChannelError';
 import { BotsService, ChannelCategory } from '../bots';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { generateTGConfig } from '../Telegram/utils/generateTGConfig';
@@ -1762,7 +1763,21 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 );
                 const rawErrorMessage = this.getErrorText(error);
 
-                if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
+                if (rawErrorMessage === 'INVITE_REQUEST_SENT') {
+                    // NOT a failure: the channel requires admin approval and our join
+                    // request was accepted (pending approval). Count it as a successful
+                    // attempt, do NOT re-queue, do NOT increment failure counts.
+                    this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
+                    joinCount++;
+                    this.incrementDailyJoinCount(mobile);
+                } else if (isDeadChannelError(error)) {
+                    // Channel username no longer resolves (renamed/deleted/never existed).
+                    // Permanent at the CHANNEL level: do NOT re-queue (it fails forever).
+                    // tryJoiningChannel -> removeChannels already deleted it from both
+                    // collections, so it won't be re-queued on the next refill either.
+                    this.logger.warn(`${mobile} dead channel @${currentChannel?.username ?? 'unknown'} (${rawErrorMessage}) — dropped from queue`);
+                    // Deliberately do NOT unshift currentChannel back into the queue.
+                } else if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
 
