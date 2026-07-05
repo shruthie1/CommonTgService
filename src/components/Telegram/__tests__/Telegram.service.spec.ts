@@ -176,10 +176,13 @@ function makeServices() {
     const activeChannelsService: any = {
         update: jest.fn().mockResolvedValue(undefined),
         createMultiple: jest.fn().mockResolvedValue(undefined),
+        remove: jest.fn().mockResolvedValue(undefined),
     };
     const channelsService: any = {
         update: jest.fn().mockResolvedValue(undefined),
         createMultiple: jest.fn().mockResolvedValue(undefined),
+        remove: jest.fn().mockResolvedValue(undefined),
+        search: jest.fn().mockResolvedValue([]),
     };
     const bufferClientService: any = {
         model: { find: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([{ tgId: 'b1', mobile: '111' }]) }) },
@@ -511,10 +514,12 @@ describe('TelegramService — channel join / removeChannels', () => {
         expect(fakeManager.joinChannel).toHaveBeenCalledWith('chan');
     });
 
-    test('tryJoiningChannel handles "No user has" (frozen account) then rethrows', async () => {
-        const err = new Error('No user has this');
-        const { svc } = makeService({ joinChannel: jest.fn().mockRejectedValue(err) });
+    test('tryJoiningChannel deletes dead channel on "No user has" then rethrows', async () => {
+        const err = new Error('No user has "chan" as username');
+        const { svc, services } = makeService({ joinChannel: jest.fn().mockRejectedValue(err) });
         await expect(svc.tryJoiningChannel('m', { username: 'chan', channelId: 'id1' } as any)).rejects.toThrow('No user has');
+        expect(services.channelsService.remove).toHaveBeenCalledWith('id1');
+        expect(services.activeChannelsService.remove).toHaveBeenCalledWith('id1');
     });
 
     test('tryJoiningChannel CHANNEL_PRIVATE error updates channel as private and rethrows', async () => {
@@ -523,12 +528,56 @@ describe('TelegramService — channel join / removeChannels', () => {
         await expect(svc.tryJoiningChannel('m', { username: 'chan', channelId: 'id1' } as any)).rejects.toBe(err);
         expect(services.channelsService.update).toHaveBeenCalledWith('id1', { private: true });
         expect(services.activeChannelsService.update).toHaveBeenCalledWith('id1', { private: true });
+        // CHANNEL_PRIVATE is NOT a dead channel — must not delete
+        expect(services.channelsService.remove).not.toHaveBeenCalled();
+        expect(services.activeChannelsService.remove).not.toHaveBeenCalled();
     });
 
-    test('removeChannels no-op for USERNAME_INVALID', async () => {
-        const { svc, services } = makeService();
-        await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, 'id', 'u', 'm');
-        expect(services.channelsService.update).not.toHaveBeenCalled();
+    describe('removeChannels', () => {
+        test('deletes from both collections for USERNAME_INVALID (by channelId)', async () => {
+            const { svc, services } = makeService();
+            await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, 'id1', 'u', 'm');
+            expect(services.channelsService.remove).toHaveBeenCalledWith('id1');
+            expect(services.activeChannelsService.remove).toHaveBeenCalledWith('id1');
+        });
+
+        test('deletes for "No user has" plain-text message', async () => {
+            const { svc, services } = makeService();
+            await svc.removeChannels(new Error('m :: No user has "x" as username'), 'id2', 'x', 'm');
+            expect(services.channelsService.remove).toHaveBeenCalledWith('id2');
+            expect(services.activeChannelsService.remove).toHaveBeenCalledWith('id2');
+        });
+
+        test('resolves channelId via search when only username is known', async () => {
+            const { svc, services } = makeService();
+            services.channelsService.search.mockResolvedValueOnce([{ channelId: 'resolved-id' }]);
+            await svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, '', 'someuser', 'm');
+            expect(services.channelsService.search).toHaveBeenCalledWith({ username: 'someuser' });
+            expect(services.channelsService.remove).toHaveBeenCalledWith('resolved-id');
+            expect(services.activeChannelsService.remove).toHaveBeenCalledWith('resolved-id');
+        });
+
+        test('does NOT delete for CHANNEL_PRIVATE (marks private instead)', async () => {
+            const { svc, services } = makeService();
+            await svc.removeChannels({ errorMessage: 'CHANNEL_PRIVATE' }, 'id1', 'u', 'm');
+            expect(services.channelsService.remove).not.toHaveBeenCalled();
+            expect(services.channelsService.update).toHaveBeenCalledWith('id1', { private: true });
+        });
+
+        test('does NOT delete for CHAT_INVALID / flood / other errors', async () => {
+            const { svc, services } = makeService();
+            await svc.removeChannels({ errorMessage: 'CHAT_INVALID' }, 'id1', 'u', 'm');
+            await svc.removeChannels({ errorMessage: 'CHANNELS_TOO_MUCH' }, 'id1', 'u', 'm');
+            await svc.removeChannels(new Error('A wait of 300 seconds is required'), 'id1', 'u', 'm');
+            expect(services.channelsService.remove).not.toHaveBeenCalled();
+            expect(services.activeChannelsService.remove).not.toHaveBeenCalled();
+        });
+
+        test('swallows deletion errors (does not throw)', async () => {
+            const { svc, services } = makeService();
+            services.channelsService.remove.mockRejectedValueOnce(new Error('db down'));
+            await expect(svc.removeChannels({ errorMessage: 'USERNAME_INVALID' }, 'id1', 'u', 'm')).resolves.not.toThrow();
+        });
     });
 });
 

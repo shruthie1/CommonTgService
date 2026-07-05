@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestj
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { BotsService } from './bots.service';
 import { Bot } from './schemas/bot.schema';
-import { ChannelCategory } from './bots.service';
+import { ChannelCategory } from './channel-category.enum';
 
 // Import DTOs
 import { CreateBotDto } from './dto/create-bot.dto';

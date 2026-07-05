@@ -1,7 +1,7 @@
 import { sleep } from 'telegram/Helpers';
 import { ClientHelperUtils } from './client-helper.utils';
 import TelegramManager from '../Telegram/TelegramManager';
-import { Logger } from '../../utils';
+import { Logger } from '../../utils/logger';
 
 const logger = new Logger('OrganicActivity');
 

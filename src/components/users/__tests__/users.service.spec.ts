@@ -1028,8 +1028,9 @@ describe('UsersService (real Mongo)', () => {
                 .map((d) => d.param)
                 .filter((p) => p && typeof p.forwardRef === 'function');
 
-            // 4 forwardRef params: TelegramService, ClientService, BufferClientService, PromoteClientService
-            expect(refs.length).toBe(4);
+            // 5 forwardRef params: TelegramService, ClientService, BotsService,
+            // BufferClientService, PromoteClientService
+            expect(refs.length).toBe(5);
             for (const ref of refs) {
                 const resolved = ref.forwardRef();
                 expect(typeof resolved).toBe('function'); // resolves to a class

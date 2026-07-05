@@ -99,6 +99,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         };
         const usersService = {
             search: jest.fn(async ({ mobile }: { mobile: string }) => [{ tgId: `tg-${mobile}`, mobile, session: `backup-${mobile}` }]),
+            findByMobileAnyStatus: jest.fn(async (mobile: string) => [{ tgId: `tg-${mobile}`, mobile, session: `backup-${mobile}` }]),
+            backfillFromPool: jest.fn(async () => null),
             update: jest.fn(async () => 1),
             expireAccount: jest.fn(async () => undefined),
         };
@@ -1069,15 +1071,20 @@ describe('session helpers', () => {
         expect(await service.pub.getOrEnsureDistinctUsersBackupSession('m1', '')).toBeNull();
     });
 
-    test('getOrEnsureDistinctUsersBackupSession throws when user missing', async () => {
-        const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([]);
+    test('getOrEnsureDistinctUsersBackupSession throws when user missing and backfill impossible', async () => {
+        // No users doc AND the pool doc can't seed a backfill → the self-heal path fails,
+        // so it throws NotFoundException.
+        const service = new TestBaseService({
+            findOne: () => ({ lean: () => ({ exec: async () => null }) }),
+        });
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([]);
+        service.usersServiceMock.backfillFromPool.mockResolvedValueOnce(null);
         await expect(service.pub.getOrEnsureDistinctUsersBackupSession('m1', 'active')).rejects.toThrow(/User not found/);
     });
 
     test('getOrEnsureDistinctUsersBackupSession reuses valid existing backup', async () => {
         const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'existing-backup' }]);
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'existing-backup' }]);
         const user = await service.pub.getOrEnsureDistinctUsersBackupSession('m1', 'active');
         expect(user?.session).toBe('existing-backup');
         expect(service.usersServiceMock.update).not.toHaveBeenCalled();
@@ -1085,7 +1092,7 @@ describe('session helpers', () => {
 
     test('getOrEnsureDistinctUsersBackupSession creates a new backup when needed', async () => {
         const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'active' }]);
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'active' }]);
         service.telegramServiceMock.createNewSession.mockResolvedValueOnce('fresh-backup');
         const user = await service.pub.getOrEnsureDistinctUsersBackupSession('m1', 'active');
         expect(user?.session).toBe('fresh-backup');
@@ -1094,14 +1101,14 @@ describe('session helpers', () => {
 
     test('getOrEnsureDistinctUsersBackupSession returns null when no distinct backup can be created', async () => {
         const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'active' }]);
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'active' }]);
         service.telegramServiceMock.createNewSession.mockResolvedValue('active');
         expect(await service.pub.getOrEnsureDistinctUsersBackupSession('m1', 'active')).toBeNull();
     });
 
     test('ensureDistinctUsersBackupSession returns boolean', async () => {
         const service = new TestBaseService();
-        service.usersServiceMock.search.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'existing-backup' }]);
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([{ tgId: 'tg-1', session: 'existing-backup' }]);
         expect(await service.pub.ensureDistinctUsersBackupSession('m1', 'active')).toBe(true);
     });
 
@@ -2479,13 +2486,13 @@ describe('helper fallback branches', () => {
         });
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        // deactivateClient returns false (updateStatus throws) -> "inactive update failed" path (line 1083).
+        // deactivateClient returns false (updateStatus throws) -> "inactivate FAILED" path.
         service.updateStatusMock.mockRejectedValueOnce(new Error('db down'));
         const doc: any = { mobile: '919990000320', tgId: 'tg-320', warmupPhase: WarmupPhase.SETTLING };
         const n = await service.pub.set2fa(doc, 0);
         expect(n).toBe(0);
         const notice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => typeof body === 'string' && body.includes('FOREIGN 2FA') && body.includes('inactive update failed'),
+            ([, body]: any[]) => typeof body === 'string' && body.includes('FOREIGN 2FA') && body.includes('inactivate FAILED'),
         );
         expect(notice).toBeDefined();
     });

@@ -1,5 +1,5 @@
 import { BotsController } from '../bots.controller';
-import { ChannelCategory } from '../bots.service';
+import { ChannelCategory } from '../channel-category.enum';
 
 function makeService(overrides: any = {}) {
   return {

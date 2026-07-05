@@ -7,7 +7,7 @@ import { ConnectionStatusDto } from '../dto/connection-management.dto';
 import { withTimeout } from '../../../utils/withTimeout';
 import { sleep } from 'telegram/Helpers';
 import { getBotsServiceInstance } from '../../../utils';
-import { ChannelCategory } from '../../bots/bots.service';
+import { ChannelCategory } from '../../bots/channel-category.enum';
 import isPermanentError from '../../../utils/isPermanentError';
 
 interface User {

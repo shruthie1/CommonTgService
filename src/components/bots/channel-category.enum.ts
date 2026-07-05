@@ -1,0 +1,31 @@
+/**
+ * Notification channel categories.
+ *
+ * Kept in its own file (not bots.service.ts) so DTOs/validators can import it
+ * WITHOUT pulling in bots.service — which transitively imports TelegramService and
+ * creates a circular import. That cycle left `ChannelCategory` undefined when the
+ * `@IsEnum(ChannelCategory)` decorator in create-bot.dto.ts evaluated at load time,
+ * crashing class-validator ("Cannot convert undefined or null to object").
+ */
+export enum ChannelCategory {
+    CLIENT_UPDATES = 'CLIENT_UPDATES',
+    USER_WARNINGS = 'USER_WARNINGS',
+    VC_WARNINGS = 'VC_WARNINGS',
+    USER_REQUESTS = 'USER_REQUESTS',
+    VC_NOTIFICATIONS = 'VC_NOTIFICATIONS',
+    CHANNEL_NOTIFICATIONS = 'CHANNEL_NOTIFICATIONS',
+    ACCOUNT_NOTIFICATIONS = 'ACCOUNT_NOTIFICATIONS',
+    ACCOUNT_LOGIN_FAILURES = 'ACCOUNT_LOGIN_FAILURES',
+    ACCOUNT_LOGINS = 'ACCOUNT_LOGINS',
+    PROMOTION_ACCOUNT = 'PROMOTION_ACCOUNT',
+    CLIENT_ACCOUNT = 'CLIENT_ACCOUNT',
+    PAYMENT_FAIL_QUERIES = 'PAYMENT_FAIL_QUERIES',
+    SAVED_MESSAGES = 'SAVED_MESSAGES',
+    HTTP_FAILURES = 'HTTP_FAILURES',
+    UNVDS = 'UNVDS',
+    PROM_LOGS1 = 'PROM_LOGS1',
+    PROM_LOGS2 = 'PROM_LOGS2',
+    UNAUTH_CALLS = 'UNAUTH_CALLS',
+    CLIENT_PROMOTIONS_1 = 'CLIENT_PROMOTIONS_1',
+    CLIENT_PROMOTIONS_2 = 'CLIENT_PROMOTIONS_2',
+}

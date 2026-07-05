@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEnum, IsOptional } from 'class-validator';
-import { ChannelCategory } from '../bots.service';
+import { ChannelCategory } from '../channel-category.enum';
 
 export class CreateBotDto {
     @ApiProperty({

@@ -10,7 +10,7 @@ import { ChannelsService } from '../channels/channels.service';
 import { parseError } from '../../utils/parseError';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SessionService } from '../session-manager';
-import { Logger } from '../../utils';
+import { Logger } from '../../utils/logger';
 import { ActiveChannel } from '../active-channels';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import TelegramManager from '../Telegram/TelegramManager';
@@ -24,7 +24,8 @@ import { computeCheck } from 'telegram/Password';
 import { StringSession } from 'telegram/sessions';
 import isPermanentError from '../../utils/isPermanentError';
 import isDeadChannelError from '../../utils/isDeadChannelError';
-import { BotsService, ChannelCategory } from '../bots';
+import type { BotsService } from '../bots/bots.service';
+import { ChannelCategory } from '../bots/channel-category.enum';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { generateTGConfig } from '../Telegram/utils/generateTGConfig';
 import { ClientHelperUtils } from './client-helper.utils';
@@ -1767,9 +1768,15 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     // NOT a failure: the channel requires admin approval and our join
                     // request was accepted (pending approval). Count it as a successful
                     // attempt, do NOT re-queue, do NOT increment failure counts.
+                    // Persist the increment here: the post-loop success increment is skipped
+                    // because tryJoiningChannel threw, so without this the count drifts.
                     this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
-                    joinCount++;
                     this.incrementDailyJoinCount(mobile);
+                    try {
+                        await this.model.updateOne({ mobile }, { $inc: { channels: 1 } });
+                    } catch (incError) {
+                        this.logger.warn(`Failed to persist invite-request join for ${mobile}: ${this.getErrorText(incError)}`);
+                    }
                 } else if (isDeadChannelError(error)) {
                     // Channel username no longer resolves (renamed/deleted/never existed).
                     // Permanent at the CHANNEL level: do NOT re-queue (it fails forever).

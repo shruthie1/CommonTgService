@@ -139,6 +139,9 @@ class TestClientService extends BaseClientService<BufferClientDocument> {
   public getJoinMap() {
     return this.joinChannelMap;
   }
+  public getJoinFailureCount(mobile: string): number {
+    return this.joinFailureCounts.get(mobile) || 0;
+  }
   public getLeaveMap() {
     return this.leaveChannelMap;
   }
@@ -298,6 +301,73 @@ describe('BaseClientService (real Mongo)', () => {
       // otherwise the DB channel count drifts below reality and the
       // growing→maturing readiness gate is mis-evaluated.
       expect(after!.channels).toBe(52);
+    });
+
+    test('dead channel (USERNAME_INVALID) is NOT re-queued and NOT counted as a failure', async () => {
+      const doc = await seed({ channels: 50 });
+      const mobile = doc.mobile;
+
+      // Single channel that fails with a dead-channel error on join.
+      const err: any = new Error('USERNAME_INVALID'); err.errorMessage = 'USERNAME_INVALID';
+      const tryJoiningChannel = jest.fn().mockRejectedValue(err);
+      const telegramService = { tryJoiningChannel, getChannelInfo: jest.fn(async () => ({ ids: [] })) };
+      const activeChannelsService = { findOne: jest.fn(async () => null), incrementClientsJoined: jest.fn(async () => {}) };
+      mockGetClient.mockResolvedValue({});
+
+      const svc = new TestClientService(model, { telegramService, activeChannelsService } as any);
+      svc.setJoinMap(mobile, [{ channelId: 'dead1', username: 'udead1', canSendMsgs: true }]);
+
+      await svc.callProcessJoinSeq();
+
+      // NOT re-queued: the mobile's channel list must not contain the dead channel again.
+      const remaining = svc.getJoinMap().get(mobile) || [];
+      expect(remaining.find((c: any) => c.channelId === 'dead1')).toBeUndefined();
+      // NOT counted as a transient failure (that would wrongly quarantine a healthy account).
+      expect(svc.getJoinFailureCount(mobile)).toBe(0);
+    });
+
+    test('INVITE_REQUEST_SENT counts as success (channel incremented), not re-queued, no failure', async () => {
+      const doc = await seed({ channels: 50 });
+      const mobile = doc.mobile;
+
+      const err: any = new Error('INVITE_REQUEST_SENT'); err.errorMessage = 'INVITE_REQUEST_SENT';
+      const tryJoiningChannel = jest.fn().mockRejectedValue(err);
+      const telegramService = { tryJoiningChannel, getChannelInfo: jest.fn(async () => ({ ids: [] })) };
+      const activeChannelsService = { findOne: jest.fn(async () => null), incrementClientsJoined: jest.fn(async () => {}) };
+      mockGetClient.mockResolvedValue({});
+
+      const svc = new TestClientService(model, { telegramService, activeChannelsService } as any);
+      svc.setJoinMap(mobile, [{ channelId: 'approval1', username: 'uapproval1', canSendMsgs: true }]);
+
+      await svc.callProcessJoinSeq();
+
+      // Treated as a successful join attempt → channel count incremented (50 + 1 = 51).
+      const after = await model.findOne({ mobile }).exec();
+      expect(after!.channels).toBe(51);
+      // Not re-queued, not a failure.
+      const remaining = svc.getJoinMap().get(mobile) || [];
+      expect(remaining.find((c: any) => c.channelId === 'approval1')).toBeUndefined();
+      expect(svc.getJoinFailureCount(mobile)).toBe(0);
+    });
+
+    test('genuine transient error (TIMEOUT) IS re-queued and counted as failure (regression guard)', async () => {
+      const doc = await seed({ channels: 50 });
+      const mobile = doc.mobile;
+
+      const tryJoiningChannel = jest.fn().mockRejectedValue(new Error('TIMEOUT'));
+      const telegramService = { tryJoiningChannel, getChannelInfo: jest.fn(async () => ({ ids: [] })) };
+      const activeChannelsService = { findOne: jest.fn(async () => null), incrementClientsJoined: jest.fn(async () => {}) };
+      mockGetClient.mockResolvedValue({});
+
+      const svc = new TestClientService(model, { telegramService, activeChannelsService } as any);
+      svc.setJoinMap(mobile, [{ channelId: 'flaky1', username: 'uflaky1', canSendMsgs: true }]);
+
+      await svc.callProcessJoinSeq();
+
+      // Transient: channel restored to the front of the queue AND failure counted.
+      const remaining = svc.getJoinMap().get(mobile) || [];
+      expect(remaining.find((c: any) => c.channelId === 'flaky1')).toBeDefined();
+      expect(svc.getJoinFailureCount(mobile)).toBe(1);
     });
   });
 

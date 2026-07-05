@@ -4,7 +4,7 @@ import { generateTGConfig as generateRealisticConfig, type TGClientConfig } from
 import { SocksClient } from "socks";
 import https from "https";
 import http from "http";
-import { Logger } from "../../../utils";
+import { Logger } from "../../../utils/logger";
 import { RedisClient } from "../../../utils/redisClient";
 
 const logger = new Logger("TGConfig");

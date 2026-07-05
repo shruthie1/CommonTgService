@@ -11,28 +11,9 @@ import { Bot, BotDocument } from './schemas/bot.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { UsersService } from '../users/users.service';
 
-export enum ChannelCategory {
-    CLIENT_UPDATES = 'CLIENT_UPDATES',
-    USER_WARNINGS = 'USER_WARNINGS',
-    VC_WARNINGS = 'VC_WARNINGS',
-    USER_REQUESTS = 'USER_REQUESTS',
-    VC_NOTIFICATIONS = 'VC_NOTIFICATIONS',
-    CHANNEL_NOTIFICATIONS = 'CHANNEL_NOTIFICATIONS',
-    ACCOUNT_NOTIFICATIONS = 'ACCOUNT_NOTIFICATIONS',
-    ACCOUNT_LOGIN_FAILURES = 'ACCOUNT_LOGIN_FAILURES',
-    ACCOUNT_LOGINS = 'ACCOUNT_LOGINS',
-    PROMOTION_ACCOUNT = 'PROMOTION_ACCOUNT',
-    CLIENT_ACCOUNT = 'CLIENT_ACCOUNT',
-    PAYMENT_FAIL_QUERIES = 'PAYMENT_FAIL_QUERIES',
-    SAVED_MESSAGES = 'SAVED_MESSAGES',
-    HTTP_FAILURES = 'HTTP_FAILURES',
-    UNVDS = 'UNVDS',
-    PROM_LOGS1 = 'PROM_LOGS1',
-    PROM_LOGS2 = 'PROM_LOGS2',
-    UNAUTH_CALLS = 'UNAUTH_CALLS',
-    CLIENT_PROMOTIONS_1 = 'CLIENT_PROMOTIONS_1',
-    CLIENT_PROMOTIONS_2 = 'CLIENT_PROMOTIONS_2',
-}
+// ChannelCategory lives in ./channel-category.enum to break a circular import
+// (create-bot.dto -> bots.service -> TelegramService -> ... -> create-bot.dto).
+import { ChannelCategory } from './channel-category.enum';
 
 /** Minimal fields the replacement flow needs from a dead bot (plain, not a Mongoose doc). */
 export interface DeadBotInfo {

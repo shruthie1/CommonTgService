@@ -8,7 +8,8 @@ import axios from 'axios';
 import { Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
-import { BotsService, ChannelCategory } from '../bots.service';
+import { BotsService } from '../bots.service';
+import { ChannelCategory } from '../channel-category.enum';
 import { Bot, BotSchema, BotDocument } from '../schemas/bot.schema';
 import { NotFoundException } from '@nestjs/common';
 
@@ -36,6 +37,10 @@ async function seedBot(overrides: Partial<Bot> = {}): Promise<BotDocument> {
   });
 }
 
+// Minimal ModuleRef mock — BotsService uses it only to lazily resolve deps for the
+// daily health-check job, which these unit tests don't exercise.
+const mockModuleRef = { get: jest.fn(), resolve: jest.fn() };
+
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
   connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'botsSvc' }).asPromise();
@@ -54,7 +59,7 @@ afterAll(async () => {
 beforeEach(async () => {
   jest.clearAllMocks();
   await model.deleteMany({});
-  service = new BotsService(model);
+  service = new BotsService(model, mockModuleRef as any);
 });
 
 function axiosOk(data: any = { ok: true, result: { username: 'fetched_bot' } }) {
@@ -108,7 +113,7 @@ describe('BotsService - lifecycle / cache init', () => {
 
   test('initializeCache swallows errors gracefully', async () => {
     const badModel: any = { find: () => ({ lean: () => ({ exec: () => Promise.reject(new Error('db down')) }) }) };
-    const svc = new BotsService(badModel);
+    const svc = new BotsService(badModel, mockModuleRef as any);
     await expect((svc as any).initializeCache()).resolves.toBeUndefined();
   });
 });
