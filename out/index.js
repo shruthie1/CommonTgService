@@ -1373,7 +1373,7 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
                 this.logger.warn('No clientId found in environment or configuration');
                 return;
             }
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`, { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } });
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service started: ${clientId}`)}`, { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } });
         }
         catch (error) {
             this.logger.warn('Failed to send start notification', error);
@@ -15316,7 +15316,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async resetWordRestrictions() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Word Restrictions\nStatus: Processing`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: reset word restrictions`)}`);
             await this.activeChannelModel.updateMany({ banned: false }, { $set: { wordRestriction: 0, dMRestriction: 0, updatedAt: new Date() } });
         }
         catch (error) {
@@ -15325,7 +15325,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async resetAvailableMsgs() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Available Messages\nStatus: Processing`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: reset available messages`)}`);
             const availableMsgs = await this.getAvailableMessages();
             await this.activeChannelModel.updateMany({
                 $expr: {
@@ -15346,7 +15346,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async updateBannedChannels() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Update Banned Channels\nStatus: Processing`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: update banned channels`)}`);
             await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
                 $set: {
                     wordRestriction: 0,
@@ -17214,8 +17214,8 @@ let BotsService = BotsService_1 = class BotsService {
             this.cache.flushAll();
         }
         catch (err) {
-            (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, true);
-            await this.notify(`⚠️ <b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${err?.message || err}`);
+            (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
+            await this.notify(`<b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
             console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) — created but NOT yet admin (inactive)`);
             return null;
         }
@@ -17358,8 +17358,12 @@ let BotsService = BotsService_1 = class BotsService {
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
             `Replaced this run: ${s.replaced} | Dead remaining: ${s.deadRemaining}`,
         ];
-        if (s.failures.length)
-            lines.push(`<b>Failures:</b>\n${s.failures.map(f => `• ${f}`).join('\n')}`);
+        if (s.failures.length) {
+            const shown = s.failures.slice(0, 10).map(f => `• ${f}`);
+            if (s.failures.length > 10)
+                shown.push(`(+${s.failures.length - 10} more)`);
+            lines.push(`<b>Failures:</b>\n${shown.join('\n')}`);
+        }
         await this.notify(lines.join('\n'));
     }
 };
@@ -19359,7 +19363,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
-            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage.substring(0, 120)}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
             throw error;
         }
     }
@@ -20459,14 +20463,20 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
     }
     async sendBufferCheckSummaryNotification(totalUpdates, createdCount, attemptedCount, updatedEntries, createdEntries) {
         const distribution = await this.getBufferClientDistribution();
-        const lines = distribution.distributionPerClient
+        const capLines = (entries) => {
+            const capped = entries.slice(0, 10);
+            if (entries.length > 10)
+                capped.push(`(+${entries.length - 10} more)`);
+            return capped;
+        };
+        const lines = capLines(distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
-            .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`);
+            .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`));
         const updatedLines = updatedEntries.length > 0
-            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            ? ['UpdatedThisRun:', ...capLines(updatedEntries.map((entry) => `- ${entry}`)), '']
             : ['UpdatedThisRun: none', ''];
         const createdLines = createdEntries.length > 0
-            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            ? ['CreatedThisRunDetails:', ...capLines(createdEntries.map((entry) => `- ${entry}`)), '']
             : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Buffer Client Check Summary</b>',
@@ -21649,7 +21659,7 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
     async remove(channelId) {
         const botsService = (0, utils_1.getBotsServiceInstance)();
         if (botsService) {
-            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `<b>Removing Channel</b>\n\n<b>Channel ID:</b> ${channelId}`, { parseMode: 'HTML' });
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing channel ${channelId}`, { parseMode: 'HTML' });
         }
         const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
     }
@@ -22931,7 +22941,7 @@ let ClientService = ClientService_1 = class ClientService {
         }
     }
     async notifyClientUpdate(clientId) {
-        await this.notify(`Client Update\n\nClient: ${clientId}\nStatus: Updating existing client`);
+        await this.notify(`Updating client ${clientId}`);
     }
     async notify(message) {
         try {
@@ -23062,13 +23072,13 @@ let ClientService = ClientService_1 = class ClientService {
                 });
                 await this.markBufferInactiveForArchival(existingClientMobile, setupClientQueryDto.reason);
             }
-            await this.notify(`Buffer Not Available\n\nClient: ${clientId}\nStatus: No safe buffer clients available for swap`);
+            await this.notify(`Buffer not available ${clientId}: no safe buffer clients for swap`);
             this.logger.log('Buffer Clients not safely available');
             return;
         }
         try {
             this.logger.info(`[${clientId}] Selected replacement buffer client`, { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
-            await this.notify(`Client Swap Started\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nOld Username: @${existingClient.username}\nNew Mobile: ${newBufferClient.mobile}`);
+            await this.notify(`Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}`);
             this.telegramService.setActiveClientSetup({
                 ...setupClientQueryDto,
                 clientId,
@@ -23086,11 +23096,11 @@ let ClientService = ClientService_1 = class ClientService {
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            await this.notify(`Client Swap Failed\n\nClient: ${clientId}\nOld Mobile: ${existingClient.mobile}\nNew Mobile: ${newBufferClient.mobile}\nError: ${errorMessage.substring(0, 200)}`);
             const errorDetails = (0, parseError_1.parseError)(error, `setupClient failed for ${newBufferClient.mobile}`);
-            if ((0, isPermanentError_1.default)(errorDetails)) {
+            const permanent = (0, isPermanentError_1.default)(errorDetails);
+            await this.notify(`Swap FAILED ${clientId}: ${existingClient.mobile} → ${newBufferClient.mobile}\n${errorMessage.substring(0, 120)}${permanent ? ' — buffer inactivated (permanent error)' : ''}`);
+            if (permanent) {
                 await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
-                await this.notify(`Buffer Marked Inactive\n\nMobile: ${newBufferClient.mobile}\nClient: ${clientId}\nReason: Permanent error during setup`);
             }
             else {
                 const availableDate = client_helper_utils_1.ClientHelperUtils.toDateString(Date.now() + 3 * 24 * 60 * 60 * 1000);
@@ -23149,7 +23159,7 @@ let ClientService = ClientService_1 = class ClientService {
             });
             const updatedUsername = bufferDoc?.username || me.username;
             this.logger.info(`[${clientId}] Using pre-set buffer username: @${updatedUsername} (current TG: @${me.username})`);
-            await this.notify(`Cutover Username\n\nClient: ${clientId}\nNew Mobile: ${newMobile}\nUsername: @${updatedUsername}`);
+            await this.notify(`Cutover username ${clientId}: ${newMobile} @${updatedUsername}`);
             if (!newSession?.trim()) {
                 throw new common_1.BadRequestException(`Invalid replacement session for ${newMobile}`);
             }
@@ -23186,7 +23196,7 @@ let ClientService = ClientService_1 = class ClientService {
             catch (deployError) {
                 const deployMessage = deployError instanceof Error ? deployError.message : String(deployError);
                 (0, parseError_1.parseError)(deployError, `[${clientId}] deployKey restart failed after cutover`);
-                await this.notify(`Deploy Restart Failed\n\nClient: ${clientId}\nNew Mobile: ${newMobile}\nStatus: Cutover completed but deploy restart failed\nError: ${deployMessage?.substring(0, 200)}`);
+                await this.notify(`Deploy restart FAILED ${clientId}: ${newMobile} (cutover done)\n${deployMessage?.substring(0, 120)}`);
             }
             this.logger.info(`[${clientId}] Starting old-client archival handling`, {
                 existingMobile,
@@ -23196,7 +23206,7 @@ let ClientService = ClientService_1 = class ClientService {
             });
             await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason);
             this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
-            await this.notify(`Client Swap Complete\n\nClient: ${clientId}\nOld Mobile: ${existingMobile}\nNew Mobile: ${newMobile}\nStatus: Cutover finished successfully`);
+            await this.notify(`Swap complete ${clientId}: ${existingMobile} → ${newMobile}`);
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `[New: ${newMobile}] Error in updating client session`, true);
@@ -23226,7 +23236,7 @@ let ClientService = ClientService_1 = class ClientService {
                 const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;
                 this.logger.warn(reasonMessage);
                 await this.markBufferInactiveForArchival(existingMobile, reasonMessage);
-                await this.notify(`Archival User Missing\n\nOld Mobile: ${existingMobile}\nStatus: Buffer marked inactive`);
+                await this.notify(`Archival ${existingMobile}: user doc missing — buffer inactivated`);
                 return;
             }
             if (formalities) {
@@ -23246,7 +23256,7 @@ let ClientService = ClientService_1 = class ClientService {
                     message: reason || 'Deactivated during client swap (archival skipped)',
                 });
                 this.logger.log('Client Archive Skipped');
-                await this.notify(`Archival Skipped\n\nOld Mobile: ${existingMobile}\nStatus: Old client marked inactive without archival`);
+                await this.notify(`Archival skipped ${existingMobile}: inactivated without archival`);
             }
         }
         catch (e) {
@@ -23255,7 +23265,7 @@ let ClientService = ClientService_1 = class ClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 await this.markBufferInactiveForArchival(existingMobile, errorMessage);
             }
-            await this.notify(`Archival Failed\n\nOld Mobile: ${existingMobile}\nError: ${errorMessage?.substring(0, 200)}`);
+            await this.notify(`Archival FAILED ${existingMobile}\n${errorMessage?.substring(0, 120)}`);
         }
     }
     isPermanentArchivalReason(reason) {
@@ -23265,19 +23275,19 @@ let ClientService = ClientService_1 = class ClientService {
         try {
             await this.usersService.expireAccount(mobile, reason);
             this.logger.warn(`Archived account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
-            await this.notify(`Buffer Marked Inactive\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 200)}`);
+            await this.notify(`Buffer inactivated ${mobile}: ${reason.substring(0, 120)}`);
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Failed to retire archived account: ${mobile}`, false);
             this.logger.error(`Failed to retire archived account ${mobile}: ${errorDetails.message}`);
-            await this.notify(`Buffer Inactive Update Failed\n\nMobile: ${mobile}\nReason: ${reason.substring(0, 160)}\nError: ${errorDetails.message.substring(0, 200)}`);
+            await this.notify(`Buffer inactivate FAILED ${mobile}: ${reason.substring(0, 100)}\n${errorDetails.message.substring(0, 120)}`);
         }
     }
     async handleFormalities(mobile) {
         try {
             await this.telegramService.updatePrivacyforDeletedAccount(mobile);
             this.logger.log('Formalities finished');
-            await this.notify(`Formalities Complete\n\nMobile: ${mobile}\nStatus: Privacy updated for old account`);
+            await this.notify(`Formalities complete ${mobile}: privacy updated`);
         }
         finally {
             await connection_manager_1.connectionManager.unregisterClient(mobile);
@@ -23301,11 +23311,11 @@ let ClientService = ClientService_1 = class ClientService {
             };
             const updatedBufferClient = await this.bufferClientService.createOrUpdate(existingMobile, bufferClientDto);
             this.logger.log('client Archived:', updatedBufferClient);
-            await this.notify(`Client Archived\n\nOld Mobile: ${existingMobile}\nNew Available Date: ${availableDate}\nStatus: Returned to buffer pool`);
+            await this.notify(`Archived ${existingMobile} → buffer pool, available ${availableDate}`);
         }
         catch (error) {
             const errorDetails = (0, parseError_1.parseError)(error, `Error in Archiving Old Client: ${existingMobile}`, true);
-            await this.notify(`Archival Error\n\nOld Mobile: ${existingMobile}\nError: ${errorDetails.message?.substring(0, 200)}`);
+            await this.notify(`Archival error ${existingMobile}\n${errorDetails.message?.substring(0, 120)}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 this.logger.log('Marking archived buffer inactive:', existingMobile);
                 await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
@@ -23410,7 +23420,7 @@ let ClientService = ClientService_1 = class ClientService {
                 ...(privacyReady ? { privacyUpdatedAt: new Date() } : {}),
                 ...(photosReady ? { profilePicsUpdatedAt: new Date() } : {}),
             });
-            await this.notify(`Client Updated\n\nClient: ${clientId}\nMobile: ${client.mobile}\nTrigger: ${message}`);
+            await this.notify(`Client updated ${clientId}: ${client.mobile} — ${message}`);
             if (!skipDeploy && client.deployKey)
                 await (0, fetchWithTimeout_1.fetchWithTimeout)(client.deployKey);
             return true;
@@ -23419,7 +23429,7 @@ let ClientService = ClientService_1 = class ClientService {
             this.lastUpdateMap.delete(clientId);
             const errorDetails = (0, parseError_1.parseError)(error, `[${clientId}] [${client.mobile}] updateClient failed`);
             const errorMessage = error instanceof Error ? error.message : String(error);
-            await this.notify(`Client Update Failed\n\nClient: ${clientId}\nMobile: ${client.mobile}\nTrigger: ${message}\nError: ${errorMessage?.substring(0, 200)}`);
+            await this.notify(`Client update FAILED ${clientId}: ${client.mobile} — ${message}\n${errorMessage?.substring(0, 120)}`);
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 this.logger.warn(`Permanent error while updating active client ${clientId}; manual review required for ${client.mobile}`);
             }
@@ -28815,7 +28825,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to update promote client ${mobile} status to ${status}: ${errorMessage}`);
-            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send promote status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Promote Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage.substring(0, 120)}`, { parseMode: 'HTML' }).catch((notifyError) => this.logger.error(`Failed to send promote status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
             throw error;
         }
     }
@@ -29556,11 +29566,17 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const lines = distribution.distributionPerClient
             .sort((a, b) => a.clientId.localeCompare(b.clientId))
             .map((item) => `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`);
+        const capLines = (entries) => {
+            const capped = entries.slice(0, 10);
+            if (entries.length > 10)
+                capped.push(`(+${entries.length - 10} more)`);
+            return capped;
+        };
         const updatedLines = updatedEntries.length > 0
-            ? ['UpdatedThisRun:', ...updatedEntries.map((entry) => `- ${entry}`), '']
+            ? ['UpdatedThisRun:', ...capLines(updatedEntries.map((entry) => `- ${entry}`)), '']
             : ['UpdatedThisRun: none', ''];
         const createdLines = createdEntries.length > 0
-            ? ['CreatedThisRunDetails:', ...createdEntries.map((entry) => `- ${entry}`), '']
+            ? ['CreatedThisRunDetails:', ...capLines(createdEntries.map((entry) => `- ${entry}`)), '']
             : ['CreatedThisRunDetails: none', ''];
         await this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, [
             '<b>Promote Client Check Summary</b>',
@@ -32850,7 +32866,7 @@ class BaseClientService {
         const failedAttempts = doc.failedUpdateAttempts || 0;
         this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
         const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
-        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK ACCOUNT</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${phase}\n<b>Age:</b> ${Math.round(daysSinceEnrolled)}d\n<b>Fails:</b> ${failedAttempts}\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'} — manual review needed`, { parseMode: 'HTML' });
+        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
         return true;
     }
     async reactivateOwnStuckAccounts(clientId, limit = 100) {
@@ -33485,7 +33501,7 @@ class BaseClientService {
                 else if (verificationStatus === 'foreign') {
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
-                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Status:</b> Account has unknown 2FA password — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
+                    this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>FOREIGN 2FA</b> ${this.clientType} ${doc.mobile} — unrecoverable, ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
                     return 0;
                 }
                 throw new Error('2FA password verification was inconclusive; will retry with normal warmup backoff');
@@ -33542,7 +33558,7 @@ class BaseClientService {
             if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
                 this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase || 'unknown'}\n<b>Error:</b> ${errorMsg?.substring(0, 200)}\n<b>Status:</b> Session revoked during auth cleanup — ${deactivated ? 'marked inactive' : 'inactive update failed'}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
                 return 0;
             }
             await this.update(doc.mobile, {
@@ -33642,7 +33658,7 @@ class BaseClientService {
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: warmup_phases_1.WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
-            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Phase:</b> ${doc.warmupPhase} → ready\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> All warmup steps complete — eligible for session rotation`, { parseMode: 'HTML' });
+            this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP READY</b> ${this.clientType} ${doc.mobile} — ${doc.channels || 0} channels, eligible for rotation`, { parseMode: 'HTML' });
             return { updateCount: 0, updateSummary: 'advance_to_ready' };
         }
         try {
@@ -33661,41 +33677,23 @@ class BaseClientService {
                 }
                 case 'set_privacy':
                     updateCount = await this.updatePrivacySettings(doc, client, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_privacy\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Privacy settings updated`, { parseMode: 'HTML' });
-                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_privacy' : null };
                 case 'delete_photos':
                     updateCount = await this.deleteProfilePhotos(doc, client, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> delete_photos\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photos deleted`, { parseMode: 'HTML' });
-                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'delete_photos' : null };
                 case 'update_name_bio':
                     updateCount = await this.updateNameAndBio(doc, client, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> update_name_bio\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Name and bio updated`, { parseMode: 'HTML' });
-                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'update_name_bio' : null };
                 case 'update_username':
                     updateCount = await this.updateUsername(doc, client, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> update_username\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Username updated`, { parseMode: 'HTML' });
-                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'update_username' : null };
                 case 'upload_photo':
                     updateCount = await this.updateProfilePhotos(doc, client, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> upload_photo\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Profile photo step completed`, { parseMode: 'HTML' });
-                    }
                     return { updateCount, updateSummary: updateCount > 0 ? 'upload_photo' : null };
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> 2FA password set successfully`, { parseMode: 'HTML' });
-                    }
-                    else {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> set_2fa\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failedAttempts + 1}\n<b>Status:</b> 2FA setup or verification failed`, { parseMode: 'HTML' });
+                    if (updateCount === 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: set_2fa — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
                 case 'remove_other_auths':
@@ -33706,18 +33704,15 @@ class BaseClientService {
                         failedAttempts,
                     });
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
-                    if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP UPDATE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Status:</b> Other sessions revoked`, { parseMode: 'HTML' });
-                    }
-                    else {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> remove_other_auths\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failedAttempts + 1}\n<b>Status:</b> Other sessions were not fully revoked`, { parseMode: 'HTML' });
+                    if (updateCount === 0) {
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: remove_other_auths — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
                     }
                     this.logger.log(`Finished remove_other_auths for ${doc.mobile}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> rotate_session\n<b>Phase:</b> ready → session_rotated\n<b>Channels:</b> ${doc.channels || 0}\n<b>Status:</b> Session rotated — account fully operational`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`, { parseMode: 'HTML' });
                     }
                     else {
                         await this.update(doc.mobile, {
@@ -33725,7 +33720,7 @@ class BaseClientService {
                             failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
                             lastUpdateFailure: new Date(),
                         });
-                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> rotate_session\n<b>Phase:</b> ready\n<b>Fails:</b> ${(doc.failedUpdateAttempts || 0) + 1}\n<b>Status:</b> Session rotation failed`, { parseMode: 'HTML' });
+                        this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${(doc.failedUpdateAttempts || 0) + 1} fails`, { parseMode: 'HTML' });
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
                 default:
@@ -33749,10 +33744,10 @@ class BaseClientService {
             if ((0, isPermanentError_1.default)(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}\n<b>Status:</b> ${deactivated ? 'Marked inactive' : 'Inactive update failed'}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP PERMANENT ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorDetails.message?.substring(0, 120)}`, { parseMode: 'HTML' });
             }
             else {
-                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b>\n\n<b>Type:</b> ${this.clientType}\n<b>Mobile:</b> ${doc.mobile}\n<b>Action:</b> ${warmupAction.action}\n<b>Phase:</b> ${warmupAction.phase}\n<b>Fails:</b> ${failCount}/${this.MAX_FAILED_ATTEMPTS}\n<b>Error:</b> ${errorDetails?.message?.substring(0, 200) || 'unknown'}`, { parseMode: 'HTML' });
+                this.botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: ${warmupAction.action} — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails?.message?.substring(0, 120) || 'unknown'}`, { parseMode: 'HTML' });
             }
             return { updateCount: 0 };
         }
@@ -37503,7 +37498,14 @@ let TransactionService = TransactionService_1 = class TransactionService {
     }
     async sendNotification(filters, total) {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)(process.env.accountsChannel)}&text=${encodeURIComponent(`Transaction Search\n\nResults: ${total}\nIP: ${filters.ip || 'N/A'}\nChat ID: ${filters.chatId || 'N/A'}\nTransaction ID: ${filters.transactionId || 'N/A'}\nProfile: ${filters.profile || 'N/A'}`)}`);
+            const parts = [
+                filters.ip && `ip=${filters.ip}`,
+                filters.chatId && `chat=${filters.chatId}`,
+                filters.transactionId && `txn=${filters.transactionId}`,
+                filters.profile && `profile=${filters.profile}`,
+            ].filter(Boolean);
+            const summary = `Txn search: ${total} results${parts.length ? ` — ${parts.join(', ')}` : ''}`;
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)(process.env.accountsChannel)}&text=${encodeURIComponent(summary)}`);
         }
         catch (error) {
             this.logger.error(`Failed to send notification: ${error.message}`);
@@ -38703,7 +38705,7 @@ let UserDataService = UserDataService_1 = class UserDataService {
     async remove(profile, chatId) {
         const botsService = (0, utils_1.getBotsServiceInstance)();
         if (botsService) {
-            botsService.sendMessageByCategory(bots_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>Deleting UserData</b>\n\n<b>Profile:</b> ${profile}\n<b>Chat ID:</b> ${chatId}`, { parseMode: 'HTML' });
+            botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Deleting UserData: ${profile} (chat ${chatId})`);
         }
         const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
         if (!deletedUser) {
@@ -44515,7 +44517,7 @@ function parseError(err, prefix, sendErr = true, config = {}) {
             try {
                 const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
                 if (!ignoreError) {
-                    const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
+                    const notificationMessage = (err.errorMessage ? err.errorMessage : extractedMessage)?.slice(0, 500);
                     const notifUrl = `${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
                     sendNotification(notifUrl, fullConfig.notificationTimeout, false).catch(() => undefined);
                 }

@@ -51,7 +51,7 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
                 this.logger.warn('No clientId found in environment or configuration');
                 return;
             }
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service Started\n\nClient: ${clientId}`)}`, { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } });
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Service started: ${clientId}`)}`, { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } });
         }
         catch (error) {
             this.logger.warn('Failed to send start notification', error);

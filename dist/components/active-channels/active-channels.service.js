@@ -646,7 +646,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async resetWordRestrictions() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Word Restrictions\nStatus: Processing`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: reset word restrictions`)}`);
             await this.activeChannelModel.updateMany({ banned: false }, { $set: { wordRestriction: 0, dMRestriction: 0, updatedAt: new Date() } });
         }
         catch (error) {
@@ -655,7 +655,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async resetAvailableMsgs() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Reset Available Messages\nStatus: Processing`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: reset available messages`)}`);
             const availableMsgs = await this.getAvailableMessages();
             await this.activeChannelModel.updateMany({
                 $expr: {
@@ -676,7 +676,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async updateBannedChannels() {
         try {
-            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel Maintenance\n\nAction: Update Banned Channels\nStatus: Processing`)}`);
+            await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: update banned channels`)}`);
             await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
                 $set: {
                     wordRestriction: 0,
