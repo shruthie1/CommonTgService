@@ -819,8 +819,8 @@ let BotsService = BotsService_1 = class BotsService {
             this.cache.flushAll();
         }
         catch (err) {
-            (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, true);
-            await this.notify(`⚠️ <b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${err?.message || err}`);
+            (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
+            await this.notify(`<b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
             console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) — created but NOT yet admin (inactive)`);
             return null;
         }
@@ -963,8 +963,12 @@ let BotsService = BotsService_1 = class BotsService {
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
             `Replaced this run: ${s.replaced} | Dead remaining: ${s.deadRemaining}`,
         ];
-        if (s.failures.length)
-            lines.push(`<b>Failures:</b>\n${s.failures.map(f => `• ${f}`).join('\n')}`);
+        if (s.failures.length) {
+            const shown = s.failures.slice(0, 10).map(f => `• ${f}`);
+            if (s.failures.length > 10)
+                shown.push(`(+${s.failures.length - 10} more)`);
+            lines.push(`<b>Failures:</b>\n${shown.join('\n')}`);
+        }
         await this.notify(lines.join('\n'));
     }
 };

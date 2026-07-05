@@ -208,7 +208,7 @@ function parseError(err, prefix, sendErr = true, config = {}) {
             try {
                 const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
                 if (!ignoreError) {
-                    const notificationMessage = err.errorMessage ? err.errorMessage : extractedMessage;
+                    const notificationMessage = (err.errorMessage ? err.errorMessage : extractedMessage)?.slice(0, 500);
                     const notifUrl = `${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
                     sendNotification(notifUrl, fullConfig.notificationTimeout, false).catch(() => undefined);
                 }
