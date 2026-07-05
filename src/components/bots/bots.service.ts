@@ -116,6 +116,14 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private static readonly HEALTH_JOB_TZ = 'Asia/Kolkata';
     // Conservative: replace at most this many dead bots per run to avoid BotFather rate-limits / flags.
     private readonly maxReplacementsPerRun = 1;
+    // Every category should keep at least this many HEALTHY (active + admin-verified) bots so a
+    // single dead bot never leaves a channel dark. After the dead-replacement pass, the health run
+    // tops up any category below this floor by provisioning fresh bots (random creator → BotFather
+    // → channel-admin add → verify).
+    private readonly minHealthyBotsPerCategory = 2;
+    // Cap NEW bots created for top-up across ALL categories per run — BotFather flood safety
+    // (separate from replacements). Keeps a run from creating a burst of accounts.
+    private readonly maxTopUpsPerRun = 2;
     private healthCheckJob: schedule.Job | null = null;
     private flushTimer: ReturnType<typeof setInterval> | null = null;
     private destroyed = false;
@@ -870,13 +878,13 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * description = "<creatorMobile> @<creatorUsername>". New bot is added to the dead
      * bot's channel as admin (via an admin account resolved from the channel).
      */
-    async validateAndReplaceBots(): Promise<{ checked: number; alive: number; dead: number; unknown: number; replaced: number; failures: string[] }> {
+    async validateAndReplaceBots(): Promise<{ checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; failures: string[] }> {
         // Per-process guard: catches same-pod overlap (scheduled tick + a manual endpoint call).
         // Multi-pod safety is handled by the BOT_HEALTH_JOB_ENABLED env gate — the scheduler runs
         // on exactly ONE pod, so no cross-pod lock is needed.
         if (this.replaceInProgress) {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
-            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, failures: ['already running (this pod)'] };
+            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0, failures: ['already running (this pod)'] };
         }
         this.replaceInProgress = true;
         const failures: string[] = [];
@@ -932,18 +940,38 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 }
             }
 
-            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, deadRemaining: deadBots.length - replaced, failures });
-            return { checked: bots.length, alive, dead, unknown, replaced, failures };
+            // Redundancy top-up: after replacing dead bots, ensure every category still has at
+            // least minHealthyBotsPerCategory live bots (so one death never leaves a channel dark).
+            let toppedUp = 0;
+            try {
+                const topUp = await this.topUpCategoriesToMinHealthy();
+                toppedUp = topUp.toppedUp;
+                failures.push(...topUp.topUpFailures);
+            } catch (err: any) {
+                const msg = `top-up pass failed: ${err?.message || err}`;
+                failures.push(msg);
+                parseError(err, `[BotHealth] ${msg}`, false);
+            }
+
+            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures };
         } finally {
             this.replaceInProgress = false;
         }
     }
 
-    /** Create a replacement bot via BotFather and add it to the dead bot's channel. */
-    private async replaceDeadBot(deadBot: DeadBotInfo): Promise<BotDocument | null> {
-        const category = deadBot.category;
-        const channelId = deadBot.channelId;
-
+    /**
+     * Provision ONE fresh bot for a category: random creator → BotFather create → persist inactive
+     * → add to channel as admin → verify → activate. Returns the saved+active doc, or null if it
+     * was created but couldn't be verified admin (left inactive; self-activates on a later run).
+     * Shared by both dead-replacement and the min-healthy top-up so the create/add/verify logic
+     * lives in exactly one place.
+     */
+    private async provisionBotForCategory(
+        category: ChannelCategory,
+        channelId: string,
+        opts: { replacesUsername?: string } = {},
+    ): Promise<{ saved: BotDocument; username: string; active: boolean }> {
         // 1. Pick a random healthy creator account (alive session, not expired, our 2FA).
         const creator = await this.pickRandomHealthyUser();
         if (!creator) {
@@ -971,7 +999,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const saved = await this.createBot({ token: botToken, category, channelId, description });
         await this.botModel.updateOne(
             { _id: saved._id },
-            { $set: { createdByMobile: creator.mobile, replacedBotUsername: deadBot.username, status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } },
+            { $set: { createdByMobile: creator.mobile, ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}), status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } },
         ).exec();
 
         // 4. Add the new bot to its channel as admin AND verify it. Only on verified success
@@ -986,23 +1014,90 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 { _id: saved._id },
                 { $set: { status: 'active' }, $unset: { deadReason: '' } },
             ).exec();
-            // Remove the OLD dead bot doc now that a verified replacement is live — otherwise
-            // stale dead rows accumulate forever and keep inflating each run's dead count.
-            try { await this.botModel.deleteOne({ token: deadBot.token }).exec(); } catch { /* non-fatal */ }
             await this.flushPendingStats(); // don't lose counters when we drop the cache next
             this.cache.flushAll(); // refresh caches so the now-active bot becomes selectable
+            console.log(`[BotHealth] provisioned @${username} (${category}) via ${creator.mobile} — active`);
+            return { saved, username, active: true };
         } catch (err: any) {
             parseError(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
-            await this.notify(`<b>Bot replaced but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
-            console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) — created but NOT yet admin (inactive)`);
-            // Return null: the bot exists but is INACTIVE/unusable, so the caller must NOT count
-            // it as a successful replacement (else the summary overstates success + under-reports
-            // deadRemaining). It will self-activate on a later run once it's actually admin.
+            await this.notify(`<b>Bot created but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
+            console.log(`[BotHealth] provisioned @${username} (${category}) — created but NOT yet admin (inactive)`);
+            return { saved, username, active: false };
+        }
+    }
+
+    /** Create a replacement bot via BotFather and add it to the dead bot's channel. */
+    private async replaceDeadBot(deadBot: DeadBotInfo): Promise<BotDocument | null> {
+        const { saved, active } = await this.provisionBotForCategory(deadBot.category, deadBot.channelId, {
+            replacesUsername: deadBot.username,
+        });
+        if (!active) {
+            // Created but not verified admin — do NOT delete the old dead doc yet (keep the record)
+            // and do NOT count it as a successful replacement.
             return null;
         }
-
-        console.log(`[BotHealth] replaced dead @${deadBot.username} with @${username} (${category}) via ${creator.mobile} — active`);
+        // Remove the OLD dead bot doc now that a verified replacement is live — otherwise stale
+        // dead rows accumulate forever and keep inflating each run's dead count.
+        try { await this.botModel.deleteOne({ token: deadBot.token }).exec(); } catch { /* non-fatal */ }
+        console.log(`[BotHealth] replaced dead @${deadBot.username} (${deadBot.category}) — active`);
         return saved;
+    }
+
+    /**
+     * Ensure every category holds at least `minHealthyBotsPerCategory` HEALTHY (active) bots.
+     * Runs AFTER the dead-replacement pass so a just-revived/just-replaced bot counts. Provisions
+     * fresh bots for any category below the floor, capped by `maxTopUpsPerRun` across all
+     * categories (BotFather flood safety). Returns how many new bots were provisioned active.
+     */
+    private async topUpCategoriesToMinHealthy(): Promise<{ toppedUp: number; topUpFailures: string[] }> {
+        const topUpFailures: string[] = [];
+        let toppedUp = 0;
+        // Re-read from DB (post replacement) grouped by category, counting only live (active) bots.
+        const all = await this.botModel.find().lean().exec();
+        const byCategory = all.reduce((acc, b) => {
+            (acc[b.category] = acc[b.category] || []).push(b);
+            return acc;
+        }, {} as Record<string, BotDocument[]>);
+
+        for (const [category, list] of Object.entries(byCategory)) {
+            if (toppedUp >= this.maxTopUpsPerRun) {
+                topUpFailures.push(`top-up cap (${this.maxTopUpsPerRun}) reached — remaining low categories deferred to next run`);
+                break;
+            }
+            const liveCount = list.filter(b => b.status !== 'inactive').length;
+            const deficit = this.minHealthyBotsPerCategory - liveCount;
+            if (deficit <= 0) continue;
+            // channelId to use for the new bot(s): take it from any existing doc in the category
+            // (all bots of a category share the same channel).
+            const channelId = list[0]?.channelId;
+            if (!channelId) {
+                topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
+                continue;
+            }
+            const need = Math.min(deficit, this.maxTopUpsPerRun - toppedUp);
+            for (let i = 0; i < need; i++) {
+                try {
+                    const { active, username } = await this.provisionBotForCategory(category as ChannelCategory, channelId);
+                    if (active) {
+                        toppedUp++;
+                        console.log(`[BotHealth] topped up ${category}: added @${username} (was ${liveCount}/${this.minHealthyBotsPerCategory})`);
+                    } else {
+                        topUpFailures.push(`${category}: created @${username} but not yet admin (inactive)`);
+                    }
+                } catch (err: any) {
+                    const msg = `top-up ${category}: ${err?.message || err}`;
+                    topUpFailures.push(msg);
+                    parseError(err, `[BotHealth] ${msg}`, false);
+                    // Flood on BotFather / manager account → stop all further top-ups this run.
+                    if (this.isFloodSignal(err) || /flood|too many|rate/i.test(err?.message || '')) {
+                        topUpFailures.push('flood/rate signal — aborting further top-ups this run');
+                        return { toppedUp, topUpFailures };
+                    }
+                    break; // move to next category on a non-flood error
+                }
+            }
+        }
+        return { toppedUp, topUpFailures };
     }
 
     /**
@@ -1193,11 +1288,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; deadRemaining: number; failures: string[] }): Promise<void> {
+    private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[] }): Promise<void> {
         const lines = [
             '<b>Bot Health Check</b>',
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
-            `Replaced this run: ${s.replaced} | Dead remaining: ${s.deadRemaining}`,
+            `Replaced: ${s.replaced} | Topped up: ${s.toppedUp} | Dead remaining: ${s.deadRemaining}`,
         ];
         if (s.failures.length) {
             const shown = s.failures.slice(0, 10).map(f => `• ${f}`);

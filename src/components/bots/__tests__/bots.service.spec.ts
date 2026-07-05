@@ -613,3 +613,92 @@ describe('BotsService - addMethodSpecificOptions videonote branch', () => {
     expect(fd).toBeTruthy();
   });
 });
+
+describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
+  // A fake creator/admin account + telegram service that always succeeds, so the
+  // provision (create → add → verify) path completes and the new bot goes active.
+  const CREATOR = { mobile: '910000000001', username: 'creator1', tgId: '111', session: 'sess' };
+  let createdCount = 0;
+
+  function wireHealthyDeps() {
+    createdCount = 0;
+    const telegramService = {
+      // Each createBot returns a fresh valid token + username.
+      createBot: jest.fn(async () => {
+        createdCount++;
+        return { botToken: `${700000000 + createdCount}:AAF${'x'.repeat(32)}`, username: `newbot_${createdCount}` };
+      }),
+      getBotInfo: jest.fn(async () => ({ id: `${900 + createdCount}`, username: `newbot_${createdCount}` })),
+      setupBotInChannel: jest.fn(async () => undefined),
+      // verify reads admins back — return the creator + whatever bot id we just made so verify passes.
+      getGroupAdmins: jest.fn(async () => [{ id: CREATOR.tgId }, { id: `${900 + createdCount}` }]),
+    };
+    const usersService = {
+      search: jest.fn(async (q: any) => {
+        // resolveChannelAdminMobile / pickRandomHealthyUser both call search — return the creator.
+        return [CREATOR];
+      }),
+    };
+    mockModuleRef.get.mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) return telegramService;
+      if (/Users/i.test(name)) return usersService;
+      return {};
+    });
+    // fetchUsername (createBot persist) + checkBotToken both hit axios.get(getMe) → alive.
+    mockedAxios.get.mockResolvedValue({ status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any);
+    // notify() → sendMessageByCategory → axios.post; make it succeed silently.
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    // Neutralize the real timing guards (humanDelay 60-180s, verify settle 3s, getMe pacing 1.2s)
+    // so provisioning completes instantly in unit tests instead of blowing the jest timeout.
+    (service as any).humanDelay = jest.fn(async () => undefined);
+    (service as any).sleep = jest.fn(async () => undefined);
+    return { telegramService, usersService };
+  }
+
+  test('category below floor (1 live) → tops up to 2 by provisioning a new bot', async () => {
+    // Use configured channel-manager so resolveChannelAdminMobile finds an admin.
+    process.env.channelManagerPrimary = CREATOR.mobile;
+    wireHealthyDeps();
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100999', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.toppedUp).toBeGreaterThanOrEqual(1);
+    // UNVDS should now have 2 live bots (1 seeded + 1 provisioned).
+    const live = await model.find({ category: ChannelCategory.UNVDS, status: { $ne: 'inactive' } });
+    expect(live.length).toBeGreaterThanOrEqual(2);
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('category already at floor (2 live) → no top-up', async () => {
+    wireHealthyDeps();
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100777', status: 'active' });
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100777', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.toppedUp).toBe(0);
+  });
+
+  test('top-up is capped per run across categories', async () => {
+    process.env.channelManagerPrimary = CREATOR.mobile;
+    wireHealthyDeps();
+    // Three different categories each with only 1 live bot → deficit of 3, but cap is 2.
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100a', status: 'active' });
+    await seedBot({ category: ChannelCategory.USER_WARNINGS, channelId: '-100b', status: 'active' });
+    await seedBot({ category: ChannelCategory.ACCOUNT_LOGIN_FAILURES, channelId: '-100c', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.toppedUp).toBeLessThanOrEqual(2); // maxTopUpsPerRun
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('concurrent run guard returns toppedUp:0', async () => {
+    (service as any).replaceInProgress = true;
+    const res = await service.validateAndReplaceBots();
+    expect(res).toMatchObject({ toppedUp: 0, replaced: 0 });
+    (service as any).replaceInProgress = false;
+  });
+});
