@@ -1,6 +1,6 @@
 {
   "name": "common-tg-service",
-  "version": "1.3.239",
+  "version": "1.3.231",
   "description": "Common Telegram service for NestJS applications",
   "author": "",
   "license": "MIT",
@@ -41,7 +41,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "upload-cloudinary": "node upload-build.js",
+    "upload-build": "node upload-build.js",
     "build:webpack": "npm i --f && npm run webpack -- --config ./webpack-prod.config.ts",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json"
@@ -57,7 +57,6 @@
     "axios": "^1.13.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
-    "cloudinary": "^2.9.0",
     "https": "^1.0.0",
     "imap": "^0.8.19",
     "ioredis": "^5.9.2",

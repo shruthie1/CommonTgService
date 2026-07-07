@@ -1,37 +1,32 @@
-import * as cloudinary from 'cloudinary';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import AdmZip from 'adm-zip';
-import { parseError } from './utils/parseError';
 import { fetchWithTimeout } from './utils/fetchWithTimeout';
+
+/**
+ * Persona-media fetcher. Despite the historical name, this no longer talks to
+ * Cloudinary directly — persona pic bundles are served as zips by the CMS/UMS
+ * `/folders/:name/files/download-all` endpoint. The old direct-Cloudinary methods
+ * (upload/create_folder/api.resources) were dead code and have been removed.
+ */
 export class CloudinaryService {
     static instance;
-    resources = new Map();
-    constructor() {
-        cloudinary.v2.config({
-            cloud_name: process.env.CL_NAME,
-            api_key: process.env.CL_APIKEY,
-            api_secret: process.env.CL_APISECRET
-        });
-    }
 
-     
     static async getInstance(_name?: string) {
         if (!CloudinaryService.instance) {
             CloudinaryService.instance = new CloudinaryService();
         }
-        // Note: the actual per-persona download now happens via getResourcesFromFolder(name),
+        // Note: the actual per-persona download happens via getResourcesFromFolder(name),
         // which returns a UNIQUE extract dir (callers must use the returned path, not cwd).
         return CloudinaryService.instance;
     }
 
     /**
      * Downloads + extracts a persona zip into a UNIQUE per-call directory and returns that
-     * directory. Previously this used a shared `temp.zip` and extracted to cwd over fixed
-     * dp1/dp2/dp3.jpg names — so two concurrent profile-pic flows (different personas) clobbered
-     * each other's files (an account could end up wearing another account's photos — a
-     * fingerprinting/anti-detection risk) or hit an unlink race. Unique paths eliminate the race.
+     * directory. Unique paths eliminate the race where two concurrent profile-pic flows
+     * (different personas) clobbered each other's files over fixed dp1/dp2/dp3.jpg names —
+     * a fingerprinting/anti-detection risk.
      */
     public async downloadAndExtractZip(url: string): Promise<string> {
         const unique = `${process.pid}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
@@ -59,140 +54,8 @@ export class CloudinaryService {
     }
 
     async getResourcesFromFolder(folderName): Promise<string> {
-        console.log('FETCHING NEW FILES!! from CLOUDINARY');
+        console.log('FETCHING NEW FILES!! for persona folder');
         // Returns the unique per-call extract directory the persona files were unpacked into.
         return this.downloadAndExtractZip(`https://cms.paidgirls.site/folders/${folderName}/files/download-all`);
-        // await this.findAndSaveResources(folderName, 'image');
-    }
-
-    async createNewFolder(folderName) {
-        await this.createFolder(folderName);
-        await this.uploadFilesToFolder(folderName);
-    }
-
-    async overwriteFile() {
-        const cloudinaryFileId = "index_nbzca5.js";
-        const localFilePath = "./src/test.js";
-
-        try {
-
-            const result = await cloudinary.v2.uploader.upload(localFilePath, {
-                resource_type: 'auto',
-                overwrite: true,
-                invalidate: true,
-                public_id: cloudinaryFileId
-            });
-            console.log('File overwritten successfully:', result);
-        } catch (error) {
-            parseError(error)
-        }
-
-    }
-
-    async findAndSaveResources(folderName: string, type: string): Promise<void> {
-        try {
-            const { resources } = await cloudinary.v2.api.resources({ resource_type: type, type: 'upload', prefix: folderName, max_results: 500 });
-            await Promise.all(resources.map(async (resource) => {
-                try {
-                    this.resources.set(resource.public_id.split('/')[1].split('_')[0], resource.url);
-                    await saveFile(resource.url, resource.public_id.split('/')[1].split('_')[0]);
-                } catch (error) {
-                    console.log("Error in saving file from cloudinary");
-                    parseError(error)
-                }
-            }));
-        } catch (error) {
-            parseError(error)
-        }
-    }
-
-    async createFolder(folderName) {
-        try {
-            const result = await cloudinary.v2.api.create_folder(folderName);
-
-            return result;
-        } catch (error) {
-            console.error('Error creating folder:', error);
-            throw error;
-        }
-    }
-
-    // Function to upload files from URLs to a specific folder in Cloudinary
-    async uploadFilesToFolder(folderName) {
-        const uploadPromises = Array.from(this.resources.entries()).map(async ([key, url]) => {
-            try {
-                const result = await cloudinary.v2.uploader.upload_large(url, {
-                    folder: folderName,
-                    resource_type: 'auto',
-                    public_id: key, // Set the key as the public_id
-                });
-
-                return result;
-            } catch (error) {
-                console.error('Error uploading file:', error);
-                throw error;
-            }
-        });
-
-        try {
-            return await Promise.all(uploadPromises);
-        } catch (error) {
-            console.error('Error uploading files:', error);
-            throw error;
-        }
-    }
-
-    async printResources() {
-        try {
-            this.resources?.forEach((val, key) => {
-                console.log(key, ":", val);
-            })
-        } catch (error) {
-            parseError(error)
-        }
-    }
-
-    get(publicId) {
-        try {
-            const result = this.resources.get(publicId)
-            return result || '';
-        } catch (error) {
-            parseError(error)
-        }
-    }
-
-    getBuffer(publicId) {
-        try {
-            const result = this.resources.get(publicId)
-            return result || '';
-        } catch (error) {
-            console.log("Error in getting buffer");
-        }
-    }
-}
-
-async function saveFile(url: string, name: string) {
-    try {
-        const extension = url.substring(url.lastIndexOf('.') + 1);
-        const rootPath = process.cwd();
-        const mypath = path.join(rootPath, `${name}.${extension}`);
-        console.log(`Downloading file: ${mypath}`);
-
-        const res = await fetchWithTimeout(url, { responseType: 'arraybuffer' }, 2);
-
-        if (res?.statusText === 'OK') {
-            if (!fs.existsSync(mypath)) {
-                fs.writeFileSync(mypath, res.data, 'binary'); // Save binary data as a file
-                console.log(`${name}.${extension} Saved!!`);
-            } else {
-                fs.unlinkSync(mypath);
-                fs.writeFileSync(mypath, res.data, 'binary'); // Save binary data as a file
-                console.log(`${name}.${extension} Replaced!!`);
-            }
-        } else {
-            throw new Error(`Unable to download file from ${url}`);
-        }
-    } catch (err) {
-        parseError(err);
     }
 }

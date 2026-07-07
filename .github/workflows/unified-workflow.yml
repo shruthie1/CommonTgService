@@ -50,13 +50,12 @@ jobs:
       - name: Build Webpack
         run: npm run webpack -- --config ./webpack-prod.config.ts
 
-      - name: Upload to Cloudinary
+      - name: Upload build (GitHub)
         if: ${{ github.event_name == 'push' }}
-        run: npm run upload-cloudinary -- ${{ env.BRANCH_NAME }}
+        run: npm run upload-build -- ${{ env.BRANCH_NAME }}
         env:
-          CL_NAME: ${{ secrets.CL_NAME }}
-          CL_APIKEY: ${{ secrets.CL_APIKEY }}
-          CL_APISECRET: ${{ secrets.CL_APISECRET }}
+          BUILDS_REPO_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
+          API_KEY: ${{ secrets.API_KEY }}
 
       - name: Configure Git
         if: ${{ github.event_name == 'push' }}
