@@ -34,14 +34,14 @@ describe('EventManagerController', () => {
 
     it('createEvent returns { data }', async () => {
         stub.create.mockResolvedValue({ _id: 'e1' });
-        const dto: any = { chatId: '1', type: 'call', profile: 'p', time: 1 };
+        const dto: any = { chatId: '1', type: 'call', clientId: 'p', time: 1 };
         expect(await controller.createEvent(dto)).toEqual({ data: { _id: 'e1' } });
         expect(stub.create).toHaveBeenCalledWith(dto);
     });
 
-    it('schedulePaidEvents passes chatId/profile/type', async () => {
+    it('schedulePaidEvents passes chatId/clientId/type', async () => {
         stub.schedulePaidEvents.mockResolvedValue({ message: 'ok' });
-        const dto: any = { chatId: 'c1', profile: 'pr', type: '2' };
+        const dto: any = { chatId: 'c1', clientId: 'pr', type: '2' };
         expect(await controller.schedulePaidEvents(dto)).toEqual({ data: { message: 'ok' } });
         expect(stub.schedulePaidEvents).toHaveBeenCalledWith('c1', 'pr', '2');
     });
