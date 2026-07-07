@@ -33,7 +33,7 @@ export class EventManagerController {
   @Post('schedule')
   @ApiOperation({ summary: 'Schedule paid events for a chatId+profile' })
   async schedulePaidEvents(@Body() dto: ScheduleEventsDto) {
-    const data = await this.eventManagerService.schedulePaidEvents(dto.chatId, dto.profile, dto.type);
+    const data = await this.eventManagerService.schedulePaidEvents(dto.chatId, dto.clientId, dto.type);
     return { data };
   }
 
