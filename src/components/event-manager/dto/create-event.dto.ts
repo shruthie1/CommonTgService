@@ -11,7 +11,7 @@ export class CreateEventDto {
   type: 'call' | 'message';
 
   @ApiProperty({})
-  profile: string;
+  clientId: string;
 
   @ApiProperty({ required: false })
   payload?: any;

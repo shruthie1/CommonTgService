@@ -5,7 +5,7 @@ export class ScheduleEventsDto {
   chatId: string;
 
   @ApiProperty({})
-  profile: string;
+  clientId: string;
 
   @ApiProperty({ enum: ['1', '2', '3'], required: false })
   type?: string;
