@@ -18,13 +18,13 @@ export class Event {
   type: 'call' | 'message';
 
   @Prop({ required: true })
-  profile: string;
+  clientId: string;
 
   @Prop({ type: MongooseSchema.Types.Mixed, default: {} })
   payload: any;
 
-  // Number of failed execution attempts. Used to give up (delete) after a cap so a
-  // permanently-dead profile.repl doesn't reschedule forever every tick.
+  // Number of failed execution attempts. Execution now lives in @tg/events;
+  // this field is retained for backward compatibility with existing documents.
   @Prop({ type: Number, default: 0 })
   attempts: number;
 }
