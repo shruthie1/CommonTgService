@@ -29,7 +29,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
-], CreateEventDto.prototype, "profile", void 0);
+], CreateEventDto.prototype, "clientId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ required: false }),
     __metadata("design:type", Object)

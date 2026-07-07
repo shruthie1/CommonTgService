@@ -30,7 +30,7 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
-], Event.prototype, "profile", void 0);
+], Event.prototype, "clientId", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ type: mongoose_2.Schema.Types.Mixed, default: {} }),
     __metadata("design:type", Object)

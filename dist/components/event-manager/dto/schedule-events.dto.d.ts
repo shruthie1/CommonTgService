@@ -1,5 +1,5 @@
 export declare class ScheduleEventsDto {
     chatId: string;
-    profile: string;
+    clientId: string;
     type?: string;
 }
