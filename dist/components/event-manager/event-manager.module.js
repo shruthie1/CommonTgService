@@ -12,7 +12,6 @@ const mongoose_1 = require("@nestjs/mongoose");
 const event_manager_controller_1 = require("./event-manager.controller");
 const event_manager_service_1 = require("./event-manager.service");
 const event_schema_1 = require("./schemas/event.schema");
-const client_module_1 = require("../clients/client.module");
 let EventManagerModule = class EventManagerModule {
 };
 exports.EventManagerModule = EventManagerModule;
@@ -20,7 +19,6 @@ exports.EventManagerModule = EventManagerModule = __decorate([
     (0, common_1.Module)({
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: event_schema_1.Event.name, schema: event_schema_1.EventSchema }]),
-            (0, common_1.forwardRef)(() => client_module_1.ClientModule),
         ],
         controllers: [event_manager_controller_1.EventManagerController],
         providers: [event_manager_service_1.EventManagerService],

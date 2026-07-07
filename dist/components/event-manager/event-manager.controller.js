@@ -35,7 +35,7 @@ let EventManagerController = class EventManagerController {
         return { data };
     }
     async schedulePaidEvents(dto) {
-        const data = await this.eventManagerService.schedulePaidEvents(dto.chatId, dto.profile, dto.type);
+        const data = await this.eventManagerService.schedulePaidEvents(dto.chatId, dto.clientId, dto.type);
         return { data };
     }
     async createMultiple(events) {

@@ -4,7 +4,7 @@ export declare class Event {
     chatId: string;
     time: number;
     type: 'call' | 'message';
-    profile: string;
+    clientId: string;
     payload: any;
     attempts: number;
 }
@@ -45,7 +45,7 @@ export declare const EventSchema: MongooseSchema<Event, import("mongoose").Model
     }, "id"> & {
         id: string;
     }>;
-    type?: import("mongoose").SchemaDefinitionProperty<"message" | "call", Event, Document<unknown, {}, Event, {
+    type?: import("mongoose").SchemaDefinitionProperty<"call" | "message", Event, Document<unknown, {}, Event, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
@@ -54,7 +54,7 @@ export declare const EventSchema: MongooseSchema<Event, import("mongoose").Model
     }, "id"> & {
         id: string;
     }>;
-    profile?: import("mongoose").SchemaDefinitionProperty<string, Event, Document<unknown, {}, Event, {
+    clientId?: import("mongoose").SchemaDefinitionProperty<string, Event, Document<unknown, {}, Event, {
         id: string;
     }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;

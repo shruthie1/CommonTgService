@@ -21,7 +21,7 @@ __decorate([
 __decorate([
     (0, swagger_1.ApiProperty)({}),
     __metadata("design:type", String)
-], ScheduleEventsDto.prototype, "profile", void 0);
+], ScheduleEventsDto.prototype, "clientId", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ enum: ['1', '2', '3'], required: false }),
     __metadata("design:type", String)

@@ -1,17 +1,10 @@
-import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { Event, EventDocument } from './schemas/event.schema';
 import { CreateEventDto } from './dto/create-event.dto';
-import { ClientService } from '../clients/client.service';
-export declare class EventManagerService implements OnModuleInit, OnModuleDestroy {
+export declare class EventManagerService {
     private readonly eventModel;
-    private readonly clientService;
-    private intervalId?;
-    private isProcessing;
     private readonly logger;
-    constructor(eventModel: Model<EventDocument>, clientService: ClientService);
-    onModuleInit(): void;
-    onModuleDestroy(): void;
+    constructor(eventModel: Model<EventDocument>);
     create(dto: CreateEventDto): Promise<import("mongoose").Document<unknown, {}, EventDocument, {}, import("mongoose").DefaultSchemaOptions> & Event & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {
@@ -33,8 +26,7 @@ export declare class EventManagerService implements OnModuleInit, OnModuleDestro
     }> & {
         __v: number;
     }>;
-    schedulePaidEvents(chatId: string, profile: string, type?: string): Promise<{
+    schedulePaidEvents(chatId: string, clientId: string, type?: string): Promise<{
         message: string;
     }>;
-    startEventExecution(): void;
 }
