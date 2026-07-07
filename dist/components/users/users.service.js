@@ -245,6 +245,27 @@ let UsersService = UsersService_1 = class UsersService {
     async findAll(limit = 100, skip = 0) {
         return this.userModel.find().limit(limit).skip(skip).exec();
     }
+    async getBotCreatorAccounts(limit = 40, foreignOnly = false) {
+        const base = {
+            expired: { $ne: true },
+            session: { $exists: true, $nin: [null, ''] },
+            mobile: { $exists: true, $nin: [null, ''] },
+        };
+        const sample = async (matchExtra, n) => {
+            if (n <= 0)
+                return [];
+            return this.userModel.aggregate([
+                { $match: { ...base, ...matchExtra } },
+                { $sample: { size: n } },
+            ]).exec();
+        };
+        const foreign = await sample({ mobile: { ...base.mobile, $not: /^\+?91/ } }, limit);
+        if (foreignOnly || foreign.length >= limit)
+            return foreign.slice(0, limit);
+        const seen = new Set(foreign.map(u => u.mobile));
+        const fill = (await sample({}, limit)).filter(u => !seen.has(u.mobile));
+        return [...foreign, ...fill].slice(0, limit);
+    }
     hasQueryConstraint(query, field) {
         if (!query || typeof query !== 'object')
             return false;

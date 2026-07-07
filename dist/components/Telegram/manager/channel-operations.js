@@ -14,6 +14,7 @@ exports.removeGroupMembers = removeGroupMembers;
 exports.promoteToAdmin = promoteToAdmin;
 exports.demoteAdmin = demoteAdmin;
 exports.unblockGroupUser = unblockGroupUser;
+exports.getChannelAbout = getChannelAbout;
 exports.getGroupAdmins = getGroupAdmins;
 exports.getGroupBannedUsers = getGroupBannedUsers;
 exports.createGroupOrChannel = createGroupOrChannel;
@@ -357,6 +358,14 @@ async function unblockGroupUser(ctx, groupId, userId) {
             sendInline: false, embedLinks: false,
         }),
     }));
+}
+async function getChannelAbout(ctx, groupId) {
+    if (!ctx.client)
+        throw new Error('Client not initialized');
+    const full = await ctx.client.invoke(new telegram_1.Api.channels.GetFullChannel({
+        channel: await ctx.client.getInputEntity(groupId),
+    }));
+    return full.fullChat?.about || '';
 }
 async function getGroupAdmins(ctx, groupId) {
     if (!ctx.client)

@@ -49,6 +49,7 @@ export declare class UsersService {
         };
     }>;
     findAll(limit?: number, skip?: number): Promise<User[]>;
+    getBotCreatorAccounts(limit?: number, foreignOnly?: boolean): Promise<User[]>;
     private hasQueryConstraint;
     private coerceDateOperands;
     private getDefaultUserListQuery;

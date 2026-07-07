@@ -29,6 +29,7 @@ export declare function promoteToAdmin(ctx: TgContext, groupId: string, userId: 
 }>, rank?: string): Promise<void>;
 export declare function demoteAdmin(ctx: TgContext, groupId: string, userId: string): Promise<void>;
 export declare function unblockGroupUser(ctx: TgContext, groupId: string, userId: string): Promise<void>;
+export declare function getChannelAbout(ctx: TgContext, groupId: string): Promise<string>;
 export declare function getGroupAdmins(ctx: TgContext, groupId: string): Promise<AdminInfo[]>;
 export declare function getGroupBannedUsers(ctx: TgContext, groupId: string): Promise<BannedUserInfo[]>;
 export declare function createGroupOrChannel(ctx: TgContext, options: GroupOptions): Promise<Api.TypeUpdates>;

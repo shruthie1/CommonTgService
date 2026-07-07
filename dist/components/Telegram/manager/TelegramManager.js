@@ -287,6 +287,9 @@ class TelegramManager {
     async getGroupAdmins(groupId) {
         return channelOps.getGroupAdmins(this.ctx, groupId);
     }
+    async getChannelAbout(groupId) {
+        return channelOps.getChannelAbout(this.ctx, groupId);
+    }
     async getGroupBannedUsers(groupId) {
         return channelOps.getGroupBannedUsers(this.ctx, groupId);
     }
