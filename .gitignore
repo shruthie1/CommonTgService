@@ -71,3 +71,11 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Build output
 /dist
+
+# sync-core runtime artifacts (do not commit)
+.sync-state
+.sync.lock
+.sync-git.lock
+sync.log
+sync-git.log
+*.bak-centralize
