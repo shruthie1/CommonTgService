@@ -68,7 +68,7 @@ jobs:
         run: |
           git diff --quiet || (git add . && git commit -m "chore: commit pre-bump changes [skip ci]")
           npm version patch -m "Bump version to %s [skip ci]"
-          git add src package.json package-lock.json
+          git add src package.json
           git add -f dist
           git commit -m "Build and deploy dist files [skip ci]" || echo "No changes to commit"
           git push origin "HEAD:$BRANCH_NAME"
@@ -79,8 +79,8 @@ jobs:
           git fetch origin master
           git checkout master
           git pull origin master
-          git checkout "$BRANCH_NAME" -- src dist package.json package-lock.json
-          git add src package.json package-lock.json
+          git checkout "$BRANCH_NAME" -- src dist package.json
+          git add src package.json
           git add -f dist
           git commit -m "Update dist and src from ${{ steps.branch_name.outputs.branch }} [skip ci]" || echo "No changes to commit"
           git push origin master -f
