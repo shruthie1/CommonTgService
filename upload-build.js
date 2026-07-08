@@ -65,28 +65,45 @@ async function overwriteFile(branch, keyPrefix) {
 
   try {
     const content = fs.readFileSync(localFilePath).toString('base64');
-    const sha = await getExistingSha(token, fileName);
-
     const putUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${encodeURIComponent(fileName)}`;
-    const putResp = await fetch(putUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'cts-upload-build',
-      },
-      body: JSON.stringify({
-        message: `build: ${fileName}`,
-        content,
-        branch: REPO_BRANCH,
-        ...(sha ? { sha } : {}),
-      }),
-    });
 
-    if (!putResp.ok) {
-      const text = await putResp.text().catch(() => '');
-      throw new Error(`GitHub upload failed: ${putResp.status} ${putResp.statusText} ${text}`.trim());
+    // Retry on 409/422: if another build commits to the same branch of shruthie1/builds
+    // between our sha read and our PUT, GitHub rejects with a conflict. Re-read + re-PUT.
+    const MAX_PUT_ATTEMPTS = 6;
+    let lastErrText = '';
+    let uploaded = false;
+    for (let attempt = 1; attempt <= MAX_PUT_ATTEMPTS; attempt++) {
+      const sha = await getExistingSha(token, fileName);
+      const putResp = await fetch(putUrl, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'cts-upload-build',
+        },
+        body: JSON.stringify({
+          message: `build: ${fileName}`,
+          content,
+          branch: REPO_BRANCH,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+
+      if (putResp.ok) { uploaded = true; break; }
+
+      lastErrText = await putResp.text().catch(() => '');
+      if (putResp.status === 409 || putResp.status === 422) {
+        const delay = 500 * attempt + Math.floor(Math.random() * 400);
+        console.warn(`[upload-build] ${fileName} conflict (${putResp.status}) attempt ${attempt}/${MAX_PUT_ATTEMPTS}, retrying in ${delay}ms`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw new Error(`GitHub upload failed: ${putResp.status} ${putResp.statusText} ${lastErrText}`.trim());
+    }
+
+    if (!uploaded) {
+      throw new Error(`GitHub upload failed after ${MAX_PUT_ATTEMPTS} attempts (last conflict): ${lastErrText}`.trim());
     }
 
     const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}/${fileName}`;
