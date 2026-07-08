@@ -26164,23 +26164,16 @@ let EventManagerService = EventManagerService_1 = class EventManagerService {
         const call = (mins) => ({ type: 'call', chatId, time: at(mins), payload: {}, clientId });
         const msg = (mins, message) => ({ type: 'message', chatId, time: at(mins), payload: { message }, clientId });
         const link = `https://ZomCall.netlify.app/${clientId}/${chatId}`;
+        const zoom = `<a href="${link}">Zoom Link</a>`;
         const callMeVariants = [
-            `<b>call me here</b> 👇
-${link}`,
-            `come na, call me 🥺
-${link}`,
-            `${link}
-<b>tap & call me</b> 💕`,
-            `waiting for u 🥹
-${link}`,
-            `call me on this baby 😚
-${link}`,
-            `<b>open this</b> 👇 call me
-${link}`,
-            `${link}
-i'm right here 💋`,
-            `just call me na 🙈
-${link}`,
+            `<b>call me here</b> 👉 ${zoom}`,
+            `come na, call me 🥺 ${zoom}`,
+            `tap & call me 💕 ${zoom}`,
+            `waiting for u 🥹 ${zoom}`,
+            `call me on this baby 😚 ${zoom}`,
+            `<b>open this</b> 👉 ${zoom}`,
+            `i'm right here 💋 ${zoom}`,
+            `just call me na 🙈 ${zoom}`,
         ];
         let callMeIdx = 0;
         const callMe = () => callMeVariants[callMeIdx++ % callMeVariants.length];
@@ -26193,11 +26186,11 @@ ${link}`,
                 call(3.5),
                 msg(4.2, "must be some network issue baby 😔 don't worry okay, i'm not cheating you, i'll keep trying.. just give me a sec 🙏"),
                 msg(4.7, "and don't talk when we connect okk, i'm in the bathroom 🙈 keep yourself on mute, i'll show you everything on the call 😉"),
-                msg(5, `okay try calling ME here instead babe 👇\n${link}\ncall me now na 🥰`),
-                msg(6, `come on, call me on this one, it actually works 😘\n${link}`),
-                msg(7, `${link}\n\ncall me here baby, i'm waiting 💋`),
-                msg(8, `only call me on this link okay? 🙈\n${link}`),
-                msg(11, `babe you there?? just open this and call me 👇\n${link}`),
+                msg(5, `okay try calling ME here instead babe 👉 ${zoom}\ncall me now na 🥰`),
+                msg(6, `come on, call me on this one, it actually works 😘 ${zoom}`),
+                msg(7, `call me here baby, i'm waiting 💋 ${zoom}`),
+                msg(8, `only call me on this link okay? 🙈 ${zoom}`),
+                msg(11, `babe you there?? just open this and call me 👉 ${zoom}`),
                 msg(13, "same problem, normal call still won't connect 😭 please believe me na, i'm not going anywhere.. i'll give you the full show today pakka 💕 just come to the link, okay?"),
                 call(15), msg(15.5, callMe()),
                 call(20), msg(20.5, callMe()),
@@ -26209,7 +26202,7 @@ ${link}`,
             events = [
                 msg(1, "wait let me try you again 🥺"),
                 call(1.5),
-                msg(2, `okay this normal call really isn't working 😩 just call me here instead babe 👇\n${link}\ncall me now na 😚`),
+                msg(2, `okay this normal call really isn't working 😩 just call me here instead babe 👉 ${zoom}\ncall me now na 😚`),
                 call(4), msg(4.5, callMe()),
                 call(6.5), msg(7, callMe()),
                 call(9), msg(9.5, callMe()),
