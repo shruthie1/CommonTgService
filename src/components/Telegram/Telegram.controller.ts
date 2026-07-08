@@ -551,7 +551,7 @@ export class TelegramController {
         if (sendMediaDto.url) {
             try {
                 const headResponse = await axios.head(sendMediaDto.url, { timeout: 10000 });
-                const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+                const contentLength = parseInt(String(headResponse.headers['content-length'] ?? '0'), 10);
                 const maxSize = 100 * 1024 * 1024; // 100MB
                 
                 if (contentLength > maxSize) {

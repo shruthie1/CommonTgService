@@ -331,7 +331,7 @@ export async function downloadFileFromUrl(url: string, maxSize: number = MAX_FIL
             validateStatus: (status) => status >= 200 && status < 400,
         });
 
-        const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+        const contentLength = parseInt(String(headResponse.headers['content-length'] ?? '0'), 10);
         if (contentLength > maxSize) {
             throw new Error(`File size ${contentLength} exceeds maximum ${maxSize} bytes`);
         }
