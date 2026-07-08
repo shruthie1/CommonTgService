@@ -34,203 +34,193 @@ export declare class SessionAudit {
     lastError?: string;
     lastErrorAt?: Date;
 }
-export declare const SessionAuditSchema: import("mongoose").Schema<SessionAudit, import("mongoose").Model<SessionAudit, any, any, any, (Document<unknown, any, SessionAudit, any, import("mongoose").DefaultSchemaOptions> & SessionAudit & {
+export declare const SessionAuditSchema: import("mongoose").Schema<SessionAudit, import("mongoose").Model<SessionAudit, any, any, any, any, any, SessionAudit>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, SessionAudit, Document<unknown, {}, SessionAudit, {
+    id: string;
+}, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-} & {
+}, "id"> & import("mongoose").HydratedDocumentOverrides<{
     id: string;
-}) | (Document<unknown, any, SessionAudit, any, import("mongoose").DefaultSchemaOptions> & SessionAudit & {
-    _id: import("mongoose").Types.ObjectId;
-} & {
-    __v: number;
-}), any, SessionAudit>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, SessionAudit, Document<unknown, {}, SessionAudit, {
-    id: string;
-}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
-    _id: import("mongoose").Types.ObjectId;
-} & {
-    __v: number;
-}, "id"> & {
-    id: string;
-}, {
+}>, {
     mobile?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     sessionString?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     status?: import("mongoose").SchemaDefinitionProperty<SessionStatus, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     creationMethod?: import("mongoose").SchemaDefinitionProperty<SessionCreationMethod, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     creationMessage?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     previousSessionString?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     createdAt?: import("mongoose").SchemaDefinitionProperty<Date, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     lastUsedAt?: import("mongoose").SchemaDefinitionProperty<Date, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     expiresAt?: import("mongoose").SchemaDefinitionProperty<Date, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     clientId?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     username?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     retryAttempts?: import("mongoose").SchemaDefinitionProperty<number, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     errorMessage?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     metadata?: import("mongoose").SchemaDefinitionProperty<Record<string, any>, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     isActive?: import("mongoose").SchemaDefinitionProperty<boolean, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     revokedAt?: import("mongoose").SchemaDefinitionProperty<Date, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     revocationReason?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     usageCount?: import("mongoose").SchemaDefinitionProperty<number, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     lastError?: import("mongoose").SchemaDefinitionProperty<string, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
     lastErrorAt?: import("mongoose").SchemaDefinitionProperty<Date, SessionAudit, Document<unknown, {}, SessionAudit, {
         id: string;
-    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<SessionAudit & {
+    }, import("mongoose").DefaultSchemaOptions> & Omit<SessionAudit & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & {
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
-    }>;
+    }>>;
 }, SessionAudit>;

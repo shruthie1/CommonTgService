@@ -443,9 +443,12 @@ let AppController = AppController_1 = class AppController {
                 }
             });
             res.status(response.status);
-            if (this.isBinaryResponse(responseType, response.headers['content-type'])) {
-                if (!res.getHeader('content-type') && response.headers['content-type']) {
-                    res.setHeader('content-type', response.headers['content-type']);
+            const contentType = response.headers['content-type'] != null
+                ? String(response.headers['content-type'])
+                : undefined;
+            if (this.isBinaryResponse(responseType, contentType)) {
+                if (!res.getHeader('content-type') && contentType) {
+                    res.setHeader('content-type', contentType);
                 }
                 res.send(Buffer.from(response.data));
             }
@@ -1667,7 +1670,7 @@ let TelegramController = class TelegramController {
         if (sendMediaDto.url) {
             try {
                 const headResponse = await axios_1.default.head(sendMediaDto.url, { timeout: 10000 });
-                const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+                const contentLength = parseInt(String(headResponse.headers['content-length'] ?? '0'), 10);
                 const maxSize = 100 * 1024 * 1024;
                 if (contentLength > maxSize) {
                     const fileSizeMB = (contentLength / (1024 * 1024)).toFixed(2);
@@ -10265,7 +10268,7 @@ async function downloadFileFromUrl(url, maxSize = exports.MAX_FILE_SIZE) {
             timeout: exports.FILE_DOWNLOAD_TIMEOUT,
             validateStatus: (status) => status >= 200 && status < 400,
         });
-        const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+        const contentLength = parseInt(String(headResponse.headers['content-length'] ?? '0'), 10);
         if (contentLength > maxSize) {
             throw new Error(`File size ${contentLength} exceeds maximum ${maxSize} bytes`);
         }
@@ -43241,13 +43244,14 @@ async function makeBypassRequest(url, options) {
             ...options.headers,
         },
     });
+    const responseContentType = response ? String(response.headers['content-type'] ?? '') : '';
     if (response &&
         (options.responseType === 'arraybuffer' ||
-            response.headers['content-type']?.includes('application/octet-stream') ||
-            response.headers['content-type']?.includes('image/') ||
-            response.headers['content-type']?.includes('audio/') ||
-            response.headers['content-type']?.includes('video/') ||
-            response.headers['content-type']?.includes('application/pdf'))) {
+            responseContentType.includes('application/octet-stream') ||
+            responseContentType.includes('image/') ||
+            responseContentType.includes('audio/') ||
+            responseContentType.includes('video/') ||
+            responseContentType.includes('application/pdf'))) {
         response.data = Buffer.from(response.data);
     }
     return response;
@@ -45731,29 +45735,29 @@ module.exports = require("url");
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	var __webpack_module_cache__ = {};
+/******/ 	const __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
-/******/ 		// Check if module exists (development only)
-/******/ 		if (__webpack_modules__[moduleId] === undefined) {
-/******/ 			var e = new Error("Cannot find module '" + moduleId + "'");
-/******/ 			e.code = 'MODULE_NOT_FOUND';
-/******/ 			throw e;
-/******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 		const module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
 /******/ 		};
 /******/ 	
 /******/ 		// Execute the module function
+/******/ 		if (!(moduleId in __webpack_modules__)) {
+/******/ 			delete __webpack_module_cache__[moduleId];
+/******/ 			const e = new Error("Cannot find module '" + moduleId + "'");
+/******/ 			e.code = 'MODULE_NOT_FOUND';
+/******/ 			throw e;
+/******/ 		}
 /******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
 /******/ 	
 /******/ 		// Return the exports of the module
@@ -45765,8 +45769,8 @@ module.exports = require("url");
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__("./src/main.ts");
-/******/ 	var __webpack_export_target__ = exports;
+/******/ 	let __webpack_exports__ = __webpack_require__("./src/main.ts");
+/******/ 	const __webpack_export_target__ = exports;
 /******/ 	for(var __webpack_i__ in __webpack_exports__) __webpack_export_target__[__webpack_i__] = __webpack_exports__[__webpack_i__];
 /******/ 	if(__webpack_exports__.__esModule) Object.defineProperty(__webpack_export_target__, "__esModule", { value: true });
 /******/ 	

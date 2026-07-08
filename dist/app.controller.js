@@ -122,9 +122,12 @@ let AppController = AppController_1 = class AppController {
                 }
             });
             res.status(response.status);
-            if (this.isBinaryResponse(responseType, response.headers['content-type'])) {
-                if (!res.getHeader('content-type') && response.headers['content-type']) {
-                    res.setHeader('content-type', response.headers['content-type']);
+            const contentType = response.headers['content-type'] != null
+                ? String(response.headers['content-type'])
+                : undefined;
+            if (this.isBinaryResponse(responseType, contentType)) {
+                if (!res.getHeader('content-type') && contentType) {
+                    res.setHeader('content-type', contentType);
                 }
                 res.send(Buffer.from(response.data));
             }
