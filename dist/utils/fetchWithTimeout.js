@@ -109,13 +109,14 @@ async function makeBypassRequest(url, options) {
             ...options.headers,
         },
     });
+    const responseContentType = response ? String(response.headers['content-type'] ?? '') : '';
     if (response &&
         (options.responseType === 'arraybuffer' ||
-            response.headers['content-type']?.includes('application/octet-stream') ||
-            response.headers['content-type']?.includes('image/') ||
-            response.headers['content-type']?.includes('audio/') ||
-            response.headers['content-type']?.includes('video/') ||
-            response.headers['content-type']?.includes('application/pdf'))) {
+            responseContentType.includes('application/octet-stream') ||
+            responseContentType.includes('image/') ||
+            responseContentType.includes('audio/') ||
+            responseContentType.includes('video/') ||
+            responseContentType.includes('application/pdf'))) {
         response.data = Buffer.from(response.data);
     }
     return response;

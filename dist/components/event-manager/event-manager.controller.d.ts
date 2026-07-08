@@ -29,13 +29,13 @@ export declare class EventManagerController {
         };
     }>;
     createMultiple(events: CreateEventDto[]): Promise<{
-        data: import("mongoose").MergeType<import("mongoose").Document<unknown, {}, import(".").EventDocument, {}, import("mongoose").DefaultSchemaOptions> & import(".").Event & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+        data: (Omit<import("mongoose").Document<unknown, {}, import(".").EventDocument, {}, import("mongoose").DefaultSchemaOptions> & import(".").Event & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
             _id: import("mongoose").Types.ObjectId;
         }> & {
             __v: number;
         } & {
             id: string;
-        }, Omit<CreateEventDto, "_id">>[];
+        }, keyof CreateEventDto> & Omit<CreateEventDto, "_id">)[];
     }>;
     deleteMultiple(chatId: string): Promise<{
         status: string;
