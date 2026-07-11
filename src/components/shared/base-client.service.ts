@@ -652,13 +652,37 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * pass `{ permanent: true }` so an expired account is never left active in
      * the users collection or the other pool.
      */
+    /**
+     * Prefix an inactivation reason with a machine-readable classification tag so
+     * audits can bucket inactive docs by prefix without heuristics / cross-referencing:
+     *   [DEAD]      — Telegram proved the account gone (SESSION_REVOKED, AUTH_KEY_*,
+     *                 USER_DEACTIVATED, FROZEN_*, banned). Never recoverable.
+     *   [UNSAFE]    — retired by our policy though Telegram didn't kill it (e.g. foreign
+     *                 2FA). Session may still work today but the account is a liability.
+     *   [STUCK]     — retired for exceeding STUCK_WARMUP_DAYS; not proven dead.
+     *   [TRANSIENT] — deactivated for a non-permanent cause (should be rare; flags it
+     *                 for review rather than silently mislabelling it as dead).
+     * Idempotent: an already-tagged reason is returned unchanged.
+     */
+    protected classifyInactivationReason(reason: string, permanent?: boolean): string {
+        const text = reason || '';
+        if (/^\[[A-Z]+\]\s/.test(text)) return text; // already tagged
+        let tag: string;
+        if (isPermanentError({ message: text })) tag = 'DEAD';
+        else if (/^Stuck:/i.test(text)) tag = 'STUCK';
+        else if (permanent) tag = 'UNSAFE';
+        else tag = 'TRANSIENT';
+        return `[${tag}] ${text}`;
+    }
+
     protected async deactivateClient(
         mobile: string,
         reason: string,
         options: { permanent?: boolean } = {},
     ): Promise<boolean> {
+        const taggedReason = this.classifyInactivationReason(reason, options.permanent);
         try {
-            await this.updateStatus(mobile, 'inactive', reason);
+            await this.updateStatus(mobile, 'inactive', taggedReason);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);

@@ -351,6 +351,46 @@ describe('deactivateClient & expireUserByMobile', () => {
         await expect(service.pub.expireUserByMobile('919990000013')).resolves.toBeUndefined();
         expect(warnSpy).toHaveBeenCalled();
     });
+
+    // Classification tag: every stored reason must start with a machine-readable
+    // [TAG] so audits can classify inactive docs by prefix without heuristics.
+    test('tags a Telegram-permanent reason as [DEAD]', async () => {
+        const service = new TestBaseService();
+        await service.pub.deactivateClient('919990000014', 'Health check failed: SESSION_REVOKED', { permanent: true });
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000014', 'inactive', expect.stringMatching(/^\[DEAD\] /));
+    });
+
+    test('tags a foreign-2FA (permanent but not TG-dead) reason as [UNSAFE]', async () => {
+        const service = new TestBaseService();
+        await service.pub.deactivateClient('919990000015', 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000015', 'inactive', expect.stringMatching(/^\[UNSAFE\] /));
+    });
+
+    test('tags a stuck-warmup reason as [STUCK]', async () => {
+        const service = new TestBaseService();
+        await service.pub.deactivateClient('919990000016', 'Stuck: 47d in settling');
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000016', 'inactive', expect.stringMatching(/^\[STUCK\] /));
+    });
+
+    test('tags a non-permanent, non-stuck reason as [TRANSIENT]', async () => {
+        const service = new TestBaseService();
+        await service.pub.deactivateClient('919990000017', 'Client creation failed - client is null');
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000017', 'inactive', expect.stringMatching(/^\[TRANSIENT\] /));
+    });
+
+    test('does not double-tag an already-tagged reason', async () => {
+        const service = new TestBaseService();
+        await service.pub.deactivateClient('919990000018', '[DEAD] SESSION_REVOKED', { permanent: true });
+        const calls = service.updateStatusMock.mock.calls;
+        const stored = calls[calls.length - 1]?.[2] as string;
+        expect(stored.match(/\[DEAD\]/g)?.length).toBe(1);
+    });
+
+    test('preserves the original reason text after the tag', async () => {
+        const service = new TestBaseService();
+        await service.pub.deactivateClient('919990000019', 'USER_DEACTIVATED', { permanent: true });
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000019', 'inactive', '[DEAD] USER_DEACTIVATED');
+    });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
