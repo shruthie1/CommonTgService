@@ -317,6 +317,29 @@ describe('ClientService coverage', () => {
             await service.setupClient('swap-2', { reason: 'SESSION_REVOKED' } as any);
             // Real markBufferInactiveForArchival ran → cascades to usersService.expireAccount (external).
             expect(usersService.expireAccount).toHaveBeenCalledWith('15558880010', 'SESSION_REVOKED');
+            // A no-buffer run must NOT burn the cooldown — otherwise a client whose buffers are only
+            // temporarily cooling down stays un-swappable for 4 min after every failed attempt.
+            expect((service as any).setupCooldownMap.has('swap-2')).toBe(false);
+        });
+
+        it('sets the cooldown only when a real swap proceeds', async () => {
+            process.env.AUTO_CLIENT_SETUP = 'true';
+            await service.onModuleInit();
+            await service.create(makeClientData({ clientId: 'cool-set', mobile: '15558882000', session: 'old-sess' }));
+            bufferClientService.executeQuery.mockResolvedValue([{ mobile: '15558882001', session: 'buf-sess' }]);
+            bufferClientService.getOrEnsureDistinctUsersBackupSession.mockResolvedValue({ tgId: 't', mobile: '15558882001', session: 'distinct' });
+            bufferClientService.findOne.mockResolvedValue({ mobile: '15558882001', username: 'bufu', assignedFirstName: 'Q', assignedProfilePics: [] });
+            let registered: any = null;
+            telegramService.setActiveClientSetup.mockImplementation((s: any) => { registered = s; });
+            telegramService.getActiveClientSetup.mockImplementation(() => registered);
+            telegramService.clearActiveClientSetup.mockImplementation(() => { registered = null; });
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ getMe: jest.fn(async () => ({ username: 'tg' })) } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+
+            expect((service as any).setupCooldownMap.has('cool-set')).toBe(false);
+            await service.setupClient('cool-set', { reason: 'swap', archiveOld: false, formalities: false } as any);
+            // A real swap proceeded → cooldown is now set.
+            expect((service as any).setupCooldownMap.has('cool-set')).toBe(true);
         });
 
         it('handles a permanent error during the real cutover by expiring the new mobile', async () => {

@@ -503,7 +503,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async handleSetupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
-    this.setupCooldownMap.set(clientId, Date.now());
+    // NOTE: the cooldown is intentionally NOT set here. It is set only once a real swap actually
+    // proceeds (a safe buffer candidate was found) — see below. Setting it up-front meant a
+    // "no buffer available" run (e.g. all of a client's buffers are temporarily cooling down on
+    // availableDate) still burned the full 4-min cooldown, blocking every retry for 4 minutes even
+    // though nothing happened. That made a frozen client un-swappable long after buffers freed up.
     const existingClient = await this.findOne(clientId);
     if (!existingClient) {
       this.logger.error(`Client not found: ${clientId}`);
@@ -543,6 +547,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.log('Buffer Clients not safely available');
       return;
     }
+    // A real swap is proceeding — start the cooldown now so a genuine in-progress setup is not
+    // retried concurrently, while a prior no-buffer run does not lock this path out.
+    this.setupCooldownMap.set(clientId, Date.now());
     try {
       this.logger.info(
         `[${clientId}] Selected replacement buffer client`,
