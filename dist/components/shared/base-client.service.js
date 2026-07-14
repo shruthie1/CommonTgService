@@ -392,9 +392,25 @@ class BaseClientService {
     mobilesMatch(a, b) {
         return (0, mobile_utils_1.mobilesEqual)(a, b);
     }
+    classifyInactivationReason(reason, permanent) {
+        const text = reason || '';
+        if (/^\[[A-Z]+\]\s/.test(text))
+            return text;
+        let tag;
+        if ((0, isPermanentError_1.default)({ message: text }))
+            tag = 'DEAD';
+        else if (/^Stuck:/i.test(text))
+            tag = 'STUCK';
+        else if (permanent)
+            tag = 'UNSAFE';
+        else
+            tag = 'TRANSIENT';
+        return `[${tag}] ${text}`;
+    }
     async deactivateClient(mobile, reason, options = {}) {
+        const taggedReason = this.classifyInactivationReason(reason, options.permanent);
         try {
-            await this.updateStatus(mobile, 'inactive', reason);
+            await this.updateStatus(mobile, 'inactive', taggedReason);
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);

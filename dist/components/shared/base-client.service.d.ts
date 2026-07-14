@@ -175,6 +175,7 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected handleError(error: unknown, context: string, mobile?: string): ReturnType<typeof parseError>;
     protected canonicalMobile(mobile: string): string;
     protected mobilesMatch(a?: string | null, b?: string | null): boolean;
+    protected classifyInactivationReason(reason: string, permanent?: boolean): string;
     protected deactivateClient(mobile: string, reason: string, options?: {
         permanent?: boolean;
     }): Promise<boolean>;

@@ -664,6 +664,7 @@ const components_1 = __webpack_require__(/*! ./components */ "./src/components/i
 const interceptors_1 = __webpack_require__(/*! ./interceptors */ "./src/interceptors/index.ts");
 const event_manager_module_1 = __webpack_require__(/*! ./components/event-manager/event-manager.module */ "./src/components/event-manager/event-manager.module.ts");
 const collection_insights_module_1 = __webpack_require__(/*! ./components/collection-insights/collection-insights.module */ "./src/components/collection-insights/collection-insights.module.ts");
+const daily_analytics_module_1 = __webpack_require__(/*! ./components/daily-analytics/daily-analytics.module */ "./src/components/daily-analytics/daily-analytics.module.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -691,6 +692,7 @@ exports.AppModule = AppModule = __decorate([
             upi_ids_module_1.UpiIdModule,
             promote_msgs_module_1.PromoteMsgModule,
             promote_stat_module_1.PromoteStatModule,
+            daily_analytics_module_1.DailyAnalyticsModule,
             stat_module_1.StatModule,
             stat2_module_1.Stat2Module,
             tg_signup_module_1.TgSignupModule,
@@ -23148,7 +23150,6 @@ let ClientService = ClientService_1 = class ClientService {
         return Date.now() > lastSetup + CONFIG.COOLDOWN_PERIOD;
     }
     async handleSetupClient(clientId, setupClientQueryDto) {
-        this.setupCooldownMap.set(clientId, Date.now());
         const existingClient = await this.findOne(clientId);
         if (!existingClient) {
             this.logger.error(`Client not found: ${clientId}`);
@@ -23182,6 +23183,7 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.log('Buffer Clients not safely available');
             return;
         }
+        this.setupCooldownMap.set(clientId, Date.now());
         try {
             this.logger.info(`[${clientId}] Selected replacement buffer client`, { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
             await this.notify(`Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}`);
@@ -25106,6 +25108,408 @@ __exportStar(__webpack_require__(/*! ./collection-insights.controller */ "./src/
 __exportStar(__webpack_require__(/*! ./collection-insights.module */ "./src/components/collection-insights/collection-insights.module.ts"), exports);
 __exportStar(__webpack_require__(/*! ./collection-insights.service */ "./src/components/collection-insights/collection-insights.service.ts"), exports);
 __exportStar(__webpack_require__(/*! ./dto */ "./src/components/collection-insights/dto/index.ts"), exports);
+
+
+/***/ },
+
+/***/ "./src/components/daily-analytics/daily-analytics.controller.ts"
+/*!**********************************************************************!*\
+  !*** ./src/components/daily-analytics/daily-analytics.controller.ts ***!
+  \**********************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DailyAnalyticsController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const daily_analytics_service_1 = __webpack_require__(/*! ./daily-analytics.service */ "./src/components/daily-analytics/daily-analytics.service.ts");
+const METRICS = ['promote', 'reaction', 'user'];
+function parseDays(days) {
+    const n = Number(days);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 60) : 14;
+}
+function parseMetric(metric) {
+    return METRICS.includes(metric) ? metric : 'promote';
+}
+let DailyAnalyticsController = class DailyAnalyticsController {
+    constructor(service) {
+        this.service = service;
+    }
+    async overview(days) {
+        return this.service.overview(parseDays(days));
+    }
+    async daily(metric, days) {
+        return this.service.dailyTotals(parseMetric(metric), parseDays(days));
+    }
+    async byClient(metric, days) {
+        return this.service.byClient(parseMetric(metric), parseDays(days));
+    }
+    async rows(metric, days, clientId) {
+        return this.service.rows(parseMetric(metric), parseDays(days), clientId);
+    }
+};
+exports.DailyAnalyticsController = DailyAnalyticsController;
+__decorate([
+    (0, common_1.Get)('overview'),
+    (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    __param(0, (0, common_1.Query)('days')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], DailyAnalyticsController.prototype, "overview", null);
+__decorate([
+    (0, common_1.Get)(':metric/daily'),
+    (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
+    (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    __param(0, (0, common_1.Param)('metric')),
+    __param(1, (0, common_1.Query)('days')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], DailyAnalyticsController.prototype, "daily", null);
+__decorate([
+    (0, common_1.Get)(':metric/by-client'),
+    (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
+    (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    __param(0, (0, common_1.Param)('metric')),
+    __param(1, (0, common_1.Query)('days')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], DailyAnalyticsController.prototype, "byClient", null);
+__decorate([
+    (0, common_1.Get)(':metric/rows'),
+    (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
+    (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false }),
+    __param(0, (0, common_1.Param)('metric')),
+    __param(1, (0, common_1.Query)('days')),
+    __param(2, (0, common_1.Query)('clientId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], DailyAnalyticsController.prototype, "rows", null);
+exports.DailyAnalyticsController = DailyAnalyticsController = __decorate([
+    (0, swagger_1.ApiTags)('daily-analytics'),
+    (0, common_1.Controller)('daily-analytics'),
+    __metadata("design:paramtypes", [daily_analytics_service_1.DailyAnalyticsService])
+], DailyAnalyticsController);
+
+
+/***/ },
+
+/***/ "./src/components/daily-analytics/daily-analytics.module.ts"
+/*!******************************************************************!*\
+  !*** ./src/components/daily-analytics/daily-analytics.module.ts ***!
+  \******************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DailyAnalyticsModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const daily_analytics_service_1 = __webpack_require__(/*! ./daily-analytics.service */ "./src/components/daily-analytics/daily-analytics.service.ts");
+const daily_analytics_controller_1 = __webpack_require__(/*! ./daily-analytics.controller */ "./src/components/daily-analytics/daily-analytics.controller.ts");
+const daily_analytics_schema_1 = __webpack_require__(/*! ./schemas/daily-analytics.schema */ "./src/components/daily-analytics/schemas/daily-analytics.schema.ts");
+let DailyAnalyticsModule = class DailyAnalyticsModule {
+};
+exports.DailyAnalyticsModule = DailyAnalyticsModule;
+exports.DailyAnalyticsModule = DailyAnalyticsModule = __decorate([
+    (0, common_1.Module)({
+        imports: [
+            mongoose_1.MongooseModule.forFeature([
+                { name: daily_analytics_schema_1.PromoteStatDaily.name, schema: daily_analytics_schema_1.PromoteStatDailySchema },
+                { name: daily_analytics_schema_1.ReactionStatDaily.name, schema: daily_analytics_schema_1.ReactionStatDailySchema },
+                { name: daily_analytics_schema_1.UserStatDaily.name, schema: daily_analytics_schema_1.UserStatDailySchema },
+            ]),
+        ],
+        controllers: [daily_analytics_controller_1.DailyAnalyticsController],
+        providers: [daily_analytics_service_1.DailyAnalyticsService],
+        exports: [daily_analytics_service_1.DailyAnalyticsService],
+    })
+], DailyAnalyticsModule);
+
+
+/***/ },
+
+/***/ "./src/components/daily-analytics/daily-analytics.service.ts"
+/*!*******************************************************************!*\
+  !*** ./src/components/daily-analytics/daily-analytics.service.ts ***!
+  \*******************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.DailyAnalyticsService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+const daily_analytics_schema_1 = __webpack_require__(/*! ./schemas/daily-analytics.schema */ "./src/components/daily-analytics/schemas/daily-analytics.schema.ts");
+let DailyAnalyticsService = class DailyAnalyticsService {
+    constructor(promoteModel, reactionModel, userModel) {
+        this.promoteModel = promoteModel;
+        this.reactionModel = reactionModel;
+        this.userModel = userModel;
+    }
+    modelFor(metric) {
+        if (metric === 'reaction')
+            return this.reactionModel;
+        if (metric === 'user')
+            return this.userModel;
+        return this.promoteModel;
+    }
+    numericFields(metric) {
+        if (metric === 'reaction')
+            return ['success', 'failed', 'restricted', 'floods'];
+        if (metric === 'user')
+            return ['newUsers', 'active', 'paid', 'revenue'];
+        return ['sent', 'success', 'failed', 'banned'];
+    }
+    lastNDates(days) {
+        const out = [];
+        const n = Math.min(Math.max(Math.floor(days) || 1, 1), 60);
+        for (let i = n - 1; i >= 0; i -= 1) {
+            const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000 - i * 24 * 60 * 60 * 1000);
+            out.push(ist.toISOString().slice(0, 10));
+        }
+        return out;
+    }
+    async rows(metric, days = 14, clientId) {
+        const dates = this.lastNDates(days);
+        const filter = { date: { $in: dates } };
+        if (clientId)
+            filter.clientId = clientId;
+        return this.modelFor(metric)
+            .find(filter, { _id: 0, expireAt: 0, createdAt: 0 })
+            .sort({ date: 1, clientId: 1 })
+            .lean()
+            .exec();
+    }
+    async dailyTotals(metric, days = 14) {
+        const dates = this.lastNDates(days);
+        const fields = this.numericFields(metric);
+        const group = { _id: '$date' };
+        for (const f of fields)
+            group[f] = { $sum: `$${f}` };
+        const agg = await this.modelFor(metric)
+            .aggregate([{ $match: { date: { $in: dates } } }, { $group: group }, { $sort: { _id: 1 } }])
+            .exec();
+        const byDate = new Map(agg.map((d) => [d._id, d]));
+        return dates.map((date) => {
+            const row = byDate.get(date) || {};
+            const out = { date };
+            for (const f of fields)
+                out[f] = row[f] || 0;
+            return out;
+        });
+    }
+    async byClient(metric, days = 14) {
+        const dates = this.lastNDates(days);
+        const fields = this.numericFields(metric);
+        const group = { _id: '$clientId' };
+        for (const f of fields)
+            group[f] = { $sum: `$${f}` };
+        const agg = await this.modelFor(metric)
+            .aggregate([{ $match: { date: { $in: dates } } }, { $group: group }, { $sort: { _id: 1 } }])
+            .exec();
+        return agg.map((d) => {
+            const out = { clientId: d._id };
+            for (const f of fields)
+                out[f] = d[f] || 0;
+            return out;
+        });
+    }
+    async overview(days = 14) {
+        const [promote, reaction, user] = await Promise.all([
+            this.dailyTotals('promote', days),
+            this.dailyTotals('reaction', days),
+            this.dailyTotals('user', days),
+        ]);
+        return { days, promote, reaction, user };
+    }
+};
+exports.DailyAnalyticsService = DailyAnalyticsService;
+exports.DailyAnalyticsService = DailyAnalyticsService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)(daily_analytics_schema_1.PromoteStatDaily.name)),
+    __param(1, (0, mongoose_1.InjectModel)(daily_analytics_schema_1.ReactionStatDaily.name)),
+    __param(2, (0, mongoose_1.InjectModel)(daily_analytics_schema_1.UserStatDaily.name)),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        mongoose_2.Model,
+        mongoose_2.Model])
+], DailyAnalyticsService);
+
+
+/***/ },
+
+/***/ "./src/components/daily-analytics/schemas/daily-analytics.schema.ts"
+/*!**************************************************************************!*\
+  !*** ./src/components/daily-analytics/schemas/daily-analytics.schema.ts ***!
+  \**************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UserStatDailySchema = exports.UserStatDaily = exports.ReactionStatDailySchema = exports.ReactionStatDaily = exports.PromoteStatDailySchema = exports.PromoteStatDaily = void 0;
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+let PromoteStatDaily = class PromoteStatDaily {
+};
+exports.PromoteStatDaily = PromoteStatDaily;
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], PromoteStatDaily.prototype, "date", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], PromoteStatDaily.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], PromoteStatDaily.prototype, "profile", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], PromoteStatDaily.prototype, "sent", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], PromoteStatDaily.prototype, "success", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], PromoteStatDaily.prototype, "failed", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], PromoteStatDaily.prototype, "banned", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], PromoteStatDaily.prototype, "expireAt", void 0);
+exports.PromoteStatDaily = PromoteStatDaily = __decorate([
+    (0, mongoose_1.Schema)({ collection: 'promoteStatsDaily', strict: false })
+], PromoteStatDaily);
+exports.PromoteStatDailySchema = mongoose_1.SchemaFactory.createForClass(PromoteStatDaily);
+let ReactionStatDaily = class ReactionStatDaily {
+};
+exports.ReactionStatDaily = ReactionStatDaily;
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], ReactionStatDaily.prototype, "date", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], ReactionStatDaily.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], ReactionStatDaily.prototype, "profile", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], ReactionStatDaily.prototype, "success", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], ReactionStatDaily.prototype, "failed", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], ReactionStatDaily.prototype, "restricted", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], ReactionStatDaily.prototype, "floods", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], ReactionStatDaily.prototype, "expireAt", void 0);
+exports.ReactionStatDaily = ReactionStatDaily = __decorate([
+    (0, mongoose_1.Schema)({ collection: 'reactionStatsDaily', strict: false })
+], ReactionStatDaily);
+exports.ReactionStatDailySchema = mongoose_1.SchemaFactory.createForClass(ReactionStatDaily);
+let UserStatDaily = class UserStatDaily {
+};
+exports.UserStatDaily = UserStatDaily;
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], UserStatDaily.prototype, "date", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], UserStatDaily.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], UserStatDaily.prototype, "profile", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], UserStatDaily.prototype, "newUsers", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], UserStatDaily.prototype, "active", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], UserStatDaily.prototype, "paid", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], UserStatDaily.prototype, "revenue", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], UserStatDaily.prototype, "expireAt", void 0);
+exports.UserStatDaily = UserStatDaily = __decorate([
+    (0, mongoose_1.Schema)({ collection: 'userStatsDaily', strict: false })
+], UserStatDaily);
+exports.UserStatDailySchema = mongoose_1.SchemaFactory.createForClass(UserStatDaily);
 
 
 /***/ },
@@ -33047,9 +33451,25 @@ class BaseClientService {
     mobilesMatch(a, b) {
         return (0, mobile_utils_1.mobilesEqual)(a, b);
     }
+    classifyInactivationReason(reason, permanent) {
+        const text = reason || '';
+        if (/^\[[A-Z]+\]\s/.test(text))
+            return text;
+        let tag;
+        if ((0, isPermanentError_1.default)({ message: text }))
+            tag = 'DEAD';
+        else if (/^Stuck:/i.test(text))
+            tag = 'STUCK';
+        else if (permanent)
+            tag = 'UNSAFE';
+        else
+            tag = 'TRANSIENT';
+        return `[${tag}] ${text}`;
+    }
     async deactivateClient(mobile, reason, options = {}) {
+        const taggedReason = this.classifyInactivationReason(reason, options.permanent);
         try {
-            await this.updateStatus(mobile, 'inactive', reason);
+            await this.updateStatus(mobile, 'inactive', taggedReason);
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);

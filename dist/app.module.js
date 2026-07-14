@@ -38,6 +38,7 @@ const components_1 = require("./components");
 const interceptors_1 = require("./interceptors");
 const event_manager_module_1 = require("./components/event-manager/event-manager.module");
 const collection_insights_module_1 = require("./components/collection-insights/collection-insights.module");
+const daily_analytics_module_1 = require("./components/daily-analytics/daily-analytics.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -65,6 +66,7 @@ exports.AppModule = AppModule = __decorate([
             upi_ids_module_1.UpiIdModule,
             promote_msgs_module_1.PromoteMsgModule,
             promote_stat_module_1.PromoteStatModule,
+            daily_analytics_module_1.DailyAnalyticsModule,
             stat_module_1.StatModule,
             stat2_module_1.Stat2Module,
             tg_signup_module_1.TgSignupModule,
