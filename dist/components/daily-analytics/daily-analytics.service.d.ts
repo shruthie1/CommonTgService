@@ -9,9 +9,10 @@ export declare class DailyAnalyticsService {
     private modelFor;
     private numericFields;
     private lastNDates;
-    rows(metric: DailyMetric, days?: number, clientId?: string): Promise<any[]>;
+    rows(metric: DailyMetric, days?: number, clientId?: string, namespace?: string, mobile?: string): Promise<any[]>;
     dailyTotals(metric: DailyMetric, days?: number): Promise<Record<string, unknown>[]>;
-    byClient(metric: DailyMetric, days?: number): Promise<Record<string, unknown>[]>;
+    byClient(metric: DailyMetric, days?: number, namespace?: string): Promise<Record<string, unknown>[]>;
+    byMobile(metric: DailyMetric, days?: number, clientId?: string, namespace?: string): Promise<Record<string, unknown>[]>;
     overview(days?: number): Promise<{
         days: number;
         promote: Record<string, unknown>[];

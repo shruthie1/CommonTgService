@@ -25154,11 +25154,14 @@ let DailyAnalyticsController = class DailyAnalyticsController {
     async daily(metric, days) {
         return this.service.dailyTotals(parseMetric(metric), parseDays(days));
     }
-    async byClient(metric, days) {
-        return this.service.byClient(parseMetric(metric), parseDays(days));
+    async byClient(metric, days, namespace) {
+        return this.service.byClient(parseMetric(metric), parseDays(days), namespace);
     }
-    async rows(metric, days, clientId) {
-        return this.service.rows(parseMetric(metric), parseDays(days), clientId);
+    async byMobile(metric, days, clientId, namespace) {
+        return this.service.byMobile(parseMetric(metric), parseDays(days), clientId, namespace);
+    }
+    async rows(metric, days, clientId, namespace, mobile) {
+        return this.service.rows(parseMetric(metric), parseDays(days), clientId, namespace, mobile);
     }
 };
 exports.DailyAnalyticsController = DailyAnalyticsController;
@@ -25184,22 +25187,42 @@ __decorate([
     (0, common_1.Get)(':metric/by-client'),
     (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
     (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" }),
     __param(0, (0, common_1.Param)('metric')),
     __param(1, (0, common_1.Query)('days')),
+    __param(2, (0, common_1.Query)('namespace')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], DailyAnalyticsController.prototype, "byClient", null);
+__decorate([
+    (0, common_1.Get)(':metric/by-mobile'),
+    (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
+    (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" }),
+    __param(0, (0, common_1.Param)('metric')),
+    __param(1, (0, common_1.Query)('days')),
+    __param(2, (0, common_1.Query)('clientId')),
+    __param(3, (0, common_1.Query)('namespace')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], DailyAnalyticsController.prototype, "byMobile", null);
 __decorate([
     (0, common_1.Get)(':metric/rows'),
     (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
     (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false }),
     __param(0, (0, common_1.Param)('metric')),
     __param(1, (0, common_1.Query)('days')),
     __param(2, (0, common_1.Query)('clientId')),
+    __param(3, (0, common_1.Query)('namespace')),
+    __param(4, (0, common_1.Query)('mobile')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], DailyAnalyticsController.prototype, "rows", null);
 exports.DailyAnalyticsController = DailyAnalyticsController = __decorate([
@@ -25306,11 +25329,15 @@ let DailyAnalyticsService = class DailyAnalyticsService {
         }
         return out;
     }
-    async rows(metric, days = 14, clientId) {
+    async rows(metric, days = 14, clientId, namespace, mobile) {
         const dates = this.lastNDates(days);
         const filter = { date: { $in: dates } };
         if (clientId)
             filter.clientId = clientId;
+        if (namespace)
+            filter.namespace = namespace;
+        if (mobile)
+            filter.mobile = mobile;
         return this.modelFor(metric)
             .find(filter, { _id: 0, expireAt: 0, createdAt: 0 })
             .sort({ date: 1, clientId: 1 })
@@ -25335,17 +25362,45 @@ let DailyAnalyticsService = class DailyAnalyticsService {
             return out;
         });
     }
-    async byClient(metric, days = 14) {
+    async byClient(metric, days = 14, namespace) {
         const dates = this.lastNDates(days);
         const fields = this.numericFields(metric);
+        const match = { date: { $in: dates } };
+        if (namespace)
+            match.namespace = namespace;
         const group = { _id: '$clientId' };
         for (const f of fields)
             group[f] = { $sum: `$${f}` };
         const agg = await this.modelFor(metric)
-            .aggregate([{ $match: { date: { $in: dates } } }, { $group: group }, { $sort: { _id: 1 } }])
+            .aggregate([{ $match: match }, { $group: group }, { $sort: { _id: 1 } }])
             .exec();
         return agg.map((d) => {
             const out = { clientId: d._id };
+            for (const f of fields)
+                out[f] = d[f] || 0;
+            return out;
+        });
+    }
+    async byMobile(metric, days = 14, clientId, namespace) {
+        const dates = this.lastNDates(days);
+        const fields = this.numericFields(metric);
+        const match = { date: { $in: dates } };
+        if (clientId)
+            match.clientId = clientId;
+        if (namespace)
+            match.namespace = namespace;
+        const group = { _id: { clientId: '$clientId', mobile: '$mobile' } };
+        for (const f of fields)
+            group[f] = { $sum: `$${f}` };
+        const agg = await this.modelFor(metric)
+            .aggregate([
+            { $match: match },
+            { $group: group },
+            { $sort: { '_id.clientId': 1, '_id.mobile': 1 } },
+        ])
+            .exec();
+        return agg.map((d) => {
+            const out = { clientId: d._id.clientId, mobile: d._id.mobile };
             for (const f of fields)
                 out[f] = d[f] || 0;
             return out;
@@ -25403,7 +25458,15 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
+], PromoteStatDaily.prototype, "namespace", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
 ], PromoteStatDaily.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], PromoteStatDaily.prototype, "mobile", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
@@ -25442,7 +25505,15 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
+], ReactionStatDaily.prototype, "namespace", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
 ], ReactionStatDaily.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], ReactionStatDaily.prototype, "mobile", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
@@ -25481,7 +25552,15 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)
+], UserStatDaily.prototype, "namespace", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
 ], UserStatDaily.prototype, "clientId", void 0);
+__decorate([
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], UserStatDaily.prototype, "mobile", void 0);
 __decorate([
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)

@@ -34,11 +34,14 @@ let DailyAnalyticsController = class DailyAnalyticsController {
     async daily(metric, days) {
         return this.service.dailyTotals(parseMetric(metric), parseDays(days));
     }
-    async byClient(metric, days) {
-        return this.service.byClient(parseMetric(metric), parseDays(days));
+    async byClient(metric, days, namespace) {
+        return this.service.byClient(parseMetric(metric), parseDays(days), namespace);
     }
-    async rows(metric, days, clientId) {
-        return this.service.rows(parseMetric(metric), parseDays(days), clientId);
+    async byMobile(metric, days, clientId, namespace) {
+        return this.service.byMobile(parseMetric(metric), parseDays(days), clientId, namespace);
+    }
+    async rows(metric, days, clientId, namespace, mobile) {
+        return this.service.rows(parseMetric(metric), parseDays(days), clientId, namespace, mobile);
     }
 };
 exports.DailyAnalyticsController = DailyAnalyticsController;
@@ -64,22 +67,42 @@ __decorate([
     (0, common_1.Get)(':metric/by-client'),
     (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
     (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" }),
     __param(0, (0, common_1.Param)('metric')),
     __param(1, (0, common_1.Query)('days')),
+    __param(2, (0, common_1.Query)('namespace')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], DailyAnalyticsController.prototype, "byClient", null);
+__decorate([
+    (0, common_1.Get)(':metric/by-mobile'),
+    (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
+    (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" }),
+    __param(0, (0, common_1.Param)('metric')),
+    __param(1, (0, common_1.Query)('days')),
+    __param(2, (0, common_1.Query)('clientId')),
+    __param(3, (0, common_1.Query)('namespace')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], DailyAnalyticsController.prototype, "byMobile", null);
 __decorate([
     (0, common_1.Get)(':metric/rows'),
     (0, swagger_1.ApiParam)({ name: 'metric', enum: METRICS }),
     (0, swagger_1.ApiQuery)({ name: 'days', required: false }),
     (0, swagger_1.ApiQuery)({ name: 'clientId', required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" }),
+    (0, swagger_1.ApiQuery)({ name: 'mobile', required: false }),
     __param(0, (0, common_1.Param)('metric')),
     __param(1, (0, common_1.Query)('days')),
     __param(2, (0, common_1.Query)('clientId')),
+    __param(3, (0, common_1.Query)('namespace')),
+    __param(4, (0, common_1.Query)('mobile')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], DailyAnalyticsController.prototype, "rows", null);
 exports.DailyAnalyticsController = DailyAnalyticsController = __decorate([
