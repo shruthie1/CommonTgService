@@ -37,20 +37,47 @@ export class DailyAnalyticsController {
   @Get(':metric/by-client')
   @ApiParam({ name: 'metric', enum: METRICS })
   @ApiQuery({ name: 'days', required: false })
-  async byClient(@Param('metric') metric: string, @Query('days') days?: string) {
-    return this.service.byClient(parseMetric(metric), parseDays(days));
+  @ApiQuery({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" })
+  async byClient(
+    @Param('metric') metric: string,
+    @Query('days') days?: string,
+    @Query('namespace') namespace?: string,
+  ) {
+    return this.service.byClient(parseMetric(metric), parseDays(days), namespace);
   }
 
-  /** Raw daily rows for one metric, optionally filtered to a single client. */
+  /**
+   * Per-mobile totals for one metric over the window — breaks a clientId's blended row out by
+   * mobile (promote-clients runs many mobiles per clientId), optionally scoped to one client.
+   */
+  @Get(':metric/by-mobile')
+  @ApiParam({ name: 'metric', enum: METRICS })
+  @ApiQuery({ name: 'days', required: false })
+  @ApiQuery({ name: 'clientId', required: false })
+  @ApiQuery({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" })
+  async byMobile(
+    @Param('metric') metric: string,
+    @Query('days') days?: string,
+    @Query('clientId') clientId?: string,
+    @Query('namespace') namespace?: string,
+  ) {
+    return this.service.byMobile(parseMetric(metric), parseDays(days), clientId, namespace);
+  }
+
+  /** Raw daily rows for one metric, optionally filtered to a single client/namespace/mobile. */
   @Get(':metric/rows')
   @ApiParam({ name: 'metric', enum: METRICS })
   @ApiQuery({ name: 'days', required: false })
   @ApiQuery({ name: 'clientId', required: false })
+  @ApiQuery({ name: 'namespace', required: false, description: "'promote-clients' | 'tg-aut'" })
+  @ApiQuery({ name: 'mobile', required: false })
   async rows(
     @Param('metric') metric: string,
     @Query('days') days?: string,
     @Query('clientId') clientId?: string,
+    @Query('namespace') namespace?: string,
+    @Query('mobile') mobile?: string,
   ) {
-    return this.service.rows(parseMetric(metric), parseDays(days), clientId);
+    return this.service.rows(parseMetric(metric), parseDays(days), clientId, namespace, mobile);
   }
 }

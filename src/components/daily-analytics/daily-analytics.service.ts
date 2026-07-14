@@ -48,11 +48,13 @@ export class DailyAnalyticsService {
     return out;
   }
 
-  /** Raw daily rows for a metric, optionally filtered by client, over the last N days. */
-  async rows(metric: DailyMetric, days = 14, clientId?: string) {
+  /** Raw daily rows for a metric, optionally filtered by client/namespace/mobile, over the last N days. */
+  async rows(metric: DailyMetric, days = 14, clientId?: string, namespace?: string, mobile?: string) {
     const dates = this.lastNDates(days);
     const filter: Record<string, unknown> = { date: { $in: dates } };
     if (clientId) filter.clientId = clientId;
+    if (namespace) filter.namespace = namespace;
+    if (mobile) filter.mobile = mobile;
     return this.modelFor(metric)
       .find(filter, { _id: 0, expireAt: 0, createdAt: 0 })
       .sort({ date: 1, clientId: 1 })
@@ -79,16 +81,46 @@ export class DailyAnalyticsService {
   }
 
   /** Per-client totals for a metric over the last N days (leaderboard/table view). */
-  async byClient(metric: DailyMetric, days = 14) {
+  async byClient(metric: DailyMetric, days = 14, namespace?: string) {
     const dates = this.lastNDates(days);
     const fields = this.numericFields(metric);
+    const match: Record<string, unknown> = { date: { $in: dates } };
+    if (namespace) match.namespace = namespace;
     const group: Record<string, unknown> = { _id: '$clientId' };
     for (const f of fields) group[f] = { $sum: `$${f}` };
     const agg = await this.modelFor(metric)
-      .aggregate([{ $match: { date: { $in: dates } } }, { $group: group }, { $sort: { _id: 1 } }] as any[])
+      .aggregate([{ $match: match }, { $group: group }, { $sort: { _id: 1 } }] as any[])
       .exec();
     return agg.map((d: any) => {
       const out: Record<string, unknown> = { clientId: d._id };
+      for (const f of fields) out[f] = d[f] || 0;
+      return out;
+    });
+  }
+
+  /**
+   * Per-mobile totals for a metric over the last N days — the per-mobile breakdown view.
+   * promote-clients runs MANY mobiles per clientId, so this is the only way to see e.g. which
+   * mobile under a clientId is failing (real example: meghana1 sent=75 failed=72 blended across
+   * mobiles before this dimension existed). Optionally scoped to one clientId and/or namespace.
+   */
+  async byMobile(metric: DailyMetric, days = 14, clientId?: string, namespace?: string) {
+    const dates = this.lastNDates(days);
+    const fields = this.numericFields(metric);
+    const match: Record<string, unknown> = { date: { $in: dates } };
+    if (clientId) match.clientId = clientId;
+    if (namespace) match.namespace = namespace;
+    const group: Record<string, unknown> = { _id: { clientId: '$clientId', mobile: '$mobile' } };
+    for (const f of fields) group[f] = { $sum: `$${f}` };
+    const agg = await this.modelFor(metric)
+      .aggregate([
+        { $match: match },
+        { $group: group },
+        { $sort: { '_id.clientId': 1, '_id.mobile': 1 } },
+      ] as any[])
+      .exec();
+    return agg.map((d: any) => {
+      const out: Record<string, unknown> = { clientId: d._id.clientId, mobile: d._id.mobile };
       for (const f of fields) out[f] = d[f] || 0;
       return out;
     });
