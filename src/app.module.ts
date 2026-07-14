@@ -29,6 +29,7 @@ import { BotsModule } from './components';
 import { ExceptionsFilter } from './interceptors';
 import { EventManagerModule } from './components/event-manager/event-manager.module';
 import { CollectionInsightsModule } from './components/collection-insights/collection-insights.module';
+import { DailyAnalyticsModule } from './components/daily-analytics/daily-analytics.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { CollectionInsightsModule } from './components/collection-insights/colle
     UpiIdModule,
     PromoteMsgModule,
     PromoteStatModule,
+    DailyAnalyticsModule,
     StatModule,
     Stat2Module,
     TgSignupModule,
