@@ -438,7 +438,6 @@ let ClientService = ClientService_1 = class ClientService {
         return Date.now() > lastSetup + CONFIG.COOLDOWN_PERIOD;
     }
     async handleSetupClient(clientId, setupClientQueryDto) {
-        this.setupCooldownMap.set(clientId, Date.now());
         const existingClient = await this.findOne(clientId);
         if (!existingClient) {
             this.logger.error(`Client not found: ${clientId}`);
@@ -472,6 +471,7 @@ let ClientService = ClientService_1 = class ClientService {
             this.logger.log('Buffer Clients not safely available');
             return;
         }
+        this.setupCooldownMap.set(clientId, Date.now());
         try {
             this.logger.info(`[${clientId}] Selected replacement buffer client`, { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
             await this.notify(`Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}`);
