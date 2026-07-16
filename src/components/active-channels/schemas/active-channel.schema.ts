@@ -64,13 +64,8 @@ export class ActiveChannel {
   @Prop({ type: Number, default: 0 })
   dMRestriction?: number;
 
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  recentUniqueUsers?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  lastUniqueUserCheckAt?: number;
+  // REMOVED recentUniqueUsers / lastUniqueUserCheckAt — dead activity-probe seeds. Only ever written as
+  // 0; no reader in CommonTgService or the promotion apps. Removed from the canonical shared schema.
 
   @ApiProperty({ type: [String], default: defaultMessages })
   @Prop({ type: [String], default: defaultMessages })
@@ -116,21 +111,14 @@ export class ActiveChannel {
   @Prop({ type: Number, default: null })
   messageId?: number;
 
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  tempBan?: boolean;
-
   @ApiProperty({ type: Number, default: 0 })
   @Prop({ type: Number, default: 0 })
   deletedCount?: number;
 
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  starred?: boolean;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  score?: number;
+  // REMOVED tempBan — never set true by any code, no send-gate read it (dead half-wired flag).
+  // REMOVED starred (channel) — never set true; only reader was an unrendered analytics count.
+  //   (users.starred is a separate, live field — unaffected.)
+  // REMOVED score — no writer set a real value, no reader (Mongoose @Prop default artifact only).
 }
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);

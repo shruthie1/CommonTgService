@@ -24,7 +24,7 @@ export class ActiveChannelsController {
   }
 
   @Post('auto-heal')
-  @ApiOperation({ summary: 'Clear time-expired reactRestricted / tempBan flags so channels can recover' })
+  @ApiOperation({ summary: 'Clear time-expired reactRestricted flags so channels can recover' })
   async autoHeal() {
     return this.activeChannelsService.autoHealChannels();
   }
@@ -42,7 +42,7 @@ export class ActiveChannelsController {
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'sortOrder', required: false, type: String })
   @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | temp_banned | with_errors | exhausted | high_deleted' })
+  @ApiQuery({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | with_errors | exhausted | high_deleted' })
   async paginated(
     @Query('page') page?: string,
     @Query('limit') limit?: string,

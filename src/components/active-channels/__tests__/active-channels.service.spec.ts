@@ -337,11 +337,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(r.total).toBe(2);
     });
 
-    test('filter temp_banned', async () => {
-      await seed({ channelId: 'p6', tempBan: true });
-      const r = await service.paginated({ filter: 'temp_banned' });
-      expect(r.total).toBe(1);
-    });
+    // 'temp_banned' filter removed — tempBan was a dead flag never set true.
 
     test('filter with_errors', async () => {
       await seedRaw({ channelId: 'p7', lastErrorType: 'X' });
@@ -441,16 +437,15 @@ describe('ActiveChannelsService (real Mongo)', () => {
   });
 
   describe('autoHealChannels', () => {
-    test('heals expired reactRestricted and tempBan', async () => {
+    test('heals expired reactRestricted', async () => {
       const oldDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
-      const oldTs = Date.now() - 5 * 24 * 60 * 60 * 1000;
       await seed({ channelId: 'h1', reactRestricted: true, reactRestrictedAt: oldDate } as any);
-      await seed({ channelId: 'h2', tempBan: true, bannedAt: oldTs } as any);
       const r = await service.autoHealChannels();
       expect(r.reactRestrictedHealed).toBe(1);
-      expect(r.tempBanHealed).toBe(1);
       const c1 = await model.findOne({ channelId: 'h1' });
       expect(c1.reactRestricted).toBe(false);
+      // tempBan healing was removed (dead flag); the return no longer carries tempBanHealed.
+      expect((r as Record<string, unknown>).tempBanHealed).toBeUndefined();
     });
 
     test('does not heal recent restrictions', async () => {

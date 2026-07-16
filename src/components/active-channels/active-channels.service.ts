@@ -28,7 +28,6 @@ export class ActiveChannelsService implements OnModuleInit {
   // permanent verdict. Clear it after the window so a one-off restriction (or a
   // false positive) doesn't keep a channel dead forever.
   private readonly REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;  // 3 days
-  private readonly TEMP_BAN_HEAL_MS = 3 * 24 * 60 * 60 * 1000;          // 3 days
 
   async onModuleInit(): Promise<void> {
     try {
@@ -46,17 +45,14 @@ export class ActiveChannelsService implements OnModuleInit {
   /**
    * Clear time-expired channel-level restrictions so flagged channels can recover.
    *
-   * The schema records `reactRestrictedAt` / `bannedAt` timestamps but nothing
-   * ever read them — meaning a channel marked `reactRestricted` or `tempBan`
-   * stayed dead permanently. This heals them once the window has elapsed:
-   *  - reactRestricted cleared after REACT_RESTRICTED_HEAL_MS (so it's re-tried)
-   *  - tempBan cleared after TEMP_BAN_HEAL_MS
-   * Permanent flags (`banned`, `private`) are NOT touched here.
+   * The schema records `reactRestrictedAt` but nothing ever read it — meaning a channel marked
+   * `reactRestricted` stayed dead permanently. This heals it once the window has elapsed
+   * (REACT_RESTRICTED_HEAL_MS) so it's re-tried. Permanent flags (`banned`, `private`) are NOT touched.
+   * (The old `tempBan` healing was removed — tempBan was a dead flag never set true.)
    */
-  async autoHealChannels(): Promise<{ reactRestrictedHealed: number; tempBanHealed: number }> {
+  async autoHealChannels(): Promise<{ reactRestrictedHealed: number }> {
     const now = Date.now();
     const reactCutoff = new Date(now - this.REACT_RESTRICTED_HEAL_MS);
-    const tempBanCutoff = now - this.TEMP_BAN_HEAL_MS;
 
     // reactRestrictedAt is a Date; heal where it's older than the cutoff.
     const reactResult = await this.activeChannelModel.updateMany(
@@ -64,18 +60,11 @@ export class ActiveChannelsService implements OnModuleInit {
       { $set: { reactRestricted: false, reactRestrictedAt: null, updatedAt: new Date() } },
     );
 
-    // bannedAt is a numeric timestamp; heal tempBan where it's older than the cutoff.
-    const tempBanResult = await this.activeChannelModel.updateMany(
-      { tempBan: true, bannedAt: { $ne: null, $lte: tempBanCutoff } },
-      { $set: { tempBan: false, bannedAt: null, updatedAt: new Date() } },
-    );
-
     const reactRestrictedHealed = reactResult.modifiedCount || 0;
-    const tempBanHealed = tempBanResult.modifiedCount || 0;
-    if (reactRestrictedHealed > 0 || tempBanHealed > 0) {
-      this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed}, tempBan on ${tempBanHealed} channel(s)`);
+    if (reactRestrictedHealed > 0) {
+      this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed} channel(s)`);
     }
-    return { reactRestrictedHealed, tempBanHealed };
+    return { reactRestrictedHealed };
   }
 
   async create(createActiveChannelDto: CreateActiveChannelDto): Promise<ActiveChannel> {
@@ -126,10 +115,6 @@ export class ActiveChannelsService implements OnModuleInit {
           'reactRestricted',
           'wordRestriction',
           'dMRestriction',
-          'recentUniqueUsers',
-          'lastUniqueUserCheckAt',
-          'starred',
-          'score',
         ]);
 
         const defaults: Record<string, unknown> = {
@@ -143,8 +128,6 @@ export class ActiveChannelsService implements OnModuleInit {
           reactRestricted: false,
           wordRestriction: 0,
           dMRestriction: 0,
-          recentUniqueUsers: 0,
-          lastUniqueUserCheckAt: 0,
           availableMsgs: [],
           banned: false,
           bannedAt: null,
@@ -377,7 +360,6 @@ export class ActiveChannelsService implements OnModuleInit {
             banned: { $ne: true },
             forbidden: { $ne: true },
             private: { $ne: true },
-            tempBan: { $ne: true },
           },
         ],
       };
@@ -473,12 +455,10 @@ export class ActiveChannelsService implements OnModuleInit {
                 restricted: { $sum: { $cond: [{ $eq: ['$restricted', true] }, 1, 0] } },
                 banned: { $sum: { $cond: [{ $eq: ['$banned', true] }, 1, 0] } },
                 forbidden: { $sum: { $cond: [{ $eq: ['$forbidden', true] }, 1, 0] } },
-                tempBan: { $sum: { $cond: [{ $eq: ['$tempBan', true] }, 1, 0] } },
                 reactRestricted: { $sum: { $cond: [{ $eq: ['$reactRestricted', true] }, 1, 0] } },
                 isPrivate: { $sum: { $cond: [{ $eq: ['$private', true] }, 1, 0] } },
                 broadcast: { $sum: { $cond: [{ $eq: ['$broadcast', true] }, 1, 0] } },
                 megagroup: { $sum: { $cond: [{ $eq: ['$megagroup', true] }, 1, 0] } },
-                starred: { $sum: { $cond: [{ $eq: ['$starred', true] }, 1, 0] } },
                 withUsername: { $sum: { $cond: [{ $and: [{ $ne: ['$username', null] }, { $ne: ['$username', ''] }] }, 1, 0] } },
               },
             },
@@ -619,12 +599,10 @@ export class ActiveChannelsService implements OnModuleInit {
         restricted: overview.restricted || 0,
         banned: overview.banned || 0,
         forbidden: overview.forbidden || 0,
-        tempBan: overview.tempBan || 0,
         reactRestricted: overview.reactRestricted || 0,
         private: overview.isPrivate || 0,
         broadcast: overview.broadcast || 0,
         megagroup: overview.megagroup || 0,
-        starred: overview.starred || 0,
         withUsername: overview.withUsername || 0,
       },
       messages: {
@@ -707,7 +685,6 @@ export class ActiveChannelsService implements OnModuleInit {
     if (filter === 'can_send') { query.canSendMsgs = true; query.restricted = { $ne: true }; query.banned = { $ne: true }; query.forbidden = { $ne: true }; }
     else if (filter === 'restricted') query.restricted = true;
     else if (filter === 'banned') { query.$or = [{ banned: true }, { forbidden: true }]; }
-    else if (filter === 'temp_banned') query.tempBan = true;
     else if (filter === 'with_errors') { query.lastErrorType = { $ne: null, $exists: true }; }
     else if (filter === 'exhausted') { query.$expr = { $eq: [{ $size: { $ifNull: ['$availableMsgs', []] } }, 0] }; }
     else if (filter === 'high_deleted') { query.deletedCount = { $gt: 30 }; }

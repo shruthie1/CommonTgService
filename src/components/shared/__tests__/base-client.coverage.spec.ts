@@ -2376,7 +2376,7 @@ describe('helper fallback branches', () => {
         expect(can({ ...base, banned: true })).toBe(false);
         expect(can({ ...base, forbidden: true })).toBe(false);
         expect(can({ ...base, private: true })).toBe(false);
-        expect(can({ ...base, tempBan: true })).toBe(false);
+        // tempBan gate removed (dead flag, never set true) — no longer excludes.
         expect(can(base)).toBe(true);
     });
 

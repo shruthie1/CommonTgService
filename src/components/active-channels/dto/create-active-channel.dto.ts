@@ -37,11 +37,7 @@ export class CreateActiveChannelDto {
   @ApiProperty({ default: 0 })
   dMRestriction?: number = 0;
 
-  @ApiProperty({ default: 0, required: false })
-  recentUniqueUsers?: number = 0;
-
-  @ApiProperty({ default: 0, required: false })
-  lastUniqueUserCheckAt?: number = 0;
+  // REMOVED recentUniqueUsers / lastUniqueUserCheckAt — dead activity-probe fields (see schema).
 
   @ApiProperty({ type: [String] })
   availableMsgs?: string[];
@@ -63,9 +59,6 @@ export class CreateActiveChannelDto {
     required: false })
   private: boolean = false;
 
-  @ApiProperty({ description: 'Starred status', default: false, required: false })
-  starred?: boolean = false;
-
-  @ApiProperty({ description: 'Channel score', default: 0, required: false })
-  score?: number = 0;
+  // REMOVED starred / score — dead fields (see schema). channel starred was never set true and score
+  // had no writer/reader; both were Mongoose default artifacts polluting the shared collection.
 }

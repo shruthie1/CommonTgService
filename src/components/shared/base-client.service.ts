@@ -820,7 +820,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (channel.banned === true) return false;
         if (channel.forbidden === true) return false;
         if (channel.private === true) return false;
-        if ('tempBan' in channel && channel.tempBan === true) return false;
+        // (removed a dead `tempBan === true` guard — tempBan was never set true and is now off the schema.)
         return true;
     }
 
