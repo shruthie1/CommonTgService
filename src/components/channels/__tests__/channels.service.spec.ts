@@ -64,27 +64,4 @@ describe('ChannelsService channel-state persistence', () => {
     expect(bulkWrite).not.toHaveBeenCalled();
   });
 
-  test('onModuleInit repairs legacy contradictory sendability flags', async () => {
-    const updateMany = jest.fn(() => ({ exec: jest.fn(async () => ({ modifiedCount: 2 })) }));
-    const service = new ChannelsService({ updateMany } as any);
-
-    await service.onModuleInit();
-
-    expect(updateMany).toHaveBeenCalledWith(
-      {
-        canSendMsgs: true,
-        $or: [{ sendMessages: true }, { sendPlain: true }],
-        banned: { $ne: true },
-        forbidden: { $ne: true },
-        private: { $ne: true },
-        restricted: { $ne: true },
-      },
-      {
-        $set: expect.objectContaining({
-          sendMessages: false,
-          sendPlain: false,
-        }),
-      },
-    );
-  });
 });

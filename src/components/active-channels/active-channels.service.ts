@@ -1,5 +1,5 @@
 import { PromoteMsgsService } from '../promote-msgs/promote-msgs.service';
-import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, OnModuleInit, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
@@ -12,7 +12,7 @@ import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
 
 @Injectable()
-export class ActiveChannelsService implements OnModuleInit {
+export class ActiveChannelsService {
   private readonly DEFAULT_LIMIT = 50;
   private readonly DEFAULT_SKIP = 0;
   private readonly MIN_PARTICIPANTS_COUNT = 600;
@@ -28,19 +28,6 @@ export class ActiveChannelsService implements OnModuleInit {
   // permanent verdict. Clear it after the window so a one-off restriction (or a
   // false positive) doesn't keep a channel dead forever.
   private readonly REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;  // 3 days
-
-  async onModuleInit(): Promise<void> {
-    try {
-      await this.repairLegacySendabilityFlags();
-    } catch (error) {
-      this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
-    }
-    try {
-      await this.autoHealChannels();
-    } catch (error) {
-      this.logger.warn(`Channel auto-heal failed: ${error instanceof Error ? error.message : error}`);
-    }
-  }
 
   /**
    * Clear time-expired channel-level restrictions so flagged channels can recover.
@@ -302,8 +289,6 @@ export class ActiveChannelsService implements OnModuleInit {
 
   async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds: string[] = []): Promise<ActiveChannel[]> {
     try {
-      await this.repairLegacySendabilityFlags();
-
       // Positive keywords disabled — negative filter + quality filters are sufficient for channel selection
       // const positiveKeywords = [
       //   'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
@@ -415,30 +400,6 @@ export class ActiveChannelsService implements OnModuleInit {
         target[field] = source[field];
       }
     }
-  }
-
-  private legacySendabilityRepaired = false;
-
-  private async repairLegacySendabilityFlags(): Promise<void> {
-    if (this.legacySendabilityRepaired) return;
-    this.legacySendabilityRepaired = true;
-    await this.activeChannelModel.updateMany(
-      {
-        canSendMsgs: true,
-        $or: [{ sendMessages: true }, { sendPlain: true }],
-        banned: { $ne: true },
-        forbidden: { $ne: true },
-        private: { $ne: true },
-        restricted: { $ne: true },
-      },
-      {
-        $set: {
-          sendMessages: false,
-          sendPlain: false,
-          updatedAt: new Date(),
-        },
-      },
-    ).exec();
   }
 
   async analytics(): Promise<Record<string, any>> {

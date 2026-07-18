@@ -30,6 +30,11 @@ import { ExceptionsFilter } from './interceptors';
 import { EventManagerModule } from './components/event-manager/event-manager.module';
 import { CollectionInsightsModule } from './components/collection-insights/collection-insights.module';
 import { DailyAnalyticsModule } from './components/daily-analytics/daily-analytics.module';
+import { FileModule } from './components/files/file.module';
+import { AppService } from './app.service';
+import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
+import { ScheduledJobsService } from './control-plane/jobs/scheduled-jobs.service';
+import { AccountMaintenanceService } from './control-plane/maintenance/account-maintenance.service';
 
 @Module({
   imports: [
@@ -60,6 +65,7 @@ import { DailyAnalyticsModule } from './components/daily-analytics/daily-analyti
     DynamicDataModule,
     EventManagerModule,
     CollectionInsightsModule,
+    FileModule.register(),
   ],
   providers: [
     {
@@ -70,6 +76,10 @@ import { DailyAnalyticsModule } from './components/daily-analytics/daily-analyti
       provide: APP_FILTER,
       useClass: ExceptionsFilter
     },
+    RuntimeConfigService,
+    AccountMaintenanceService,
+    AppService,
+    ScheduledJobsService,
   ],
   controllers: [AppController],
   exports: [

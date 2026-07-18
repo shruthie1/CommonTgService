@@ -119,7 +119,6 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private isBotHealthJobEnabled;
     private scheduleBotHealthCheck;
     onModuleDestroy(): void;
-    private migrateLegacyLifecycle;
     private legacyLifecycleUpdate;
     private lifecycleOf;
     private isSelectable;

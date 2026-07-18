@@ -180,13 +180,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     async onModuleInit(): Promise<void> {
-        try {
-            await this.migrateLegacyLifecycle();
-        } catch (err: any) {
-            // Preserve CMS availability if Mongo is briefly unavailable at boot. Legacy records
-            // are still classified safely in-memory by lifecycleOf until the next health run.
-            console.error('[BotHealth] lifecycle migration deferred; Mongo unavailable at startup', err?.message || err);
-        }
         await this.initializeCache();
         // Start periodic flush of pending stat updates (safe to run on every pod — it only
         // writes each pod's own accumulated counters).
@@ -238,20 +231,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         try { this.healthCheckJob?.cancel?.(); } catch { /* noop */ }
         this.healthCheckJob = null;
         if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = null; }
-    }
-
-    /** Map pre-lifecycle documents once, retaining their legacy fields for old callers. */
-    private async migrateLegacyLifecycle(): Promise<void> {
-        const legacyBots = await this.botModel.find({ lifecycle: { $exists: false } }).lean().exec();
-        if (legacyBots.length === 0) return;
-        const now = new Date();
-        await this.botModel.bulkWrite(legacyBots.map(bot => ({
-            updateOne: {
-                filter: { _id: bot._id, lifecycle: { $exists: false } },
-                update: { $set: this.legacyLifecycleUpdate(bot, now) },
-            },
-        })));
-        console.log(`[BotHealth] migrated lifecycle metadata for ${legacyBots.length} legacy bot record(s)`);
     }
 
     private legacyLifecycleUpdate(bot: Partial<Bot>, now = new Date()): Pick<Bot, 'lifecycle' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'repairAttempts'> {
@@ -1081,7 +1060,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         let creationBudget = this.maxBotCreationsPerRun;
         let stopPrivilegedWork = false;
         try {
-            if (!options.dryRun) await this.migrateLegacyLifecycle();
             const bots = await this.botModel.find().lean().exec();
             for (const bot of bots) {
                 const check = await this.checkBotToken(bot.token);

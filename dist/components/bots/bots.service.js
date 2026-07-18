@@ -89,12 +89,6 @@ let BotsService = BotsService_1 = class BotsService {
         return this.moduleRef.get(users_service_1.UsersService, { strict: false });
     }
     async onModuleInit() {
-        try {
-            await this.migrateLegacyLifecycle();
-        }
-        catch (err) {
-            console.error('[BotHealth] lifecycle migration deferred; Mongo unavailable at startup', err?.message || err);
-        }
         await this.initializeCache();
         this.startPeriodicFlush();
         if (this.isBotHealthJobEnabled()) {
@@ -133,19 +127,6 @@ let BotsService = BotsService_1 = class BotsService {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
         }
-    }
-    async migrateLegacyLifecycle() {
-        const legacyBots = await this.botModel.find({ lifecycle: { $exists: false } }).lean().exec();
-        if (legacyBots.length === 0)
-            return;
-        const now = new Date();
-        await this.botModel.bulkWrite(legacyBots.map(bot => ({
-            updateOne: {
-                filter: { _id: bot._id, lifecycle: { $exists: false } },
-                update: { $set: this.legacyLifecycleUpdate(bot, now) },
-            },
-        })));
-        console.log(`[BotHealth] migrated lifecycle metadata for ${legacyBots.length} legacy bot record(s)`);
     }
     legacyLifecycleUpdate(bot, now = new Date()) {
         const reason = bot.deadReason || '';
@@ -851,8 +832,6 @@ let BotsService = BotsService_1 = class BotsService {
         let creationBudget = this.maxBotCreationsPerRun;
         let stopPrivilegedWork = false;
         try {
-            if (!options.dryRun)
-                await this.migrateLegacyLifecycle();
             const bots = await this.botModel.find().lean().exec();
             for (const bot of bots) {
                 const check = await this.checkBotToken(bot.token);

@@ -67,21 +67,11 @@ function axiosOk(data: any = { ok: true, result: { username: 'fetched_bot' } }) 
 }
 
 describe('BotsService - lifecycle / cache init', () => {
-  test('migrates legacy status/deadReason records without removing legacy fields', async () => {
-    const legacyId = new mongoose.Types.ObjectId();
-    await model.collection.insertOne({
-      _id: legacyId,
-      token: 'legacy_token', username: 'legacy_bot', category: ChannelCategory.UNVDS,
-      channelId: '-100legacy', status: 'inactive', deadReason: 'awaiting channel-admin add',
-      lastUsed: new Date(), stats: { ...baseStats },
-    });
-
-    await (service as any).migrateLegacyLifecycle();
-
-    const migrated = await model.findById(legacyId).lean();
-    expect(migrated.lifecycle).toBe('pending_admin');
-    expect(migrated.status).toBe('inactive');
-    expect(migrated.deadReason).toBe('awaiting channel-admin add');
+  test('derives a lifecycle for legacy records without writing a migration', () => {
+    expect((service as any).lifecycleOf({
+      status: 'inactive',
+      deadReason: 'awaiting channel-admin add',
+    })).toBe('pending_admin');
   });
 
   test('onModuleInit initializes cache and starts periodic flush', async () => {

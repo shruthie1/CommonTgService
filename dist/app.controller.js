@@ -58,14 +58,48 @@ const crypto_1 = require("crypto");
 const https = __importStar(require("https"));
 const url_1 = require("url");
 const utils_1 = require("./utils");
+const client_service_1 = require("./components/clients/client.service");
+const app_service_1 = require("./app.service");
+const cloudflare_cache_interceptor_1 = require("./interceptors/cloudflare-cache.interceptor");
+const no_cache_decorator_1 = require("./decorators/no-cache.decorator");
 let AppController = AppController_1 = class AppController {
-    constructor() {
+    constructor(clientService, appService) {
+        this.clientService = clientService;
+        this.appService = appService;
         this.logger = new utils_1.Logger(AppController_1.name);
         this.DEFAULT_TIMEOUT = 30000;
         this.MAX_CONTENT_SIZE = 50 * 1024 * 1024;
     }
     getHello() {
         return 'Hello World!';
+    }
+    health() {
+        return this.getHello();
+    }
+    async refreshMap() {
+        await this.clientService.refreshMap();
+    }
+    async setupClient(clientId, query) {
+        return this.appService.setupClient(clientId, query);
+    }
+    async forward(url, query) {
+        if (!url)
+            throw new common_1.BadRequestException('url query parameter is required');
+        try {
+            new url_1.URL(url);
+        }
+        catch {
+            throw new common_1.BadRequestException('url query parameter must be a valid URL');
+        }
+        const { url: _url, ...params } = query;
+        return this.appService.forwardGetRequest(url, params);
+    }
+    async processUsers(limit, skip) {
+        return this.appService.processEligibleUsers(limit, skip);
+    }
+    exit() {
+        setTimeout(() => process.exit(0), 2_000);
+        return 'Exiting application... in 2 seconds';
     }
     async executeRequest(req, res) {
         const requestId = (0, crypto_1.randomUUID)();
@@ -260,6 +294,112 @@ let AppController = AppController_1 = class AppController {
             requestId
         };
     }
+    async blockUserAll(tgId) {
+        return await this.appService.blockUserAll(tgId);
+    }
+    async unblockUserAll(tgId) {
+        return await this.appService.unblockUserAll(tgId);
+    }
+    async isRecentUser(chatId) {
+        return this.appService.isRecentUser(chatId);
+    }
+    async updateRecentUser(chatId, videoDetails) {
+        return await this.appService.updateRecentUser(chatId, videoDetails);
+    }
+    async resetRecentUser(chatId) {
+        return this.appService.resetRecentUser(chatId);
+    }
+    async getPaymentStats(chatId, profile) {
+        return this.appService.getPaymentStats(chatId, profile);
+    }
+    async sendToChannel(message, chatId, token) {
+        try {
+            if (message.length < 1500) {
+                return await this.appService.sendToChannel(chatId, token, message);
+            }
+            else {
+                console.log('Skipped Message:', decodeURIComponent(message));
+                return 'sent';
+            }
+        }
+        catch (e) {
+            (0, utils_1.parseError)(e);
+        }
+    }
+    async sendToAll(query) {
+        try {
+            const decodedEndpoint = decodeURIComponent(query);
+            this.appService.sendToAll(decodedEndpoint);
+            return `Send ${query}`;
+        }
+        catch (e) {
+            (0, utils_1.parseError)(e);
+            throw e;
+        }
+    }
+    async joinChannelsforBufferClients() {
+        return this.appService.joinchannelForClients();
+    }
+    async maskedCls(query) {
+        return await this.appService.findAllMasked(query);
+    }
+    async portalData(query) {
+        return await this.appService.portalData(query);
+    }
+    async requestCall(username, chatId, type) {
+        return await this.appService.getRequestCall(username, chatId, type);
+    }
+    async refreshPrimary() {
+        this.appService.refreshPrimary();
+        return '1';
+    }
+    async refreshSecondary() {
+        this.appService.refreshSecondary();
+        return '2';
+    }
+    async exitPrimary() {
+        this.appService.exitPrimary();
+        return '1';
+    }
+    async exitSecondary() {
+        this.appService.exitSecondary();
+        return '2';
+    }
+    async getVidData(profile, clientId, chatId) {
+        return await this.appService.getUserData(profile, clientId, chatId);
+    }
+    async updateVidData(profile, clientId, body) {
+        return await this.appService.updateUserData(profile, clientId, body);
+    }
+    async updtaeUserConfig(filter, data) {
+        throw new Error('Method not implemented');
+    }
+    async getUserConfig(filter) {
+        return this.appService.getUserConfig(filter);
+    }
+    async getallupiIds() {
+        return await this.appService.getallupiIds();
+    }
+    async updateUserConfig(chatId, profile, data) {
+        return await this.appService.updateUserConfig(chatId, profile, data);
+    }
+    async getUserInfo(filter) {
+        return await this.appService.getUserInfo(filter);
+    }
+    async getData(res) {
+        this.appService.checkAndRefresh();
+        res.setHeader('Content-Type', 'text/html');
+        let resp = '<html><head></head><body>';
+        resp += await this.appService.getData();
+        resp += '</body></html>';
+        resp += `<script>
+                console.log("hi");
+                setInterval(() => {
+                  window.location.reload();
+                }, 20000);
+            </script>`;
+        res.send(resp);
+    }
 };
 exports.AppController = AppController;
 __decorate([
@@ -268,6 +408,48 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", String)
 ], AppController.prototype, "getHello", null);
+__decorate([
+    (0, common_1.Get)('health'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", String)
+], AppController.prototype, "health", null);
+__decorate([
+    (0, common_1.Get)('refreshmap'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "refreshMap", null);
+__decorate([
+    (0, common_1.Get)('setupClient/:clientId'),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "setupClient", null);
+__decorate([
+    (0, common_1.Get)('forward'),
+    __param(0, (0, common_1.Query)('url')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "forward", null);
+__decorate([
+    (0, common_1.Get)('processUsers/:limit/:skip'),
+    __param(0, (0, common_1.Param)('limit', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Param)('skip', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "processUsers", null);
+__decorate([
+    (0, common_1.Get)('exit'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", String)
+], AppController.prototype, "exit", null);
 __decorate([
     (0, common_1.Post)('execute-request'),
     (0, swagger_1.ApiOperation)({
@@ -288,9 +470,273 @@ __decorate([
     __metadata("design:paramtypes", [execute_request_dto_1.ExecuteRequestDto, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "executeRequest", null);
+__decorate([
+    (0, common_1.Get)('blockUserAll/:tgId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Block user across all services' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of blocking user' }),
+    __param(0, (0, common_1.Param)('tgId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "blockUserAll", null);
+__decorate([
+    (0, common_1.Get)('unblockUserAll/:tgId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Unblock user across all services' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of unblocking user' }),
+    __param(0, (0, common_1.Param)('tgId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "unblockUserAll", null);
+__decorate([
+    (0, common_1.Get)('isRecentUser'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Check if user is recent and return access data' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns count of recent accesses and video details' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "isRecentUser", null);
+__decorate([
+    (0, common_1.Post)('isRecentUser'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update recent user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true }),
+    (0, swagger_1.ApiBody)({ description: 'Video details to update', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Successfully updated recent user data' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateRecentUser", null);
+__decorate([
+    (0, common_1.Get)('resetRecentUser'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Reset recent user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns count of recent accesses after reset' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "resetRecentUser", null);
+__decorate([
+    (0, common_1.Get)('paymentStats'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get payment statistics' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile identifier', type: String }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns payment statistics' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __param(1, (0, common_1.Query)('profile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getPaymentStats", null);
+__decorate([
+    (0, common_1.Get)('sendToChannel'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send message to channel' }),
+    (0, swagger_1.ApiQuery)({ name: 'msg', description: 'Message to send', type: String, required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the channel', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'token', description: 'Token for authentication', type: String, required: false }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of sending message to channel' }),
+    __param(0, (0, common_1.Query)('msg')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('token')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "sendToChannel", null);
+__decorate([
+    (0, common_1.Get)('sendToAll'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send endpoint to all clients' }),
+    (0, swagger_1.ApiQuery)({ name: 'query', description: 'Endpoint to send', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of endpoint sent' }),
+    __param(0, (0, common_1.Query)('query')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "sendToAll", null);
+__decorate([
+    (0, common_1.Get)('joinChannelsForClients'),
+    (0, swagger_1.ApiOperation)({ summary: 'Join channels for clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of joining channels for clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "joinChannelsforBufferClients", null);
+__decorate([
+    (0, common_1.Get)('maskedCls'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Retrieve masked CLS data' }),
+    (0, swagger_1.ApiQuery)({ name: 'query', description: 'Query parameters', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns masked CLS data' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "maskedCls", null);
+__decorate([
+    (0, common_1.Get)('portalData'),
+    (0, swagger_1.ApiOperation)({ summary: 'Retrieve portal data' }),
+    (0, swagger_1.ApiQuery)({ name: 'query', description: 'Query parameters', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns portal data including client and UPIs' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "portalData", null);
+__decorate([
+    (0, common_1.Get)('/requestcall'),
+    (0, swagger_1.ApiOperation)({ summary: 'Request a call' }),
+    (0, swagger_1.ApiQuery)({ name: 'username', description: 'Username', type: String, required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID', type: String, required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'type', description: 'Ladder type', type: String, required: false }),
+    (0, swagger_1.ApiResponse)({ description: 'Call request processed successfully' }),
+    __param(0, (0, common_1.Query)('username')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('type')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "requestCall", null);
+__decorate([
+    (0, common_1.Get)('refreshPrimary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh primary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of primary clients refresh' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "refreshPrimary", null);
+__decorate([
+    (0, common_1.Get)('refreshSecondary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh secondary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of secondary clients refresh' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "refreshSecondary", null);
+__decorate([
+    (0, common_1.Get)('exitPrimary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Exit primary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of exiting primary clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "exitPrimary", null);
+__decorate([
+    (0, common_1.Get)('exitSecondary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Exit secondary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of exiting secondary clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "exitSecondary", null);
+__decorate([
+    (0, common_1.Get)('/getviddata'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get video data' }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Client ID', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Video data retrieved successfully' }),
+    __param(0, (0, common_1.Query)('profile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getVidData", null);
+__decorate([
+    (0, common_1.Post)('/getviddata'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update video data' }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Client ID', type: String, required: false }),
+    (0, swagger_1.ApiBody)({ description: 'Body data', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Video data updated successfully' }),
+    __param(0, (0, common_1.Query)('profile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateVidData", null);
+__decorate([
+    (0, common_1.Post)('/getUserConfig'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user configuration' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', description: 'Filter parameters', type: Object }),
+    (0, swagger_1.ApiBody)({ description: 'Configuration data', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'User configuration updated successfully' }),
+    __param(0, (0, common_1.Query)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updtaeUserConfig", null);
+__decorate([
+    (0, common_1.Get)('/getUserConfig'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user configuration' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getUserConfig", null);
+__decorate([
+    (0, common_1.Get)('/getallupiIds'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all UPI IDs' }),
+    (0, swagger_1.ApiResponse)({ description: 'All UPI IDs retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getallupiIds", null);
+__decorate([
+    (0, common_1.Post)('/updateUserData/:chatId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user configuration' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile', type: String, required: false }),
+    (0, swagger_1.ApiBody)({ description: 'User data', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'User configuration updated successfully' }),
+    __param(0, (0, common_1.Param)('chatId')),
+    __param(1, (0, common_1.Query)('profile')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateUserConfig", null);
+__decorate([
+    (0, common_1.Get)('/getUserInfo'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user information' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', description: 'Filter parameters', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'User information retrieved successfully' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getUserInfo", null);
+__decorate([
+    (0, common_1.Get)('getdata'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get data and refresh periodically' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns HTML data with periodic refresh' }),
+    __param(0, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getData", null);
 exports.AppController = AppController = AppController_1 = __decorate([
     (0, swagger_1.ApiTags)('App'),
     (0, common_1.Controller)(),
-    __metadata("design:paramtypes", [])
+    __metadata("design:paramtypes", [client_service_1.ClientService,
+        app_service_1.AppService])
 ], AppController);
 //# sourceMappingURL=app.controller.js.map

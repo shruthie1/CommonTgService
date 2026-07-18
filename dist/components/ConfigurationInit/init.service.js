@@ -45,6 +45,10 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
         await this.notifyStart();
     }
     async notifyStart() {
+        if (process.env.LOCAL_SERVER) {
+            this.logger.log('Skipping configuration startup notification in local mode');
+            return;
+        }
         try {
             const clientId = process.env.clientId || this.configService.get('clientId');
             if (!clientId) {

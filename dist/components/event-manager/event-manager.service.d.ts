@@ -12,13 +12,13 @@ export declare class EventManagerService {
     } & {
         id: string;
     }>;
-    createMultiple(events: CreateEventDto[]): Promise<(Omit<import("mongoose").Document<unknown, {}, EventDocument, {}, import("mongoose").DefaultSchemaOptions> & Event & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
+    createMultiple(events: CreateEventDto[]): Promise<import("mongoose").MergeType<import("mongoose").Document<unknown, {}, EventDocument, {}, import("mongoose").DefaultSchemaOptions> & Event & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
         _id: import("mongoose").Types.ObjectId;
     }> & {
         __v: number;
     } & {
         id: string;
-    }, keyof CreateEventDto> & Omit<CreateEventDto, "_id">)[]>;
+    }, Omit<CreateEventDto, "_id">>[]>;
     deleteMultiple(chatId: string): Promise<number>;
     getEvents(filter: object): Promise<any[]>;
     getEventById(id: string): Promise<Event & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{

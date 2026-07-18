@@ -39,6 +39,10 @@ export class ConfigurationService implements OnModuleInit {
     }
 
     private async notifyStart() {
+        if (process.env.LOCAL_SERVER) {
+            this.logger.log('Skipping configuration startup notification in local mode');
+            return;
+        }
         try {
             const clientId = process.env.clientId || this.configService.get('clientId');
             if (!clientId) {

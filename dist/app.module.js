@@ -39,6 +39,11 @@ const interceptors_1 = require("./interceptors");
 const event_manager_module_1 = require("./components/event-manager/event-manager.module");
 const collection_insights_module_1 = require("./components/collection-insights/collection-insights.module");
 const daily_analytics_module_1 = require("./components/daily-analytics/daily-analytics.module");
+const file_module_1 = require("./components/files/file.module");
+const app_service_1 = require("./app.service");
+const runtime_config_service_1 = require("./control-plane/config/runtime-config.service");
+const scheduled_jobs_service_1 = require("./control-plane/jobs/scheduled-jobs.service");
+const account_maintenance_service_1 = require("./control-plane/maintenance/account-maintenance.service");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -75,6 +80,7 @@ exports.AppModule = AppModule = __decorate([
             dynamic_data_module_1.DynamicDataModule,
             event_manager_module_1.EventManagerModule,
             collection_insights_module_1.CollectionInsightsModule,
+            file_module_1.FileModule.register(),
         ],
         providers: [
             {
@@ -85,6 +91,10 @@ exports.AppModule = AppModule = __decorate([
                 provide: core_1.APP_FILTER,
                 useClass: interceptors_1.ExceptionsFilter
             },
+            runtime_config_service_1.RuntimeConfigService,
+            account_maintenance_service_1.AccountMaintenanceService,
+            app_service_1.AppService,
+            scheduled_jobs_service_1.ScheduledJobsService,
         ],
         controllers: [app_controller_1.AppController],
         exports: [

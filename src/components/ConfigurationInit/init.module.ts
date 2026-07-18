@@ -85,8 +85,10 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
 
       console.log(`Started :: ${process.env.clientId}`);
 
-      // Optional: Send notification on successful startup
-      await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+      // Local smoke/dev instances must not emit external Telegram notifications.
+      if (!process.env.LOCAL_SERVER) {
+        await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+      }
 
     } catch (error) {
       InitModule.initializationStatus.isInitializing = false;
@@ -196,7 +198,9 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
       console.log('Init Module destroying...');
 
       this.stopHealthCheck();
-      await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+      if (!process.env.LOCAL_SERVER) {
+        await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+      }
 
       if (this.connection && this.connection.readyState !== 0) {
         console.log('Closing MongoDB connection...');

@@ -9,6 +9,8 @@
 // Auth: BUILDS_REPO_TOKEN — a fine-grained PAT with contents:write on shruthie1/builds.
 //
 // Usage: node upload-build.js <branch> [keyPrefix]   (keyPrefix default 'cts')
+// The build key is branch-specific (for example cts-main) so several PM2
+// instances can run one artifact with different ENABLE_* operation flags.
 
 const fs = require('fs');
 
@@ -59,9 +61,13 @@ async function overwriteFile(branch, keyPrefix) {
     return;
   }
 
+  if (!branch || !/^[a-zA-Z0-9._-]+$/.test(branch)) {
+    throw new Error('A safe branch name is required (letters, numbers, dot, underscore, dash)');
+  }
+
   const localFilePath = './out/index.js';
   const fileName = `${keyPrefix}-${branch}.js`;
-  const buildKey = keyPrefix; // CMS stores the metadata under the bare prefix key ('cts')
+  const buildKey = `${keyPrefix}-${branch}`;
 
   try {
     const content = fs.readFileSync(localFilePath).toString('base64');

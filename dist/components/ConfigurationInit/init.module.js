@@ -46,7 +46,9 @@ let InitModule = InitModule_1 = class InitModule {
             InitModule_1.initializationStatus.isInitialized = true;
             InitModule_1.initializationStatus.isInitializing = false;
             console.log(`Started :: ${process.env.clientId}`);
-            await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+            if (!process.env.LOCAL_SERVER) {
+                await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+            }
         }
         catch (error) {
             InitModule_1.initializationStatus.isInitializing = false;
@@ -135,7 +137,9 @@ let InitModule = InitModule_1 = class InitModule {
         try {
             console.log('Init Module destroying...');
             this.stopHealthCheck();
-            await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+            if (!process.env.LOCAL_SERVER) {
+                await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+            }
             if (this.connection && this.connection.readyState !== 0) {
                 console.log('Closing MongoDB connection...');
                 await this.connection.close(true);

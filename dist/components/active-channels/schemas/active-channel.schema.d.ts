@@ -26,229 +26,239 @@ export declare class ActiveChannel {
     messageId?: number;
     deletedCount?: number;
 }
-export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChannel, import("mongoose").Model<ActiveChannel, any, any, any, any, any, ActiveChannel>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, ActiveChannel, {
-    id: string;
-}, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChannel, import("mongoose").Model<ActiveChannel, any, any, any, (Document<unknown, any, ActiveChannel, any, import("mongoose").DefaultSchemaOptions> & ActiveChannel & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, "id"> & import("mongoose").HydratedDocumentOverrides<{
+} & {
     id: string;
-}>, {
+}) | (Document<unknown, any, ActiveChannel, any, import("mongoose").DefaultSchemaOptions> & ActiveChannel & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
+}), any, ActiveChannel>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, ActiveChannel, {
+    id: string;
+}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
+}, "id"> & {
+    id: string;
+}, {
     channelId?: import("mongoose").SchemaDefinitionProperty<string, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     title?: import("mongoose").SchemaDefinitionProperty<string, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     participantsCount?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     username?: import("mongoose").SchemaDefinitionProperty<string, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     restricted?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     broadcast?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     sendMessages?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     sendPlain?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     canSendMsgs?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     megagroup?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     wordRestriction?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     dMRestriction?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     availableMsgs?: import("mongoose").SchemaDefinitionProperty<string[], ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     banned?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     bannedAt?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     forbidden?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     reactRestricted?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     reactRestrictedAt?: import("mongoose").SchemaDefinitionProperty<Date, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     clientsJoined?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     private?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     lastMessageTime?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     messageIndex?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     messageId?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     deletedCount?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
 }, ActiveChannel>;

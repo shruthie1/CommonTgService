@@ -33,21 +33,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         this.MIN_PARTICIPANTS_COUNT = 600;
         this.logger = new common_1.Logger(ActiveChannelsService_1.name);
         this.REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
-        this.legacySendabilityRepaired = false;
-    }
-    async onModuleInit() {
-        try {
-            await this.repairLegacySendabilityFlags();
-        }
-        catch (error) {
-            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
-        }
-        try {
-            await this.autoHealChannels();
-        }
-        catch (error) {
-            this.logger.warn(`Channel auto-heal failed: ${error instanceof Error ? error.message : error}`);
-        }
     }
     async autoHealChannels() {
         const now = Date.now();
@@ -250,7 +235,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds = []) {
         try {
-            await this.repairLegacySendabilityFlags();
             const negativeKeywords = [
                 'online', 'realestat', 'propert', 'freefire', 'bgmi', 'promo', 'agent', 'board', 'design',
                 'realt', 'clas', 'PROFIT', 'wholesale', 'retail', 'topper', 'exam', 'motivat', 'medico',
@@ -331,25 +315,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 target[field] = source[field];
             }
         }
-    }
-    async repairLegacySendabilityFlags() {
-        if (this.legacySendabilityRepaired)
-            return;
-        this.legacySendabilityRepaired = true;
-        await this.activeChannelModel.updateMany({
-            canSendMsgs: true,
-            $or: [{ sendMessages: true }, { sendPlain: true }],
-            banned: { $ne: true },
-            forbidden: { $ne: true },
-            private: { $ne: true },
-            restricted: { $ne: true },
-        }, {
-            $set: {
-                sendMessages: false,
-                sendPlain: false,
-                updatedAt: new Date(),
-            },
-        }).exec();
     }
     async analytics() {
         const [result] = await this.activeChannelModel.aggregate([

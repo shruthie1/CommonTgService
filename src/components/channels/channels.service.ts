@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CreateChannelDto } from './dto/create-channel.dto';
@@ -9,20 +9,10 @@ import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
 
 @Injectable()
-export class ChannelsService implements OnModuleInit {
-  private readonly logger = new Logger(ChannelsService.name);
-
+export class ChannelsService {
   constructor(
     @InjectModel(Channel.name) private ChannelModel: Model<ChannelDocument>,
   ) {
-  }
-
-  async onModuleInit(): Promise<void> {
-    try {
-      await this.repairLegacySendabilityFlags();
-    } catch (error) {
-      this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
-    }
   }
 
   async create(createChannelDto: CreateChannelDto): Promise<Channel> {
@@ -201,8 +191,6 @@ export class ChannelsService implements OnModuleInit {
   }
 
   async getActiveChannels(limit = 50, skip = 0, notIds = []) {
-    await this.repairLegacySendabilityFlags();
-
     const query = {
       '$and':
         [
@@ -286,27 +274,4 @@ export class ChannelsService implements OnModuleInit {
     }
   }
 
-  private legacySendabilityRepaired = false;
-
-  private async repairLegacySendabilityFlags(): Promise<void> {
-    if (this.legacySendabilityRepaired) return;
-    this.legacySendabilityRepaired = true;
-    await this.ChannelModel.updateMany(
-      {
-        canSendMsgs: true,
-        $or: [{ sendMessages: true }, { sendPlain: true }],
-        banned: { $ne: true },
-        forbidden: { $ne: true },
-        private: { $ne: true },
-        restricted: { $ne: true },
-      },
-      {
-        $set: {
-          sendMessages: false,
-          sendPlain: false,
-          updatedAt: new Date(),
-        },
-      },
-    ).exec();
-  }
 }

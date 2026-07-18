@@ -62,240 +62,250 @@ export declare class User {
         }>;
     };
 }
-export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any, any, any, any, any, User>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, User, mongoose.Document<unknown, {}, User, {
-    id: string;
-}, mongoose.DefaultSchemaOptions> & Omit<User & {
+export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any, any, any, (mongoose.Document<unknown, any, User, any, mongoose.DefaultSchemaOptions> & User & {
     _id: mongoose.Types.ObjectId;
 } & {
     __v: number;
-}, "id"> & mongoose.HydratedDocumentOverrides<{
+} & {
     id: string;
-}>, {
+}) | (mongoose.Document<unknown, any, User, any, mongoose.DefaultSchemaOptions> & User & {
+    _id: mongoose.Types.ObjectId;
+} & {
+    __v: number;
+}), any, User>, {}, {}, {}, {}, mongoose.DefaultSchemaOptions, User, mongoose.Document<unknown, {}, User, {
+    id: string;
+}, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
+    _id: mongoose.Types.ObjectId;
+} & {
+    __v: number;
+}, "id"> & {
+    id: string;
+}, {
     mobile?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     session?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     tgId?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     firstName?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     lastName?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     username?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     gender?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     twoFA?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     expired?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     password?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     starred?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     demoGiven?: mongoose.SchemaDefinitionProperty<boolean, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     channels?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     personalChats?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     totalChats?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     contacts?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     msgs?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     photoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     videoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     movieCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     ownPhotoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     otherPhotoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     ownVideoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     otherVideoCount?: mongoose.SchemaDefinitionProperty<number, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     lastActive?: mongoose.SchemaDefinitionProperty<string, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     calls?: mongoose.SchemaDefinitionProperty<{
         totalCalls: number;
         outgoing: number;
@@ -304,13 +314,13 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         audio: number;
     }, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     relationships?: mongoose.SchemaDefinitionProperty<{
         score: number;
         bestScore: number;
@@ -340,11 +350,11 @@ export declare const UserSchema: mongoose.Schema<User, mongoose.Model<User, any,
         }>;
     }, User, mongoose.Document<unknown, {}, User, {
         id: string;
-    }, mongoose.DefaultSchemaOptions> & Omit<User & {
+    }, mongoose.ResolveSchemaOptions<mongoose.DefaultSchemaOptions>> & Omit<User & {
         _id: mongoose.Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & mongoose.HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
 }, User>;

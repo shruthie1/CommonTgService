@@ -38,7 +38,7 @@ describe('AppController', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedAxios.isAxiosError.mockReturnValue(false);
-    controller = new AppController();
+    controller = new AppController({} as any, {} as any);
   });
 
   it('getHello returns greeting', () => {

@@ -157,39 +157,6 @@ describe('ChannelsService - search / getChannels / executeQuery / getActiveChann
   });
 });
 
-describe('ChannelsService - onModuleInit / repair', () => {
-  test('onModuleInit repairs legacy flags', async () => {
-    await seed({ channelId: 'leg-1', canSendMsgs: true, sendMessages: true });
-    await service.onModuleInit();
-    const repaired = await model.findOne({ channelId: 'leg-1' });
-    expect(repaired.sendMessages).toBe(false);
-  });
-
-  test('onModuleInit swallows repair error', async () => {
-    const spy = jest.spyOn(model, 'updateMany').mockImplementationOnce(() => { throw new Error('repair fail'); });
-    await expect(service.onModuleInit()).resolves.toBeUndefined();
-    spy.mockRestore();
-  });
-
-  test('onModuleInit swallows a non-Error throw (stringifies it)', async () => {
-    // Covers the `error instanceof Error ? ... : error` false branch in the catch.
-    const spy = jest.spyOn(model, 'updateMany').mockImplementationOnce(() => { throw 'plain string failure'; });
-    await expect(service.onModuleInit()).resolves.toBeUndefined();
-    spy.mockRestore();
-  });
-
-  test('repairLegacySendabilityFlags only runs once (early-return on second call)', async () => {
-    // Business rule: legacy repair is a one-shot migration per service instance.
-    await seed({ channelId: 'leg-once', canSendMsgs: true, sendMessages: true, sendPlain: true });
-    const updateSpy = jest.spyOn(model, 'updateMany');
-    await service.onModuleInit();           // first pass performs the updateMany
-    expect(updateSpy).toHaveBeenCalledTimes(1);
-    await (service as any).repairLegacySendabilityFlags(); // second pass hits the guard
-    expect(updateSpy).toHaveBeenCalledTimes(1); // not called again
-    updateSpy.mockRestore();
-  });
-});
-
 describe('ChannelsService - executeQuery branch matrix', () => {
   test('executeQuery with sort but no limit returns all matches sorted', async () => {
     await seed({ channelId: 'es1', participantsCount: 10 });

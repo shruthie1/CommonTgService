@@ -1,10 +1,9 @@
 import { PromoteMsgsService } from '../promote-msgs/promote-msgs.service';
-import { OnModuleInit } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
-export declare class ActiveChannelsService implements OnModuleInit {
+export declare class ActiveChannelsService {
     private activeChannelModel;
     private promoteMsgsService;
     private readonly DEFAULT_LIMIT;
@@ -13,7 +12,6 @@ export declare class ActiveChannelsService implements OnModuleInit {
     private readonly logger;
     constructor(activeChannelModel: Model<ActiveChannelDocument>, promoteMsgsService: PromoteMsgsService);
     private readonly REACT_RESTRICTED_HEAL_MS;
-    onModuleInit(): Promise<void>;
     autoHealChannels(): Promise<{
         reactRestrictedHealed: number;
     }>;
@@ -29,8 +27,6 @@ export declare class ActiveChannelsService implements OnModuleInit {
     search(filter: any): Promise<ActiveChannel[]>;
     getActiveChannels(limit?: number, skip?: number, notIds?: string[]): Promise<ActiveChannel[]>;
     private copyDefinedFields;
-    private legacySendabilityRepaired;
-    private repairLegacySendabilityFlags;
     analytics(): Promise<Record<string, any>>;
     paginated(options: {
         page?: number;

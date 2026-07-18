@@ -7,29 +7,17 @@
   "engines": {
     "node": ">=22.0.0"
   },
-  "private": false,
+  "private": true,
   "keywords": [
     "nestjs",
     "telegram",
     "common",
     "service"
   ],
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist/**/*",
-    "README.md",
-    "LICENSE"
-  ],
   "sideEffects": false,
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
     "prebuild": "rimraf dist",
     "build": "nest build",
-    "prepublishOnly": "npm run build",
     "start": "cross-env nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
@@ -42,7 +30,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "upload-build": "node upload-build.js",
-    "build:webpack": "npm i --f && npm run webpack -- --config ./webpack-prod.config.ts",
+    "build:webpack": "npm run webpack -- --config ./webpack-prod.config.ts",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
@@ -54,6 +42,7 @@
     "@nestjs/platform-express": "^11.1.13",
     "@nestjs/swagger": "^11.2.6",
     "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
     "axios": "^1.13.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
@@ -61,6 +50,8 @@
     "imap": "^0.8.19",
     "ioredis": "^5.9.2",
     "mongoose": "^9.1.6",
+    "mime": "^3.0.0",
+    "mime-types": "^3.0.1",
     "node-cache": "^5.1.2",
     "node-schedule-tz": "^1.2.1-4",
     "rxjs": "^7.8.2",

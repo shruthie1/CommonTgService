@@ -11,7 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var ChannelsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChannelsService = void 0;
 const common_1 = require("@nestjs/common");
@@ -20,19 +19,9 @@ const mongoose_2 = require("mongoose");
 const channel_schema_1 = require("./schemas/channel.schema");
 const bots_1 = require("../bots");
 const utils_1 = require("../../utils");
-let ChannelsService = ChannelsService_1 = class ChannelsService {
+let ChannelsService = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
-        this.logger = new common_1.Logger(ChannelsService_1.name);
-        this.legacySendabilityRepaired = false;
-    }
-    async onModuleInit() {
-        try {
-            await this.repairLegacySendabilityFlags();
-        }
-        catch (error) {
-            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
-        }
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);
@@ -184,7 +173,6 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
         }
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
-        await this.repairLegacySendabilityFlags();
         const query = {
             '$and': [
                 {
@@ -251,28 +239,9 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
             }
         }
     }
-    async repairLegacySendabilityFlags() {
-        if (this.legacySendabilityRepaired)
-            return;
-        this.legacySendabilityRepaired = true;
-        await this.ChannelModel.updateMany({
-            canSendMsgs: true,
-            $or: [{ sendMessages: true }, { sendPlain: true }],
-            banned: { $ne: true },
-            forbidden: { $ne: true },
-            private: { $ne: true },
-            restricted: { $ne: true },
-        }, {
-            $set: {
-                sendMessages: false,
-                sendPlain: false,
-                updatedAt: new Date(),
-            },
-        }).exec();
-    }
 };
 exports.ChannelsService = ChannelsService;
-exports.ChannelsService = ChannelsService = ChannelsService_1 = __decorate([
+exports.ChannelsService = ChannelsService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(channel_schema_1.Channel.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])

@@ -25,220 +25,230 @@ export declare class Client {
     bios: string[];
     profilePics: string[];
 }
-export declare const ClientSchema: import("mongoose").Schema<Client, import("mongoose").Model<Client, any, any, any, any, any, Client>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Client, Document<unknown, {}, Client, {
-    id: string;
-}, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+export declare const ClientSchema: import("mongoose").Schema<Client, import("mongoose").Model<Client, any, any, any, (Document<unknown, any, Client, any, import("mongoose").DefaultSchemaOptions> & Client & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, "id"> & import("mongoose").HydratedDocumentOverrides<{
+} & {
     id: string;
-}>, {
+}) | (Document<unknown, any, Client, any, import("mongoose").DefaultSchemaOptions> & Client & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
+}), any, Client>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Client, Document<unknown, {}, Client, {
+    id: string;
+}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
+}, "id"> & {
+    id: string;
+}, {
     channelLink?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     dbcoll?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     link?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     name?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     mobile?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     password?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     repl?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     promoteRepl?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     session?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     username?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     clientId?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     deployKey?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     product?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     qrId?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     gpayId?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     dedicatedIps?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     preferredIpCountry?: import("mongoose").SchemaDefinitionProperty<string, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     autoAssignIps?: import("mongoose").SchemaDefinitionProperty<boolean, Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     firstNames?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     bufferLastNames?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     promoteLastNames?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     bios?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     profilePics?: import("mongoose").SchemaDefinitionProperty<string[], Client, Document<unknown, {}, Client, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Client & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Client & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
 }, Client>;

@@ -4488,7 +4488,7 @@
     },
     "/bots": {
       "post": {
-        "description": "Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.",
+        "description": "Registers a Telegram bot as pending channel-admin verification. It becomes eligible for message distribution only after the health workflow verifies its channel-admin membership.",
         "operationId": "BotsController_createBot",
         "parameters": [],
         "requestBody": {
@@ -4570,12 +4570,31 @@
     },
     "/bots/validate-and-replace": {
       "post": {
-        "description": "Runs the health check now: getMe every bot, mark 401s inactive, and conservatively replace dead bots via BotFather (title=category, description=creator mobile+username), adding the new bot to its channel as admin. Also runs daily on a schedule.",
+        "description": "Runs the lifecycle-safe health check: getMe every bot, retire only permanent token failures, reconcile pending channel admins, then use at most one shared BotFather creation budget for replacement or top-up. Pass ?dryRun=true to report actions without bot-state writes or Telegram mutations; pass ?async=true to run in the background.",
         "operationId": "BotsController_validateAndReplace",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "async",
+            "required": false,
+            "in": "query",
+            "description": "true = fire-and-forget (returns immediately), false/omitted = await the full summary",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dryRun",
+            "required": false,
+            "in": "query",
+            "description": "true = validate and report proposed transitions without bot-state writes, BotFather creation, or channel promotion (the short-lived run lease is still acquired)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "201": {
-            "description": "Validation + replacement summary"
+            "description": "Validation + replacement summary (or {started:true} when async)"
           }
         },
         "summary": "Validate all bots and auto-replace dead ones",
@@ -4612,7 +4631,7 @@
         ]
       },
       "patch": {
-        "description": "Updates the configuration of an existing bot. Only provided fields will be modified.",
+        "description": "Updates non-lifecycle bot configuration. Lifecycle, health, and verification fields are managed only by the health workflow.",
         "operationId": "BotsController_updateBot",
         "parameters": [
           {
@@ -5459,7 +5478,7 @@
             "description": ""
           }
         },
-        "summary": "Clear time-expired reactRestricted / tempBan flags so channels can recover",
+        "summary": "Clear time-expired reactRestricted flags so channels can recover",
         "tags": [
           "Active Channels"
         ]
@@ -5528,7 +5547,7 @@
             "name": "filter",
             "required": false,
             "in": "query",
-            "description": "all | can_send | restricted | banned | temp_banned | with_errors | exhausted | high_deleted",
+            "description": "all | can_send | restricted | banned | with_errors | exhausted | high_deleted",
             "schema": {
               "type": "string"
             }
@@ -11274,6 +11293,224 @@
         ]
       }
     },
+    "/daily-analytics/overview": {
+      "get": {
+        "operationId": "DailyAnalyticsController_overview",
+        "parameters": [
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "daily-analytics"
+        ]
+      }
+    },
+    "/daily-analytics/{metric}/daily": {
+      "get": {
+        "operationId": "DailyAnalyticsController_daily",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "promote",
+                "reaction",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "daily-analytics"
+        ]
+      }
+    },
+    "/daily-analytics/{metric}/by-client": {
+      "get": {
+        "operationId": "DailyAnalyticsController_byClient",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "promote",
+                "reaction",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "namespace",
+            "required": false,
+            "in": "query",
+            "description": "'promote-clients' | 'tg-aut'",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "daily-analytics"
+        ]
+      }
+    },
+    "/daily-analytics/{metric}/by-mobile": {
+      "get": {
+        "operationId": "DailyAnalyticsController_byMobile",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "promote",
+                "reaction",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "namespace",
+            "required": false,
+            "in": "query",
+            "description": "'promote-clients' | 'tg-aut'",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "daily-analytics"
+        ]
+      }
+    },
+    "/daily-analytics/{metric}/rows": {
+      "get": {
+        "operationId": "DailyAnalyticsController_rows",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "promote",
+                "reaction",
+                "user"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "namespace",
+            "required": false,
+            "in": "query",
+            "description": "'promote-clients' | 'tg-aut'",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mobile",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "daily-analytics"
+        ]
+      }
+    },
     "/stats": {
       "post": {
         "operationId": "StatController_create",
@@ -12383,6 +12620,125 @@
         ]
       }
     },
+    "/health": {
+      "get": {
+        "operationId": "AppController_health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/refreshmap": {
+      "get": {
+        "operationId": "AppController_refreshMap",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/setupClient/{clientId}": {
+      "get": {
+        "operationId": "AppController_setupClient",
+        "parameters": [
+          {
+            "name": "clientId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/forward": {
+      "get": {
+        "operationId": "AppController_forward",
+        "parameters": [
+          {
+            "name": "url",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/processUsers/{limit}/{skip}": {
+      "get": {
+        "operationId": "AppController_processUsers",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "skip",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/exit": {
+      "get": {
+        "operationId": "AppController_exit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ]
+      }
+    },
     "/execute-request": {
       "post": {
         "description": "Makes an HTTP request to the specified URL with provided configuration and returns the response",
@@ -12415,6 +12771,2077 @@
         "summary": "Execute an HTTP request with given details",
         "tags": [
           "App"
+        ]
+      }
+    },
+    "/blockUserAll/{tgId}": {
+      "get": {
+        "operationId": "AppController_blockUserAll",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": true,
+            "in": "path",
+            "description": "Telegram ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns result of blocking user"
+          }
+        },
+        "summary": "Block user across all services",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/unblockUserAll/{tgId}": {
+      "get": {
+        "operationId": "AppController_unblockUserAll",
+        "parameters": [
+          {
+            "name": "tgId",
+            "required": true,
+            "in": "path",
+            "description": "Telegram ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns result of unblocking user"
+          }
+        },
+        "summary": "Unblock user across all services",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/isRecentUser": {
+      "get": {
+        "operationId": "AppController_isRecentUser",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns count of recent accesses and video details"
+          }
+        },
+        "summary": "Check if user is recent and return access data",
+        "tags": [
+          "App"
+        ]
+      },
+      "post": {
+        "operationId": "AppController_updateRecentUser",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Video details to update",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Successfully updated recent user data"
+          }
+        },
+        "summary": "Update recent user data",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/resetRecentUser": {
+      "get": {
+        "operationId": "AppController_resetRecentUser",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns count of recent accesses after reset"
+          }
+        },
+        "summary": "Reset recent user data",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/paymentStats": {
+      "get": {
+        "operationId": "AppController_getPaymentStats",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID of the user",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profile",
+            "required": true,
+            "in": "query",
+            "description": "Profile identifier",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns payment statistics"
+          }
+        },
+        "summary": "Get payment statistics",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/sendToChannel": {
+      "get": {
+        "operationId": "AppController_sendToChannel",
+        "parameters": [
+          {
+            "name": "msg",
+            "required": true,
+            "in": "query",
+            "description": "Message to send",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": false,
+            "in": "query",
+            "description": "Chat ID of the channel",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "required": false,
+            "in": "query",
+            "description": "Token for authentication",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns result of sending message to channel"
+          }
+        },
+        "summary": "Send message to channel",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/sendToAll": {
+      "get": {
+        "operationId": "AppController_sendToAll",
+        "parameters": [
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "description": "Endpoint to send",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns confirmation of endpoint sent"
+          }
+        },
+        "summary": "Send endpoint to all clients",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/joinChannelsForClients": {
+      "get": {
+        "operationId": "AppController_joinChannelsforBufferClients",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Returns result of joining channels for clients"
+          }
+        },
+        "summary": "Join channels for clients",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/maskedCls": {
+      "get": {
+        "operationId": "AppController_maskedCls",
+        "parameters": [
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "description": "Query parameters",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns masked CLS data"
+          }
+        },
+        "summary": "Retrieve masked CLS data",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/portalData": {
+      "get": {
+        "operationId": "AppController_portalData",
+        "parameters": [
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "description": "Query parameters",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Returns portal data including client and UPIs"
+          }
+        },
+        "summary": "Retrieve portal data",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/requestcall": {
+      "get": {
+        "operationId": "AppController_requestCall",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "query",
+            "description": "Username",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Ladder type",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Call request processed successfully"
+          }
+        },
+        "summary": "Request a call",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/refreshPrimary": {
+      "get": {
+        "operationId": "AppController_refreshPrimary",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Returns confirmation of primary clients refresh"
+          }
+        },
+        "summary": "Refresh primary clients",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/refreshSecondary": {
+      "get": {
+        "operationId": "AppController_refreshSecondary",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Returns confirmation of secondary clients refresh"
+          }
+        },
+        "summary": "Refresh secondary clients",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/exitPrimary": {
+      "get": {
+        "operationId": "AppController_exitPrimary",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Returns confirmation of exiting primary clients"
+          }
+        },
+        "summary": "Exit primary clients",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/exitSecondary": {
+      "get": {
+        "operationId": "AppController_exitSecondary",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Returns confirmation of exiting secondary clients"
+          }
+        },
+        "summary": "Exit secondary clients",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/getviddata": {
+      "get": {
+        "operationId": "AppController_getVidData",
+        "parameters": [
+          {
+            "name": "profile",
+            "required": false,
+            "in": "query",
+            "description": "Profile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "query",
+            "description": "Chat ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Video data retrieved successfully"
+          }
+        },
+        "summary": "Get video data",
+        "tags": [
+          "App"
+        ]
+      },
+      "post": {
+        "operationId": "AppController_updateVidData",
+        "parameters": [
+          {
+            "name": "profile",
+            "required": false,
+            "in": "query",
+            "description": "Profile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Client ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Body data",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Video data updated successfully"
+          }
+        },
+        "summary": "Update video data",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/getUserConfig": {
+      "post": {
+        "operationId": "AppController_updtaeUserConfig",
+        "parameters": [
+          {
+            "name": "filter",
+            "required": true,
+            "in": "query",
+            "description": "Filter parameters",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Configuration data",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "User configuration updated successfully"
+          }
+        },
+        "summary": "Update user configuration",
+        "tags": [
+          "App"
+        ]
+      },
+      "get": {
+        "operationId": "AppController_getUserConfig",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get user configuration",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/getallupiIds": {
+      "get": {
+        "operationId": "AppController_getallupiIds",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "All UPI IDs retrieved successfully"
+          }
+        },
+        "summary": "Get all UPI IDs",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/updateUserData/{chatId}": {
+      "post": {
+        "operationId": "AppController_updateUserConfig",
+        "parameters": [
+          {
+            "name": "chatId",
+            "required": true,
+            "in": "path",
+            "description": "Chat ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "profile",
+            "required": false,
+            "in": "query",
+            "description": "Profile",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "User data",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "User configuration updated successfully"
+          }
+        },
+        "summary": "Update user configuration",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/getUserInfo": {
+      "get": {
+        "operationId": "AppController_getUserInfo",
+        "parameters": [
+          {
+            "name": "filter",
+            "required": true,
+            "in": "query",
+            "description": "Filter parameters",
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "User information retrieved successfully"
+          }
+        },
+        "summary": "Get user information",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/getdata": {
+      "get": {
+        "operationId": "AppController_getData",
+        "parameters": [],
+        "responses": {
+          "default": {
+            "description": "Returns HTML data with periodic refresh"
+          }
+        },
+        "summary": "Get data and refresh periodically",
+        "tags": [
+          "App"
+        ]
+      }
+    },
+    "/folders/{folder}/files": {
+      "post": {
+        "description": "Upload single or multiple files to a specified folder",
+        "operationId": "FileController_uploadFiles",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Target folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": false,
+            "in": "query",
+            "description": "Optional custom filename for single file upload",
+            "schema": {}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "files"
+                ],
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Files to upload"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Upload files to a folder",
+        "tags": [
+          "File"
+        ]
+      },
+      "get": {
+        "operationId": "FileController_listFiles",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all files in a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders": {
+      "get": {
+        "operationId": "FileController_listFolders",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Folders listed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error while listing folders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List all folders",
+        "tags": [
+          "File"
+        ]
+      },
+      "post": {
+        "operationId": "FileController_createFolder",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folderName": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Folder created successfully"
+          },
+          "400": {
+            "description": "Invalid folder name"
+          }
+        },
+        "summary": "Create a new folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}": {
+      "get": {
+        "operationId": "FileController_getFolderDetails",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number for pagination",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Number of files per page",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Folder details retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderDetailsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Folder not found"
+          }
+        },
+        "summary": "Get folder details and list files",
+        "tags": [
+          "File"
+        ]
+      },
+      "delete": {
+        "operationId": "FileController_deleteFolder",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder to delete",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a folder and all its contents",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/stream/{folder}/{file}": {
+      "get": {
+        "operationId": "FileController_stream",
+        "parameters": [
+          {
+            "name": "file",
+            "required": true,
+            "in": "path",
+            "description": "Name of the video file",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder containing the file",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/uploadFromUrl": {
+      "post": {
+        "operationId": "FileController_uploadFromUrl",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadByUrlDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/download": {
+      "get": {
+        "operationId": "FileController_downloadFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Download a file from a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/metadata": {
+      "get": {
+        "operationId": "FileController_getFileMetadata",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File metadata retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileMetadataResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Get metadata of a file",
+        "tags": [
+          "File"
+        ]
+      },
+      "put": {
+        "operationId": "FileController_updateFileMetadata",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newFilename": {
+                    "type": "string",
+                    "description": "New filename"
+                  },
+                  "newFolder": {
+                    "type": "string",
+                    "description": "New folder"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "File metadata updated successfully"
+          },
+          "400": {
+            "description": "Invalid metadata"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Update file metadata",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/move": {
+      "put": {
+        "operationId": "FileController_moveFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Current folder of the file",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "Current file name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newFolder": {
+                    "type": "string"
+                  },
+                  "newFilename": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "File moved successfully"
+          },
+          "400": {
+            "description": "Invalid destination"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Move or rename a file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/copy": {
+      "post": {
+        "operationId": "FileController_copyFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Source folder",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File to copy",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newFolder": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "File copied successfully"
+          },
+          "400": {
+            "description": "Invalid destination"
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Copy a file to another location",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/download-all": {
+      "get": {
+        "operationId": "FileController_downloadAllFiles",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Download all files in a folder as a ZIP archive",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/temp-links": {
+      "get": {
+        "operationId": "FileController_getTemporaryLinks",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get temporary access links for all files in a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/temp-link": {
+      "get": {
+        "operationId": "FileController_getTemporaryFileLink",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Generate a temporary access link for a file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/search": {
+      "get": {
+        "operationId": "FileController_searchFiles",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pattern",
+            "required": true,
+            "in": "query",
+            "description": "Regex pattern for matching filenames",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Search for files by name in a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/json/folders/{folder}/files/{filename}": {
+      "get": {
+        "description": "Returns the complete contents of a JSON file",
+        "operationId": "FileController_getJsonFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON file contents retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonFileResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JSON file not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error parsing JSON file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Retrieve the entire JSON file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/json/folders/{folder}/files/{filename}/{path}": {
+      "get": {
+        "description": "Returns a specific value from a JSON file using a path with / as separator",
+        "operationId": "FileController_getNestedJsonValue",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "required": true,
+            "in": "path",
+            "description": "Path to the nested value (e.g., user/profile/name)",
+            "schema": {
+              "example": [
+                "user",
+                "profile",
+                "name"
+              ],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON value retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValueResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid path or key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JSON file not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Retrieve a nested value from a JSON file by key path",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/json/folders/{folder}/files/{filename}/query": {
+      "get": {
+        "description": "Query JSON data using dot notation and array indices. Example: users[0].profile.name",
+        "operationId": "FileController_queryJsonFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "description": "JSON path query using dot notation (e.g., users[0].profile.name)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON value retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValueResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query format or path not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "JSON file not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Query a JSON file using dot notation",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}": {
+      "delete": {
+        "operationId": "FileController_deleteFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a file from a folder",
+        "tags": [
+          "File"
+        ]
+      },
+      "get": {
+        "operationId": "FileController_getFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Retrieve a file from a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/size": {
+      "get": {
+        "operationId": "FileController_getFolderSize",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get the total size of a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/thumbnail": {
+      "get": {
+        "operationId": "FileController_getThumbnail",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a thumbnail of an image or video file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/rename": {
+      "put": {
+        "operationId": "FileController_renameFolder",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Current folder name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newFolderName": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Folder renamed successfully"
+          },
+          "400": {
+            "description": "Invalid folder name"
+          },
+          "404": {
+            "description": "Folder not found"
+          }
+        },
+        "summary": "Rename a folder",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/move": {
+      "put": {
+        "operationId": "FileController_moveFolder",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Current folder name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "newLocation": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Folder moved successfully"
+          },
+          "400": {
+            "description": "Invalid destination"
+          },
+          "404": {
+            "description": "Folder not found"
+          }
+        },
+        "summary": "Move a folder to a different location",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/preview": {
+      "get": {
+        "operationId": "FileController_getFilePreview",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a preview of a file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/tree": {
+      "get": {
+        "operationId": "FileController_getFolderTree",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Folder tree retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderTreeResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a hierarchical tree structure of folders and files",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/share": {
+      "post": {
+        "operationId": "FileController_generateShareableLink",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shareable link generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareableLinkResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Generate a shareable link for a file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/lock": {
+      "put": {
+        "operationId": "FileController_lockFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "File is already locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error locking file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Lock a file for editing",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/unlock": {
+      "put": {
+        "operationId": "FileController_unlockFile",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Unlock a file for editing",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/files/recent": {
+      "get": {
+        "operationId": "FileController_getRecentFiles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a list of recently modified files",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/files/{filename}/versions": {
+      "get": {
+        "operationId": "FileController_getFileVersions",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Folder name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filename",
+            "required": true,
+            "in": "path",
+            "description": "File name",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File versions retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileVersionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "File not found"
+          }
+        },
+        "summary": "Get different versions of a file",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/metrics/file-operations": {
+      "get": {
+        "description": "Retrieve metrics about recent file operations including success rate and performance data",
+        "operationId": "FileController_getFileOperationMetrics",
+        "parameters": [
+          {
+            "name": "timeWindow",
+            "required": false,
+            "in": "query",
+            "description": "Time window in milliseconds for failure rate calculation",
+            "schema": {
+              "example": 3600000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Maximum number of metrics to return",
+            "schema": {
+              "example": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File operation metrics retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileOperationMetricsResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get file operation metrics",
+        "tags": [
+          "File"
+        ]
+      }
+    },
+    "/folders/{folder}/copy": {
+      "post": {
+        "description": "Creates a copy of a folder and all its contents at a new location",
+        "operationId": "FileController_copyFolder",
+        "parameters": [
+          {
+            "name": "folder",
+            "required": true,
+            "in": "path",
+            "description": "Source folder name to copy",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "destinationFolder"
+                ],
+                "properties": {
+                  "destinationFolder": {
+                    "type": "string",
+                    "description": "Name of the destination folder where the copy will be created"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Folder copied successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "sourceFolder": {
+                      "type": "string"
+                    },
+                    "destinationFolder": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid destination or destination already exists"
+          },
+          "404": {
+            "description": "Source folder not found"
+          }
+        },
+        "summary": "Copy a folder to a new location",
+        "tags": [
+          "File"
         ]
       }
     }
@@ -14051,14 +16478,6 @@
             "type": "number",
             "default": 0
           },
-          "recentUniqueUsers": {
-            "type": "number",
-            "default": 0
-          },
-          "lastUniqueUserCheckAt": {
-            "type": "number",
-            "default": 0
-          },
           "availableMsgs": {
             "type": "array",
             "items": {
@@ -14085,16 +16504,6 @@
           "private": {
             "type": "boolean",
             "description": "Whether the channel is private"
-          },
-          "starred": {
-            "type": "boolean",
-            "description": "Starred status",
-            "default": false
-          },
-          "score": {
-            "type": "number",
-            "description": "Channel score",
-            "default": 0
           }
         },
         "required": [
@@ -14162,14 +16571,6 @@
             "type": "number",
             "default": 0
           },
-          "recentUniqueUsers": {
-            "type": "number",
-            "default": 0
-          },
-          "lastUniqueUserCheckAt": {
-            "type": "number",
-            "default": 0
-          },
           "availableMsgs": {
             "type": "array",
             "items": {
@@ -14196,16 +16597,6 @@
           "private": {
             "type": "boolean",
             "description": "Whether the channel is private"
-          },
-          "starred": {
-            "type": "boolean",
-            "description": "Starred status",
-            "default": false
-          },
-          "score": {
-            "type": "number",
-            "description": "Channel score",
-            "default": 0
           }
         }
       },
@@ -14628,7 +17019,7 @@
               "message"
             ]
           },
-          "profile": {
+          "clientId": {
             "type": "string"
           },
           "payload": {
@@ -14639,7 +17030,7 @@
           "chatId",
           "time",
           "type",
-          "profile"
+          "clientId"
         ]
       },
       "ScheduleEventsDto": {
@@ -14648,7 +17039,7 @@
           "chatId": {
             "type": "string"
           },
-          "profile": {
+          "clientId": {
             "type": "string"
           },
           "type": {
@@ -14662,7 +17053,7 @@
         },
         "required": [
           "chatId",
-          "profile"
+          "clientId"
         ]
       },
       "CreateSessionDto": {
@@ -17459,6 +19850,326 @@
         },
         "required": [
           "url"
+        ]
+      },
+      "FolderResponse": {
+        "type": "object",
+        "properties": {
+          "folders": {
+            "example": [
+              "folder1",
+              "folder2"
+            ],
+            "description": "List of folder names",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "folders"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 400,
+            "description": "HTTP status code"
+          },
+          "message": {
+            "type": "string",
+            "example": "File not found",
+            "description": "Error message"
+          },
+          "error": {
+            "type": "string",
+            "example": "Bad Request",
+            "description": "Error type"
+          }
+        },
+        "required": [
+          "statusCode",
+          "message",
+          "error"
+        ]
+      },
+      "FolderDetailsResponse": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string",
+            "example": "documents",
+            "description": "Name of the folder"
+          },
+          "files": {
+            "example": [
+              "file1.pdf",
+              "file2.jpg"
+            ],
+            "description": "List of files in the folder",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "totalFiles": {
+            "type": "number",
+            "example": 100,
+            "description": "Total number of files in folder"
+          },
+          "page": {
+            "type": "number",
+            "example": 1,
+            "description": "Current page number"
+          },
+          "limit": {
+            "type": "number",
+            "example": 10,
+            "description": "Number of items per page"
+          }
+        },
+        "required": [
+          "folder",
+          "files",
+          "totalFiles",
+          "page",
+          "limit"
+        ]
+      },
+      "UploadByUrlDto": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string",
+            "example": "videos"
+          },
+          "files": {
+            "type": "object",
+            "example": {
+              "intro": "https://cdn.example.com/video1.mp4",
+              "welcome": "https://cdn.example.com/welcome"
+            }
+          }
+        },
+        "required": [
+          "folder",
+          "files"
+        ]
+      },
+      "FileMetadataResponse": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "example": "document.pdf",
+            "description": "Name of the file"
+          },
+          "size": {
+            "type": "number",
+            "example": 1024,
+            "description": "Size of file in bytes"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2024-02-20T10:00:00.000Z",
+            "description": "Creation timestamp"
+          },
+          "modifiedAt": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2024-02-20T11:30:00.000Z",
+            "description": "Last modification timestamp"
+          }
+        },
+        "required": [
+          "filename",
+          "size",
+          "createdAt",
+          "modifiedAt"
+        ]
+      },
+      "JsonFileResponse": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "object",
+            "example": {
+              "key": "value",
+              "name": "example",
+              "age": 30,
+              "nested": {
+                "key": "value"
+              }
+            },
+            "description": "JSON file content"
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "JsonValueResponse": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "object",
+            "example": "value",
+            "description": "Value at the specified path in the JSON file"
+          }
+        },
+        "required": [
+          "value"
+        ]
+      },
+      "FolderTreeResponse": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "root",
+            "description": "Name of the current node"
+          },
+          "children": {
+            "example": [
+              {
+                "name": "folder1",
+                "children": []
+              },
+              {
+                "name": "file1.pdf"
+              }
+            ],
+            "description": "Child nodes (folders and files)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "children"
+        ]
+      },
+      "ShareableLinkResponse": {
+        "type": "object",
+        "properties": {
+          "shareableLink": {
+            "type": "string",
+            "example": "https://promoteClients2.glitch.me/folders/docs/files/example.pdf?share=true",
+            "description": "Generated shareable link for the file"
+          }
+        },
+        "required": [
+          "shareableLink"
+        ]
+      },
+      "FileVersionResponse": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "example": "document.pdf",
+            "description": "Name of the original file"
+          },
+          "versions": {
+            "example": [
+              {
+                "version": "1",
+                "filename": "document.pdf.v1"
+              },
+              {
+                "version": "2",
+                "filename": "document.pdf.v2"
+              }
+            ],
+            "description": "List of available versions",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "filename",
+          "versions"
+        ]
+      },
+      "FileOperationMetricDto": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "example": "createFolder",
+            "description": "Name of the file operation"
+          },
+          "success": {
+            "type": "boolean",
+            "example": true,
+            "description": "Whether the operation succeeded"
+          },
+          "duration": {
+            "type": "number",
+            "example": 123,
+            "description": "Duration of operation in milliseconds"
+          },
+          "timestamp": {
+            "type": "number",
+            "example": 1645564789123,
+            "description": "Timestamp of the operation"
+          },
+          "path": {
+            "type": "string",
+            "example": "/uploads/docs",
+            "description": "Path involved in the operation"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if operation failed"
+          }
+        },
+        "required": [
+          "operation",
+          "success",
+          "duration",
+          "timestamp"
+        ]
+      },
+      "FileOperationMetricsResponse": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "description": "Recent file operation metrics",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileOperationMetricDto"
+            }
+          },
+          "failureRate": {
+            "type": "number",
+            "example": 0.05,
+            "description": "Rate of failed operations in the time window"
+          },
+          "timeWindow": {
+            "type": "number",
+            "example": 3600000,
+            "description": "Time window in milliseconds"
+          },
+          "totalOperations": {
+            "type": "number",
+            "example": 100,
+            "description": "Total number of operations recorded"
+          }
+        },
+        "required": [
+          "metrics",
+          "failureRate",
+          "timeWindow",
+          "totalOperations"
         ]
       }
     }

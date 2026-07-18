@@ -1,104 +1,44 @@
-name: Build, Deploy and Publish
+name: Build and Upload CommonTgService
 
 on:
   push:
     branches:
       - '**'
   pull_request:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
 
 concurrency:
-  group: build-publish-${{ github.ref }}
+  group: common-tg-service-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-publish:
-    name: Build, Deploy and Publish
+  build-and-upload:
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: "https://registry.npmjs.org/"
 
       - name: Determine branch name
-        id: branch_name
-        run: |
-          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
-          echo "branch=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+        run: echo "BRANCH_NAME=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}" >> "$GITHUB_ENV"
 
-      - name: Sync Branch
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          git fetch origin "$BRANCH_NAME"
-          git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME"
-
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Build NestJS app
+      - name: Build NestJS application
         run: npm run build
 
-      - name: Build Webpack
+      - name: Build single deployable artifact
         run: npm run webpack -- --config ./webpack-prod.config.ts
 
-      - name: Upload build (GitHub)
+      - name: Upload build
         if: ${{ github.event_name == 'push' }}
-        run: npm run upload-build -- ${{ env.BRANCH_NAME }}
+        run: npm run upload-build -- "$BRANCH_NAME"
         env:
           BUILDS_REPO_TOKEN: ${{ secrets.BUILDS_REPO_TOKEN }}
           API_KEY: ${{ secrets.API_KEY }}
-
-      - name: Configure Git
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-
-      - name: Update Current Branch
-        if: ${{ github.event_name == 'push' }}
-        run: |
-          git diff --quiet || (git add . && git commit -m "chore: commit pre-bump changes [skip ci]")
-          npm version patch -m "Bump version to %s [skip ci]"
-          git add src package.json
-          git add -f dist
-          git commit -m "Build and deploy dist files [skip ci]" || echo "No changes to commit"
-          git push origin "HEAD:$BRANCH_NAME"
-
-      - name: Update Master Branch
-        if: ${{ github.event_name == 'push' && github.ref != 'refs/heads/master' }}
-        run: |
-          git fetch origin master
-          git checkout master
-          git pull origin master
-          git checkout "$BRANCH_NAME" -- src dist package.json
-          git add src package.json
-          git add -f dist
-          git commit -m "Update dist and src from ${{ steps.branch_name.outputs.branch }} [skip ci]" || echo "No changes to commit"
-          git push origin master -f
-
-      - name: Configure NPM Authentication
-        if: ${{ success() && github.event_name == 'push' }}
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-          chmod 0600 ~/.npmrc
-
-      - name: Verify NPM Authentication
-        if: ${{ success() && github.event_name == 'push' }}
-        run: npm whoami
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to NPM
-        if: ${{ success() && github.event_name == 'push' }}
-        run: npm publish --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -70,29 +70,14 @@ describe('ActiveChannelsService channel-state persistence', () => {
     ], { ordered: false });
   });
 
-  test('getActiveChannels repairs legacy contradictory sendability flags before selecting candidates', async () => {
+  test('getActiveChannels does not run a legacy data migration before selecting candidates', async () => {
     const updateMany = jest.fn(() => execQuery({ modifiedCount: 2 }));
     const aggregate = jest.fn(() => execQuery([]));
     const service = new ActiveChannelsService({ updateMany, aggregate } as any, {} as any);
 
     await service.getActiveChannels(25, 0, []);
 
-    expect(updateMany).toHaveBeenCalledWith(
-      {
-        canSendMsgs: true,
-        $or: [{ sendMessages: true }, { sendPlain: true }],
-        banned: { $ne: true },
-        forbidden: { $ne: true },
-        private: { $ne: true },
-        restricted: { $ne: true },
-      },
-      {
-        $set: expect.objectContaining({
-          sendMessages: false,
-          sendPlain: false,
-        }),
-      },
-    );
+    expect(updateMany).not.toHaveBeenCalled();
     expect(aggregate).toHaveBeenCalled();
   });
 });
@@ -452,21 +437,6 @@ describe('ActiveChannelsService (real Mongo)', () => {
       await seed({ channelId: 'h3', reactRestricted: true, reactRestrictedAt: new Date() } as any);
       const r = await service.autoHealChannels();
       expect(r.reactRestrictedHealed).toBe(0);
-    });
-  });
-
-  describe('onModuleInit', () => {
-    test('runs repair + auto-heal without throwing', async () => {
-      await seed({ channelId: 'init-1', canSendMsgs: true, sendMessages: true });
-      await expect(service.onModuleInit()).resolves.toBeUndefined();
-    });
-
-    test('swallows repair + heal errors', async () => {
-      const repairSpy = jest.spyOn(service as any, 'repairLegacySendabilityFlags').mockRejectedValue(new Error('repair'));
-      const healSpy = jest.spyOn(service, 'autoHealChannels').mockRejectedValue(new Error('heal'));
-      await expect(service.onModuleInit()).resolves.toBeUndefined();
-      repairSpy.mockRestore();
-      healSpy.mockRestore();
     });
   });
 

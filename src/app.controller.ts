@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, ValidationPipe, HttpException, HttpStatus, Res } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Post, Query, Res, UseInterceptors, ValidationPipe } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import axios, { AxiosError, AxiosResponse } from 'axios';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
 import { randomUUID } from 'crypto';
@@ -7,6 +7,10 @@ import { Request, Response } from 'express';
 import * as https from 'https';
 import { URL } from 'url';
 import { parseError , Logger} from './utils';
+import { ClientService } from './components/clients/client.service';
+import { AppService, VideoDetails } from './app.service';
+import { CloudflareCacheInterceptor } from './interceptors/cloudflare-cache.interceptor';
+import { NoCache } from './decorators/no-cache.decorator';
 
 @ApiTags('App')
 @Controller()
@@ -15,11 +19,58 @@ export class AppController {
   private readonly DEFAULT_TIMEOUT = 30000;
   private readonly MAX_CONTENT_SIZE = 50 * 1024 * 1024; // 50MB
 
-  constructor() { }
+  constructor(
+    private readonly clientService: ClientService,
+    private readonly appService: AppService,
+  ) { }
 
   @Get()
   getHello(): string {
     return 'Hello World!';
+  }
+
+  @Get('health')
+  health(): string {
+    return this.getHello();
+  }
+
+  @Get('refreshmap')
+  async refreshMap(): Promise<void> {
+    await this.clientService.refreshMap();
+  }
+
+  @Get('setupClient/:clientId')
+  async setupClient(@Param('clientId') clientId: string, @Query() query: any) {
+    return this.appService.setupClient(clientId, query);
+  }
+
+  @Get('forward')
+  async forward(
+    @Query('url') url: string,
+    @Query() query: Record<string, unknown>,
+  ) {
+    if (!url) throw new BadRequestException('url query parameter is required');
+    try {
+      new URL(url);
+    } catch {
+      throw new BadRequestException('url query parameter must be a valid URL');
+    }
+    const { url: _url, ...params } = query;
+    return this.appService.forwardGetRequest(url, params);
+  }
+
+  @Get('processUsers/:limit/:skip')
+  async processUsers(
+    @Param('limit', ParseIntPipe) limit: number,
+    @Param('skip', ParseIntPipe) skip: number,
+  ) {
+    return this.appService.processEligibleUsers(limit, skip);
+  }
+
+  @Get('exit')
+  exit(): string {
+    setTimeout(() => process.exit(0), 2_000);
+    return 'Exiting application... in 2 seconds';
   }
   @Post('execute-request')
   @ApiOperation({
@@ -277,5 +328,274 @@ export class AppController {
       message: error.message || 'An unexpected error occurred',
       requestId
     };
+  }
+
+  @Get('blockUserAll/:tgId')
+  @ApiOperation({ summary: 'Block user across all services' })
+  @ApiParam({ name: 'tgId', description: 'Telegram ID of the user', type: String })
+  @ApiResponse({ description: 'Returns result of blocking user' })
+  async blockUserAll(@Param('tgId') tgId: string) {
+    return await this.appService.blockUserAll(tgId);
+  }
+
+  @Get('unblockUserAll/:tgId')
+  @ApiOperation({ summary: 'Unblock user across all services' })
+  @ApiParam({ name: 'tgId', description: 'Telegram ID of the user', type: String })
+  @ApiResponse({ description: 'Returns result of unblocking user' })
+  async unblockUserAll(@Param('tgId') tgId: string) {
+    return await this.appService.unblockUserAll(tgId);
+  }
+
+  @Get('isRecentUser')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache()
+  @ApiOperation({ summary: 'Check if user is recent and return access data' })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true })
+  @ApiResponse({ description: 'Returns count of recent accesses and video details' })
+  async isRecentUser(@Query('chatId') chatId: string) {
+    return this.appService.isRecentUser(chatId);
+  }
+
+  @Post('isRecentUser')
+  @ApiOperation({ summary: 'Update recent user data' })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true })
+  @ApiBody({ description: 'Video details to update', type: Object })
+  @ApiResponse({ description: 'Successfully updated recent user data' })
+  async updateRecentUser(
+    @Query('chatId') chatId: string,
+    @Body() videoDetails: any,
+  ): Promise<VideoDetails> {
+    return await this.appService.updateRecentUser(chatId, videoDetails);
+  }
+
+  @Get('resetRecentUser')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache()
+  @ApiOperation({ summary: 'Reset recent user data' })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true })
+  @ApiResponse({ description: 'Returns count of recent accesses after reset' })
+  async resetRecentUser(@Query('chatId') chatId: string) {
+    return this.appService.resetRecentUser(chatId);
+  }
+
+  @Get('paymentStats')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache()
+  @ApiOperation({ summary: 'Get payment statistics' })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID of the user', type: String })
+  @ApiQuery({ name: 'profile', description: 'Profile identifier', type: String })
+  @ApiResponse({ description: 'Returns payment statistics' })
+  async getPaymentStats(
+    @Query('chatId') chatId: string,
+    @Query('profile') profile: string,
+  ) {
+    return this.appService.getPaymentStats(chatId, profile);
+  }
+
+  @Get('sendToChannel')
+  @ApiOperation({ summary: 'Send message to channel' })
+  @ApiQuery({ name: 'msg', description: 'Message to send', type: String, required: true })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID of the channel', type: String, required: false })
+  @ApiQuery({ name: 'token', description: 'Token for authentication', type: String, required: false })
+  @ApiResponse({ description: 'Returns result of sending message to channel' })
+  async sendToChannel(
+    @Query('msg') message: string,
+    @Query('chatId') chatId: string,
+    @Query('token') token: string,
+  ) {
+    try {
+      if (message.length < 1500) {
+        return await this.appService.sendToChannel(chatId, token, message);
+      } else {
+        console.log('Skipped Message:', decodeURIComponent(message));
+        return 'sent';
+      }
+    } catch (e) {
+      parseError(e);
+    }
+  }
+
+  @Get('sendToAll')
+  @ApiOperation({ summary: 'Send endpoint to all clients' })
+  @ApiQuery({ name: 'query', description: 'Endpoint to send', type: String, required: true })
+  @ApiResponse({ description: 'Returns confirmation of endpoint sent' })
+  async sendToAll(@Query('query') query: string) {
+    try {
+      const decodedEndpoint = decodeURIComponent(query);
+      this.appService.sendToAll(decodedEndpoint);
+      return `Send ${query}`;
+    } catch (e) {
+      parseError(e);
+      throw e;
+    }
+  }
+
+  @Get('joinChannelsForClients')
+  @ApiOperation({ summary: 'Join channels for clients' })
+  @ApiResponse({ description: 'Returns result of joining channels for clients' })
+  async joinChannelsforBufferClients(): Promise<string> {
+    return this.appService.joinchannelForClients();
+  }
+
+  @Get('maskedCls')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache()
+  @ApiOperation({ summary: 'Retrieve masked CLS data' })
+  @ApiQuery({ name: 'query', description: 'Query parameters', type: Object })
+  @ApiResponse({ description: 'Returns masked CLS data' })
+  async maskedCls(@Query() query: object): Promise<any> {
+    return await this.appService.findAllMasked(query);
+  }
+
+  @Get('portalData')
+  @ApiOperation({ summary: 'Retrieve portal data' })
+  @ApiQuery({ name: 'query', description: 'Query parameters', type: Object })
+  @ApiResponse({ description: 'Returns portal data including client and UPIs' })
+  async portalData(
+    @Query() query: object,
+  ): Promise<{ client: any; upis: object }> {
+    return await this.appService.portalData(query);
+  }
+
+  @Get('/requestcall')
+  @ApiOperation({ summary: 'Request a call' })
+  @ApiQuery({ name: 'username', description: 'Username', type: String, required: true })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID', type: String, required: true })
+  @ApiQuery({ name: 'type', description: 'Ladder type', type: String, required: false })
+  @ApiResponse({ description: 'Call request processed successfully' })
+  async requestCall(
+    @Query('username') username: string,
+    @Query('chatId') chatId: string,
+    @Query('type') type?: string,
+  ) {
+    return await this.appService.getRequestCall(username, chatId, type);
+  }
+
+  @Get('refreshPrimary')
+  @ApiOperation({ summary: 'Refresh primary clients' })
+  @ApiResponse({ description: 'Returns confirmation of primary clients refresh' })
+  async refreshPrimary() {
+    this.appService.refreshPrimary();
+    return '1';
+  }
+
+  @Get('refreshSecondary')
+  @ApiOperation({ summary: 'Refresh secondary clients' })
+  @ApiResponse({ description: 'Returns confirmation of secondary clients refresh' })
+  async refreshSecondary() {
+    this.appService.refreshSecondary();
+    return '2';
+  }
+
+  @Get('exitPrimary')
+  @ApiOperation({ summary: 'Exit primary clients' })
+  @ApiResponse({ description: 'Returns confirmation of exiting primary clients' })
+  async exitPrimary() {
+    this.appService.exitPrimary();
+    return '1';
+  }
+
+  @Get('exitSecondary')
+  @ApiOperation({ summary: 'Exit secondary clients' })
+  @ApiResponse({ description: 'Returns confirmation of exiting secondary clients' })
+  async exitSecondary() {
+    this.appService.exitSecondary();
+    return '2';
+  }
+
+  @Get('/getviddata')
+  @ApiOperation({ summary: 'Get video data' })
+  @ApiQuery({ name: 'profile', description: 'Profile', type: String, required: false })
+  @ApiQuery({ name: 'clientId', description: 'Client ID', type: String, required: false })
+  @ApiQuery({ name: 'chatId', description: 'Chat ID', type: String, required: true })
+  @ApiResponse({ description: 'Video data retrieved successfully' })
+  async getVidData(
+    @Query('profile') profile: string,
+    @Query('clientId') clientId: string,
+    @Query('chatId') chatId: any,
+  ) {
+    return await this.appService.getUserData(profile, clientId, chatId);
+  }
+
+  @Post('/getviddata')
+  @ApiOperation({ summary: 'Update video data' })
+  @ApiQuery({ name: 'profile', description: 'Profile', type: String, required: false })
+  @ApiQuery({ name: 'clientId', description: 'Client ID', type: String, required: false })
+  @ApiBody({ description: 'Body data', type: Object })
+  @ApiResponse({ description: 'Video data updated successfully' })
+  async updateVidData(
+    @Query('profile') profile: string,
+    @Query('clientId') clientId: string,
+    @Body() body: any,
+  ) {
+    return await this.appService.updateUserData(profile, clientId, body);
+  }
+
+  @Post('/getUserConfig')
+  @ApiOperation({ summary: 'Update user configuration' })
+  @ApiQuery({ name: 'filter', description: 'Filter parameters', type: Object })
+  @ApiBody({ description: 'Configuration data', type: Object })
+  @ApiResponse({ description: 'User configuration updated successfully' })
+  async updtaeUserConfig(@Query() filter: any, @Body() data: any) {
+    throw new Error('Method not implemented');
+    // return await this.appService.updateUserConfig(filter, data);
+  }
+
+  @Get('/getUserConfig')
+  @ApiOperation({ summary: 'Get user configuration' })
+  async getUserConfig(@Query() filter: any) {
+    return this.appService.getUserConfig(filter);
+  }
+
+  @Get('/getallupiIds')
+  @ApiOperation({ summary: 'Get all UPI IDs' })
+  @ApiResponse({ description: 'All UPI IDs retrieved successfully' })
+  async getallupiIds() {
+    return await this.appService.getallupiIds();
+  }
+
+  @Post('/updateUserData/:chatId')
+  @ApiOperation({ summary: 'Update user configuration' })
+  @ApiParam({ name: 'chatId', description: 'Chat ID', type: String })
+  @ApiQuery({ name: 'profile', description: 'Profile', type: String, required: false })
+  @ApiBody({ description: 'User data', type: Object })
+  @ApiResponse({ description: 'User configuration updated successfully' })
+  async updateUserConfig(
+    @Param('chatId') chatId: string,
+    @Query('profile') profile: string,
+    @Body() data: any,
+  ) {
+    return await this.appService.updateUserConfig(chatId, profile, data);
+  }
+
+  @Get('/getUserInfo')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache()
+  @ApiOperation({ summary: 'Get user information' })
+  @ApiQuery({ name: 'filter', description: 'Filter parameters', type: Object })
+  @ApiResponse({ description: 'User information retrieved successfully' })
+  async getUserInfo(@Query() filter: any) {
+    return await this.appService.getUserInfo(filter);
+  }
+
+  @Get('getdata')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache()
+  @ApiOperation({ summary: 'Get data and refresh periodically' })
+  @ApiResponse({ description: 'Returns HTML data with periodic refresh' })
+  async getData(@Res() res: Response): Promise<void> {
+    this.appService.checkAndRefresh();
+
+    res.setHeader('Content-Type', 'text/html');
+    let resp = '<html><head></head><body>';
+    resp += await this.appService.getData();
+    resp += '</body></html>';
+    resp += `<script>
+                console.log("hi");
+                setInterval(() => {
+                  window.location.reload();
+                }, 20000);
+            </script>`;
+    res.send(resp);
   }
 }

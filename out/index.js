@@ -379,14 +379,48 @@ const crypto_1 = __webpack_require__(/*! crypto */ "crypto");
 const https = __importStar(__webpack_require__(/*! https */ "https"));
 const url_1 = __webpack_require__(/*! url */ "url");
 const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
+const client_service_1 = __webpack_require__(/*! ./components/clients/client.service */ "./src/components/clients/client.service.ts");
+const app_service_1 = __webpack_require__(/*! ./app.service */ "./src/app.service.ts");
+const cloudflare_cache_interceptor_1 = __webpack_require__(/*! ./interceptors/cloudflare-cache.interceptor */ "./src/interceptors/cloudflare-cache.interceptor.ts");
+const no_cache_decorator_1 = __webpack_require__(/*! ./decorators/no-cache.decorator */ "./src/decorators/no-cache.decorator.ts");
 let AppController = AppController_1 = class AppController {
-    constructor() {
+    constructor(clientService, appService) {
+        this.clientService = clientService;
+        this.appService = appService;
         this.logger = new utils_1.Logger(AppController_1.name);
         this.DEFAULT_TIMEOUT = 30000;
         this.MAX_CONTENT_SIZE = 50 * 1024 * 1024;
     }
     getHello() {
         return 'Hello World!';
+    }
+    health() {
+        return this.getHello();
+    }
+    async refreshMap() {
+        await this.clientService.refreshMap();
+    }
+    async setupClient(clientId, query) {
+        return this.appService.setupClient(clientId, query);
+    }
+    async forward(url, query) {
+        if (!url)
+            throw new common_1.BadRequestException('url query parameter is required');
+        try {
+            new url_1.URL(url);
+        }
+        catch {
+            throw new common_1.BadRequestException('url query parameter must be a valid URL');
+        }
+        const { url: _url, ...params } = query;
+        return this.appService.forwardGetRequest(url, params);
+    }
+    async processUsers(limit, skip) {
+        return this.appService.processEligibleUsers(limit, skip);
+    }
+    exit() {
+        setTimeout(() => process.exit(0), 2_000);
+        return 'Exiting application... in 2 seconds';
     }
     async executeRequest(req, res) {
         const requestId = (0, crypto_1.randomUUID)();
@@ -581,6 +615,112 @@ let AppController = AppController_1 = class AppController {
             requestId
         };
     }
+    async blockUserAll(tgId) {
+        return await this.appService.blockUserAll(tgId);
+    }
+    async unblockUserAll(tgId) {
+        return await this.appService.unblockUserAll(tgId);
+    }
+    async isRecentUser(chatId) {
+        return this.appService.isRecentUser(chatId);
+    }
+    async updateRecentUser(chatId, videoDetails) {
+        return await this.appService.updateRecentUser(chatId, videoDetails);
+    }
+    async resetRecentUser(chatId) {
+        return this.appService.resetRecentUser(chatId);
+    }
+    async getPaymentStats(chatId, profile) {
+        return this.appService.getPaymentStats(chatId, profile);
+    }
+    async sendToChannel(message, chatId, token) {
+        try {
+            if (message.length < 1500) {
+                return await this.appService.sendToChannel(chatId, token, message);
+            }
+            else {
+                console.log('Skipped Message:', decodeURIComponent(message));
+                return 'sent';
+            }
+        }
+        catch (e) {
+            (0, utils_1.parseError)(e);
+        }
+    }
+    async sendToAll(query) {
+        try {
+            const decodedEndpoint = decodeURIComponent(query);
+            this.appService.sendToAll(decodedEndpoint);
+            return `Send ${query}`;
+        }
+        catch (e) {
+            (0, utils_1.parseError)(e);
+            throw e;
+        }
+    }
+    async joinChannelsforBufferClients() {
+        return this.appService.joinchannelForClients();
+    }
+    async maskedCls(query) {
+        return await this.appService.findAllMasked(query);
+    }
+    async portalData(query) {
+        return await this.appService.portalData(query);
+    }
+    async requestCall(username, chatId, type) {
+        return await this.appService.getRequestCall(username, chatId, type);
+    }
+    async refreshPrimary() {
+        this.appService.refreshPrimary();
+        return '1';
+    }
+    async refreshSecondary() {
+        this.appService.refreshSecondary();
+        return '2';
+    }
+    async exitPrimary() {
+        this.appService.exitPrimary();
+        return '1';
+    }
+    async exitSecondary() {
+        this.appService.exitSecondary();
+        return '2';
+    }
+    async getVidData(profile, clientId, chatId) {
+        return await this.appService.getUserData(profile, clientId, chatId);
+    }
+    async updateVidData(profile, clientId, body) {
+        return await this.appService.updateUserData(profile, clientId, body);
+    }
+    async updtaeUserConfig(filter, data) {
+        throw new Error('Method not implemented');
+    }
+    async getUserConfig(filter) {
+        return this.appService.getUserConfig(filter);
+    }
+    async getallupiIds() {
+        return await this.appService.getallupiIds();
+    }
+    async updateUserConfig(chatId, profile, data) {
+        return await this.appService.updateUserConfig(chatId, profile, data);
+    }
+    async getUserInfo(filter) {
+        return await this.appService.getUserInfo(filter);
+    }
+    async getData(res) {
+        this.appService.checkAndRefresh();
+        res.setHeader('Content-Type', 'text/html');
+        let resp = '<html><head></head><body>';
+        resp += await this.appService.getData();
+        resp += '</body></html>';
+        resp += `<script>
+                console.log("hi");
+                setInterval(() => {
+                  window.location.reload();
+                }, 20000);
+            </script>`;
+        res.send(resp);
+    }
 };
 exports.AppController = AppController;
 __decorate([
@@ -589,6 +729,48 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", String)
 ], AppController.prototype, "getHello", null);
+__decorate([
+    (0, common_1.Get)('health'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", String)
+], AppController.prototype, "health", null);
+__decorate([
+    (0, common_1.Get)('refreshmap'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "refreshMap", null);
+__decorate([
+    (0, common_1.Get)('setupClient/:clientId'),
+    __param(0, (0, common_1.Param)('clientId')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "setupClient", null);
+__decorate([
+    (0, common_1.Get)('forward'),
+    __param(0, (0, common_1.Query)('url')),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "forward", null);
+__decorate([
+    (0, common_1.Get)('processUsers/:limit/:skip'),
+    __param(0, (0, common_1.Param)('limit', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Param)('skip', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "processUsers", null);
+__decorate([
+    (0, common_1.Get)('exit'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", String)
+], AppController.prototype, "exit", null);
 __decorate([
     (0, common_1.Post)('execute-request'),
     (0, swagger_1.ApiOperation)({
@@ -609,10 +791,274 @@ __decorate([
     __metadata("design:paramtypes", [execute_request_dto_1.ExecuteRequestDto, Object]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "executeRequest", null);
+__decorate([
+    (0, common_1.Get)('blockUserAll/:tgId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Block user across all services' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of blocking user' }),
+    __param(0, (0, common_1.Param)('tgId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "blockUserAll", null);
+__decorate([
+    (0, common_1.Get)('unblockUserAll/:tgId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Unblock user across all services' }),
+    (0, swagger_1.ApiParam)({ name: 'tgId', description: 'Telegram ID of the user', type: String }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of unblocking user' }),
+    __param(0, (0, common_1.Param)('tgId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "unblockUserAll", null);
+__decorate([
+    (0, common_1.Get)('isRecentUser'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Check if user is recent and return access data' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns count of recent accesses and video details' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "isRecentUser", null);
+__decorate([
+    (0, common_1.Post)('isRecentUser'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update recent user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true }),
+    (0, swagger_1.ApiBody)({ description: 'Video details to update', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Successfully updated recent user data' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateRecentUser", null);
+__decorate([
+    (0, common_1.Get)('resetRecentUser'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Reset recent user data' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns count of recent accesses after reset' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "resetRecentUser", null);
+__decorate([
+    (0, common_1.Get)('paymentStats'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get payment statistics' }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the user', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile identifier', type: String }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns payment statistics' }),
+    __param(0, (0, common_1.Query)('chatId')),
+    __param(1, (0, common_1.Query)('profile')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getPaymentStats", null);
+__decorate([
+    (0, common_1.Get)('sendToChannel'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send message to channel' }),
+    (0, swagger_1.ApiQuery)({ name: 'msg', description: 'Message to send', type: String, required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the channel', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'token', description: 'Token for authentication', type: String, required: false }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of sending message to channel' }),
+    __param(0, (0, common_1.Query)('msg')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('token')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "sendToChannel", null);
+__decorate([
+    (0, common_1.Get)('sendToAll'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send endpoint to all clients' }),
+    (0, swagger_1.ApiQuery)({ name: 'query', description: 'Endpoint to send', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of endpoint sent' }),
+    __param(0, (0, common_1.Query)('query')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "sendToAll", null);
+__decorate([
+    (0, common_1.Get)('joinChannelsForClients'),
+    (0, swagger_1.ApiOperation)({ summary: 'Join channels for clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns result of joining channels for clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "joinChannelsforBufferClients", null);
+__decorate([
+    (0, common_1.Get)('maskedCls'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Retrieve masked CLS data' }),
+    (0, swagger_1.ApiQuery)({ name: 'query', description: 'Query parameters', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns masked CLS data' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "maskedCls", null);
+__decorate([
+    (0, common_1.Get)('portalData'),
+    (0, swagger_1.ApiOperation)({ summary: 'Retrieve portal data' }),
+    (0, swagger_1.ApiQuery)({ name: 'query', description: 'Query parameters', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns portal data including client and UPIs' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "portalData", null);
+__decorate([
+    (0, common_1.Get)('/requestcall'),
+    (0, swagger_1.ApiOperation)({ summary: 'Request a call' }),
+    (0, swagger_1.ApiQuery)({ name: 'username', description: 'Username', type: String, required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID', type: String, required: true }),
+    (0, swagger_1.ApiQuery)({ name: 'type', description: 'Ladder type', type: String, required: false }),
+    (0, swagger_1.ApiResponse)({ description: 'Call request processed successfully' }),
+    __param(0, (0, common_1.Query)('username')),
+    __param(1, (0, common_1.Query)('chatId')),
+    __param(2, (0, common_1.Query)('type')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "requestCall", null);
+__decorate([
+    (0, common_1.Get)('refreshPrimary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh primary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of primary clients refresh' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "refreshPrimary", null);
+__decorate([
+    (0, common_1.Get)('refreshSecondary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Refresh secondary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of secondary clients refresh' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "refreshSecondary", null);
+__decorate([
+    (0, common_1.Get)('exitPrimary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Exit primary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of exiting primary clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "exitPrimary", null);
+__decorate([
+    (0, common_1.Get)('exitSecondary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Exit secondary clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of exiting secondary clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "exitSecondary", null);
+__decorate([
+    (0, common_1.Get)('/getviddata'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get video data' }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Client ID', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID', type: String, required: true }),
+    (0, swagger_1.ApiResponse)({ description: 'Video data retrieved successfully' }),
+    __param(0, (0, common_1.Query)('profile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Query)('chatId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getVidData", null);
+__decorate([
+    (0, common_1.Post)('/getviddata'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update video data' }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile', type: String, required: false }),
+    (0, swagger_1.ApiQuery)({ name: 'clientId', description: 'Client ID', type: String, required: false }),
+    (0, swagger_1.ApiBody)({ description: 'Body data', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'Video data updated successfully' }),
+    __param(0, (0, common_1.Query)('profile')),
+    __param(1, (0, common_1.Query)('clientId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateVidData", null);
+__decorate([
+    (0, common_1.Post)('/getUserConfig'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user configuration' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', description: 'Filter parameters', type: Object }),
+    (0, swagger_1.ApiBody)({ description: 'Configuration data', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'User configuration updated successfully' }),
+    __param(0, (0, common_1.Query)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updtaeUserConfig", null);
+__decorate([
+    (0, common_1.Get)('/getUserConfig'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user configuration' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getUserConfig", null);
+__decorate([
+    (0, common_1.Get)('/getallupiIds'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all UPI IDs' }),
+    (0, swagger_1.ApiResponse)({ description: 'All UPI IDs retrieved successfully' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getallupiIds", null);
+__decorate([
+    (0, common_1.Post)('/updateUserData/:chatId'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update user configuration' }),
+    (0, swagger_1.ApiParam)({ name: 'chatId', description: 'Chat ID', type: String }),
+    (0, swagger_1.ApiQuery)({ name: 'profile', description: 'Profile', type: String, required: false }),
+    (0, swagger_1.ApiBody)({ description: 'User data', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'User configuration updated successfully' }),
+    __param(0, (0, common_1.Param)('chatId')),
+    __param(1, (0, common_1.Query)('profile')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "updateUserConfig", null);
+__decorate([
+    (0, common_1.Get)('/getUserInfo'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user information' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', description: 'Filter parameters', type: Object }),
+    (0, swagger_1.ApiResponse)({ description: 'User information retrieved successfully' }),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getUserInfo", null);
+__decorate([
+    (0, common_1.Get)('getdata'),
+    (0, common_1.UseInterceptors)(cloudflare_cache_interceptor_1.CloudflareCacheInterceptor),
+    (0, no_cache_decorator_1.NoCache)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get data and refresh periodically' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns HTML data with periodic refresh' }),
+    __param(0, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "getData", null);
 exports.AppController = AppController = AppController_1 = __decorate([
     (0, swagger_1.ApiTags)('App'),
     (0, common_1.Controller)(),
-    __metadata("design:paramtypes", [])
+    __metadata("design:paramtypes", [client_service_1.ClientService,
+        app_service_1.AppService])
 ], AppController);
 
 
@@ -665,6 +1111,11 @@ const interceptors_1 = __webpack_require__(/*! ./interceptors */ "./src/intercep
 const event_manager_module_1 = __webpack_require__(/*! ./components/event-manager/event-manager.module */ "./src/components/event-manager/event-manager.module.ts");
 const collection_insights_module_1 = __webpack_require__(/*! ./components/collection-insights/collection-insights.module */ "./src/components/collection-insights/collection-insights.module.ts");
 const daily_analytics_module_1 = __webpack_require__(/*! ./components/daily-analytics/daily-analytics.module */ "./src/components/daily-analytics/daily-analytics.module.ts");
+const file_module_1 = __webpack_require__(/*! ./components/files/file.module */ "./src/components/files/file.module.ts");
+const app_service_1 = __webpack_require__(/*! ./app.service */ "./src/app.service.ts");
+const runtime_config_service_1 = __webpack_require__(/*! ./control-plane/config/runtime-config.service */ "./src/control-plane/config/runtime-config.service.ts");
+const scheduled_jobs_service_1 = __webpack_require__(/*! ./control-plane/jobs/scheduled-jobs.service */ "./src/control-plane/jobs/scheduled-jobs.service.ts");
+const account_maintenance_service_1 = __webpack_require__(/*! ./control-plane/maintenance/account-maintenance.service */ "./src/control-plane/maintenance/account-maintenance.service.ts");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer.apply(logger_middleware_1.LoggerMiddleware).forRoutes('*');
@@ -701,6 +1152,7 @@ exports.AppModule = AppModule = __decorate([
             dynamic_data_module_1.DynamicDataModule,
             event_manager_module_1.EventManagerModule,
             collection_insights_module_1.CollectionInsightsModule,
+            file_module_1.FileModule.register(),
         ],
         providers: [
             {
@@ -711,6 +1163,10 @@ exports.AppModule = AppModule = __decorate([
                 provide: core_1.APP_FILTER,
                 useClass: interceptors_1.ExceptionsFilter
             },
+            runtime_config_service_1.RuntimeConfigService,
+            account_maintenance_service_1.AccountMaintenanceService,
+            app_service_1.AppService,
+            scheduled_jobs_service_1.ScheduledJobsService,
         ],
         controllers: [app_controller_1.AppController],
         exports: [
@@ -730,6 +1186,759 @@ exports.AppModule = AppModule = __decorate([
         ]
     })
 ], AppModule);
+
+
+/***/ },
+
+/***/ "./src/app.service.ts"
+/*!****************************!*\
+  !*** ./src/app.service.ts ***!
+  \****************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var AppService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AppService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+const schedule = __importStar(__webpack_require__(/*! node-schedule-tz */ "node-schedule-tz"));
+const components_1 = __webpack_require__(/*! ./components */ "./src/components/index.ts");
+const utils_1 = __webpack_require__(/*! ./utils */ "./src/utils/index.ts");
+const runtime_config_service_1 = __webpack_require__(/*! ./control-plane/config/runtime-config.service */ "./src/control-plane/config/runtime-config.service.ts");
+const account_maintenance_service_1 = __webpack_require__(/*! ./control-plane/maintenance/account-maintenance.service */ "./src/control-plane/maintenance/account-maintenance.service.ts");
+let AppService = AppService_1 = class AppService {
+    constructor(usersService, telegramService, userDataService, clientService, activeChannelsService, upiIdService, statService, stat2Service, promoteStatService, channelsService, timestampService, botsService, eventManagerService, runtimeConfig, bufferClientService, maintenance) {
+        this.usersService = usersService;
+        this.telegramService = telegramService;
+        this.userDataService = userDataService;
+        this.clientService = clientService;
+        this.activeChannelsService = activeChannelsService;
+        this.upiIdService = upiIdService;
+        this.statService = statService;
+        this.stat2Service = stat2Service;
+        this.promoteStatService = promoteStatService;
+        this.channelsService = channelsService;
+        this.timestampService = timestampService;
+        this.botsService = botsService;
+        this.eventManagerService = eventManagerService;
+        this.runtimeConfig = runtimeConfig;
+        this.bufferClientService = bufferClientService;
+        this.maintenance = maintenance;
+        this.logger = new common_1.Logger(AppService_1.name);
+        this.userAccessData = new Map();
+        this.joinChannelMap = new Map();
+        this.joinChannelQueueRunning = false;
+        this.scheduledJobs = [];
+        this.refresTime = 0;
+        console.log('App Module Constructor initiated !!');
+    }
+    onModuleInit() {
+        console.log('App Module initiated !!');
+        if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
+            this.cleanupInterval = setInterval(() => this.cleanupOldAccessData(), 15 * 60 * 1000);
+        }
+        try {
+            if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
+                const channelJoinJob = schedule.scheduleJob('ums-channel-join-cycle', '25 2,9,16 * * * ', 'Asia/Kolkata', async () => {
+                    try {
+                        await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=ExecutingjoinchannelForClients-${process.env.clientId}`);
+                    }
+                    catch (error) {
+                        (0, utils_1.parseError)(error, 'UMS scheduled join notification failed');
+                    }
+                    try {
+                        if (new Date().getUTCDate() % 3 === 1) {
+                            await this.leaveChannelsAll();
+                        }
+                        else {
+                            await this.joinchannelForClients();
+                        }
+                    }
+                    catch (error) {
+                        (0, utils_1.parseError)(error, 'UMS scheduled channel join failed');
+                    }
+                });
+                if (channelJoinJob)
+                    this.scheduledJobs.push(channelJoinJob);
+            }
+            if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
+                const retentionJob = schedule.scheduleJob('ums-user-data-retention', '0 3 * * * ', 'Asia/Kolkata', async () => {
+                    try {
+                        const res = await this.userDataService.removeRedundantData();
+                        await this.timestampService.clear();
+                        console.log('Deleted userdata older than month | count: ', res.deletedCount);
+                    }
+                    catch (e) {
+                        console.error('Error Deleteing old userData', e);
+                    }
+                });
+                if (retentionJob)
+                    this.scheduledJobs.push(retentionJob);
+            }
+            console.log('Added enabled UMS cron jobs:', this.runtimeConfig.activeSchedulers());
+        }
+        catch (error) {
+            console.log('Some Error: ', error);
+        }
+    }
+    async setupClient(clientId, query) {
+        return this.clientService.setupClient(clientId, query);
+    }
+    async checkBufferClients() {
+        await this.bufferClientService.checkBufferClients();
+    }
+    async joinBufferClients() {
+        await this.bufferClientService.joinchannelForBufferClients();
+    }
+    async updateBufferClientInfo() {
+        try {
+            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updating Buffer Clients Info`);
+        }
+        catch (error) {
+            this.logger.error('CMS buffer-info notification failed; continuing update', error);
+        }
+        await this.bufferClientService.updateInfo();
+    }
+    async forwardGetRequest(externalUrl, queryParams) {
+        try {
+            return (await axios_1.default.get(externalUrl, { params: queryParams })).data;
+        }
+        catch (error) {
+            const axiosError = error;
+            this.logger.error(`Forward request failed: ${axiosError.message}`, axiosError.stack);
+            throw new Error(`Forward GET request failed: ${axiosError.message}`);
+        }
+    }
+    async processEligibleUsers(limit, skip) {
+        return this.maintenance.processEligibleUsers(limit, skip);
+    }
+    async checkPromotions() {
+        setInterval(async () => {
+            const clients = await this.clientService.findAll();
+            for (const client of clients) {
+                const userPromoteStats = await this.promoteStatService.findByClient(client.clientId);
+                if (userPromoteStats?.isActive &&
+                    (Date.now() - userPromoteStats?.lastUpdatedTimeStamp) / (1000 * 60) >
+                        6) {
+                    try {
+                        await (0, utils_1.fetchWithTimeout)(`${client.repl}/promote`, {
+                            timeout: 120000,
+                        });
+                        console.log(client.clientId, ': Promote Triggered!!');
+                    }
+                    catch (error) {
+                        (0, utils_1.parseError)(error, 'Promotion Check Err');
+                    }
+                }
+                else {
+                    console.log(client.clientId, ': ALL Good!! ---', Math.floor((Date.now() - userPromoteStats?.lastUpdatedTimeStamp) /
+                        (1000 * 60)));
+                }
+            }
+        }, 240000);
+    }
+    async getPromotionStatsPlain() {
+        let resp = '';
+        const result = await this.promoteStatService.findAll();
+        for (const data of result) {
+            resp += `\n${data.client.toUpperCase()} : ${data.totalCount} ${data.totalCount > 0 ? ` | ${Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)}` : ''}`;
+        }
+        return resp;
+    }
+    async leaveChannelsAll() {
+        await this.sendToAll('leavechannels');
+    }
+    async sendToAll(endpoint) {
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            const url = `${client.repl}/${endpoint}`;
+            console.log('Trying : ', url);
+            (0, utils_1.fetchWithTimeout)(url);
+            await (0, Helpers_1.sleep)(2000);
+        }
+    }
+    async exitPrimary() {
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            if (client.clientId.toLowerCase().includes('1')) {
+                await (0, utils_1.fetchWithTimeout)(`${client.repl}/exit`);
+                await (0, Helpers_1.sleep)(40000);
+            }
+        }
+    }
+    async exitSecondary() {
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            if (client.clientId.toLowerCase().includes('2')) {
+                await (0, utils_1.fetchWithTimeout)(`${client.repl}/exit`);
+                await (0, Helpers_1.sleep)(40000);
+            }
+        }
+    }
+    async refreshPrimary() {
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            if (client.clientId.toLowerCase().includes('1')) {
+                await (0, utils_1.fetchWithTimeout)(`${client.repl}/exec/refresh`);
+                await (0, Helpers_1.sleep)(40000);
+            }
+        }
+    }
+    async refreshSecondary() {
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            if (client.clientId.toLowerCase().includes('2')) {
+                await (0, utils_1.fetchWithTimeout)(`${client.repl}/exec/refresh`);
+                await (0, Helpers_1.sleep)(40000);
+            }
+        }
+    }
+    async getUser(limit, skip) {
+        const currentDate = new Date();
+        const weekAgoDate = new Date(currentDate);
+        weekAgoDate.setDate(currentDate.getDate() - 7);
+        const monthAgoDate = new Date(currentDate);
+        monthAgoDate.setDate(currentDate.getDate() - 30);
+        const threeMonthAgoDate = new Date(currentDate);
+        threeMonthAgoDate.setDate(currentDate.getDate() - 90);
+        const query = {
+            expired: false,
+            $or: [
+                { createdAt: { $gt: monthAgoDate }, updatedAt: { $lt: weekAgoDate } },
+                {
+                    createdAt: { $lte: monthAgoDate, $gt: threeMonthAgoDate },
+                    updatedAt: { $lt: monthAgoDate },
+                },
+                {
+                    createdAt: { $lte: threeMonthAgoDate },
+                    updatedAt: { $lte: threeMonthAgoDate },
+                },
+            ],
+        };
+        const users = await this.usersService.executeQuery(query, {}, limit || 300, skip || 0);
+        return users;
+    }
+    getHello() {
+        return 'Hello World!';
+    }
+    cleanupOldAccessData() {
+        const currentTime = Date.now();
+        for (const [chatId, accessData] of this.userAccessData.entries()) {
+            const recentAccessData = accessData.timestamps.filter((timestamp) => currentTime - timestamp <= 15 * 60 * 1000);
+            if (recentAccessData.length === 0) {
+                this.userAccessData.delete(chatId);
+            }
+            else if (recentAccessData.length < accessData.timestamps.length) {
+                this.userAccessData.set(chatId, {
+                    timestamps: recentAccessData,
+                    videoDetails: accessData.videoDetails,
+                });
+            }
+        }
+    }
+    async isRecentUser(chatId) {
+        const accessData = this.userAccessData.get(chatId) || {
+            timestamps: [],
+            videoDetails: {},
+        };
+        const currentTime = Date.now();
+        const recentAccessData = accessData.timestamps.filter((timestamp) => currentTime - timestamp <= 15 * 60 * 1000);
+        recentAccessData.push(currentTime);
+        this.userAccessData.set(chatId, {
+            videoDetails: accessData.videoDetails,
+            timestamps: recentAccessData,
+        });
+        const result = {
+            count: recentAccessData.length,
+            videoDetails: accessData.videoDetails,
+        };
+        console.log('Get', chatId, result);
+        return result;
+    }
+    async updateRecentUser(chatId, videoDetails) {
+        const accessData = this.userAccessData.get(chatId) || {
+            timestamps: [],
+            videoDetails: {},
+        };
+        const updatedVideoDetails = { ...accessData.videoDetails, ...videoDetails };
+        this.userAccessData.set(chatId, {
+            videoDetails: updatedVideoDetails,
+            timestamps: accessData.timestamps,
+        });
+        const result = {
+            count: accessData.timestamps.length,
+            videoDetails: updatedVideoDetails,
+        };
+        console.log('Update:', chatId, {
+            videoDetails: updatedVideoDetails,
+            timestamps: accessData.timestamps,
+        });
+        return result;
+    }
+    async resetRecentUser(chatId) {
+        this.userAccessData.delete(chatId);
+        console.log('Deleted User Access Data for: ', chatId);
+        return { count: 0 };
+    }
+    async getPaymentStats(chatId, profile) {
+        const resp = {
+            paid: 0,
+            demoGiven: 0,
+            secondShow: 0,
+            fullShow: 0,
+            latestCallTime: 0,
+            canCall: true,
+            videos: [],
+        };
+        const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+        const twentyDays = Date.now() - 20 * 24 * 60 * 60 * 1000;
+        try {
+            const query1 = {
+                chatId,
+                profile: { $exists: true, $ne: profile },
+                payAmount: { $gte: 10 },
+            };
+            const query2 = { chatId, profile: { $exists: true, $ne: profile } };
+            const document = await this.userDataService.executeQuery(query1);
+            const document2 = await this.userDataService.executeQuery(query2);
+            if (document.length > 0) {
+                resp.paid = document.length;
+            }
+            if (document2.length > 0) {
+                for (const doc of document2) {
+                    if (doc.canReply == 0 && doc.lastMsgTimeStamp > threeDaysAgo) {
+                        resp.canCall = false;
+                    }
+                    if (doc.callTime > threeDaysAgo) {
+                        if (doc.demoGiven) {
+                            resp.demoGiven++;
+                        }
+                        if (doc.secondShow) {
+                            resp.secondShow++;
+                        }
+                        if (doc.fullShow) {
+                            resp.fullShow++;
+                        }
+                        if (doc.callTime > resp.latestCallTime) {
+                            resp.latestCallTime = doc.callTime;
+                        }
+                        resp.videos.push(...doc.videos);
+                    }
+                    else {
+                        if (doc.lastMsgTimeStamp < twentyDays) {
+                            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(`ReSetting UserData for Profile: ${doc.profile} | ChatId: ${doc.chatId}\n\n LastMsg: ${getReadableTimeDifference(doc.lastMsgTimeStamp, Date.now())} `)}`);
+                            await this.userDataService.update(doc.profile, doc.chatId, {
+                                payAmount: 0,
+                                demoGiven: false,
+                                secondShow: false,
+                                highestPayAmount: 0,
+                                lastMsgTimeStamp: Date.now(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        catch (error) {
+            (0, utils_1.parseError)(error);
+        }
+        console.log(resp);
+        return resp;
+    }
+    async sendToChannel(chatId, token, message) {
+        function decodeIfEncoded(str) {
+            try {
+                return str !== decodeURIComponent(str) ? decodeURIComponent(str) : str;
+            }
+            catch (e) {
+                return str;
+            }
+        }
+        function escapeMarkdownV2(text) {
+            text = text.replace(/([\\_*`\[\]()~>#+\-=|{}.!])/g, '\\$1');
+            return text;
+        }
+        const decodedMessage = decodeIfEncoded(message);
+        console.log('Message:', decodedMessage);
+        const category = !token
+            ? AppService_1.CHANNEL_CATEGORY_MAP[chatId]
+            : undefined;
+        if (category) {
+            try {
+                const sent = await this.botsService.sendMessageByCategory(category, decodedMessage);
+                if (sent)
+                    return { ok: true };
+                console.warn(`sendToChannel: category ${category} send returned falsy; falling back to ppplbot`);
+            }
+            catch (error) {
+                (0, utils_1.parseError)(error, `sendToChannel category ${category}`, false);
+            }
+        }
+        const escapedMessage = escapeMarkdownV2(decodedMessage);
+        const encodedMessage = encodeURIComponent(escapedMessage).replace(/%5Cn/g, '%0A');
+        const url = `${(0, utils_1.ppplbot)(chatId, token)}&parse_mode=MarkdownV2&text=${encodedMessage}`;
+        return (await (0, utils_1.fetchWithTimeout)(url, {}, 0))?.data;
+    }
+    async findAllMasked(query) {
+        return await this.clientService.findAllMasked();
+    }
+    async portalData(query) {
+        const client = (await this.clientService.findAllMasked())[0];
+        const upis = await this.upiIdService.findOne();
+        return { client, upis };
+    }
+    async joinchannelForClients() {
+        console.log('Joining Channel Started');
+        await (0, Helpers_1.sleep)(2000);
+        const clients = await this.clientService.findAll();
+        await Promise.all(clients.map(async (document) => {
+            try {
+                const resp = await (0, utils_1.fetchWithTimeout)(`${document.repl}/channelinfo`, { timeout: 200000 }, 1);
+                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Channel SendTrue :: ${document.clientId}: ${resp.data.canSendTrueCount}`);
+                if (resp?.data?.canSendTrueCount &&
+                    resp?.data?.canSendTrueCount < 350) {
+                    const result = await this.activeChannelsService.getActiveChannels(150, 0, resp.data?.ids);
+                    await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Started Joining Channels for ${document.clientId}: ${result.length}`);
+                    this.joinChannelMap.set(document.repl, result);
+                }
+            }
+            catch (error) {
+                (0, utils_1.parseError)(error);
+            }
+        }));
+        this.joinChannelQueue();
+        console.log('Joining Channel Triggered Succesfully for ', clients.length);
+        return 'Initiated Joining channels';
+    }
+    async joinChannelQueue() {
+        if (this.joinChannelIntervalId)
+            return;
+        this.joinChannelIntervalId = setInterval(async () => {
+            if (this.joinChannelQueueRunning)
+                return;
+            this.joinChannelQueueRunning = true;
+            try {
+                const keys = Array.from(this.joinChannelMap.keys());
+                if (keys.length > 0) {
+                    console.log('In JOIN CHANNEL interval: ', new Date().toISOString());
+                    const promises = keys.map(async (url) => {
+                        const channels = this.joinChannelMap.get(url);
+                        if (channels && channels.length > 0) {
+                            const channel = channels.shift();
+                            console.log(url, ' Pending Channels :', channels.length);
+                            this.joinChannelMap.set(url, channels);
+                            try {
+                                await (0, utils_1.fetchWithTimeout)(`${url}/joinchannel?username=${channel.username}`);
+                                console.log(url, ' Trying to join :', channel.username);
+                            }
+                            catch (error) {
+                                (0, utils_1.parseError)(error, 'Outer Err: ');
+                            }
+                        }
+                        else {
+                            this.joinChannelMap.delete(url);
+                        }
+                    });
+                    await Promise.all(promises);
+                }
+                else {
+                    this.clearJoinChannelInterval();
+                }
+            }
+            finally {
+                this.joinChannelQueueRunning = false;
+            }
+        }, 3 * 60 * 1000);
+    }
+    clearJoinChannelInterval() {
+        if (this.joinChannelIntervalId) {
+            console.log('Cleared joinChannel Set Interval');
+            clearInterval(this.joinChannelIntervalId);
+            this.joinChannelIntervalId = null;
+        }
+    }
+    async refreshmap() {
+        await this.clientService.refreshMap();
+    }
+    async blockUserAll(chatId) {
+        let profileData = '';
+        const userDatas = await this.userDataService.search({ chatId });
+        for (const userData of userDatas) {
+            const profileRegex = new RegExp(userData.profile, 'i');
+            const profiles = await this.clientService.executeQuery({
+                clientId: { $regex: profileRegex },
+            });
+            for (const profile of profiles) {
+                const url = `${profile.repl}/blockuser/${chatId}`;
+                console.log('Executing: ', url);
+                const result = await (0, utils_1.fetchWithTimeout)(url);
+                console.log(result.data);
+            }
+            profileData = profileData + ' | ' + userData.profile;
+        }
+        return profileData;
+    }
+    async unblockUserAll(chatId) {
+        let profileData = '';
+        const userDatas = await this.userDataService.search({ chatId });
+        for (const userData of userDatas) {
+            const profileRegex = new RegExp(userData.profile, 'i');
+            const profiles = await this.clientService.executeQuery({
+                clientId: { $regex: profileRegex },
+            });
+            for (const profile of profiles) {
+                const url = `${profile.repl}/unblockuser/${chatId}`;
+                console.log('Executing: ', url);
+                const result = await (0, utils_1.fetchWithTimeout)(url);
+                console.log(result.data);
+            }
+            profileData = profileData + ' | ' + userData.profile;
+        }
+        return profileData;
+    }
+    async getRequestCall(username, chatId, type = '1') {
+        const user = (await this.clientService.search({ username: username.toLowerCase() }))[0];
+        console.log(`Call Request Recived: ${username} | ${chatId}`);
+        if (user) {
+            return await this.eventManagerService.schedulePaidEvents(chatId, user.clientId, type);
+        }
+        return { message: 'No Such User Found' };
+    }
+    async getUserData(profile, clientId, chatId) {
+        if (!profile) {
+            profile = clientId?.replace(/\d/g, '');
+        }
+        return await this.userDataService.findOne(profile, chatId);
+    }
+    async updateUserData(profile, clientId, body) {
+        if (!profile) {
+            profile = clientId?.replace(/\d/g, '');
+        }
+        const chatId = body.chatId;
+        return await this.userDataService.update(profile, chatId, body);
+    }
+    async updateUserConfig(chatId, profile, data) {
+        this.userDataService.update(profile, chatId, data);
+    }
+    async getUserConfig(filter) {
+        void filter;
+        return undefined;
+    }
+    async getallupiIds() {
+        return await this.upiIdService.findOne();
+    }
+    async getUserInfo(filter) {
+        const client = (await this.clientService.executeQuery(filter))[0];
+        const result = { ...(client._doc ? client._doc : client) };
+        delete result['session'];
+        delete result['mobile'];
+        delete result['deployKey'];
+        delete result['promoteMobile'];
+        return result;
+    }
+    extractNumberFromString(inputString) {
+        const regexPattern = /\d+/;
+        const matchResult = inputString?.match(regexPattern);
+        if (matchResult && matchResult.length > 0) {
+            return parseInt(matchResult[0], 10);
+        }
+        return null;
+    }
+    async createInitializedObject() {
+        const clients = await this.clientService.findAll();
+        const initializedObject = {};
+        for (const user of clients) {
+            if (this.extractNumberFromString(user.clientId))
+                initializedObject[user.clientId.toUpperCase()] = {
+                    profile: user.clientId.toUpperCase(),
+                    totalCount: 0,
+                    totalPaid: 0,
+                    totalOldPaid: 0,
+                    oldPaidDemo: 0,
+                    totalpendingDemos: 0,
+                    oldPendingDemos: 0,
+                    totalNew: 0,
+                    totalNewPaid: 0,
+                    newPaidDemo: 0,
+                    newPendingDemos: 0,
+                    names: '',
+                    fullShowPPl: 0,
+                    fullShowNames: '',
+                };
+        }
+        return initializedObject;
+    }
+    async getData() {
+        const profileData = await this.createInitializedObject();
+        const stats = await this.statService.findAll();
+        for (const stat of stats) {
+            const { count, newUser, payAmount, demoGivenToday, demoGiven, client, name, secondShow, } = stat;
+            if (client && profileData[client.toUpperCase()]) {
+                const userData = profileData[client.toUpperCase()];
+                userData.totalCount += count;
+                userData.totalPaid += payAmount > 0 ? 1 : 0;
+                userData.totalOldPaid += payAmount > 0 && !newUser ? 1 : 0;
+                userData.oldPaidDemo += demoGivenToday && !newUser ? 1 : 0;
+                userData.totalpendingDemos += payAmount > 25 && !demoGiven ? 1 : 0;
+                userData.oldPendingDemos +=
+                    payAmount > 25 && !demoGiven && !newUser ? 1 : 0;
+                if (payAmount > 25 && !demoGiven) {
+                    userData.names = userData.names + ` ${name} |`;
+                }
+                if (demoGiven &&
+                    ((payAmount > 90 && !secondShow) || (payAmount > 150 && secondShow))) {
+                    userData.fullShowPPl++;
+                    userData.fullShowNames = userData.fullShowNames + ` ${name} |`;
+                }
+                if (newUser) {
+                    userData.totalNew += 1;
+                    userData.totalNewPaid += payAmount > 0 ? 1 : 0;
+                    userData.newPaidDemo += demoGivenToday ? 1 : 0;
+                    userData.newPendingDemos += payAmount > 25 && !demoGiven ? 1 : 0;
+                }
+            }
+        }
+        const profileDataArray = Object.entries(profileData);
+        profileDataArray.sort((a, b) => b[1].totalpendingDemos - a[1].totalpendingDemos);
+        let reply = '';
+        for (const [profile, userData] of profileDataArray) {
+            reply += `${profile.toUpperCase()} : <b>${userData.totalpendingDemos}</b> | ${userData.names}<br>`;
+        }
+        profileDataArray.sort((a, b) => b[1].fullShowPPl - a[1].fullShowPPl);
+        let reply2 = '';
+        for (const [profile, userData] of profileDataArray) {
+            reply2 += `${profile.toUpperCase()} : <b>${userData.fullShowPPl}</b> |${userData.fullShowNames}<br>`;
+        }
+        const reply3 = await this.getPromotionStats();
+        console.log(reply3);
+        return `<div>
+        <div style="display: flex; margin-bottom: 60px">
+          <div style="flex: 1;">${reply} </div>
+      < div style = "flex: 1; " > ${reply2} </div>
+        </div>
+        < div style = "display: flex;" >
+          <div style="flex: 1; " > ${reply3} </div>
+            </div>
+            </div>`;
+    }
+    async getPromotionStats() {
+        let resp = '';
+        const result = await this.promoteStatService.findAll();
+        for (const data of result) {
+            resp += `${data.client.toUpperCase()} : <b>${data.totalCount}</b>${data.totalCount > 0 ? ` | ${Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)}` : ''}<br>`;
+        }
+        return resp;
+    }
+    async checkAndRefresh() {
+        if (Date.now() > this.refresTime) {
+            this.refresTime = Date.now() + 5 * 60 * 1000;
+            const clients = await this.clientService.findAll();
+            for (const value of clients) {
+                await (0, utils_1.fetchWithTimeout)(`${value.repl}/markasread`);
+                await (0, Helpers_1.sleep)(3000);
+            }
+        }
+    }
+    onModuleDestroy() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+        }
+        if (this.joinChannelIntervalId) {
+            clearInterval(this.joinChannelIntervalId);
+        }
+        for (const job of this.scheduledJobs)
+            job.cancel();
+    }
+};
+exports.AppService = AppService;
+AppService.CHANNEL_CATEGORY_MAP = {
+    '-1002529408777': components_1.ChannelCategory.VC_NOTIFICATIONS,
+    '-1002472867139': components_1.ChannelCategory.VC_WARNINGS,
+};
+exports.AppService = AppService = AppService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [components_1.UsersService,
+        components_1.TelegramService,
+        components_1.UserDataService,
+        components_1.ClientService,
+        components_1.ActiveChannelsService,
+        components_1.UpiIdService,
+        components_1.Stat1Service,
+        components_1.Stat2Service,
+        components_1.PromoteStatService,
+        components_1.ChannelsService,
+        components_1.TimestampService,
+        components_1.BotsService,
+        components_1.EventManagerService,
+        runtime_config_service_1.RuntimeConfigService,
+        components_1.BufferClientService,
+        account_maintenance_service_1.AccountMaintenanceService])
+], AppService);
+function getReadableTimeDifference(ms1, ms2) {
+    const diff = Math.abs(ms1 - ms2);
+    const seconds = Math.floor(diff / 1000);
+    const days = Math.floor(seconds / (3600 * 24));
+    const hours = Math.floor((seconds % (3600 * 24)) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    let result = [];
+    if (days > 0)
+        result.push(`${days}d`);
+    if (hours > 0)
+        result.push(`${hours}h`);
+    if (minutes > 0)
+        result.push(`${minutes}m`);
+    if (secs > 0 || result.length === 0)
+        result.push(`${secs}s`);
+    return result.join(' ');
+}
 
 
 /***/ },
@@ -1015,7 +2224,9 @@ let InitModule = InitModule_1 = class InitModule {
             InitModule_1.initializationStatus.isInitialized = true;
             InitModule_1.initializationStatus.isInitializing = false;
             console.log(`Started :: ${process.env.clientId}`);
-            await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+            if (!process.env.LOCAL_SERVER) {
+                await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+            }
         }
         catch (error) {
             InitModule_1.initializationStatus.isInitializing = false;
@@ -1104,7 +2315,9 @@ let InitModule = InitModule_1 = class InitModule {
         try {
             console.log('Init Module destroying...');
             this.stopHealthCheck();
-            await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+            if (!process.env.LOCAL_SERVER) {
+                await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+            }
             if (this.connection && this.connection.readyState !== 0) {
                 console.log('Closing MongoDB connection...');
                 await this.connection.close(true);
@@ -1237,6 +2450,10 @@ let ConfigurationService = ConfigurationService_1 = class ConfigurationService {
         await this.notifyStart();
     }
     async notifyStart() {
+        if (process.env.LOCAL_SERVER) {
+            this.logger.log('Skipping configuration startup notification in local mode');
+            return;
+        }
         try {
             const clientId = process.env.clientId || this.configService.get('clientId');
             if (!clientId) {
@@ -14663,21 +15880,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         this.MIN_PARTICIPANTS_COUNT = 600;
         this.logger = new common_1.Logger(ActiveChannelsService_1.name);
         this.REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
-        this.legacySendabilityRepaired = false;
-    }
-    async onModuleInit() {
-        try {
-            await this.repairLegacySendabilityFlags();
-        }
-        catch (error) {
-            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
-        }
-        try {
-            await this.autoHealChannels();
-        }
-        catch (error) {
-            this.logger.warn(`Channel auto-heal failed: ${error instanceof Error ? error.message : error}`);
-        }
     }
     async autoHealChannels() {
         const now = Date.now();
@@ -14880,7 +16082,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds = []) {
         try {
-            await this.repairLegacySendabilityFlags();
             const negativeKeywords = [
                 'online', 'realestat', 'propert', 'freefire', 'bgmi', 'promo', 'agent', 'board', 'design',
                 'realt', 'clas', 'PROFIT', 'wholesale', 'retail', 'topper', 'exam', 'motivat', 'medico',
@@ -14961,25 +16162,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 target[field] = source[field];
             }
         }
-    }
-    async repairLegacySendabilityFlags() {
-        if (this.legacySendabilityRepaired)
-            return;
-        this.legacySendabilityRepaired = true;
-        await this.activeChannelModel.updateMany({
-            canSendMsgs: true,
-            $or: [{ sendMessages: true }, { sendPlain: true }],
-            banned: { $ne: true },
-            forbidden: { $ne: true },
-            private: { $ne: true },
-            restricted: { $ne: true },
-        }, {
-            $set: {
-                sendMessages: false,
-                sendPlain: false,
-                updatedAt: new Date(),
-            },
-        }).exec();
     }
     async analytics() {
         const [result] = await this.activeChannelModel.aggregate([
@@ -16392,12 +17574,6 @@ let BotsService = BotsService_1 = class BotsService {
         return this.moduleRef.get(users_service_1.UsersService, { strict: false });
     }
     async onModuleInit() {
-        try {
-            await this.migrateLegacyLifecycle();
-        }
-        catch (err) {
-            console.error('[BotHealth] lifecycle migration deferred; Mongo unavailable at startup', err?.message || err);
-        }
         await this.initializeCache();
         this.startPeriodicFlush();
         if (this.isBotHealthJobEnabled()) {
@@ -16436,19 +17612,6 @@ let BotsService = BotsService_1 = class BotsService {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
         }
-    }
-    async migrateLegacyLifecycle() {
-        const legacyBots = await this.botModel.find({ lifecycle: { $exists: false } }).lean().exec();
-        if (legacyBots.length === 0)
-            return;
-        const now = new Date();
-        await this.botModel.bulkWrite(legacyBots.map(bot => ({
-            updateOne: {
-                filter: { _id: bot._id, lifecycle: { $exists: false } },
-                update: { $set: this.legacyLifecycleUpdate(bot, now) },
-            },
-        })));
-        console.log(`[BotHealth] migrated lifecycle metadata for ${legacyBots.length} legacy bot record(s)`);
     }
     legacyLifecycleUpdate(bot, now = new Date()) {
         const reason = bot.deadReason || '';
@@ -17154,8 +18317,6 @@ let BotsService = BotsService_1 = class BotsService {
         let creationBudget = this.maxBotCreationsPerRun;
         let stopPrivilegedWork = false;
         try {
-            if (!options.dryRun)
-                await this.migrateLegacyLifecycle();
             const bots = await this.botModel.find().lean().exec();
             for (const bot of bots) {
                 const check = await this.checkBotToken(bot.token);
@@ -21923,7 +23084,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var ChannelsService_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ChannelsService = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
@@ -21932,19 +23092,9 @@ const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./src/components/channels/schemas/channel.schema.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-let ChannelsService = ChannelsService_1 = class ChannelsService {
+let ChannelsService = class ChannelsService {
     constructor(ChannelModel) {
         this.ChannelModel = ChannelModel;
-        this.logger = new common_1.Logger(ChannelsService_1.name);
-        this.legacySendabilityRepaired = false;
-    }
-    async onModuleInit() {
-        try {
-            await this.repairLegacySendabilityFlags();
-        }
-        catch (error) {
-            this.logger.warn(`Legacy sendability repair failed: ${error instanceof Error ? error.message : error}`);
-        }
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);
@@ -22096,7 +23246,6 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
         }
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
-        await this.repairLegacySendabilityFlags();
         const query = {
             '$and': [
                 {
@@ -22163,28 +23312,9 @@ let ChannelsService = ChannelsService_1 = class ChannelsService {
             }
         }
     }
-    async repairLegacySendabilityFlags() {
-        if (this.legacySendabilityRepaired)
-            return;
-        this.legacySendabilityRepaired = true;
-        await this.ChannelModel.updateMany({
-            canSendMsgs: true,
-            $or: [{ sendMessages: true }, { sendPlain: true }],
-            banned: { $ne: true },
-            forbidden: { $ne: true },
-            private: { $ne: true },
-            restricted: { $ne: true },
-        }, {
-            $set: {
-                sendMessages: false,
-                sendPlain: false,
-                updatedAt: new Date(),
-            },
-        }).exec();
-    }
 };
 exports.ChannelsService = ChannelsService;
-exports.ChannelsService = ChannelsService = ChannelsService_1 = __decorate([
+exports.ChannelsService = ChannelsService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(channel_schema_1.Channel.name)),
     __metadata("design:paramtypes", [mongoose_2.Model])
@@ -27089,6 +28219,2912 @@ exports.Event = Event = __decorate([
     })
 ], Event);
 exports.EventSchema = mongoose_1.SchemaFactory.createForClass(Event);
+
+
+/***/ },
+
+/***/ "./src/components/files/config/file.config.ts"
+/*!****************************************************!*\
+  !*** ./src/components/files/config/file.config.ts ***!
+  \****************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FILE_CONFIG = void 0;
+const path_1 = __webpack_require__(/*! path */ "path");
+exports.FILE_CONFIG = {
+    MAX_FILE_SIZE: 2 * 1024 * 1024 * 100,
+    MAX_FILES_PER_UPLOAD: 10,
+    ALLOWED_FILE_TYPES: [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/bmp',
+        'image/tiff',
+        'image/svg+xml',
+        'image/heic',
+        'image/heif',
+        'audio/mpeg',
+        'audio/mp3',
+        'audio/wav',
+        'audio/x-wav',
+        'audio/webm',
+        'audio/ogg',
+        'audio/aac',
+        'audio/mp4',
+        'audio/x-m4a',
+        'audio/flac',
+        'audio/3gpp',
+        'audio/3gpp2',
+        'audio/amr',
+        'audio/midi',
+        'audio/x-midi',
+        'video/mp4',
+        'video/mpeg',
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/x-ms-wmv',
+        'video/x-flv',
+        'video/webm',
+        'video/3gpp',
+        'video/3gpp2',
+        'video/ogg',
+        'application/ogg',
+        'application/vnd.apple.mpegurl',
+        'video/mp2t',
+        'video/x-matroska',
+    ],
+    TEMP_LINK_EXPIRY: 24 * 60 * 60 * 1000,
+    STORAGE_PATH: (0, path_1.join)(process.cwd(), 'uploads'),
+};
+
+
+/***/ },
+
+/***/ "./src/components/files/config/view.config.ts"
+/*!****************************************************!*\
+  !*** ./src/components/files/config/view.config.ts ***!
+  \****************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.VIEW_CONFIG = void 0;
+exports.VIEW_CONFIG = {
+    IMAGE_TYPES: [
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'image/svg+xml',
+        'image/bmp',
+    ],
+    PDF_TYPES: ['application/pdf'],
+    TEXT_TYPES: [
+        'text/plain',
+        'text/html',
+        'text/css',
+        'text/javascript',
+        'application/json',
+        'application/xml',
+    ],
+    AUDIO_TYPES: [
+        'audio/mpeg',
+        'audio/wav',
+        'audio/ogg',
+        'audio/mp3',
+        'audio/aac',
+        'audio/webm',
+    ],
+    VIDEO_TYPES: [
+        'video/mp4',
+        'video/mpeg',
+        'video/webm',
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/x-matroska',
+    ],
+    PREVIEW_SIZE_LIMIT: 1024 * 1024 * 100,
+    THUMBNAIL_OPTIONS: {
+        width: 320,
+        height: 240,
+        quality: 85,
+        format: 'jpeg',
+        fit: 'contain',
+        background: {
+            r: 245,
+            g: 245,
+            b: 245,
+            alpha: 1,
+        },
+    },
+    DEFAULT_THUMBNAILS: {
+        video: 'assets/video-thumbnail.png',
+        audio: 'assets/audio-thumbnail.png',
+    },
+    VIDEO_PREVIEW: {
+        thumbnailTime: '00:00:01',
+        width: 320,
+        height: 240,
+    },
+    AUDIO_PREVIEW: {
+        duration: true,
+        metadata: true,
+        waveform: true,
+    },
+    VIDEO_THUMBNAIL: {
+        timePosition: '00:00:01',
+        frameCount: 1,
+    },
+    THUMBNAIL_STYLES: {
+        background: {
+            startColor: '#1a73e8',
+            endColor: '#174ea6',
+        },
+        text: {
+            color: '#ffffff',
+            fontFamily: 'Arial',
+            fontSize: {
+                title: 12,
+                format: 11,
+            },
+        },
+        playButton: {
+            size: 40,
+            color: '#1a73e8',
+            background: '#ffffff',
+        },
+    },
+};
+
+
+/***/ },
+
+/***/ "./src/components/files/dto/requests.dto.ts"
+/*!**************************************************!*\
+  !*** ./src/components/files/dto/requests.dto.ts ***!
+  \**************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CopyFolderDto = exports.JsonQuery = exports.JsonPathParams = exports.UpdateFileMetadataDto = exports.CopyFileDto = exports.RenameFolderDto = exports.MoveFolderDto = exports.MoveFileDto = exports.CreateFolderDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class CreateFolderDto {
+}
+exports.CreateFolderDto = CreateFolderDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'documents',
+        description: 'Name of the folder to create',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateFolderDto.prototype, "folderName", void 0);
+class MoveFileDto {
+}
+exports.MoveFileDto = MoveFileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'destination',
+        description: 'New folder path for the file',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MoveFileDto.prototype, "newFolder", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'newname.pdf', description: 'New name for the file' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], MoveFileDto.prototype, "newFilename", void 0);
+class MoveFolderDto {
+}
+exports.MoveFolderDto = MoveFolderDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'new-location',
+        description: 'New location path for the folder',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], MoveFolderDto.prototype, "newLocation", void 0);
+class RenameFolderDto {
+}
+exports.RenameFolderDto = RenameFolderDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'new-folder-name',
+        description: 'New name for the folder',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], RenameFolderDto.prototype, "newFolderName", void 0);
+class CopyFileDto {
+}
+exports.CopyFileDto = CopyFileDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'destination',
+        description: 'Destination folder for the file copy',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CopyFileDto.prototype, "newFolder", void 0);
+class UpdateFileMetadataDto {
+}
+exports.UpdateFileMetadataDto = UpdateFileMetadataDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'newname.pdf', description: 'New name for the file' }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], UpdateFileMetadataDto.prototype, "newFilename", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'new-folder',
+        description: 'New folder for the file',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], UpdateFileMetadataDto.prototype, "newFolder", void 0);
+class JsonPathParams {
+}
+exports.JsonPathParams = JsonPathParams;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: ['user', 'profile', 'name'],
+        description: 'Path segments to the nested value',
+        isArray: true,
+    }),
+    (0, class_validator_1.IsString)({ each: true }),
+    (0, class_validator_1.IsNotEmpty)({ each: true }),
+    __metadata("design:type", Array)
+], JsonPathParams.prototype, "path", void 0);
+class JsonQuery {
+}
+exports.JsonQuery = JsonQuery;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'data.users[0].name',
+        description: 'JSON path query using dot notation',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], JsonQuery.prototype, "query", void 0);
+class CopyFolderDto {
+}
+exports.CopyFolderDto = CopyFolderDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'destination-folder',
+        description: 'Destination folder for the folder copy',
+    }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CopyFolderDto.prototype, "destinationFolder", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/files/dto/responses.dto.ts"
+/*!***************************************************!*\
+  !*** ./src/components/files/dto/responses.dto.ts ***!
+  \***************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileOperationMetricsResponse = exports.FileOperationMetricDto = exports.JsonValueResponse = exports.JsonFileResponse = exports.ErrorResponse = exports.FolderTreeResponse = exports.FileVersionResponse = exports.ShareableLinkResponse = exports.FolderDetailsResponse = exports.FolderResponse = exports.FileMetadataResponse = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+class FileMetadataResponse {
+}
+exports.FileMetadataResponse = FileMetadataResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'document.pdf', description: 'Name of the file' }),
+    __metadata("design:type", String)
+], FileMetadataResponse.prototype, "filename", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 1024, description: 'Size of file in bytes' }),
+    __metadata("design:type", Number)
+], FileMetadataResponse.prototype, "size", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2024-02-20T10:00:00.000Z',
+        description: 'Creation timestamp',
+    }),
+    __metadata("design:type", Date)
+], FileMetadataResponse.prototype, "createdAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '2024-02-20T11:30:00.000Z',
+        description: 'Last modification timestamp',
+    }),
+    __metadata("design:type", Date)
+], FileMetadataResponse.prototype, "modifiedAt", void 0);
+class FolderResponse {
+}
+exports.FolderResponse = FolderResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: ['folder1', 'folder2'],
+        description: 'List of folder names',
+    }),
+    __metadata("design:type", Array)
+], FolderResponse.prototype, "folders", void 0);
+class FolderDetailsResponse {
+}
+exports.FolderDetailsResponse = FolderDetailsResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'documents', description: 'Name of the folder' }),
+    __metadata("design:type", String)
+], FolderDetailsResponse.prototype, "folder", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: ['file1.pdf', 'file2.jpg'],
+        description: 'List of files in the folder',
+    }),
+    __metadata("design:type", Array)
+], FolderDetailsResponse.prototype, "files", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 100, description: 'Total number of files in folder' }),
+    __metadata("design:type", Number)
+], FolderDetailsResponse.prototype, "totalFiles", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 1, description: 'Current page number' }),
+    __metadata("design:type", Number)
+], FolderDetailsResponse.prototype, "page", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 10, description: 'Number of items per page' }),
+    __metadata("design:type", Number)
+], FolderDetailsResponse.prototype, "limit", void 0);
+class ShareableLinkResponse {
+}
+exports.ShareableLinkResponse = ShareableLinkResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'https://promoteClients2.glitch.me/folders/docs/files/example.pdf?share=true',
+        description: 'Generated shareable link for the file',
+    }),
+    __metadata("design:type", String)
+], ShareableLinkResponse.prototype, "shareableLink", void 0);
+class FileVersionResponse {
+}
+exports.FileVersionResponse = FileVersionResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'document.pdf',
+        description: 'Name of the original file',
+    }),
+    __metadata("design:type", String)
+], FileVersionResponse.prototype, "filename", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: [
+            { version: '1', filename: 'document.pdf.v1' },
+            { version: '2', filename: 'document.pdf.v2' },
+        ],
+        description: 'List of available versions',
+    }),
+    __metadata("design:type", Array)
+], FileVersionResponse.prototype, "versions", void 0);
+class FolderTreeResponse {
+}
+exports.FolderTreeResponse = FolderTreeResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'root', description: 'Name of the current node' }),
+    __metadata("design:type", String)
+], FolderTreeResponse.prototype, "name", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: [{ name: 'folder1', children: [] }, { name: 'file1.pdf' }],
+        description: 'Child nodes (folders and files)',
+    }),
+    __metadata("design:type", Array)
+], FolderTreeResponse.prototype, "children", void 0);
+class ErrorResponse {
+}
+exports.ErrorResponse = ErrorResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 400, description: 'HTTP status code' }),
+    __metadata("design:type", Number)
+], ErrorResponse.prototype, "statusCode", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'File not found', description: 'Error message' }),
+    __metadata("design:type", String)
+], ErrorResponse.prototype, "message", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 'Bad Request', description: 'Error type' }),
+    __metadata("design:type", String)
+], ErrorResponse.prototype, "error", void 0);
+class JsonFileResponse {
+}
+exports.JsonFileResponse = JsonFileResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: {
+            key: 'value',
+            name: 'example',
+            age: 30,
+            nested: {
+                key: 'value',
+            },
+        },
+        description: 'JSON file content',
+    }),
+    __metadata("design:type", Object)
+], JsonFileResponse.prototype, "content", void 0);
+class JsonValueResponse {
+}
+exports.JsonValueResponse = JsonValueResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'value',
+        description: 'Value at the specified path in the JSON file',
+    }),
+    __metadata("design:type", Object)
+], JsonValueResponse.prototype, "value", void 0);
+class FileOperationMetricDto {
+}
+exports.FileOperationMetricDto = FileOperationMetricDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 'createFolder',
+        description: 'Name of the file operation',
+    }),
+    __metadata("design:type", String)
+], FileOperationMetricDto.prototype, "operation", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: true,
+        description: 'Whether the operation succeeded',
+    }),
+    __metadata("design:type", Boolean)
+], FileOperationMetricDto.prototype, "success", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 123,
+        description: 'Duration of operation in milliseconds',
+    }),
+    __metadata("design:type", Number)
+], FileOperationMetricDto.prototype, "duration", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 1645564789123,
+        description: 'Timestamp of the operation',
+    }),
+    __metadata("design:type", Number)
+], FileOperationMetricDto.prototype, "timestamp", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: '/uploads/docs',
+        required: false,
+        description: 'Path involved in the operation',
+    }),
+    __metadata("design:type", String)
+], FileOperationMetricDto.prototype, "path", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        required: false,
+        description: 'Error message if operation failed',
+    }),
+    __metadata("design:type", String)
+], FileOperationMetricDto.prototype, "error", void 0);
+class FileOperationMetricsResponse {
+}
+exports.FileOperationMetricsResponse = FileOperationMetricsResponse;
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        type: [FileOperationMetricDto],
+        description: 'Recent file operation metrics',
+    }),
+    __metadata("design:type", Array)
+], FileOperationMetricsResponse.prototype, "metrics", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 0.05,
+        description: 'Rate of failed operations in the time window',
+    }),
+    __metadata("design:type", Number)
+], FileOperationMetricsResponse.prototype, "failureRate", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 3600000, description: 'Time window in milliseconds' }),
+    __metadata("design:type", Number)
+], FileOperationMetricsResponse.prototype, "timeWindow", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: 100,
+        description: 'Total number of operations recorded',
+    }),
+    __metadata("design:type", Number)
+], FileOperationMetricsResponse.prototype, "totalOperations", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/files/dto/upload-by-url.dto.ts"
+/*!*******************************************************!*\
+  !*** ./src/components/files/dto/upload-by-url.dto.ts ***!
+  \*******************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.UploadByUrlDto = void 0;
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const class_validator_1 = __webpack_require__(/*! class-validator */ "class-validator");
+class UploadByUrlDto {
+}
+exports.UploadByUrlDto = UploadByUrlDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: "videos" }),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], UploadByUrlDto.prototype, "folder", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({
+        example: {
+            intro: 'https://cdn.example.com/video1.mp4',
+            welcome: 'https://cdn.example.com/welcome',
+        },
+    }),
+    (0, class_validator_1.IsObject)(),
+    __metadata("design:type", Object)
+], UploadByUrlDto.prototype, "files", void 0);
+
+
+/***/ },
+
+/***/ "./src/components/files/file.controller.ts"
+/*!*************************************************!*\
+  !*** ./src/components/files/file.controller.ts ***!
+  \*************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var FileController_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileController = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const platform_express_1 = __webpack_require__(/*! @nestjs/platform-express */ "@nestjs/platform-express");
+const multer_1 = __webpack_require__(/*! multer */ "multer");
+const file_validators_1 = __webpack_require__(/*! ./utils/file-validators */ "./src/components/files/utils/file-validators.ts");
+const file_config_1 = __webpack_require__(/*! ./config/file.config */ "./src/components/files/config/file.config.ts");
+const file_service_1 = __webpack_require__(/*! ./file.service */ "./src/components/files/file.service.ts");
+const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
+const fs_1 = __webpack_require__(/*! fs */ "fs");
+const path_1 = __webpack_require__(/*! path */ "path");
+const requests_dto_1 = __webpack_require__(/*! ./dto/requests.dto */ "./src/components/files/dto/requests.dto.ts");
+const responses_dto_1 = __webpack_require__(/*! ./dto/responses.dto */ "./src/components/files/dto/responses.dto.ts");
+const requests_dto_2 = __webpack_require__(/*! ./dto/requests.dto */ "./src/components/files/dto/requests.dto.ts");
+const file_operation_monitor_1 = __webpack_require__(/*! ./utils/file-operation-monitor */ "./src/components/files/utils/file-operation-monitor.ts");
+const upload_by_url_dto_1 = __webpack_require__(/*! ./dto/upload-by-url.dto */ "./src/components/files/dto/upload-by-url.dto.ts");
+const MAX_FILE_SIZE = 1024 * 1024 * 100;
+const UPLOADS_BASE = (0, path_1.join)(process.cwd(), 'uploads');
+function getSafePath(...segments) {
+    const filePath = (0, path_1.join)(...segments);
+    const resolvedPath = (0, path_1.resolve)(filePath);
+    const uploadsPath = (0, path_1.resolve)(UPLOADS_BASE);
+    if (resolvedPath !== uploadsPath &&
+        !resolvedPath.startsWith(`${uploadsPath}${path_1.sep}`)) {
+        throw new Error(`Invalid path detected: ${resolvedPath}`);
+    }
+    return resolvedPath;
+}
+function safeUploadFilename(value) {
+    const filename = (0, path_1.basename)(value);
+    if (!filename ||
+        filename === '.' ||
+        filename === '..' ||
+        filename !== value ||
+        value.includes('\\') ||
+        filename.includes('\0')) {
+        throw new common_1.BadRequestException('Invalid upload filename');
+    }
+    return filename;
+}
+let FileController = FileController_1 = class FileController {
+    constructor(fileService) {
+        this.logger = new common_1.Logger(FileController_1.name);
+        if (!fileService) {
+            throw new Error('FileService is required');
+        }
+        this.fileService = fileService;
+    }
+    async uploadFiles(folder, files) {
+        if (!files?.length) {
+            throw new common_1.BadRequestException('No files provided');
+        }
+        return this.fileService.uploadFiles(folder, files);
+    }
+    listFolders() {
+        return this.fileService.listFolders();
+    }
+    getFolderDetails(folder, page, limit) {
+        return this.fileService.getFolderDetails(folder, page, limit);
+    }
+    async stream(file, folder, req, res) {
+        return this.fileService.stream(file, folder, req, res);
+    }
+    async uploadFromUrl(body) {
+        return this.fileService.uploadFromUrl(body.files, body.folder);
+    }
+    createFolder(createFolderDto) {
+        return this.fileService.createFolder(createFolderDto.folderName);
+    }
+    deleteFolder(folder) {
+        return this.fileService.deleteFolder(folder);
+    }
+    downloadFile(folder, filename, res) {
+        return this.fileService.downloadFile(folder, filename, res);
+    }
+    getFileMetadata(folder, filename) {
+        return this.fileService.getFileMetadata(folder, filename);
+    }
+    moveFile(folder, filename, moveFileDto) {
+        return this.fileService.moveFile(folder, filename, moveFileDto);
+    }
+    copyFile(folder, filename, copyFileDto) {
+        return this.fileService.copyFile(folder, filename, copyFileDto);
+    }
+    async downloadAllFiles(folder, res) {
+        return this.fileService.downloadAllFiles(folder, res);
+    }
+    getTemporaryLinks(folder) {
+        return this.fileService.getTemporaryLinks(folder);
+    }
+    getTemporaryFileLink(folder, filename) {
+        return this.fileService.getTemporaryFileLink(folder, filename);
+    }
+    searchFiles(folder, pattern) {
+        return this.fileService.searchFiles(folder, pattern);
+    }
+    getJsonFile(folder, filename) {
+        return this.fileService.getJsonFile(folder, filename);
+    }
+    getNestedJsonValue(folder, filename, pathParams) {
+        return this.fileService.getNestedJsonValue(folder, filename, pathParams);
+    }
+    queryJsonFile(folder, filename, query) {
+        return this.fileService.queryJsonFile(folder, filename, query);
+    }
+    deleteFile(folder, filename) {
+        return this.fileService.deleteFile(folder, filename);
+    }
+    updateFileMetadata(folder, filename, updateFileMetadataDto) {
+        return this.fileService.updateFileMetadata(folder, filename, updateFileMetadataDto);
+    }
+    getFolderSize(folder) {
+        return this.fileService.getFolderSize(folder);
+    }
+    listFiles(folder) {
+        return this.fileService.listFiles(folder);
+    }
+    getThumbnail(folder, filename, res) {
+        return this.fileService.getThumbnail(folder, filename, res);
+    }
+    getFile(folder, filename, res) {
+        return this.fileService.getFile(folder, filename, res);
+    }
+    renameFolder(folder, renameFolderDto) {
+        return this.fileService.renameFolder(folder, renameFolderDto.newFolderName);
+    }
+    moveFolder(folder, moveFolderDto) {
+        return this.fileService.moveFolder(folder, moveFolderDto.newLocation);
+    }
+    getFilePreview(folder, filename, req, res) {
+        return this.fileService.getFilePreview(folder, filename, req, res);
+    }
+    getFolderTree() {
+        return this.fileService.getFolderTree();
+    }
+    generateShareableLink(folder, filename) {
+        return this.fileService.generateShareableLink(folder, filename);
+    }
+    lockFile(folder, filename) {
+        return this.fileService.lockFile(folder, filename);
+    }
+    unlockFile(folder, filename) {
+        return this.fileService.unlockFile(folder, filename);
+    }
+    getRecentFiles() {
+        return this.fileService.getRecentFiles();
+    }
+    getFileVersions(folder, filename) {
+        return this.fileService.getFileVersions(folder, filename);
+    }
+    getFileOperationMetrics(timeWindow, limit) {
+        const metrics = file_operation_monitor_1.FileOperationMonitor.getMetrics(limit);
+        const failureRate = file_operation_monitor_1.FileOperationMonitor.getFailureRate(timeWindow);
+        return {
+            metrics,
+            failureRate,
+            timeWindow,
+            totalOperations: metrics.length,
+        };
+    }
+    async copyFolder(folder, destinationFolder) {
+        return this.fileService.copyFolder(folder, destinationFolder);
+    }
+};
+exports.FileController = FileController;
+__decorate([
+    (0, common_1.Post)('folders/:folder/files'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FilesInterceptor)('files', 10, {
+        storage: (0, multer_1.diskStorage)({
+            destination: (req, file, cb) => {
+                try {
+                    const folderName = req.params.folder;
+                    const folderPath = getSafePath(UPLOADS_BASE, folderName);
+                    if (!(0, fs_1.existsSync)(folderPath)) {
+                        (0, fs_1.mkdirSync)(folderPath, { recursive: true });
+                        console.log(`Created folder: ${folderPath}`);
+                    }
+                    cb(null, folderPath);
+                }
+                catch (error) {
+                    console.error(`Error setting destination: ${error.message}`);
+                    cb(error, null);
+                }
+            },
+            filename: (req, file, cb) => {
+                try {
+                    const filenameQuery = req.query.filename;
+                    const originalname = safeUploadFilename(file.originalname);
+                    const extension = originalname.substring(originalname.lastIndexOf('.'));
+                    if (!req.fileCounter) {
+                        req.fileCounter = 0;
+                    }
+                    req.fileCounter++;
+                    let finalFilename = originalname;
+                    if (filenameQuery) {
+                        const safeBaseName = safeUploadFilename(filenameQuery);
+                        const currentCount = req.fileCounter;
+                        finalFilename = `${safeBaseName}${currentCount}${extension}`;
+                    }
+                    console.log(`Saving file as: ${finalFilename}`);
+                    cb(null, finalFilename);
+                }
+                catch (error) {
+                    console.error(`Error setting filename: ${error.message}`);
+                    cb(error, null);
+                }
+            },
+        }),
+        limits: { fileSize: MAX_FILE_SIZE },
+    })),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Upload files to a folder',
+        description: 'Upload single or multiple files to a specified folder',
+    }),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['files'],
+            properties: {
+                files: {
+                    type: 'array',
+                    items: { type: 'string', format: 'binary' },
+                    description: 'Files to upload',
+                },
+            },
+        },
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Target folder name' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'filename',
+        required: false,
+        description: 'Optional custom filename for single file upload',
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.UploadedFiles)(new common_1.ParseFilePipe({
+        validators: [
+            new file_validators_1.CustomFileValidator({
+                fileTypes: file_config_1.FILE_CONFIG.ALLOWED_FILE_TYPES,
+            }),
+            new file_validators_1.FileSizeValidator({ maxSize: file_config_1.FILE_CONFIG.MAX_FILE_SIZE }),
+        ],
+        errorHttpStatusCode: 400,
+    }))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Array]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "uploadFiles", null);
+__decorate([
+    (0, common_1.Get)('folders'),
+    (0, swagger_1.ApiOperation)({ summary: 'List all folders' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Folders listed successfully',
+        type: responses_dto_1.FolderResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Server error while listing folders',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "listFolders", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get folder details and list files' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Folder details retrieved successfully',
+        type: responses_dto_1.FolderDetailsResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'Folder not found',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'page',
+        required: false,
+        description: 'Page number for pagination',
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        description: 'Number of files per page',
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Query)('page', new common_1.DefaultValuePipe(1), common_1.ParseIntPipe)),
+    __param(2, (0, common_1.Query)('limit', new common_1.DefaultValuePipe(10), common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Number, Number]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "getFolderDetails", null);
+__decorate([
+    (0, common_1.Get)('stream/:folder/:file'),
+    (0, swagger_1.ApiParam)({ name: 'folder', required: true, description: 'Folder containing the file' }),
+    (0, swagger_1.ApiParam)({ name: 'file', required: true, description: 'Name of the video file' }),
+    __param(0, (0, common_1.Param)('file')),
+    __param(1, (0, common_1.Param)('folder')),
+    __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "stream", null);
+__decorate([
+    (0, common_1.Post)('uploadFromUrl'),
+    (0, swagger_1.ApiBody)({ type: upload_by_url_dto_1.UploadByUrlDto }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [upload_by_url_dto_1.UploadByUrlDto]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "uploadFromUrl", null);
+__decorate([
+    (0, common_1.Post)('folders'),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new folder' }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'Folder created successfully',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid folder name',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: { type: 'object', properties: { folderName: { type: 'string' } } },
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [requests_dto_1.CreateFolderDto]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "createFolder", null);
+__decorate([
+    (0, common_1.Delete)('folders/:folder'),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete a folder and all its contents' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder to delete' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "deleteFolder", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename/download'),
+    (0, swagger_1.ApiOperation)({ summary: 'Download a file from a folder' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "downloadFile", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename/metadata'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get metadata of a file' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'File metadata retrieved successfully',
+        type: responses_dto_1.FileMetadataResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'File not found',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "getFileMetadata", null);
+__decorate([
+    (0, common_1.Put)('folders/:folder/files/:filename/move'),
+    (0, swagger_1.ApiOperation)({ summary: 'Move or rename a file' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'File moved successfully',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid destination',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'File not found',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Current folder of the file' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'Current file name' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                newFolder: { type: 'string' },
+                newFilename: { type: 'string' },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, requests_dto_1.MoveFileDto]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "moveFile", null);
+__decorate([
+    (0, common_1.Post)('folders/:folder/files/:filename/copy'),
+    (0, swagger_1.ApiOperation)({ summary: 'Copy a file to another location' }),
+    (0, swagger_1.ApiResponse)({ status: 201, description: 'File copied successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid destination' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'File not found' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Source folder' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File to copy' }),
+    (0, swagger_1.ApiBody)({
+        schema: { type: 'object', properties: { newFolder: { type: 'string' } } },
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, requests_dto_1.CopyFileDto]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "copyFile", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/download-all'),
+    (0, swagger_1.ApiOperation)({ summary: 'Download all files in a folder as a ZIP archive' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "downloadAllFiles", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/temp-links'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get temporary access links for all files in a folder',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getTemporaryLinks", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename/temp-link'),
+    (0, swagger_1.ApiOperation)({ summary: 'Generate a temporary access link for a file' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getTemporaryFileLink", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/search'),
+    (0, swagger_1.ApiOperation)({ summary: 'Search for files by name in a folder' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiQuery)({
+        name: 'pattern',
+        description: 'Regex pattern for matching filenames',
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Query)('pattern')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "searchFiles", null);
+__decorate([
+    (0, common_1.Get)('json/folders/:folder/files/:filename'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Retrieve the entire JSON file',
+        description: 'Returns the complete contents of a JSON file',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'JSON file contents retrieved successfully',
+        type: responses_dto_1.JsonFileResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'JSON file not found',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Error parsing JSON file',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getJsonFile", null);
+__decorate([
+    (0, common_1.Get)('json/folders/:folder/files/:filename/*path'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Retrieve a nested value from a JSON file by key path',
+        description: 'Returns a specific value from a JSON file using a path with / as separator',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'JSON value retrieved successfully',
+        type: responses_dto_1.JsonValueResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid path or key not found',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'JSON file not found',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'path',
+        description: 'Path to the nested value (e.g., user/profile/name)',
+        type: String,
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Param)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, requests_dto_2.JsonPathParams]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getNestedJsonValue", null);
+__decorate([
+    (0, common_1.Get)('json/folders/:folder/files/:filename/query'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Query a JSON file using dot notation',
+        description: 'Query JSON data using dot notation and array indices. Example: users[0].profile.name',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'JSON value retrieved successfully',
+        type: responses_dto_1.JsonValueResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid query format or path not found',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'JSON file not found',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'query',
+        description: 'JSON path query using dot notation (e.g., users[0].profile.name)',
+        required: true,
+        type: String,
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Query)('query')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "queryJsonFile", null);
+__decorate([
+    (0, common_1.Delete)('folders/:folder/files/:filename'),
+    (0, swagger_1.ApiOperation)({ summary: 'Delete a file from a folder' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "deleteFile", null);
+__decorate([
+    (0, common_1.Put)('folders/:folder/files/:filename/metadata'),
+    (0, swagger_1.ApiOperation)({ summary: 'Update file metadata' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'File metadata updated successfully',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid metadata' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'File not found' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: {
+                newFilename: { type: 'string', description: 'New filename' },
+                newFolder: { type: 'string', description: 'New folder' },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, requests_dto_1.UpdateFileMetadataDto]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "updateFileMetadata", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/size'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get the total size of a folder' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getFolderSize", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files'),
+    (0, swagger_1.ApiOperation)({ summary: 'List all files in a folder' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "listFiles", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename/thumbnail'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get a thumbnail of an image or video file' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getThumbnail", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename'),
+    (0, swagger_1.ApiOperation)({ summary: 'Retrieve a file from a folder' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getFile", null);
+__decorate([
+    (0, common_1.Put)('folders/:folder/rename'),
+    (0, swagger_1.ApiOperation)({ summary: 'Rename a folder' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Folder renamed successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid folder name' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Folder not found' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Current folder name' }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            properties: { newFolderName: { type: 'string' } },
+        },
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, requests_dto_1.RenameFolderDto]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "renameFolder", null);
+__decorate([
+    (0, common_1.Put)('folders/:folder/move'),
+    (0, swagger_1.ApiOperation)({ summary: 'Move a folder to a different location' }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Folder moved successfully' }),
+    (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid destination' }),
+    (0, swagger_1.ApiResponse)({ status: 404, description: 'Folder not found' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Current folder name' }),
+    (0, swagger_1.ApiBody)({
+        schema: { type: 'object', properties: { newLocation: { type: 'string' } } },
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, requests_dto_1.MoveFolderDto]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "moveFolder", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename/preview'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get a preview of a file' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __param(2, (0, common_1.Req)()),
+    __param(3, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getFilePreview", null);
+__decorate([
+    (0, common_1.Get)('folders/tree'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get a hierarchical tree structure of folders and files',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Folder tree retrieved successfully',
+        type: responses_dto_1.FolderTreeResponse,
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "getFolderTree", null);
+__decorate([
+    (0, common_1.Post)('folders/:folder/files/:filename/share'),
+    (0, swagger_1.ApiOperation)({ summary: 'Generate a shareable link for a file' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Shareable link generated',
+        type: responses_dto_1.ShareableLinkResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'File not found',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "generateShareableLink", null);
+__decorate([
+    (0, common_1.Put)('folders/:folder/files/:filename/lock'),
+    (0, swagger_1.ApiOperation)({ summary: 'Lock a file for editing' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'File is already locked',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'File not found',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 500,
+        description: 'Error locking file',
+        type: responses_dto_1.ErrorResponse,
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "lockFile", null);
+__decorate([
+    (0, common_1.Put)('folders/:folder/files/:filename/unlock'),
+    (0, swagger_1.ApiOperation)({ summary: 'Unlock a file for editing' }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "unlockFile", null);
+__decorate([
+    (0, common_1.Get)('files/recent'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get a list of recently modified files' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], FileController.prototype, "getRecentFiles", null);
+__decorate([
+    (0, common_1.Get)('folders/:folder/files/:filename/versions'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get different versions of a file' }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'File versions retrieved successfully',
+        type: responses_dto_1.FileVersionResponse,
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'File not found',
+    }),
+    (0, swagger_1.ApiParam)({ name: 'folder', description: 'Folder name' }),
+    (0, swagger_1.ApiParam)({ name: 'filename', description: 'File name' }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "getFileVersions", null);
+__decorate([
+    (0, common_1.Get)('metrics/file-operations'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get file operation metrics',
+        description: 'Retrieve metrics about recent file operations including success rate and performance data',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'File operation metrics retrieved successfully',
+        type: responses_dto_1.FileOperationMetricsResponse,
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'timeWindow',
+        required: false,
+        description: 'Time window in milliseconds for failure rate calculation',
+        type: Number,
+        example: 3600000,
+    }),
+    (0, swagger_1.ApiQuery)({
+        name: 'limit',
+        required: false,
+        description: 'Maximum number of metrics to return',
+        type: Number,
+        example: 100,
+    }),
+    __param(0, (0, common_1.Query)('timeWindow', new common_1.DefaultValuePipe(3600000), common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Query)('limit', new common_1.DefaultValuePipe(100), common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:returntype", responses_dto_1.FileOperationMetricsResponse)
+], FileController.prototype, "getFileOperationMetrics", null);
+__decorate([
+    (0, common_1.Post)('folders/:folder/copy'),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Copy a folder to a new location',
+        description: 'Creates a copy of a folder and all its contents at a new location',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 201,
+        description: 'Folder copied successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string' },
+                sourceFolder: { type: 'string' },
+                destinationFolder: { type: 'string' },
+            },
+        },
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 400,
+        description: 'Invalid destination or destination already exists',
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 404,
+        description: 'Source folder not found',
+    }),
+    (0, swagger_1.ApiParam)({
+        name: 'folder',
+        description: 'Source folder name to copy',
+    }),
+    (0, swagger_1.ApiBody)({
+        schema: {
+            type: 'object',
+            required: ['destinationFolder'],
+            properties: {
+                destinationFolder: {
+                    type: 'string',
+                    description: 'Name of the destination folder where the copy will be created',
+                },
+            },
+        },
+    }),
+    __param(0, (0, common_1.Param)('folder')),
+    __param(1, (0, common_1.Body)('destinationFolder')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], FileController.prototype, "copyFolder", null);
+exports.FileController = FileController = FileController_1 = __decorate([
+    (0, common_1.Injectable)(),
+    (0, common_1.Controller)(),
+    __metadata("design:paramtypes", [file_service_1.FileService])
+], FileController);
+
+
+/***/ },
+
+/***/ "./src/components/files/file.module.interface.ts"
+/*!*******************************************************!*\
+  !*** ./src/components/files/file.module.interface.ts ***!
+  \*******************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FILE_MODULE_OPTIONS = void 0;
+exports.FILE_MODULE_OPTIONS = 'FILE_MODULE_OPTIONS';
+
+
+/***/ },
+
+/***/ "./src/components/files/file.module.ts"
+/*!*********************************************!*\
+  !*** ./src/components/files/file.module.ts ***!
+  \*********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var FileModule_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileModule = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const file_controller_1 = __webpack_require__(/*! ./file.controller */ "./src/components/files/file.controller.ts");
+const file_service_1 = __webpack_require__(/*! ./file.service */ "./src/components/files/file.service.ts");
+const platform_express_1 = __webpack_require__(/*! @nestjs/platform-express */ "@nestjs/platform-express");
+const file_config_1 = __webpack_require__(/*! ./config/file.config */ "./src/components/files/config/file.config.ts");
+const file_module_interface_1 = __webpack_require__(/*! ./file.module.interface */ "./src/components/files/file.module.interface.ts");
+let FileModule = FileModule_1 = class FileModule {
+    static register() {
+        return {
+            module: FileModule_1,
+            imports: [
+                platform_express_1.MulterModule.register({
+                    dest: file_config_1.FILE_CONFIG.STORAGE_PATH,
+                }),
+            ],
+            controllers: [file_controller_1.FileController],
+            providers: [file_service_1.FileService],
+            exports: [file_service_1.FileService],
+        };
+    }
+    static forRoot(options = {}) {
+        const providers = [
+            {
+                provide: file_module_interface_1.FILE_MODULE_OPTIONS,
+                useValue: {
+                    storagePath: options.storagePath || file_config_1.FILE_CONFIG.STORAGE_PATH,
+                    maxFileSize: options.maxFileSize || file_config_1.FILE_CONFIG.MAX_FILE_SIZE,
+                    allowedFileTypes: options.allowedFileTypes || file_config_1.FILE_CONFIG.ALLOWED_FILE_TYPES,
+                },
+            },
+            file_service_1.FileService,
+        ];
+        return {
+            module: FileModule_1,
+            imports: [
+                platform_express_1.MulterModule.register({
+                    dest: options.storagePath || file_config_1.FILE_CONFIG.STORAGE_PATH,
+                }),
+            ],
+            controllers: [file_controller_1.FileController],
+            providers: providers,
+            exports: [file_service_1.FileService],
+        };
+    }
+    static forRootGlobal(options = {}) {
+        const module = this.forRoot(options);
+        return {
+            ...module,
+            global: true,
+        };
+    }
+};
+exports.FileModule = FileModule;
+exports.FileModule = FileModule = FileModule_1 = __decorate([
+    (0, common_1.Module)({})
+], FileModule);
+
+
+/***/ },
+
+/***/ "./src/components/files/file.service.ts"
+/*!**********************************************!*\
+  !*** ./src/components/files/file.service.ts ***!
+  \**********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var FileService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const path_1 = __importStar(__webpack_require__(/*! path */ "path"));
+const fs = __importStar(__webpack_require__(/*! fs */ "fs"));
+const archiver_1 = __importDefault(__webpack_require__(/*! archiver */ "archiver"));
+const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
+const file_config_1 = __webpack_require__(/*! ./config/file.config */ "./src/components/files/config/file.config.ts");
+const view_config_1 = __webpack_require__(/*! ./config/view.config */ "./src/components/files/config/view.config.ts");
+const fs_1 = __webpack_require__(/*! fs */ "fs");
+const mime_types_1 = __webpack_require__(/*! mime-types */ "mime-types");
+const json_path_validator_1 = __webpack_require__(/*! ./utils/json-path.validator */ "./src/components/files/utils/json-path.validator.ts");
+const file_operation_error_1 = __webpack_require__(/*! ./utils/file-operation-error */ "./src/components/files/utils/file-operation-error.ts");
+const file_operation_wrapper_1 = __webpack_require__(/*! ./utils/file-operation-wrapper */ "./src/components/files/utils/file-operation-wrapper.ts");
+const file_module_interface_1 = __webpack_require__(/*! ./file.module.interface */ "./src/components/files/file.module.interface.ts");
+const mime_1 = __importDefault(__webpack_require__(/*! mime */ "mime"));
+const stream_1 = __webpack_require__(/*! stream */ "stream");
+const util_1 = __webpack_require__(/*! util */ "util");
+const helper_1 = __webpack_require__(/*! ./utils/helper */ "./src/components/files/utils/helper.ts");
+const streamPipeline = (0, util_1.promisify)(stream_1.pipeline);
+let FileService = FileService_1 = class FileService {
+    constructor(options) {
+        this.options = options;
+        this.logger = new common_1.Logger(FileService_1.name);
+        this.config = {
+            storagePath: options?.storagePath || file_config_1.FILE_CONFIG.STORAGE_PATH,
+            maxFileSize: options?.maxFileSize || file_config_1.FILE_CONFIG.MAX_FILE_SIZE,
+            allowedFileTypes: options?.allowedFileTypes || file_config_1.FILE_CONFIG.ALLOWED_FILE_TYPES,
+        };
+        this.logger.log(`FileService initialized with storage path: ${this.config.storagePath}`);
+    }
+    getSafePath(...segments) {
+        const filePath = (0, path_1.join)(...segments);
+        const resolvedPath = (0, path_1.resolve)(filePath);
+        const basePath = (0, path_1.resolve)(this.config.storagePath);
+        if (!resolvedPath.startsWith(basePath + path_1.sep)) {
+            throw new Error(`Invalid or unsafe path access detected: ${resolvedPath}`);
+        }
+        return resolvedPath;
+    }
+    validateFileType(file) {
+        return this.config.allowedFileTypes.includes(file.mimetype);
+    }
+    validateFileSize(file) {
+        return file.size <= this.config.maxFileSize;
+    }
+    async listFolders() {
+        const result = await (0, file_operation_wrapper_1.withFileOperation)('listFolders', async () => {
+            if (!fs.existsSync(this.config.storagePath)) {
+                fs.mkdirSync(this.config.storagePath, { recursive: true });
+            }
+            const folders = fs
+                .readdirSync(this.config.storagePath, { withFileTypes: true })
+                .filter((dirent) => dirent.isDirectory())
+                .map((dirent) => dirent.name);
+            return { folders };
+        });
+        if (!result.success) {
+            this.logger.error(`Failed to list folders: ${result.error.message}`);
+            throw new common_1.InternalServerErrorException('Failed to list folders');
+        }
+        return result.data;
+    }
+    async getFolderDetails(folder, page = 1, limit = 10) {
+        const folderPath = this.getSafePath(this.config.storagePath, folder);
+        if (!fs.existsSync(folderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        const files = fs.readdirSync(folderPath);
+        const startIndex = (page - 1) * limit;
+        const endIndex = page * limit;
+        const paginatedFiles = files.slice(startIndex, endIndex);
+        return {
+            folder,
+            files: paginatedFiles,
+            totalFiles: files.length,
+            page,
+            limit,
+        };
+    }
+    async createFolder(folderName) {
+        const result = await (0, file_operation_wrapper_1.withFileOperation)('createFolder', async () => {
+            const folderPath = this.getSafePath(this.config.storagePath, folderName);
+            if (fs.existsSync(folderPath)) {
+                throw new file_operation_error_1.FileOperationError('Folder already exists', file_operation_error_1.FileErrorCodes.FOLDER_EXISTS, 'createFolder', { folderName });
+            }
+            fs.mkdirSync(folderPath, { recursive: true });
+            return { message: 'Folder created successfully', folder: folderName };
+        });
+        if (!result.success) {
+            if (result.error.code === file_operation_error_1.FileErrorCodes.FOLDER_EXISTS) {
+                throw new common_1.BadRequestException(result.error.message);
+            }
+            this.logger.error(`Failed to create folder: ${result.error.message}`);
+            throw new common_1.InternalServerErrorException('Failed to create folder');
+        }
+        return result.data;
+    }
+    async deleteFolder(folder) {
+        const result = await (0, file_operation_wrapper_1.withFileOperation)('deleteFolder', async () => {
+            const folderPath = this.getSafePath(this.config.storagePath, folder);
+            if (!fs.existsSync(folderPath)) {
+                throw new file_operation_error_1.FileOperationError('Folder not found', file_operation_error_1.FileErrorCodes.FILE_NOT_FOUND, 'deleteFolder', { folder });
+            }
+            const files = fs.readdirSync(folderPath);
+            if (files.length > 0) {
+                throw new file_operation_error_1.FileOperationError('Cannot delete non-empty folder', file_operation_error_1.FileErrorCodes.FOLDER_NOT_EMPTY, 'deleteFolder', { folder, fileCount: files.length });
+            }
+            fs.rmdirSync(folderPath);
+            return { message: 'Folder deleted successfully' };
+        });
+        if (!result.success) {
+            if (result.error.code === file_operation_error_1.FileErrorCodes.FILE_NOT_FOUND) {
+                throw new common_1.NotFoundException(result.error.message);
+            }
+            if (result.error.code === file_operation_error_1.FileErrorCodes.FOLDER_NOT_EMPTY) {
+                throw new common_1.BadRequestException(result.error.message);
+            }
+            this.logger.error(`Failed to delete folder: ${result.error.message}`);
+            throw new common_1.InternalServerErrorException('Failed to delete folder');
+        }
+        return result.data;
+    }
+    getDestination(req, file, cb) {
+        try {
+            const folderPath = this.getSafePath(this.config.storagePath, req.params.folder);
+            if (!fs.existsSync(folderPath)) {
+                fs.mkdirSync(folderPath, { recursive: true });
+            }
+            cb(null, folderPath);
+        }
+        catch (error) {
+            cb(error, null);
+        }
+    }
+    getFilename(req, file, cb) {
+        try {
+            const extension = file.originalname.substring(file.originalname.lastIndexOf('.'));
+            const baseFilename = req.query.filename || 'uploaded_file';
+            const files = req.files;
+            let finalFilename;
+            if (files.length === 1) {
+                finalFilename = `${baseFilename}${extension}`;
+            }
+            else {
+                if (!req._fileCounter) {
+                    req._fileCounter = 0;
+                }
+                req._fileCounter++;
+                finalFilename = `${baseFilename}${req._fileCounter}${extension}`;
+            }
+            cb(null, finalFilename);
+        }
+        catch (error) {
+            cb(error, null);
+        }
+    }
+    uploadFiles(folder, files) {
+        if (!files || files.length === 0) {
+            this.logger.error(`No files provided for folder ${folder}`);
+            throw new common_1.BadRequestException('File upload failed: No files provided');
+        }
+        const uploadedFiles = files.map((file) => {
+            if (!this.validateFileType(file)) {
+                this.logger.error(`Invalid file type: ${file.mimetype} for ${file.originalname}`);
+                throw new common_1.BadRequestException(`Invalid file type for ${file.originalname}`);
+            }
+            if (!this.validateFileSize(file)) {
+                this.logger.error(`File size exceeds limit: ${file.size} bytes`);
+                throw new common_1.BadRequestException(`File size exceeds limit for ${file.originalname}`);
+            }
+            this.logger.log(`File uploaded: ${file.filename} to folder: ${folder}`);
+            return { filename: file.filename };
+        });
+        return { message: 'Files uploaded successfully', files: uploadedFiles };
+    }
+    downloadFile(folder, filename, res) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const stats = fs.statSync(filePath);
+        const etag = `"${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
+        res.set({
+            'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+            'ETag': etag,
+            'Last-Modified': stats.mtime.toUTCString(),
+        });
+        return res.download(filePath);
+    }
+    async getFileMetadata(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        try {
+            const stats = fs.statSync(filePath);
+            return {
+                filename,
+                size: stats.size,
+                createdAt: stats.birthtime,
+                modifiedAt: stats.mtime,
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error retrieving metadata for ${filename}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error retrieving file metadata');
+        }
+    }
+    moveFile(folder, filename, body) {
+        const oldPath = this.getSafePath(this.config.storagePath, folder, filename);
+        const newFolder = body.newFolder || folder;
+        const newFilename = body.newFilename || filename;
+        const newFolderPath = this.getSafePath(this.config.storagePath, newFolder);
+        if (!fs.existsSync(newFolderPath)) {
+            try {
+                fs.mkdirSync(newFolderPath, { recursive: true });
+                this.logger.log(`Created destination folder: ${newFolder}`);
+            }
+            catch (error) {
+                this.logger.error(`Error creating folder ${newFolder}: ${error.message}`);
+                throw new common_1.InternalServerErrorException('Failed to create destination folder');
+            }
+        }
+        const newPath = this.getSafePath(newFolderPath, newFilename);
+        if (fs.existsSync(newPath)) {
+            this.logger.error(`File already exists at destination: ${newPath}`);
+            throw new common_1.BadRequestException('File already exists at destination');
+        }
+        try {
+            fs.renameSync(oldPath, newPath);
+            this.logger.log(`File moved from ${oldPath} to ${newPath}`);
+            return { message: 'File moved/renamed successfully', newPath };
+        }
+        catch (error) {
+            this.logger.error(`Error moving file: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error moving file');
+        }
+    }
+    copyFile(folder, filename, body) {
+        const oldPath = this.getSafePath(this.config.storagePath, folder, filename);
+        const newFolder = body.newFolder || folder;
+        const newFolderPath = this.getSafePath(this.config.storagePath, newFolder);
+        if (!fs.existsSync(oldPath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        if (!fs.existsSync(newFolderPath)) {
+            try {
+                fs.mkdirSync(newFolderPath, { recursive: true });
+                this.logger.log(`Created destination folder: ${newFolder}`);
+            }
+            catch (error) {
+                this.logger.error(`Error creating folder ${newFolder}: ${error.message}`);
+                throw new common_1.InternalServerErrorException('Failed to create destination folder');
+            }
+        }
+        const newPath = this.getSafePath(newFolderPath, filename);
+        try {
+            fs.copyFileSync(oldPath, newPath);
+            this.logger.log(`File copied from ${oldPath} to ${newPath}`);
+            return { message: 'File copied successfully', newPath };
+        }
+        catch (error) {
+            this.logger.error(`Error copying file: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error copying file');
+        }
+    }
+    async downloadAllFiles(folder, res) {
+        const folderPath = this.getSafePath(this.config.storagePath, folder);
+        if (!fs.existsSync(folderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        const files = fs.readdirSync(folderPath);
+        if (files.length === 0) {
+            this.logger.warn(`No files found in folder: ${folder}`);
+            throw new common_1.BadRequestException('No files available in this folder');
+        }
+        const archive = (0, archiver_1.default)('zip', { zlib: { level: 9 } });
+        res.attachment(`${folder}.zip`);
+        archive.pipe(res);
+        files.forEach((file) => {
+            try {
+                const filePath = this.getSafePath(folderPath, file);
+                archive.file(filePath, { name: file });
+            }
+            catch (error) {
+                this.logger.error(`Error adding file ${file} to ZIP: ${error.message}`);
+            }
+        });
+        try {
+            await archive.finalize();
+            this.logger.log(`ZIP archive generated for folder: ${folder}`);
+        }
+        catch (error) {
+            this.logger.error(`Error finalizing ZIP: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error generating ZIP archive');
+        }
+    }
+    getTemporaryLinks(folder) {
+        const folderPath = this.getSafePath(this.config.storagePath, folder);
+        if (!fs.existsSync(folderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        const files = fs.readdirSync(folderPath);
+        if (files.length === 0) {
+            this.logger.warn(`No files found in folder: ${folder}`);
+            throw new common_1.BadRequestException('No files available in this folder');
+        }
+        const fileLinks = files.map((file) => ({
+            filename: file,
+            url: `${process.env.serviceUrl}/folders/${folder}/files/${file}?temp=true`,
+        }));
+        return { folder, fileLinks };
+    }
+    getTemporaryFileLink(folder, filename) {
+        return {
+            url: `${process.env.serviceUrl}/folders/${folder}/files/${filename}?temp=true`,
+        };
+    }
+    searchFiles(folder, pattern) {
+        const folderPath = this.getSafePath(this.config.storagePath, folder);
+        if (!fs.existsSync(folderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        let regex;
+        try {
+            regex = new RegExp(pattern, 'i');
+        }
+        catch (error) {
+            console.log('error', error);
+            this.logger.error(`Invalid regex: ${pattern}`);
+            throw new common_1.BadRequestException('Invalid regular expression');
+        }
+        const files = fs.readdirSync(folderPath);
+        const matchingFiles = files.filter((file) => regex.test(file));
+        return { folder, pattern, matchingFiles };
+    }
+    async getJsonFile(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, `${filename}.json`);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`JSON file not found: ${filename}.json in folder ${folder}`);
+            throw new common_1.NotFoundException('JSON file not found');
+        }
+        try {
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            return { content: JSON.parse(fileContent) };
+        }
+        catch (error) {
+            this.logger.error(`Error parsing JSON file ${filename}.json: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error parsing JSON file');
+        }
+    }
+    async getNestedJsonValue(folder, filename, pathParams) {
+        const wildcardPath = pathParams['path'][0] || '';
+        const keys = wildcardPath.split('/').filter((key) => key !== '');
+        try {
+            json_path_validator_1.JsonPathValidator.validate(keys);
+            const filePath = this.getSafePath(this.config.storagePath, folder, `${filename}.json`);
+            if (!fs.existsSync(filePath)) {
+                this.logger.error(`JSON file not found: ${filename}.json in folder ${folder}`);
+                throw new common_1.NotFoundException('JSON file not found');
+            }
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            let result = JSON.parse(fileContent);
+            for (const key of keys) {
+                if (result[key] === undefined) {
+                    this.logger.error(`Key '${key}' not found in ${filename}.json`);
+                    throw new common_1.BadRequestException(`Key '${key}' not found`);
+                }
+                result = result[key];
+            }
+            return { value: result };
+        }
+        catch (error) {
+            if (error instanceof json_path_validator_1.JsonPathValidationError) {
+                throw new common_1.BadRequestException(error.message);
+            }
+            if (error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            this.logger.error(`Error processing JSON file ${filename}.json: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error processing JSON file');
+        }
+    }
+    async queryJsonFile(folder, filename, query) {
+        try {
+            json_path_validator_1.JsonPathValidator.validateJsonQuery(query);
+            const filePath = this.getSafePath(this.config.storagePath, folder, `${filename}.json`);
+            if (!fs.existsSync(filePath)) {
+                this.logger.error(`JSON file not found: ${filename}.json in folder ${folder}`);
+                throw new common_1.NotFoundException('JSON file not found');
+            }
+            const fileContent = fs.readFileSync(filePath, 'utf-8');
+            const jsonData = JSON.parse(fileContent);
+            const segments = query.split('.');
+            let result = jsonData;
+            for (const segment of segments) {
+                const arrayMatch = segment.match(/^(\w+)\[(\d+)\]$/);
+                if (arrayMatch) {
+                    const [, key, index] = arrayMatch;
+                    result = result[key]?.[parseInt(index, 10)];
+                }
+                else {
+                    result = result[segment];
+                }
+                if (result === undefined) {
+                    throw new common_1.BadRequestException(`Path '${query}' not found in JSON`);
+                }
+            }
+            return { value: result };
+        }
+        catch (error) {
+            if (error instanceof json_path_validator_1.JsonPathValidationError ||
+                error instanceof common_1.BadRequestException) {
+                throw new common_1.BadRequestException(error.message);
+            }
+            this.logger.error(`Error querying JSON file ${filename}.json: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error processing JSON file');
+        }
+    }
+    deleteFile(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        try {
+            fs.rmSync(filePath);
+            this.logger.log(`File deleted successfully: ${filename} from folder: ${folder}`);
+            return { message: 'File deleted successfully' };
+        }
+        catch (error) {
+            this.logger.error(`Error deleting file ${filename}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error deleting file');
+        }
+    }
+    updateFileMetadata(folder, filename, body) {
+        const oldPath = this.getSafePath(this.config.storagePath, folder, filename);
+        const newFolder = body.newFolder || folder;
+        const newFilename = body.newFilename || filename;
+        const newFolderPath = this.getSafePath(this.config.storagePath, newFolder);
+        if (!fs.existsSync(newFolderPath)) {
+            try {
+                fs.mkdirSync(newFolderPath, { recursive: true });
+                this.logger.log(`Created destination folder: ${newFolder}`);
+            }
+            catch (error) {
+                this.logger.error(`Error creating folder ${newFolder}: ${error.message}`);
+                throw new common_1.InternalServerErrorException('Failed to create destination folder');
+            }
+        }
+        const newPath = this.getSafePath(newFolderPath, newFilename);
+        if (fs.existsSync(newPath)) {
+            this.logger.error(`File already exists at destination: ${newPath}`);
+            throw new common_1.BadRequestException('File already exists at destination');
+        }
+        try {
+            fs.renameSync(oldPath, newPath);
+            this.logger.log(`File metadata updated from ${oldPath} to ${newPath}`);
+            return { message: 'File metadata updated successfully', newPath };
+        }
+        catch (error) {
+            this.logger.error(`Error updating file metadata: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error updating file metadata');
+        }
+    }
+    getFolderSize(folder) {
+        const folderPath = this.getSafePath(this.config.storagePath, folder);
+        if (!fs.existsSync(folderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        const getSize = (dirPath) => {
+            const files = fs.readdirSync(dirPath);
+            return files.reduce((total, file) => {
+                const filePath = this.getSafePath(dirPath, file);
+                const stats = fs.statSync(filePath);
+                return total + (stats.isDirectory() ? getSize(filePath) : stats.size);
+            }, 0);
+        };
+        const size = getSize(folderPath);
+        return { folder, size };
+    }
+    listFiles(folder) {
+        const folderPath = this.getSafePath(this.config.storagePath, folder);
+        if (!fs.existsSync(folderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        const files = fs.readdirSync(folderPath);
+        return { folder, files };
+    }
+    getFile(folder, filename, res) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const stats = fs.statSync(filePath);
+        const etag = `"${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
+        res.set({
+            'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+            'ETag': etag,
+            'Last-Modified': stats.mtime.toUTCString(),
+        });
+        return res.sendFile(filePath);
+    }
+    renameFolder(folder, newFolderName) {
+        const oldFolderPath = this.getSafePath(this.config.storagePath, folder);
+        const newFolderPath = this.getSafePath(this.config.storagePath, newFolderName);
+        if (!fs.existsSync(oldFolderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        if (fs.existsSync(newFolderPath)) {
+            this.logger.error(`Folder already exists: ${newFolderName}`);
+            throw new common_1.BadRequestException('Folder already exists');
+        }
+        try {
+            fs.renameSync(oldFolderPath, newFolderPath);
+            this.logger.log(`Folder renamed from ${folder} to ${newFolderName}`);
+            return { message: 'Folder renamed successfully', newFolderName };
+        }
+        catch (error) {
+            this.logger.error(`Error renaming folder ${folder}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error renaming folder');
+        }
+    }
+    moveFolder(folder, newLocation) {
+        const oldFolderPath = this.getSafePath(this.config.storagePath, folder);
+        const newFolderPath = this.getSafePath(this.config.storagePath, newLocation, folder);
+        if (!fs.existsSync(oldFolderPath)) {
+            this.logger.error(`Folder not found: ${folder}`);
+            throw new common_1.NotFoundException('Folder not found');
+        }
+        if (fs.existsSync(newFolderPath)) {
+            this.logger.error(`Folder already exists at destination: ${newFolderPath}`);
+            throw new common_1.BadRequestException('Folder already exists at destination');
+        }
+        try {
+            fs.renameSync(oldFolderPath, newFolderPath);
+            this.logger.log(`Folder moved from ${oldFolderPath} to ${newFolderPath}`);
+            return { message: 'Folder moved successfully', newFolderPath };
+        }
+        catch (error) {
+            this.logger.error(`Error moving folder ${folder}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error moving folder');
+        }
+    }
+    async getFilePreview(folder, filename, req, res) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const stats = fs.statSync(filePath);
+        const mimeType = (0, mime_types_1.lookup)(filePath) || 'application/octet-stream';
+        const etag = `"${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
+        if (stats.size > view_config_1.VIEW_CONFIG.PREVIEW_SIZE_LIMIT) {
+            if (!this.isPreviewSupported(mimeType)) {
+                throw new common_1.BadRequestException('Preview not available for this file type or size');
+            }
+        }
+        res.set({
+            'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+            'ETag': etag,
+            'Last-Modified': stats.mtime.toUTCString(),
+        });
+        try {
+            if (view_config_1.VIEW_CONFIG.IMAGE_TYPES.includes(mimeType)) {
+                const thumbnail = fs.readFileSync(filePath);
+                res.setHeader('Content-Type', mimeType);
+                return res.send(thumbnail);
+            }
+            if (view_config_1.VIEW_CONFIG.VIDEO_TYPES.includes(mimeType) ||
+                view_config_1.VIEW_CONFIG.AUDIO_TYPES.includes(mimeType)) {
+                const range = req.headers.range;
+                if (range) {
+                    const parts = range.replace(/bytes=/, '').split('-');
+                    const start = parseInt(parts[0], 10);
+                    const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+                    const chunkSize = end - start + 1;
+                    const stream = fs.createReadStream(filePath, { start, end });
+                    const headers = {
+                        'Content-Range': `bytes ${start}-${end}/${stats.size}`,
+                        'Accept-Ranges': 'bytes',
+                        'Content-Length': chunkSize,
+                        'Content-Type': mimeType,
+                    };
+                    res.writeHead(206, headers);
+                    return stream.pipe(res);
+                }
+                else {
+                    const headers = {
+                        'Content-Length': stats.size,
+                        'Content-Type': mimeType,
+                        'Accept-Ranges': 'bytes',
+                    };
+                    res.writeHead(200, headers);
+                    return fs.createReadStream(filePath).pipe(res);
+                }
+            }
+            if (view_config_1.VIEW_CONFIG.TEXT_TYPES.includes(mimeType)) {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                const preview = content.substring(0, 1000) + (content.length > 1000 ? '...' : '');
+                return { preview, mimeType };
+            }
+            if (view_config_1.VIEW_CONFIG.PDF_TYPES.includes(mimeType)) {
+                res.setHeader('Content-Type', mimeType);
+                res.setHeader('Content-Range', `bytes 0-${Math.min(stats.size, view_config_1.VIEW_CONFIG.PREVIEW_SIZE_LIMIT)}`);
+                const stream = (0, fs_1.createReadStream)(filePath, {
+                    start: 0,
+                    end: view_config_1.VIEW_CONFIG.PREVIEW_SIZE_LIMIT - 1,
+                });
+                return stream.pipe(res);
+            }
+            throw new common_1.BadRequestException('Preview not available for this file type');
+        }
+        catch (error) {
+            this.logger.error(`Error generating preview for ${filename}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error generating file preview');
+        }
+    }
+    async getThumbnail(folder, filename, res) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const mimeType = (0, mime_types_1.lookup)(filePath) || 'application/octet-stream';
+        const stats = fs.statSync(filePath);
+        const etag = `"thumb-${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
+        res.set({
+            'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+            'ETag': etag,
+            'Last-Modified': stats.mtime.toUTCString(),
+        });
+        try {
+            if (view_config_1.VIEW_CONFIG.IMAGE_TYPES.includes(mimeType)) {
+                const thumbnail = fs.readFileSync(filePath);
+                res.setHeader('Content-Type', 'image/jpeg');
+                return res.send(thumbnail);
+            }
+            if (view_config_1.VIEW_CONFIG.VIDEO_TYPES.includes(mimeType)) {
+                res.setHeader('Content-Type', 'image/jpeg');
+                return res.send(undefined);
+            }
+            throw new common_1.BadRequestException('Thumbnail not available for this file type');
+        }
+        catch (error) {
+            this.logger.error(`Error generating thumbnail for ${filename}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error generating thumbnail');
+        }
+    }
+    isPreviewSupported(mimeType) {
+        const supportedTypes = [
+            ...view_config_1.VIEW_CONFIG.IMAGE_TYPES,
+            ...view_config_1.VIEW_CONFIG.PDF_TYPES,
+            ...view_config_1.VIEW_CONFIG.TEXT_TYPES,
+            ...view_config_1.VIEW_CONFIG.AUDIO_TYPES,
+            ...view_config_1.VIEW_CONFIG.VIDEO_TYPES,
+        ];
+        return supportedTypes.includes(mimeType);
+    }
+    async getFolderTree() {
+        const buildTree = (dirPath) => {
+            const name = dirPath.split('/').pop();
+            const item = { name, children: [] };
+            const files = fs.readdirSync(dirPath, { withFileTypes: true });
+            for (const file of files) {
+                if (file.isDirectory()) {
+                    item.children.push(buildTree((0, path_1.join)(dirPath, file.name)));
+                }
+                else {
+                    item.children.push({ name: file.name });
+                }
+            }
+            return item;
+        };
+        return buildTree(this.config.storagePath);
+    }
+    async generateShareableLink(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const shareableLink = `${process.env.serviceUrl}/folders/${folder}/files/${filename}?share=true`;
+        return { shareableLink };
+    }
+    lockFile(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const lockFilePath = `${filePath}.lock`;
+        if (fs.existsSync(lockFilePath)) {
+            this.logger.error(`File is already locked: ${filename}`);
+            throw new common_1.BadRequestException('File is already locked');
+        }
+        try {
+            fs.writeFileSync(lockFilePath, '');
+            this.logger.log(`File locked successfully: ${filename}`);
+            return { message: 'File locked successfully' };
+        }
+        catch (error) {
+            this.logger.error(`Error locking file ${filename}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error locking file');
+        }
+    }
+    unlockFile(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const lockFilePath = `${filePath}.lock`;
+        if (!fs.existsSync(lockFilePath)) {
+            this.logger.error(`File is not locked: ${filename}`);
+            throw new common_1.BadRequestException('File is not locked');
+        }
+        try {
+            fs.rmSync(lockFilePath);
+            this.logger.log(`File unlocked successfully: ${filename}`);
+            return { message: 'File unlocked successfully' };
+        }
+        catch (error) {
+            this.logger.error(`Error unlocking file ${filename}: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error unlocking file');
+        }
+    }
+    getRecentFiles() {
+        const getRecentFilesFromDir = (dirPath) => {
+            const files = fs.readdirSync(dirPath, { withFileTypes: true });
+            let recentFiles = [];
+            for (const file of files) {
+                const filePath = (0, path_1.join)(dirPath, file.name);
+                if (file.isDirectory()) {
+                    recentFiles = recentFiles.concat(getRecentFilesFromDir(filePath));
+                }
+                else {
+                    const stats = fs.statSync(filePath);
+                    recentFiles.push({ name: file.name, modifiedAt: stats.mtime });
+                }
+            }
+            return recentFiles;
+        };
+        const recentFiles = getRecentFilesFromDir(this.config.storagePath);
+        recentFiles.sort((a, b) => b.modifiedAt - a.modifiedAt);
+        return recentFiles.slice(0, 10);
+    }
+    async getFileVersions(folder, filename) {
+        const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+        if (!fs.existsSync(filePath)) {
+            this.logger.error(`File not found: ${filename} in folder: ${folder}`);
+            throw new common_1.NotFoundException('File not found');
+        }
+        const versionFiles = fs
+            .readdirSync(this.config.storagePath)
+            .filter((file) => file.startsWith(`${filename}.v`))
+            .map((file) => ({ version: file.split('.v')[1], filename: file }));
+        return { filename, versions: versionFiles };
+    }
+    onModuleInit() {
+        const thumbnailsPath = this.getSafePath(this.config.storagePath, '.thumbnails');
+        if (!fs.existsSync(thumbnailsPath)) {
+            fs.mkdirSync(thumbnailsPath, { recursive: true });
+        }
+    }
+    async copyFolder(sourceFolder, destinationFolder) {
+        const sourcePath = this.getSafePath(this.config.storagePath, sourceFolder);
+        const destPath = this.getSafePath(this.config.storagePath, destinationFolder);
+        if (!fs.existsSync(sourcePath)) {
+            this.logger.error(`Source folder not found: ${sourceFolder}`);
+            throw new common_1.NotFoundException('Source folder not found');
+        }
+        if (fs.existsSync(destPath)) {
+            this.logger.error(`Destination folder already exists: ${destinationFolder}`);
+            throw new common_1.BadRequestException('Destination folder already exists');
+        }
+        try {
+            fs.mkdirSync(destPath, { recursive: true });
+            const copyRecursive = (src, dest) => {
+                const entries = fs.readdirSync(src, { withFileTypes: true });
+                for (const entry of entries) {
+                    const srcPath = (0, path_1.join)(src, entry.name);
+                    const destPath = (0, path_1.join)(dest, entry.name);
+                    if (entry.isDirectory()) {
+                        fs.mkdirSync(destPath, { recursive: true });
+                        copyRecursive(srcPath, destPath);
+                    }
+                    else {
+                        fs.copyFileSync(srcPath, destPath);
+                    }
+                }
+            };
+            copyRecursive(sourcePath, destPath);
+            this.logger.log(`Folder copied from ${sourcePath} to ${destPath}`);
+            return {
+                message: 'Folder copied successfully',
+                sourceFolder,
+                destinationFolder,
+            };
+        }
+        catch (error) {
+            this.logger.error(`Error copying folder: ${error.message}`);
+            throw new common_1.InternalServerErrorException('Error copying folder');
+        }
+    }
+    async stream(filename, folder, req, res) {
+        const requestId = req.headers['x-request-id'] ||
+            `req-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        try {
+            const filePath = this.getSafePath(this.config.storagePath, folder, filename);
+            if (!fs.existsSync(filePath)) {
+                this.logger.warn(`[${requestId}] ❌ File not found: ${filePath}`);
+                return res.status(404).json({ error: 'File not found' });
+            }
+            const stat = await fs.promises.stat(filePath);
+            if (!stat.isFile() || stat.size === 0) {
+                this.logger.warn(`[${requestId}] ❌ Invalid file`);
+                return res.status(400).json({ error: 'Invalid file' });
+            }
+            const mimeType = mime_1.default.lookup(filePath) || 'application/octet-stream';
+            const fileSize = stat.size;
+            const rangeHeader = req.headers.range;
+            const etag = `"${stat.mtime.getTime()}-${stat.size}"`;
+            const lastModified = stat.mtime.toUTCString();
+            if (req.headers['if-none-match'] === etag) {
+                return res.status(304).end();
+            }
+            if (req.headers['if-modified-since']) {
+                const clientDate = new Date(req.headers['if-modified-since']);
+                if (clientDate >= new Date(stat.mtime.getTime() - 1000)) {
+                    return res.status(304).end();
+                }
+            }
+            let start = 0;
+            let end = fileSize - 1;
+            let statusCode = 200;
+            if (rangeHeader) {
+                const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+                if (match) {
+                    start = match[1] ? parseInt(match[1]) : 0;
+                    end = match[2] ? parseInt(match[2]) : fileSize - 1;
+                    const MAX_CHUNK = 1024 * 1024;
+                    if (!match[2] && end > start + MAX_CHUNK - 1) {
+                        end = start + MAX_CHUNK - 1;
+                    }
+                    if (start >= fileSize || end >= fileSize || start > end) {
+                        return res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).json({ error: 'Range not satisfiable' });
+                    }
+                    statusCode = 206;
+                }
+            }
+            const contentLength = end - start + 1;
+            this.logger.log(`[${requestId}] 📤 Streaming ${filename} [${start}-${end}] (${(contentLength / 1024 / 1024).toFixed(2)} MB)`);
+            res.writeHead(statusCode, {
+                'Content-Type': mimeType,
+                'Content-Length': contentLength.toString(),
+                'Accept-Ranges': 'bytes',
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'ETag': etag,
+                'Last-Modified': lastModified,
+                'Cache-Control': 'public, max-age=3600',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, ETag, Last-Modified, Content-Type',
+            });
+            const stream = fs.createReadStream(filePath, {
+                start,
+                end,
+                highWaterMark: 1024 * 1024,
+            });
+            stream.pipe(res);
+            stream.on('end', () => {
+            });
+            stream.on('error', (err) => {
+                this.logger.error(`[${requestId}] ❌ Stream error:`, err);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Stream error' });
+                }
+                else {
+                    res.destroy();
+                }
+            });
+            req.on('close', () => {
+                stream.destroy();
+            });
+        }
+        catch (error) {
+            this.logger.error(`[${requestId}] ❌ Fatal error:`, error);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Internal server error' });
+            }
+            else {
+                res.destroy();
+            }
+        }
+    }
+    async uploadFromUrl(files, folderName) {
+        const results = [];
+        const uploadPath = this.getSafePath(this.config.storagePath, folderName);
+        let index = 0;
+        for (const [key, url] of Object.entries(files)) {
+            index++;
+            this.logger.log(`⬇️[${index} / ${Object.keys(files).length}] Starting download: ${key} `);
+            try {
+                const head = await axios_1.default.head(url);
+                const contentType = head.headers['content-type'];
+                const ext = (0, helper_1.getFileExtension)(contentType, url);
+                const safeName = (0, helper_1.sanitizeFileName)(key);
+                const finalFileName = `${safeName}.${ext} `;
+                const filePath = path_1.default.resolve(uploadPath, finalFileName);
+                if (fs.existsSync(filePath)) {
+                    this.logger.log(`✅ Skipped(Already exists): ${finalFileName} `);
+                    results.push({ file: finalFileName, status: 'skipped', reason: 'Already exists' });
+                    continue;
+                }
+                fs.mkdirSync(path_1.default.dirname(filePath), { recursive: true });
+                const response = await axios_1.default.get(url, { responseType: 'stream' });
+                await streamPipeline(response.data, fs.createWriteStream(filePath));
+                this.logger.log(`🎉 Downloaded: ${finalFileName} `);
+                results.push({ file: finalFileName, status: 'success' });
+            }
+            catch (err) {
+                this.logger.warn(`⚠️ Failed to download ${key}: ${err.message} `);
+                results.push({ file: key, status: 'failed', reason: err.message });
+            }
+        }
+        this.logger.log(`📦 Download summary - Total: ${Object.keys(files).length}, Success: ${results.filter(r => r.status === 'success').length}, Skipped: ${results.filter(r => r.status === 'skipped').length}, Failed: ${results.filter(r => r.status === 'failed').length} `);
+        return { results };
+    }
+};
+exports.FileService = FileService;
+exports.FileService = FileService = FileService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, common_1.Optional)()),
+    __param(0, (0, common_1.Inject)(file_module_interface_1.FILE_MODULE_OPTIONS)),
+    __metadata("design:paramtypes", [Object])
+], FileService);
+
+
+/***/ },
+
+/***/ "./src/components/files/utils/file-operation-error.ts"
+/*!************************************************************!*\
+  !*** ./src/components/files/utils/file-operation-error.ts ***!
+  \************************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileErrorCodes = exports.FileOperationError = void 0;
+class FileOperationError extends Error {
+    constructor(message, code, operation, details) {
+        super(message);
+        this.code = code;
+        this.operation = operation;
+        this.details = details;
+        this.name = 'FileOperationError';
+    }
+}
+exports.FileOperationError = FileOperationError;
+exports.FileErrorCodes = {
+    FILE_NOT_FOUND: 'FILE_NOT_FOUND',
+    INVALID_PATH: 'INVALID_PATH',
+    ACCESS_DENIED: 'ACCESS_DENIED',
+    INVALID_OPERATION: 'INVALID_OPERATION',
+    STORAGE_FULL: 'STORAGE_FULL',
+    FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+    INVALID_FILE_TYPE: 'INVALID_FILE_TYPE',
+    FOLDER_EXISTS: 'FOLDER_EXISTS',
+    FILE_EXISTS: 'FILE_EXISTS',
+    FOLDER_NOT_EMPTY: 'FOLDER_NOT_EMPTY',
+};
+
+
+/***/ },
+
+/***/ "./src/components/files/utils/file-operation-monitor.ts"
+/*!**************************************************************!*\
+  !*** ./src/components/files/utils/file-operation-monitor.ts ***!
+  \**************************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileOperationMonitor = void 0;
+class FileOperationMonitor {
+    static recordOperation(metric) {
+        this.metrics.unshift(metric);
+        if (this.metrics.length > this.MAX_METRICS) {
+            this.metrics.pop();
+        }
+    }
+    static getMetrics(limit = 100) {
+        return this.metrics.slice(0, limit);
+    }
+    static getFailureRate(timeWindow = 3600000) {
+        const now = Date.now();
+        const recentOperations = this.metrics.filter((m) => now - m.timestamp < timeWindow);
+        if (recentOperations.length === 0)
+            return 0;
+        const failures = recentOperations.filter((m) => !m.success).length;
+        return failures / recentOperations.length;
+    }
+    static clearMetrics() {
+        this.metrics = [];
+    }
+}
+exports.FileOperationMonitor = FileOperationMonitor;
+FileOperationMonitor.metrics = [];
+FileOperationMonitor.MAX_METRICS = 1000;
+
+
+/***/ },
+
+/***/ "./src/components/files/utils/file-operation-wrapper.ts"
+/*!**************************************************************!*\
+  !*** ./src/components/files/utils/file-operation-wrapper.ts ***!
+  \**************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileOperationResult = void 0;
+exports.withFileOperation = withFileOperation;
+const file_operation_error_1 = __webpack_require__(/*! ./file-operation-error */ "./src/components/files/utils/file-operation-error.ts");
+const file_operation_monitor_1 = __webpack_require__(/*! ./file-operation-monitor */ "./src/components/files/utils/file-operation-monitor.ts");
+class FileOperationResult {
+    constructor(success, data, error) {
+        this.success = success;
+        this.data = data;
+        this.error = error;
+    }
+    static success(data) {
+        return new FileOperationResult(true, data);
+    }
+    static failure(error) {
+        return new FileOperationResult(false, undefined, error);
+    }
+}
+exports.FileOperationResult = FileOperationResult;
+async function withFileOperation(operation, action, path) {
+    const startTime = Date.now();
+    try {
+        const result = await action();
+        file_operation_monitor_1.FileOperationMonitor.recordOperation({
+            operation,
+            success: true,
+            duration: Date.now() - startTime,
+            timestamp: startTime,
+            path,
+        });
+        return FileOperationResult.success(result);
+    }
+    catch (error) {
+        const duration = Date.now() - startTime;
+        file_operation_monitor_1.FileOperationMonitor.recordOperation({
+            operation,
+            success: false,
+            duration,
+            timestamp: startTime,
+            path,
+            error: error.message,
+        });
+        if (error instanceof file_operation_error_1.FileOperationError) {
+            return FileOperationResult.failure(error);
+        }
+        let fileError;
+        if (error.code === 'ENOENT') {
+            fileError = new file_operation_error_1.FileOperationError('File or directory not found', file_operation_error_1.FileErrorCodes.FILE_NOT_FOUND, operation);
+        }
+        else if (error.code === 'EACCES') {
+            fileError = new file_operation_error_1.FileOperationError('Access denied', file_operation_error_1.FileErrorCodes.ACCESS_DENIED, operation);
+        }
+        else if (error.code === 'EEXIST') {
+            fileError = new file_operation_error_1.FileOperationError('File or folder already exists', file_operation_error_1.FileErrorCodes.FILE_EXISTS, operation);
+        }
+        else if (error.code === 'ENOSPC') {
+            fileError = new file_operation_error_1.FileOperationError('No space left on storage', file_operation_error_1.FileErrorCodes.STORAGE_FULL, operation);
+        }
+        else {
+            fileError = new file_operation_error_1.FileOperationError(error.message || 'Unknown error occurred', file_operation_error_1.FileErrorCodes.INVALID_OPERATION, operation, error);
+        }
+        return FileOperationResult.failure(fileError);
+    }
+}
+
+
+/***/ },
+
+/***/ "./src/components/files/utils/file-validators.ts"
+/*!*******************************************************!*\
+  !*** ./src/components/files/utils/file-validators.ts ***!
+  \*******************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FileSizeValidator = exports.CustomFileValidator = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const common_2 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+let CustomFileValidator = class CustomFileValidator extends common_2.FileValidator {
+    constructor(options) {
+        super(options);
+    }
+    isValid(file) {
+        if (!file) {
+            return false;
+        }
+        return this.validationOptions.fileTypes.includes(file.mimetype);
+    }
+    buildErrorMessage() {
+        return `File type must be one of: ${this.validationOptions.fileTypes.join(', ')}`;
+    }
+};
+exports.CustomFileValidator = CustomFileValidator;
+exports.CustomFileValidator = CustomFileValidator = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [Object])
+], CustomFileValidator);
+let FileSizeValidator = class FileSizeValidator extends common_2.FileValidator {
+    constructor(options) {
+        super(options);
+    }
+    isValid(file) {
+        if (!file) {
+            return false;
+        }
+        return file.size <= this.validationOptions.maxSize;
+    }
+    buildErrorMessage() {
+        return `File size must not exceed ${this.validationOptions.maxSize / (1024 * 1024)}MB`;
+    }
+};
+exports.FileSizeValidator = FileSizeValidator;
+exports.FileSizeValidator = FileSizeValidator = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [Object])
+], FileSizeValidator);
+
+
+/***/ },
+
+/***/ "./src/components/files/utils/helper.ts"
+/*!**********************************************!*\
+  !*** ./src/components/files/utils/helper.ts ***!
+  \**********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.sanitizeFileName = sanitizeFileName;
+exports.getSafeFilePath = getSafeFilePath;
+exports.getFileExtension = getFileExtension;
+const path_1 = __importStar(__webpack_require__(/*! path */ "path"));
+const url_1 = __webpack_require__(/*! url */ "url");
+const mime = __importStar(__webpack_require__(/*! mime-types */ "mime-types"));
+const VIDEO_ROOT = path_1.default.resolve(process.cwd(), 'videos');
+function sanitizeFileName(name) {
+    return (0, path_1.basename)(name, (0, path_1.extname)(name)).replace(/[^\w.\-]/g, '_');
+}
+function getSafeFilePath(filename) {
+    const resolvedPath = (0, path_1.resolve)(VIDEO_ROOT, filename);
+    return resolvedPath.startsWith(VIDEO_ROOT) ? resolvedPath : null;
+}
+function getFileExtension(contentType, url) {
+    const extFromHeader = mime.extension(contentType);
+    const extFromUrl = (0, path_1.extname)(new url_1.URL(url).pathname).split('?')[0];
+    return extFromHeader || extFromUrl.replace('.', '') || 'mp4';
+}
+
+
+/***/ },
+
+/***/ "./src/components/files/utils/json-path.validator.ts"
+/*!***********************************************************!*\
+  !*** ./src/components/files/utils/json-path.validator.ts ***!
+  \***********************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.JsonPathValidator = exports.JsonPathValidationError = void 0;
+class JsonPathValidationError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'JsonPathValidationError';
+    }
+}
+exports.JsonPathValidationError = JsonPathValidationError;
+class JsonPathValidator {
+    static validate(path) {
+        if (!Array.isArray(path) || path.length === 0) {
+            throw new JsonPathValidationError('Path must be a non-empty array');
+        }
+        const validKeyRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+        for (const segment of path) {
+            if (!validKeyRegex.test(segment)) {
+                throw new JsonPathValidationError(`Invalid path segment: ${segment}`);
+            }
+        }
+        return true;
+    }
+    static validateJsonQuery(query) {
+        const validQueryRegex = /^[\w.[\]]+$/;
+        if (!validQueryRegex.test(query)) {
+            throw new JsonPathValidationError('Invalid JSON query format');
+        }
+        return true;
+    }
+}
+exports.JsonPathValidator = JsonPathValidator;
 
 
 /***/ },
@@ -42866,6 +46902,559 @@ exports.WebshareProxyService = WebshareProxyService = WebshareProxyService_1 = _
 
 /***/ },
 
+/***/ "./src/control-plane/config/runtime-config.service.ts"
+/*!************************************************************!*\
+  !*** ./src/control-plane/config/runtime-config.service.ts ***!
+  \************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.RuntimeConfigService = exports.SCHEDULER_FLAGS = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+exports.SCHEDULER_FLAGS = [
+    'CMS_SCHEDULER',
+    'UMS_SCHEDULER',
+    'UMS_TEST_SCHEDULER',
+];
+function bool(value, fallback) {
+    if (value === undefined)
+        return fallback;
+    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+const DEFAULTS = {
+    CMS_SCHEDULER: false,
+    UMS_SCHEDULER: false,
+    UMS_TEST_SCHEDULER: false,
+};
+let RuntimeConfigService = class RuntimeConfigService {
+    constructor() {
+        this.schedulers = Object.fromEntries(exports.SCHEDULER_FLAGS.map((flag) => [
+            flag,
+            bool(process.env[`ENABLE_${flag}`], DEFAULTS[flag]),
+        ]));
+    }
+    enabled(scheduler) {
+        return this.schedulers[scheduler];
+    }
+    activeSchedulers() {
+        return exports.SCHEDULER_FLAGS.filter((scheduler) => this.schedulers[scheduler]);
+    }
+};
+exports.RuntimeConfigService = RuntimeConfigService;
+exports.RuntimeConfigService = RuntimeConfigService = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [])
+], RuntimeConfigService);
+
+
+/***/ },
+
+/***/ "./src/control-plane/jobs/scheduled-jobs.service.ts"
+/*!**********************************************************!*\
+  !*** ./src/control-plane/jobs/scheduled-jobs.service.ts ***!
+  \**********************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+var ScheduledJobsService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ScheduledJobsService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __importDefault(__webpack_require__(/*! mongoose */ "mongoose"));
+const schedule = __importStar(__webpack_require__(/*! node-schedule-tz */ "node-schedule-tz"));
+const components_1 = __webpack_require__(/*! ../../components */ "./src/components/index.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const app_service_1 = __webpack_require__(/*! ../../app.service */ "./src/app.service.ts");
+const runtime_config_service_1 = __webpack_require__(/*! ../config/runtime-config.service */ "./src/control-plane/config/runtime-config.service.ts");
+const account_maintenance_service_1 = __webpack_require__(/*! ../maintenance/account-maintenance.service */ "./src/control-plane/maintenance/account-maintenance.service.ts");
+const IST = 'Asia/Kolkata';
+let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
+    constructor(config, appService, maintenance, clientService, activeChannelsService, userDataService, stat1Service, stat2Service) {
+        this.config = config;
+        this.appService = appService;
+        this.maintenance = maintenance;
+        this.clientService = clientService;
+        this.activeChannelsService = activeChannelsService;
+        this.userDataService = userDataService;
+        this.stat1Service = stat1Service;
+        this.stat2Service = stat2Service;
+        this.logger = new common_1.Logger(ScheduledJobsService_1.name);
+        this.jobs = [];
+        this.startupTimers = [];
+        this.owner = `${process.env.HOSTNAME || 'control-plane'}:${process.pid}`;
+    }
+    onModuleInit() {
+        this.registerCmsJobs();
+        this.registerMaintenanceJobs();
+    }
+    onModuleDestroy() {
+        for (const job of this.jobs)
+            job.cancel();
+        for (const timer of this.startupTimers)
+            clearTimeout(timer);
+    }
+    register(name, cron, task) {
+        const job = schedule.scheduleJob(name, cron, IST, async () => {
+            try {
+                this.logger.log(`Starting scheduled job: ${name}`);
+                await task();
+                this.logger.log(`Completed scheduled job: ${name}`);
+            }
+            catch (error) {
+                this.logger.error(`Scheduled job failed: ${name}`, error instanceof Error ? error.stack : String(error));
+            }
+        });
+        if (!job)
+            throw new Error(`Unable to register scheduled job ${name}`);
+        this.jobs.push(job);
+    }
+    registerCmsJobs() {
+        if (!this.config.enabled('CMS_SCHEDULER'))
+            return;
+        this.register('cms-buffer-check', '25 2 * * *', () => this.appService.checkBufferClients());
+        this.register('cms-buffer-join', '0 */3 * * *', () => this.appService.joinBufferClients());
+        this.register('cms-buffer-info-refresh', '25 0 * * *', async () => {
+            if (new Date().getUTCDate() % 5 === 0)
+                await this.appService.updateBufferClientInfo();
+        });
+        if (!this.enabled('LOCAL_SERVER')) {
+            this.afterStartup(60_000, () => this.appService.joinBufferClients());
+        }
+    }
+    registerMaintenanceJobs() {
+        if (!this.config.enabled('UMS_TEST_SCHEDULER'))
+            return;
+        this.register('maintenance-refresh-map-and-stat1', '0 * * * *', async () => {
+            await this.clientService.refreshMap();
+            await this.stat1Service.deleteAll();
+        });
+        this.register('maintenance-process-users', '0 */3 * * *', async () => {
+            await this.maintenance.processEligibleUsers(400, 0);
+        });
+        this.register('maintenance-promote-client-check', '35 16 * * *', () => this.maintenance.checkPromoteClients());
+        this.register('maintenance-active-channel-word-restrictions', '25 0 * * *', async () => {
+            if (new Date().getUTCDate() % 9 !== 0)
+                return;
+            await new Promise((resolve) => setTimeout(resolve, 30_000));
+            await this.activeChannelsService.resetWordRestrictions();
+        });
+        this.register('maintenance-daily-promote-stats-reset', '25 0 * * *', () => this.runDailyPromoteReset());
+        this.register('maintenance-daily-promote-stats-reset-recovery', '30,45 0 * * *', () => this.runDailyPromoteReset());
+        if (this.isDailyResetRecoveryWindow()) {
+            this.afterStartup(15_000, () => this.runDailyPromoteReset());
+        }
+        this.afterStartup(120_000, () => this.maintenance.processEligibleUsers(400, 0));
+    }
+    afterStartup(delayMs, task) {
+        const timer = setTimeout(() => {
+            task().catch((error) => this.logger.error('Startup task failed', error instanceof Error ? error.stack : String(error)));
+        }, delayMs);
+        this.startupTimers.push(timer);
+    }
+    enabled(name) {
+        return ['1', 'true', 'yes', 'on'].includes((process.env[name] || '').trim().toLowerCase());
+    }
+    istDateKey() {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: IST,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        })
+            .format(new Date())
+            .replace(/\//g, '-');
+    }
+    isDailyResetRecoveryWindow() {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+            timeZone: IST,
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        }).formatToParts(new Date());
+        const value = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
+        const minutes = value('hour') * 60 + value('minute');
+        return minutes >= 25 && minutes < 60;
+    }
+    async runDailyPromoteReset() {
+        const db = mongoose_1.default.connection.db;
+        if (!db)
+            throw new Error('Mongo connection is unavailable for the daily promoteStats reset');
+        const jobId = `daily-promote-stats-reset:${this.istDateKey()}`;
+        if (!(await this.claimJob(db.collection('controlPlaneJobRuns'), jobId))) {
+            this.logger.warn(`Daily promoteStats reset already claimed or completed: ${jobId}`);
+            return;
+        }
+        let notification = '';
+        try {
+            const stats = await db
+                .collection('promoteStats')
+                .find({}, { projection: { client: 1, totalCount: 1, lastUpdatedTimeStamp: 1 } })
+                .toArray();
+            notification = stats
+                .map((stat) => `${String(stat.client || 'unknown').toUpperCase()}: ${stat.totalCount || 0}`)
+                .join('\n');
+            const result = await this.resetPromoteStatsWithRetries(db.collection('promoteStats'));
+            await db.collection('controlPlaneJobRuns').updateOne({ _id: jobId }, {
+                $set: {
+                    completedAt: new Date(),
+                    resetMatchedCount: result.matchedCount,
+                    resetModifiedCount: result.modifiedCount,
+                },
+                $unset: { leaseOwner: '', leaseExpiresAt: '' },
+            });
+        }
+        catch (error) {
+            await db.collection('controlPlaneJobRuns').updateOne({ _id: jobId }, {
+                $set: {
+                    failedAt: new Date(),
+                    error: error instanceof Error ? error.message : String(error),
+                    leaseExpiresAt: new Date(0),
+                },
+                $unset: { leaseOwner: '' },
+            });
+            throw error;
+        }
+        try {
+            await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=${encodeURIComponent(notification)}`);
+        }
+        catch (error) {
+            this.logger.error('Daily promoteStats reset completed, but its notification failed', error instanceof Error ? error.stack : String(error));
+        }
+    }
+    async resetPromoteStatsWithRetries(promoteStats) {
+        let lastError;
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+                await this.userDataService.resetPaidUsers();
+                await this.stat1Service.deleteAll();
+                await this.stat2Service.deleteAll();
+                const now = Date.now();
+                return await promoteStats.updateMany({}, {
+                    $set: {
+                        totalCount: 0,
+                        uniqueChannels: 0,
+                        releaseDay: now,
+                        lastUpdatedTimeStamp: now,
+                        data: {},
+                    },
+                });
+            }
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`Daily promoteStats reset attempt ${attempt}/3 failed`);
+                if (attempt < 3)
+                    await new Promise((resolve) => setTimeout(resolve, 30_000));
+            }
+        }
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
+    async claimJob(collection, jobId) {
+        const now = new Date();
+        const leaseExpiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+        const claimed = await collection.updateOne({
+            _id: jobId,
+            completedAt: { $exists: false },
+            $or: [
+                { leaseExpiresAt: { $lt: now } },
+                { leaseExpiresAt: { $exists: false } },
+            ],
+        }, { $set: { leaseOwner: this.owner, leaseExpiresAt, startedAt: now } });
+        if (claimed.modifiedCount === 1)
+            return true;
+        try {
+            await collection.insertOne({
+                _id: jobId,
+                leaseOwner: this.owner,
+                leaseExpiresAt,
+                startedAt: now,
+            });
+            return true;
+        }
+        catch (error) {
+            if (error.code === 11000)
+                return false;
+            throw error;
+        }
+    }
+};
+exports.ScheduledJobsService = ScheduledJobsService;
+exports.ScheduledJobsService = ScheduledJobsService = ScheduledJobsService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [runtime_config_service_1.RuntimeConfigService,
+        app_service_1.AppService,
+        account_maintenance_service_1.AccountMaintenanceService,
+        components_1.ClientService,
+        components_1.ActiveChannelsService,
+        components_1.UserDataService,
+        components_1.Stat1Service,
+        components_1.Stat2Service])
+], ScheduledJobsService);
+
+
+/***/ },
+
+/***/ "./src/control-plane/maintenance/account-maintenance.service.ts"
+/*!**********************************************************************!*\
+  !*** ./src/control-plane/maintenance/account-maintenance.service.ts ***!
+  \**********************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var AccountMaintenanceService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AccountMaintenanceService = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
+const components_1 = __webpack_require__(/*! ../../components */ "./src/components/index.ts");
+const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
+const channel_eligibility_1 = __webpack_require__(/*! ./channel-eligibility */ "./src/control-plane/maintenance/channel-eligibility.ts");
+const runtime_config_service_1 = __webpack_require__(/*! ../config/runtime-config.service */ "./src/control-plane/config/runtime-config.service.ts");
+let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaintenanceService {
+    constructor(usersService, channelsService, activeChannelsService, promoteClientService, config) {
+        this.usersService = usersService;
+        this.channelsService = channelsService;
+        this.activeChannelsService = activeChannelsService;
+        this.promoteClientService = promoteClientService;
+        this.config = config;
+        this.logger = new common_1.Logger(AccountMaintenanceService_1.name);
+        this.running = false;
+        this.delayedJoinTimers = [];
+    }
+    async processEligibleUsers(limit = 300, skip = 0) {
+        if (this.running) {
+            this.logger.warn('Account maintenance skipped; previous run is still active');
+            return { processed: 0, skipped: true };
+        }
+        this.running = true;
+        try {
+            const users = await this.findEligibleUsers(limit, skip);
+            for (const user of users)
+                await this.updateUser(user);
+            this.schedulePromoteClientJoin();
+            return { processed: users.length, skipped: false };
+        }
+        finally {
+            this.running = false;
+        }
+    }
+    async checkPromoteClients() {
+        await this.promoteClientService.checkPromoteClients();
+    }
+    onModuleDestroy() {
+        for (const timer of this.delayedJoinTimers)
+            clearTimeout(timer);
+    }
+    schedulePromoteClientJoin() {
+        if (!this.config.enabled('UMS_TEST_SCHEDULER'))
+            return;
+        const timer = setTimeout(() => {
+            this.promoteClientService
+                .joinchannelForPromoteClients()
+                .catch((error) => this.logger.error('Delayed promote-client join failed', error instanceof Error ? error.stack : String(error)));
+        }, 2 * 60 * 1000);
+        this.delayedJoinTimers.push(timer);
+    }
+    async findEligibleUsers(limit, skip) {
+        const now = new Date();
+        const weekAgo = new Date(now);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        const monthAgo = new Date(now);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        const threeMonthsAgo = new Date(now);
+        threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 70);
+        return this.usersService.executeQuery({
+            expired: false,
+            updatedAt: { $lt: weekAgo },
+            $or: [
+                { createdAt: { $gt: monthAgo }, updatedAt: { $lt: weekAgo } },
+                {
+                    createdAt: { $lte: monthAgo, $gt: threeMonthsAgo },
+                    updatedAt: { $lt: monthAgo },
+                },
+                {
+                    createdAt: { $lte: threeMonthsAgo },
+                    updatedAt: { $lte: threeMonthsAgo },
+                },
+            ],
+        }, {}, limit, skip);
+    }
+    async updateUser(user) {
+        let manager;
+        try {
+            manager = await components_1.connectionManager.getClient(user.mobile, {
+                autoDisconnect: true,
+                handler: false,
+            });
+            const [lastActive, me, selfMessages, dialogs, contacts, hasPassword, calls,] = await Promise.all([
+                manager.getLastActiveTime(),
+                manager.getMe(),
+                manager.getSelfMSgsInfo(),
+                manager.getDialogs({ limit: 5 }),
+                manager.getContacts(),
+                manager.hasPassword(),
+                manager.getCallLogStats(),
+            ]);
+            await this.usersService.updateByFilter({ $or: [{ tgId: user.tgId }, { mobile: me.phone }] }, {
+                contacts: 'savedCount' in contacts ? contacts.savedCount : 0,
+                calls: calls || {
+                    incoming: 0,
+                    outgoing: 0,
+                    totalCalls: 0,
+                    video: 0,
+                    audio: 0,
+                },
+                firstName: me.firstName,
+                lastName: me.lastName,
+                mobile: me.phone,
+                username: me.username,
+                msgs: selfMessages.total,
+                totalChats: dialogs.total,
+                ownPhotoCount: selfMessages.ownPhotoCount,
+                movieCount: selfMessages.movieCount,
+                otherPhotoCount: selfMessages.otherPhotoCount,
+                otherVideoCount: selfMessages.otherVideoCount,
+                ownVideoCount: selfMessages.ownVideoCount,
+                twoFA: Boolean(hasPassword),
+                lastActive,
+                tgId: me.id.toString(),
+            });
+            await manager.client.sendMessage('me', { message: '.' });
+            await this.persistDiscoveredChannels(dialogs);
+        }
+        catch (error) {
+            const details = (0, utils_1.parseError)(error, `Account maintenance failed for ${user.mobile}`, false);
+            if ((0, utils_1.contains)(details.message.toLowerCase(), [
+                'user_deactivated_ban',
+                'user_deactivated',
+                'session_revoked',
+                'auth_key_unregistered',
+            ])) {
+                await this.usersService.delete(user.tgId);
+            }
+        }
+        finally {
+            if (manager)
+                await components_1.connectionManager.unregisterClient(user.mobile);
+            await (0, Helpers_1.sleep)(2000);
+        }
+    }
+    async persistDiscoveredChannels(dialogs) {
+        const channels = dialogs
+            .filter((dialog) => dialog.isChannel || dialog.isGroup)
+            .map((dialog) => dialog.entity)
+            .filter((channel) => !channel.broadcast &&
+            !channel.defaultBannedRights?.sendMessages &&
+            (channel.participantsCount || 0) > 50 &&
+            (0, channel_eligibility_1.isEligibleDiscoveredChannel)(channel))
+            .map((channel) => ({
+            channelId: channel.id.toString(),
+            participantsCount: channel.participantsCount,
+            title: channel.title,
+            broadcast: channel.broadcast,
+            megagroup: channel.megagroup,
+            username: channel.username,
+        }));
+        if (!channels.length)
+            return;
+        await this.channelsService.createMultiple(channels);
+        await this.activeChannelsService.createMultiple(channels);
+    }
+};
+exports.AccountMaintenanceService = AccountMaintenanceService;
+exports.AccountMaintenanceService = AccountMaintenanceService = AccountMaintenanceService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [components_1.UsersService,
+        components_1.ChannelsService,
+        components_1.ActiveChannelsService,
+        components_1.PromoteClientService,
+        runtime_config_service_1.RuntimeConfigService])
+], AccountMaintenanceService);
+
+
+/***/ },
+
+/***/ "./src/control-plane/maintenance/channel-eligibility.ts"
+/*!**************************************************************!*\
+  !*** ./src/control-plane/maintenance/channel-eligibility.ts ***!
+  \**************************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isEligibleDiscoveredChannel = isEligibleDiscoveredChannel;
+function isEligibleDiscoveredChannel(channel) {
+    const regex = /(wife|adult|lanj|chat|𝑭𝒂𝒎𝒊𝒍𝒚|𝙏𝙖𝙢𝙞𝙡|𝐒𝐖𝐀𝐏|lesb|aunty|girl|boy|tamil|kannad|telugu|hindi|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi)/i;
+    return Boolean((channel.title && regex.test(channel.title)) ||
+        (channel.username && regex.test(channel.username)));
+}
+
+
+/***/ },
+
 /***/ "./src/decorators/cloudflare-cache.decorator.ts"
 /*!******************************************************!*\
   !*** ./src/decorators/cloudflare-cache.decorator.ts ***!
@@ -46174,6 +50763,16 @@ module.exports = require("adm-zip");
 
 /***/ },
 
+/***/ "archiver"
+/*!***************************!*\
+  !*** external "archiver" ***!
+  \***************************/
+(module) {
+
+module.exports = require("archiver");
+
+/***/ },
+
 /***/ "axios"
 /*!************************!*\
   !*** external "axios" ***!
@@ -46271,6 +50870,26 @@ module.exports = require("ioredis");
 (module) {
 
 module.exports = require("lodash");
+
+/***/ },
+
+/***/ "mime"
+/*!***********************!*\
+  !*** external "mime" ***!
+  \***********************/
+(module) {
+
+module.exports = require("mime");
+
+/***/ },
+
+/***/ "mime-types"
+/*!*****************************!*\
+  !*** external "mime-types" ***!
+  \*****************************/
+(module) {
+
+module.exports = require("mime-types");
 
 /***/ },
 
@@ -46494,6 +51113,16 @@ module.exports = require("path");
 
 /***/ },
 
+/***/ "stream"
+/*!*************************!*\
+  !*** external "stream" ***!
+  \*************************/
+(module) {
+
+module.exports = require("stream");
+
+/***/ },
+
 /***/ "url"
 /*!**********************!*\
   !*** external "url" ***!
@@ -46502,34 +51131,44 @@ module.exports = require("path");
 
 module.exports = require("url");
 
+/***/ },
+
+/***/ "util"
+/*!***********************!*\
+  !*** external "util" ***!
+  \***********************/
+(module) {
+
+module.exports = require("util");
+
 /***/ }
 
 /******/ 	});
 /************************************************************************/
 /******/ 	// The module cache
-/******/ 	const __webpack_module_cache__ = {};
+/******/ 	var __webpack_module_cache__ = {};
 /******/ 	
 /******/ 	// The require function
 /******/ 	function __webpack_require__(moduleId) {
 /******/ 		// Check if module is in cache
-/******/ 		const cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
 /******/ 		if (cachedModule !== undefined) {
 /******/ 			return cachedModule.exports;
 /******/ 		}
+/******/ 		// Check if module exists (development only)
+/******/ 		if (__webpack_modules__[moduleId] === undefined) {
+/******/ 			var e = new Error("Cannot find module '" + moduleId + "'");
+/******/ 			e.code = 'MODULE_NOT_FOUND';
+/******/ 			throw e;
+/******/ 		}
 /******/ 		// Create a new module (and put it into the cache)
-/******/ 		const module = __webpack_module_cache__[moduleId] = {
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
 /******/ 			// no module.id needed
 /******/ 			// no module.loaded needed
 /******/ 			exports: {}
 /******/ 		};
 /******/ 	
 /******/ 		// Execute the module function
-/******/ 		if (!(moduleId in __webpack_modules__)) {
-/******/ 			delete __webpack_module_cache__[moduleId];
-/******/ 			const e = new Error("Cannot find module '" + moduleId + "'");
-/******/ 			e.code = 'MODULE_NOT_FOUND';
-/******/ 			throw e;
-/******/ 		}
 /******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
 /******/ 	
 /******/ 		// Return the exports of the module
@@ -46541,8 +51180,8 @@ module.exports = require("url");
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	let __webpack_exports__ = __webpack_require__("./src/main.ts");
-/******/ 	const __webpack_export_target__ = exports;
+/******/ 	var __webpack_exports__ = __webpack_require__("./src/main.ts");
+/******/ 	var __webpack_export_target__ = exports;
 /******/ 	for(var __webpack_i__ in __webpack_exports__) __webpack_export_target__[__webpack_i__] = __webpack_exports__[__webpack_i__];
 /******/ 	if(__webpack_exports__.__esModule) Object.defineProperty(__webpack_export_target__, "__esModule", { value: true });
 /******/ 	

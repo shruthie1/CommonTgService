@@ -8,67 +8,77 @@ export declare class Event {
     payload: any;
     attempts: number;
 }
-export declare const EventSchema: MongooseSchema<Event, import("mongoose").Model<Event, any, any, any, any, any, Event>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Event, Document<unknown, {}, Event, {
-    id: string;
-}, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+export declare const EventSchema: MongooseSchema<Event, import("mongoose").Model<Event, any, any, any, (Document<unknown, any, Event, any, import("mongoose").DefaultSchemaOptions> & Event & {
     _id: import("mongoose").Types.ObjectId;
 } & {
     __v: number;
-}, "id"> & import("mongoose").HydratedDocumentOverrides<{
+} & {
     id: string;
-}>, {
+}) | (Document<unknown, any, Event, any, import("mongoose").DefaultSchemaOptions> & Event & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
+}), any, Event>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, Event, Document<unknown, {}, Event, {
+    id: string;
+}, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
+    _id: import("mongoose").Types.ObjectId;
+} & {
+    __v: number;
+}, "id"> & {
+    id: string;
+}, {
     chatId?: import("mongoose").SchemaDefinitionProperty<string, Event, Document<unknown, {}, Event, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     time?: import("mongoose").SchemaDefinitionProperty<number, Event, Document<unknown, {}, Event, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
-    type?: import("mongoose").SchemaDefinitionProperty<"call" | "message", Event, Document<unknown, {}, Event, {
+    }>;
+    type?: import("mongoose").SchemaDefinitionProperty<"message" | "call", Event, Document<unknown, {}, Event, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     clientId?: import("mongoose").SchemaDefinitionProperty<string, Event, Document<unknown, {}, Event, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     payload?: import("mongoose").SchemaDefinitionProperty<any, Event, Document<unknown, {}, Event, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
     attempts?: import("mongoose").SchemaDefinitionProperty<number, Event, Document<unknown, {}, Event, {
         id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<Event & {
+    }, import("mongoose").ResolveSchemaOptions<import("mongoose").DefaultSchemaOptions>> & Omit<Event & {
         _id: import("mongoose").Types.ObjectId;
     } & {
         __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+    }, "id"> & {
         id: string;
-    }>>;
+    }>;
 }, Event>;
