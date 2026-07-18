@@ -1,0 +1,32 @@
+import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { ActiveChannelsService, ClientService, Stat1Service, Stat2Service, UserDataService } from '../../components';
+import { AppService } from '../../app.service';
+import { RuntimeConfigService } from '../config/runtime-config.service';
+import { AccountMaintenanceService } from '../maintenance/account-maintenance.service';
+export declare class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
+    private readonly config;
+    private readonly appService;
+    private readonly maintenance;
+    private readonly clientService;
+    private readonly activeChannelsService;
+    private readonly userDataService;
+    private readonly stat1Service;
+    private readonly stat2Service;
+    private readonly logger;
+    private readonly jobs;
+    private readonly startupTimers;
+    private readonly owner;
+    constructor(config: RuntimeConfigService, appService: AppService, maintenance: AccountMaintenanceService, clientService: ClientService, activeChannelsService: ActiveChannelsService, userDataService: UserDataService, stat1Service: Stat1Service, stat2Service: Stat2Service);
+    onModuleInit(): void;
+    onModuleDestroy(): void;
+    private register;
+    private registerCmsJobs;
+    private registerMaintenanceJobs;
+    private afterStartup;
+    private enabled;
+    private istDateKey;
+    private isDailyResetRecoveryWindow;
+    private runDailyPromoteReset;
+    private resetPromoteStatsWithRetries;
+    private claimJob;
+}

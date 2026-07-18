@@ -30777,7 +30777,8 @@ let FileService = FileService_1 = class FileService {
             this.logger.log(`⬇️[${index} / ${Object.keys(files).length}] Starting download: ${key} `);
             try {
                 const head = await axios_1.default.head(url);
-                const contentType = head.headers['content-type'];
+                const contentTypeHeader = head.headers['content-type'];
+                const contentType = typeof contentTypeHeader === 'string' ? contentTypeHeader : '';
                 const ext = (0, helper_1.getFileExtension)(contentType, url);
                 const safeName = (0, helper_1.sanitizeFileName)(key);
                 const finalFileName = `${safeName}.${ext} `;

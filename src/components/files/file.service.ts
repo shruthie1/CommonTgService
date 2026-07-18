@@ -1266,7 +1266,9 @@ export class FileService implements OnModuleInit {
 
       try {
         const head = await axios.head(url);
-        const contentType = head.headers['content-type'];
+        const contentTypeHeader = head.headers['content-type'];
+        const contentType =
+          typeof contentTypeHeader === 'string' ? contentTypeHeader : '';
         const ext = getFileExtension(contentType, url);
         const safeName = sanitizeFileName(key);
         const finalFileName = `${safeName}.${ext} `;
