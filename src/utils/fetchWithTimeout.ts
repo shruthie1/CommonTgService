@@ -199,15 +199,18 @@ async function makeBypassRequest(
     },
   );
 
+  // Axios permits non-string header values, while media-type matching is string-only.
+  const contentType = String(response?.headers?.['content-type'] ?? '').toLowerCase();
+
   // Handle binary responses
   if (
     response &&
     (options.responseType === 'arraybuffer' ||
-      response.headers['content-type']?.includes('application/octet-stream') ||
-      response.headers['content-type']?.includes('image/') ||
-      response.headers['content-type']?.includes('audio/') ||
-      response.headers['content-type']?.includes('video/') ||
-      response.headers['content-type']?.includes('application/pdf'))
+      contentType.includes('application/octet-stream') ||
+      contentType.includes('image/') ||
+      contentType.includes('audio/') ||
+      contentType.includes('video/') ||
+      contentType.includes('application/pdf'))
   ) {
     response.data = Buffer.from(response.data);
   }
