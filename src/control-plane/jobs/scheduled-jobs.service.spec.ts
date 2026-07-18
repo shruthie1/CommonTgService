@@ -2,7 +2,13 @@ jest.mock('node-schedule-tz', () => ({
   scheduleJob: jest.fn(() => ({ cancel: jest.fn() })),
 }));
 
+jest.mock('../../utils', () => ({
+  ...jest.requireActual('../../utils'),
+  fetchWithTimeout: jest.fn().mockResolvedValue({ data: { ok: true } }),
+}));
+
 import * as schedule from 'node-schedule-tz';
+import { fetchWithTimeout } from '../../utils';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 
 const scheduleJob = schedule.scheduleJob as jest.Mock;
@@ -20,7 +26,10 @@ describe('ScheduledJobsService scheduler ownership', () => {
     else process.env.LOCAL_SERVER = originalLocalServer;
   });
 
-  function createService(enabled: string[]): ScheduledJobsService {
+  function createService(
+    enabled: string[],
+    connection: { db?: unknown } = { db: {} },
+  ): ScheduledJobsService {
     const config = {
       enabled: jest.fn((name: string) => enabled.includes(name)),
       activeSchedulers: jest.fn(() => enabled),
@@ -37,9 +46,8 @@ describe('ScheduledJobsService scheduler ownership', () => {
       } as any,
       { refreshMap: jest.fn() } as any,
       { resetWordRestrictions: jest.fn() } as any,
-      { resetPaidUsers: jest.fn() } as any,
       { deleteAll: jest.fn() } as any,
-      { deleteAll: jest.fn() } as any,
+      connection as any,
     );
   }
 
@@ -106,5 +114,51 @@ describe('ScheduledJobsService scheduler ownership', () => {
     expect(jobNames()).not.toContain('maintenance-daily-promote-stats-reset');
     expect(jobNames()).not.toContain('cms-buffer-ready-rotation');
     service.onModuleDestroy();
+  });
+
+  it('uses the injected Nest connection for the complete legacy promoteStats reset', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ matchedCount: 20, modifiedCount: 20 });
+    const promoteStats = {
+      find: jest.fn(() => ({
+        toArray: jest.fn().mockResolvedValue([{ client: 'ums', totalCount: 7 }]),
+      })),
+      updateMany,
+    };
+    const controlPlaneJobRuns = {
+      updateOne: jest
+        .fn()
+        .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 1 }),
+      insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+    };
+    const db = {
+      collection: jest.fn((name: string) => {
+        if (name === 'promoteStats') return promoteStats;
+        if (name === 'controlPlaneJobRuns') return controlPlaneJobRuns;
+        throw new Error(`Unexpected collection: ${name}`);
+      }),
+    };
+    const service = createService(['UMS_SCHEDULER'], { db });
+
+    await (service as any).runDailyPromoteReset();
+
+    expect(db.collection).toHaveBeenCalledWith('controlPlaneJobRuns');
+    expect(db.collection).toHaveBeenCalledWith('promoteStats');
+    expect(updateMany).toHaveBeenCalledWith(
+      {},
+      {
+        $set: expect.objectContaining({
+          totalCount: 0,
+          uniqueChannels: 0,
+          data: {},
+        }),
+      },
+    );
+    expect(controlPlaneJobRuns.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: expect.stringMatching(/^daily-promote-stats-reset:/),
+      }),
+    );
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
   });
 });

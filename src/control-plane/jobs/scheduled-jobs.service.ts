@@ -4,14 +4,14 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import mongoose from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
+import type { Connection } from 'mongoose';
+import type { Db } from 'mongodb';
 import * as schedule from 'node-schedule-tz';
 import {
   ActiveChannelsService,
   ClientService,
   Stat1Service,
-  Stat2Service,
-  UserDataService,
 } from '../../components';
 import { fetchWithTimeout, ppplbot } from '../../utils';
 import { AppService } from '../../app.service';
@@ -33,9 +33,11 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     private readonly maintenance: AccountMaintenanceService,
     private readonly clientService: ClientService,
     private readonly activeChannelsService: ActiveChannelsService,
-    private readonly userDataService: UserDataService,
     private readonly stat1Service: Stat1Service,
-    private readonly stat2Service: Stat2Service,
+    // Use Nest's configured connection. Importing the global mongoose singleton is
+    // unsafe in the bundled runtime: it can be a different module instance from
+    // the one MongooseModule connected, leaving scheduled jobs falsely "offline".
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   onModuleInit(): void {
@@ -252,11 +254,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async runDailyPromoteReset(): Promise<void> {
-    const db = mongoose.connection.db;
-    if (!db)
-      throw new Error(
-        'Mongo connection is unavailable for the daily promoteStats reset',
-      );
+    const db = this.requireDatabase('daily promoteStats reset');
 
     const jobId = `daily-promote-stats-reset:${this.istDateKey()}`;
     if (
@@ -335,8 +333,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     name: string,
     task: () => Promise<boolean>,
   ): Promise<void> {
-    const db = mongoose.connection.db;
-    if (!db) throw new Error(`Mongo connection is unavailable for ${name}`);
+    const db = this.requireDatabase(name);
 
     const collection = db.collection<any>('controlPlaneJobRuns');
     const jobId = `${name}:${this.istDateKey()}`;
@@ -388,9 +385,6 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        await this.userDataService.resetPaidUsers();
-        await this.stat1Service.deleteAll();
-        await this.stat2Service.deleteAll();
         const now = Date.now();
         return await promoteStats.updateMany(
           {},
@@ -414,6 +408,14 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       }
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private requireDatabase(jobName: string): Db {
+    const db = this.connection.db;
+    if (!db) {
+      throw new Error(`Mongo connection is unavailable for ${jobName}`);
+    }
+    return db;
   }
 
   private async claimJob(collection: any, jobId: string): Promise<boolean> {

@@ -41,14 +41,14 @@ var __importStar = (this && this.__importStar) || (function () {
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
 };
 var ScheduledJobsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ScheduledJobsService = void 0;
 const common_1 = require("@nestjs/common");
-const mongoose_1 = __importDefault(require("mongoose"));
+const mongoose_1 = require("@nestjs/mongoose");
 const schedule = __importStar(require("node-schedule-tz"));
 const components_1 = require("../../components");
 const utils_1 = require("../../utils");
@@ -57,15 +57,14 @@ const runtime_config_service_1 = require("../config/runtime-config.service");
 const account_maintenance_service_1 = require("../maintenance/account-maintenance.service");
 const IST = 'Asia/Kolkata';
 let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
-    constructor(config, appService, maintenance, clientService, activeChannelsService, userDataService, stat1Service, stat2Service) {
+    constructor(config, appService, maintenance, clientService, activeChannelsService, stat1Service, connection) {
         this.config = config;
         this.appService = appService;
         this.maintenance = maintenance;
         this.clientService = clientService;
         this.activeChannelsService = activeChannelsService;
-        this.userDataService = userDataService;
         this.stat1Service = stat1Service;
-        this.stat2Service = stat2Service;
+        this.connection = connection;
         this.logger = new common_1.Logger(ScheduledJobsService_1.name);
         this.jobs = [];
         this.startupTimers = [];
@@ -203,9 +202,7 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
         return minutes >= 25 && minutes < 60;
     }
     async runDailyPromoteReset() {
-        const db = mongoose_1.default.connection.db;
-        if (!db)
-            throw new Error('Mongo connection is unavailable for the daily promoteStats reset');
+        const db = this.requireDatabase('daily promoteStats reset');
         const jobId = `daily-promote-stats-reset:${this.istDateKey()}`;
         if (!(await this.claimJob(db.collection('controlPlaneJobRuns'), jobId))) {
             this.logger.warn(`Daily promoteStats reset already claimed or completed: ${jobId}`);
@@ -249,9 +246,7 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
         }
     }
     async runOncePerIstDay(name, task) {
-        const db = mongoose_1.default.connection.db;
-        if (!db)
-            throw new Error(`Mongo connection is unavailable for ${name}`);
+        const db = this.requireDatabase(name);
         const collection = db.collection('controlPlaneJobRuns');
         const jobId = `${name}:${this.istDateKey()}`;
         if (!(await this.claimJob(collection, jobId))) {
@@ -288,9 +283,6 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
         let lastError;
         for (let attempt = 1; attempt <= 3; attempt += 1) {
             try {
-                await this.userDataService.resetPaidUsers();
-                await this.stat1Service.deleteAll();
-                await this.stat2Service.deleteAll();
                 const now = Date.now();
                 return await promoteStats.updateMany({}, {
                     $set: {
@@ -310,6 +302,13 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
             }
         }
         throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
+    requireDatabase(jobName) {
+        const db = this.connection.db;
+        if (!db) {
+            throw new Error(`Mongo connection is unavailable for ${jobName}`);
+        }
+        return db;
     }
     async claimJob(collection, jobId) {
         const now = new Date();
@@ -343,13 +342,12 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
 exports.ScheduledJobsService = ScheduledJobsService;
 exports.ScheduledJobsService = ScheduledJobsService = ScheduledJobsService_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(6, (0, mongoose_1.InjectConnection)()),
     __metadata("design:paramtypes", [runtime_config_service_1.RuntimeConfigService,
         app_service_1.AppService,
         account_maintenance_service_1.AccountMaintenanceService,
         components_1.ClientService,
         components_1.ActiveChannelsService,
-        components_1.UserDataService,
-        components_1.Stat1Service,
-        components_1.Stat2Service])
+        components_1.Stat1Service, Function])
 ], ScheduledJobsService);
 //# sourceMappingURL=scheduled-jobs.service.js.map
