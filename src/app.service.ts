@@ -577,7 +577,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       ChannelCategory.WEB_TELEMETRY,
       bounded,
       { parseMode: 'HTML' },
-      false,
     );
     return { ok: Boolean(sent) };
   }
