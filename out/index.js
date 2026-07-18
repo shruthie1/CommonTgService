@@ -47937,6 +47937,9 @@ function renderStatusDashboardDocument(content) {
           * { box-sizing: border-box; }
           body { margin: 0; min-width: 320px; background: #111827; color: #f8fafc; }
           .dashboard { width: min(1120px, 100%); margin: 0 auto; padding: 24px 16px 40px; }
+          .pull-indicator { position: fixed; z-index: 10; top: 5px; left: 50%; transform: translate(-50%, -130%); border: 1px solid #475569; border-radius: 999px; padding: 5px 10px; background: #172033; color: #cbd5e1; font-size: 11px; font-weight: 800; opacity: 0; pointer-events: none; transition: transform .16s ease, opacity .16s ease, color .16s ease, border-color .16s ease; }
+          .pull-indicator.is-visible { transform: translate(-50%, 0); opacity: 1; }
+          .pull-indicator.is-ready { border-color: #22d3ee; color: #67e8f9; }
           .dashboard-header { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 20px; }
           h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
           .refresh-button { display: grid; width: 52px; height: 36px; place-items: center; border: 1px solid #475569; border-radius: 10px; padding: 0; background: #1e293b; color: #67e8f9; font-size: 24px; line-height: 1; cursor: pointer; }
@@ -47979,6 +47982,7 @@ function renderStatusDashboardDocument(content) {
           @media (max-width: 680px) {
             body { overflow: hidden; }
             .dashboard { height: 100dvh; padding: 7px; overflow: hidden; }
+            .pull-indicator { padding: 3px 8px; font-size: 9px; }
             .dashboard-header { margin: 0 0 5px; }
             h1 { font-size: 18px; }
             .refresh-button { width: 40px; height: 25px; border-radius: 7px; font-size: 18px; }
@@ -48005,6 +48009,7 @@ function renderStatusDashboardDocument(content) {
         </style>
       </head>
       <body>
+        <div class="pull-indicator" id="pull-indicator" aria-live="polite">↓ Pull to refresh</div>
         ${content}
         <script>
           setInterval(() => window.location.reload(), 20000);
@@ -48015,18 +48020,29 @@ function renderStatusDashboardDocument(content) {
             window.location.reload();
           };
           document.querySelector('.refresh-button').addEventListener('click', refreshStatus);
+          const pullIndicator = document.getElementById('pull-indicator');
           let touchStartY = 0;
+          let pullDistance = 0;
+          const updatePullIndicator = (distance) => {
+            pullDistance = Math.max(0, distance);
+            const isVisible = pullDistance > 12;
+            const isReady = pullDistance > 55;
+            pullIndicator.classList.toggle('is-visible', isVisible);
+            pullIndicator.classList.toggle('is-ready', isReady);
+            pullIndicator.textContent = isReady ? '↻ Release to refresh' : '↓ Pull to refresh';
+          };
           document.addEventListener('touchstart', (event) => {
             touchStartY = event.touches[0].clientY;
           }, { passive: true });
           document.addEventListener('touchmove', (event) => {
-            const pullDistance = event.touches[0].clientY - touchStartY;
-            if (pullDistance > 55 && window.scrollY === 0) refreshStatus();
+            if (window.scrollY === 0) updatePullIndicator(event.touches[0].clientY - touchStartY);
           }, { passive: true });
           document.addEventListener('touchend', (event) => {
-            const pullDistance = event.changedTouches[0].clientY - touchStartY;
-            if (pullDistance > 55 && window.scrollY === 0) refreshStatus();
+            const shouldRefresh = pullDistance > 55 && window.scrollY === 0;
+            updatePullIndicator(0);
+            if (shouldRefresh) refreshStatus();
           }, { passive: true });
+          document.addEventListener('touchcancel', () => updatePullIndicator(0), { passive: true });
         </script>
       </body>
     </html>`;
