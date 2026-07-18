@@ -883,7 +883,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     return `<main class="dashboard">
         <header class="dashboard-header">
           <h1>Status</h1>
-          <button class="refresh-button" type="button" aria-label="Refresh status" title="Refresh">↻</button>
         </header>
         <section class="dashboard-card dashboard-overview">
           <div class="overview-table" role="table" aria-label="Demo and full-show status">
@@ -906,6 +905,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           </div>
         </section>
         ${promotionStats.summary}
+        <button class="refresh-button" type="button" aria-label="Refresh status" title="Refresh">↻</button>
       </main>`;
   }
 
