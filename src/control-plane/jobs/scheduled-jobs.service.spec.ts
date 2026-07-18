@@ -8,6 +8,8 @@ jest.mock('../../utils', () => ({
 }));
 
 import * as schedule from 'node-schedule-tz';
+import mongoose from 'mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { fetchWithTimeout } from '../../utils';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 
@@ -19,6 +21,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
   beforeEach(() => {
     process.env.LOCAL_SERVER = 'true';
     scheduleJob.mockClear();
+    (fetchWithTimeout as jest.Mock).mockClear();
   });
 
   afterAll(() => {
@@ -160,5 +163,44 @@ describe('ScheduledJobsService scheduler ownership', () => {
       }),
     );
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('executes the reset through a real Mongoose Connection.db', async () => {
+    jest.setTimeout(60_000);
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-test' })
+      .asPromise();
+
+    try {
+      await connection.db.collection('promoteStats').insertMany([
+        { client: 'ums', totalCount: 7, uniqueChannels: 4, data: { channel: 1 } },
+        { client: 'ums-test', totalCount: 2, uniqueChannels: 1, data: { channel: 1 } },
+      ]);
+      const service = createService(['UMS_SCHEDULER'], connection);
+
+      await (service as any).runDailyPromoteReset();
+
+      const stats = await connection.db.collection('promoteStats').find({}).toArray();
+      expect(stats).toHaveLength(2);
+      expect(stats).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ totalCount: 0, uniqueChannels: 0, data: {} }),
+        expect.objectContaining({ totalCount: 0, uniqueChannels: 0, data: {} }),
+        ]),
+      );
+      const runs = (await connection.db
+        .collection('controlPlaneJobRuns')
+        .find({})
+        .toArray()).filter((run) =>
+        String(run._id).startsWith('daily-promote-stats-reset:'),
+      );
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toEqual(expect.objectContaining({ completedAt: expect.any(Date) }));
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
   });
 });
