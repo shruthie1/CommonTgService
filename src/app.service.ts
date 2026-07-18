@@ -862,7 +862,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     );
     let reply = '';
     for (const [profile, userData] of profileDataArray) {
-      reply += `${profile.toUpperCase()} : <b>${(userData as any).totalpendingDemos}</b> | ${(userData as any).names}<br>`;
+      reply += this.renderDashboardRow(
+        profile,
+        (userData as any).totalpendingDemos,
+        (userData as any).names,
+      );
     }
 
     profileDataArray.sort(
@@ -870,28 +874,71 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     );
     let reply2 = '';
     for (const [profile, userData] of profileDataArray) {
-      reply2 += `${profile.toUpperCase()} : <b>${(userData as any).fullShowPPl}</b> |${(userData as any).fullShowNames}<br>`;
+      reply2 += this.renderDashboardRow(
+        profile,
+        (userData as any).fullShowPPl,
+        (userData as any).fullShowNames,
+      );
     }
 
     const reply3 = await this.getPromotionStats();
-    console.log(reply3);
 
-    return `<div style="font-family: system-ui, sans-serif; line-height: 1.45; padding: 16px;">
-        <div style="display: flex; gap: 32px; margin-bottom: 32px; align-items: flex-start;">
-          <div style="flex: 1; min-width: 0;">${reply}</div>
-          <div style="flex: 1; min-width: 0;">${reply2}</div>
+    return `<main class="dashboard">
+        <header class="dashboard-header">
+          <p class="dashboard-eyebrow">Live overview</p>
+          <h1>UMS dashboard</h1>
+          <p class="dashboard-subtitle">Refreshes automatically every 20 seconds</p>
+        </header>
+        <div class="dashboard-grid">
+          <section class="dashboard-card">
+            <h2>Pending demos</h2>
+            <div class="metric-list">${reply}</div>
+          </section>
+          <section class="dashboard-card">
+            <h2>Full-show users</h2>
+            <div class="metric-list">${reply2}</div>
+          </section>
         </div>
-        <div>${reply3}</div>
-      </div>`;
+        <section class="dashboard-card dashboard-card-wide">
+          <h2>Promotion stats</h2>
+          <div class="metric-list">${reply3}</div>
+        </section>
+      </main>`;
   }
 
   async getPromotionStats(): Promise<string> {
     let resp = '';
     const result = await this.promoteStatService.findAll();
     for (const data of result) {
-      resp += `${data.client.toUpperCase()} : <b>${data.totalCount}</b>${data.totalCount > 0 ? ` | ${Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)}` : ''}<br>`;
+      const minutes = data.totalCount > 0
+        ? Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)
+        : '';
+      resp += this.renderDashboardRow(data.client, data.totalCount, minutes ? `${minutes} min ago` : '');
     }
     return resp;
+  }
+
+  private renderDashboardRow(
+    label: unknown,
+    count: unknown,
+    details: unknown,
+  ): string {
+    const safeDetails = this.escapeDashboardHtml(details).trim();
+    return `<div class="metric-row">
+      <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
+      <strong class="metric-value">${this.escapeDashboardHtml(count)}</strong>
+      ${safeDetails ? `<span class="metric-detail">${safeDetails}</span>` : ''}
+    </div>`;
+  }
+
+  private escapeDashboardHtml(value: unknown): string {
+    return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;',
+    })[character] || character);
   }
 
   async checkAndRefresh() {

@@ -713,7 +713,32 @@ let AppController = AppController_1 = class AppController {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(`<!doctype html>
       <html>
-        <head><title>UMS dashboard</title></head>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <meta name="theme-color" content="#111827">
+          <title>UMS dashboard</title>
+          <style>
+            :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+            * { box-sizing: border-box; }
+            body { margin: 0; min-width: 320px; background: #111827; color: #f8fafc; }
+            .dashboard { width: min(1120px, 100%); margin: 0 auto; padding: 24px 16px 40px; }
+            .dashboard-header { margin: 4px 0 20px; }
+            .dashboard-eyebrow { margin: 0 0 6px; color: #67e8f9; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+            h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
+            .dashboard-subtitle { margin: 8px 0 0; color: #94a3b8; font-size: 14px; }
+            .dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+            .dashboard-card { overflow: hidden; border: 1px solid #334155; border-radius: 16px; background: #1e293b; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); }
+            .dashboard-card-wide { margin-top: 16px; }
+            h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #334155; background: #26354b; color: #e0f2fe; font-size: 15px; }
+            .metric-list { padding: 4px 0; }
+            .metric-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid rgba(148, 163, 184, .16); }
+            .metric-row:last-child { border-bottom: 0; }
+            .metric-label { min-width: 0; overflow-wrap: anywhere; color: #e2e8f0; font-size: 14px; font-weight: 700; }
+            .metric-value { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
+            .metric-detail { grid-column: 1 / -1; overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.45; }
+            @media (max-width: 680px) { .dashboard { padding: 16px 12px 28px; } .dashboard-grid { grid-template-columns: 1fr; } .dashboard-card-wide { margin-top: 16px; } .metric-row { padding: 12px 14px; } }
+          </style>
+        </head>
         <body>
           ${data}
           <script>
@@ -1860,30 +1885,63 @@ let AppService = AppService_1 = class AppService {
         profileDataArray.sort((a, b) => b[1].totalpendingDemos - a[1].totalpendingDemos);
         let reply = '';
         for (const [profile, userData] of profileDataArray) {
-            reply += `${profile.toUpperCase()} : <b>${userData.totalpendingDemos}</b> | ${userData.names}<br>`;
+            reply += this.renderDashboardRow(profile, userData.totalpendingDemos, userData.names);
         }
         profileDataArray.sort((a, b) => b[1].fullShowPPl - a[1].fullShowPPl);
         let reply2 = '';
         for (const [profile, userData] of profileDataArray) {
-            reply2 += `${profile.toUpperCase()} : <b>${userData.fullShowPPl}</b> |${userData.fullShowNames}<br>`;
+            reply2 += this.renderDashboardRow(profile, userData.fullShowPPl, userData.fullShowNames);
         }
         const reply3 = await this.getPromotionStats();
-        console.log(reply3);
-        return `<div style="font-family: system-ui, sans-serif; line-height: 1.45; padding: 16px;">
-        <div style="display: flex; gap: 32px; margin-bottom: 32px; align-items: flex-start;">
-          <div style="flex: 1; min-width: 0;">${reply}</div>
-          <div style="flex: 1; min-width: 0;">${reply2}</div>
+        return `<main class="dashboard">
+        <header class="dashboard-header">
+          <p class="dashboard-eyebrow">Live overview</p>
+          <h1>UMS dashboard</h1>
+          <p class="dashboard-subtitle">Refreshes automatically every 20 seconds</p>
+        </header>
+        <div class="dashboard-grid">
+          <section class="dashboard-card">
+            <h2>Pending demos</h2>
+            <div class="metric-list">${reply}</div>
+          </section>
+          <section class="dashboard-card">
+            <h2>Full-show users</h2>
+            <div class="metric-list">${reply2}</div>
+          </section>
         </div>
-        <div>${reply3}</div>
-      </div>`;
+        <section class="dashboard-card dashboard-card-wide">
+          <h2>Promotion stats</h2>
+          <div class="metric-list">${reply3}</div>
+        </section>
+      </main>`;
     }
     async getPromotionStats() {
         let resp = '';
         const result = await this.promoteStatService.findAll();
         for (const data of result) {
-            resp += `${data.client.toUpperCase()} : <b>${data.totalCount}</b>${data.totalCount > 0 ? ` | ${Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)}` : ''}<br>`;
+            const minutes = data.totalCount > 0
+                ? Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)
+                : '';
+            resp += this.renderDashboardRow(data.client, data.totalCount, minutes ? `${minutes} min ago` : '');
         }
         return resp;
+    }
+    renderDashboardRow(label, count, details) {
+        const safeDetails = this.escapeDashboardHtml(details).trim();
+        return `<div class="metric-row">
+      <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
+      <strong class="metric-value">${this.escapeDashboardHtml(count)}</strong>
+      ${safeDetails ? `<span class="metric-detail">${safeDetails}</span>` : ''}
+    </div>`;
+    }
+    escapeDashboardHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;',
+        })[character] || character);
     }
     async checkAndRefresh() {
         if (Date.now() > this.refresTime) {

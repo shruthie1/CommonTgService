@@ -661,30 +661,63 @@ let AppService = AppService_1 = class AppService {
         profileDataArray.sort((a, b) => b[1].totalpendingDemos - a[1].totalpendingDemos);
         let reply = '';
         for (const [profile, userData] of profileDataArray) {
-            reply += `${profile.toUpperCase()} : <b>${userData.totalpendingDemos}</b> | ${userData.names}<br>`;
+            reply += this.renderDashboardRow(profile, userData.totalpendingDemos, userData.names);
         }
         profileDataArray.sort((a, b) => b[1].fullShowPPl - a[1].fullShowPPl);
         let reply2 = '';
         for (const [profile, userData] of profileDataArray) {
-            reply2 += `${profile.toUpperCase()} : <b>${userData.fullShowPPl}</b> |${userData.fullShowNames}<br>`;
+            reply2 += this.renderDashboardRow(profile, userData.fullShowPPl, userData.fullShowNames);
         }
         const reply3 = await this.getPromotionStats();
-        console.log(reply3);
-        return `<div style="font-family: system-ui, sans-serif; line-height: 1.45; padding: 16px;">
-        <div style="display: flex; gap: 32px; margin-bottom: 32px; align-items: flex-start;">
-          <div style="flex: 1; min-width: 0;">${reply}</div>
-          <div style="flex: 1; min-width: 0;">${reply2}</div>
+        return `<main class="dashboard">
+        <header class="dashboard-header">
+          <p class="dashboard-eyebrow">Live overview</p>
+          <h1>UMS dashboard</h1>
+          <p class="dashboard-subtitle">Refreshes automatically every 20 seconds</p>
+        </header>
+        <div class="dashboard-grid">
+          <section class="dashboard-card">
+            <h2>Pending demos</h2>
+            <div class="metric-list">${reply}</div>
+          </section>
+          <section class="dashboard-card">
+            <h2>Full-show users</h2>
+            <div class="metric-list">${reply2}</div>
+          </section>
         </div>
-        <div>${reply3}</div>
-      </div>`;
+        <section class="dashboard-card dashboard-card-wide">
+          <h2>Promotion stats</h2>
+          <div class="metric-list">${reply3}</div>
+        </section>
+      </main>`;
     }
     async getPromotionStats() {
         let resp = '';
         const result = await this.promoteStatService.findAll();
         for (const data of result) {
-            resp += `${data.client.toUpperCase()} : <b>${data.totalCount}</b>${data.totalCount > 0 ? ` | ${Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)}` : ''}<br>`;
+            const minutes = data.totalCount > 0
+                ? Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)
+                : '';
+            resp += this.renderDashboardRow(data.client, data.totalCount, minutes ? `${minutes} min ago` : '');
         }
         return resp;
+    }
+    renderDashboardRow(label, count, details) {
+        const safeDetails = this.escapeDashboardHtml(details).trim();
+        return `<div class="metric-row">
+      <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
+      <strong class="metric-value">${this.escapeDashboardHtml(count)}</strong>
+      ${safeDetails ? `<span class="metric-detail">${safeDetails}</span>` : ''}
+    </div>`;
+    }
+    escapeDashboardHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            "'": '&#39;',
+            '"': '&quot;',
+        })[character] || character);
     }
     async checkAndRefresh() {
         if (Date.now() > this.refresTime) {
