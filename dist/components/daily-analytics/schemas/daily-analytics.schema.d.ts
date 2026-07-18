@@ -1,7 +1,9 @@
 import { HydratedDocument } from 'mongoose';
 export declare class PromoteStatDaily {
     date: string;
+    namespace?: string;
     clientId: string;
+    mobile?: string;
     profile?: string;
     sent?: number;
     success?: number;
@@ -28,7 +30,25 @@ export declare const PromoteStatDailySchema: import("mongoose").Schema<PromoteSt
     }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
     }>>;
+    namespace?: import("mongoose").SchemaDefinitionProperty<string, PromoteStatDaily, import("mongoose").Document<unknown, {}, PromoteStatDaily, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<PromoteStatDaily & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
     clientId?: import("mongoose").SchemaDefinitionProperty<string, PromoteStatDaily, import("mongoose").Document<unknown, {}, PromoteStatDaily, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<PromoteStatDaily & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    mobile?: import("mongoose").SchemaDefinitionProperty<string, PromoteStatDaily, import("mongoose").Document<unknown, {}, PromoteStatDaily, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<PromoteStatDaily & {
         _id: import("mongoose").Types.ObjectId;
@@ -94,7 +114,9 @@ export declare const PromoteStatDailySchema: import("mongoose").Schema<PromoteSt
 }, PromoteStatDaily>;
 export declare class ReactionStatDaily {
     date: string;
+    namespace?: string;
     clientId: string;
+    mobile?: string;
     profile?: string;
     success?: number;
     failed?: number;
@@ -121,7 +143,25 @@ export declare const ReactionStatDailySchema: import("mongoose").Schema<Reaction
     }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
     }>>;
+    namespace?: import("mongoose").SchemaDefinitionProperty<string, ReactionStatDaily, import("mongoose").Document<unknown, {}, ReactionStatDaily, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<ReactionStatDaily & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
     clientId?: import("mongoose").SchemaDefinitionProperty<string, ReactionStatDaily, import("mongoose").Document<unknown, {}, ReactionStatDaily, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<ReactionStatDaily & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    mobile?: import("mongoose").SchemaDefinitionProperty<string, ReactionStatDaily, import("mongoose").Document<unknown, {}, ReactionStatDaily, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<ReactionStatDaily & {
         _id: import("mongoose").Types.ObjectId;
@@ -187,7 +227,9 @@ export declare const ReactionStatDailySchema: import("mongoose").Schema<Reaction
 }, ReactionStatDaily>;
 export declare class UserStatDaily {
     date: string;
+    namespace?: string;
     clientId: string;
+    mobile?: string;
     profile?: string;
     newUsers?: number;
     active?: number;
@@ -214,7 +256,25 @@ export declare const UserStatDailySchema: import("mongoose").Schema<UserStatDail
     }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
     }>>;
+    namespace?: import("mongoose").SchemaDefinitionProperty<string, UserStatDaily, import("mongoose").Document<unknown, {}, UserStatDaily, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<UserStatDaily & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
     clientId?: import("mongoose").SchemaDefinitionProperty<string, UserStatDaily, import("mongoose").Document<unknown, {}, UserStatDaily, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<UserStatDaily & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    mobile?: import("mongoose").SchemaDefinitionProperty<string, UserStatDaily, import("mongoose").Document<unknown, {}, UserStatDaily, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<UserStatDaily & {
         _id: import("mongoose").Types.ObjectId;

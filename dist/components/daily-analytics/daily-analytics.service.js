@@ -46,11 +46,15 @@ let DailyAnalyticsService = class DailyAnalyticsService {
         }
         return out;
     }
-    async rows(metric, days = 14, clientId) {
+    async rows(metric, days = 14, clientId, namespace, mobile) {
         const dates = this.lastNDates(days);
         const filter = { date: { $in: dates } };
         if (clientId)
             filter.clientId = clientId;
+        if (namespace)
+            filter.namespace = namespace;
+        if (mobile)
+            filter.mobile = mobile;
         return this.modelFor(metric)
             .find(filter, { _id: 0, expireAt: 0, createdAt: 0 })
             .sort({ date: 1, clientId: 1 })
@@ -75,17 +79,45 @@ let DailyAnalyticsService = class DailyAnalyticsService {
             return out;
         });
     }
-    async byClient(metric, days = 14) {
+    async byClient(metric, days = 14, namespace) {
         const dates = this.lastNDates(days);
         const fields = this.numericFields(metric);
+        const match = { date: { $in: dates } };
+        if (namespace)
+            match.namespace = namespace;
         const group = { _id: '$clientId' };
         for (const f of fields)
             group[f] = { $sum: `$${f}` };
         const agg = await this.modelFor(metric)
-            .aggregate([{ $match: { date: { $in: dates } } }, { $group: group }, { $sort: { _id: 1 } }])
+            .aggregate([{ $match: match }, { $group: group }, { $sort: { _id: 1 } }])
             .exec();
         return agg.map((d) => {
             const out = { clientId: d._id };
+            for (const f of fields)
+                out[f] = d[f] || 0;
+            return out;
+        });
+    }
+    async byMobile(metric, days = 14, clientId, namespace) {
+        const dates = this.lastNDates(days);
+        const fields = this.numericFields(metric);
+        const match = { date: { $in: dates } };
+        if (clientId)
+            match.clientId = clientId;
+        if (namespace)
+            match.namespace = namespace;
+        const group = { _id: { clientId: '$clientId', mobile: '$mobile' } };
+        for (const f of fields)
+            group[f] = { $sum: `$${f}` };
+        const agg = await this.modelFor(metric)
+            .aggregate([
+            { $match: match },
+            { $group: group },
+            { $sort: { '_id.clientId': 1, '_id.mobile': 1 } },
+        ])
+            .exec();
+        return agg.map((d) => {
+            const out = { clientId: d._id.clientId, mobile: d._id.mobile };
             for (const f of fields)
                 out[f] = d[f] || 0;
             return out;

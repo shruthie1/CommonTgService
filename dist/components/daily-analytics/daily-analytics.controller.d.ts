@@ -9,6 +9,7 @@ export declare class DailyAnalyticsController {
         user: Record<string, unknown>[];
     }>;
     daily(metric: string, days?: string): Promise<Record<string, unknown>[]>;
-    byClient(metric: string, days?: string): Promise<Record<string, unknown>[]>;
-    rows(metric: string, days?: string, clientId?: string): Promise<any[]>;
+    byClient(metric: string, days?: string, namespace?: string): Promise<Record<string, unknown>[]>;
+    byMobile(metric: string, days?: string, clientId?: string, namespace?: string): Promise<Record<string, unknown>[]>;
+    rows(metric: string, days?: string, clientId?: string, namespace?: string, mobile?: string): Promise<any[]>;
 }
