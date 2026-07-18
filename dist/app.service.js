@@ -84,11 +84,13 @@ let AppService = AppService_1 = class AppService {
     onModuleInit() {
         console.log('App Module initiated !!');
         if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
+            this.logger.log('Starting UMS access-data cleanup interval (every 15 minutes)');
             this.cleanupInterval = setInterval(() => this.cleanupOldAccessData(), 15 * 60 * 1000);
         }
         try {
             if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
                 const channelJoinJob = schedule.scheduleJob('ums-channel-join-cycle', '25 2,9,16 * * * ', 'Asia/Kolkata', async () => {
+                    this.logger.log('Starting UMS primary-client channel join/leave cycle');
                     try {
                         await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=ExecutingjoinchannelForClients-${process.env.clientId}`);
                     }
@@ -97,11 +99,14 @@ let AppService = AppService_1 = class AppService {
                     }
                     try {
                         if (new Date().getUTCDate() % 3 === 1) {
+                            this.logger.log('UMS channel cycle branch=leave-all');
                             await this.leaveChannelsAll();
                         }
                         else {
+                            this.logger.log('UMS channel cycle branch=join');
                             await this.joinchannelForClients();
                         }
+                        this.logger.log('Completed UMS primary-client channel join/leave cycle');
                     }
                     catch (error) {
                         (0, utils_1.parseError)(error, 'UMS scheduled channel join failed');
@@ -112,10 +117,12 @@ let AppService = AppService_1 = class AppService {
             }
             if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
                 const retentionJob = schedule.scheduleJob('ums-user-data-retention', '0 3 * * * ', 'Asia/Kolkata', async () => {
+                    this.logger.log('Starting UMS user-data/timestamp retention');
                     try {
                         const res = await this.userDataService.removeRedundantData();
                         await this.timestampService.clear();
                         console.log('Deleted userdata older than month | count: ', res.deletedCount);
+                        this.logger.log(`Completed UMS user-data/timestamp retention: deleted=${res.deletedCount}`);
                     }
                     catch (e) {
                         console.error('Error Deleteing old userData', e);
@@ -135,6 +142,9 @@ let AppService = AppService_1 = class AppService {
     }
     async checkBufferClients() {
         await this.bufferClientService.checkBufferClients();
+    }
+    async rotateReadyBufferClients() {
+        return this.bufferClientService.rotateReadyBufferClients();
     }
     async joinBufferClients() {
         await this.bufferClientService.joinchannelForBufferClients();

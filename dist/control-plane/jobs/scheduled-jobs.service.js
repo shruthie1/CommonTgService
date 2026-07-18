@@ -72,8 +72,14 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
         this.owner = `${process.env.HOSTNAME || 'control-plane'}:${process.pid}`;
     }
     onModuleInit() {
+        const owners = this.config.activeSchedulers();
+        this.logger.log(owners.length
+            ? `Scheduler owner enabled: ${owners[0]}`
+            : 'No scheduler owner enabled; API-only control-plane process');
         this.registerCmsJobs();
-        this.registerMaintenanceJobs();
+        this.registerUmsJobs();
+        this.registerUmsTestJobs();
+        this.logger.log(`Scheduler registration complete: ${this.jobs.length} jobs`);
     }
     onModuleDestroy() {
         for (const job of this.jobs)
@@ -95,47 +101,80 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
         if (!job)
             throw new Error(`Unable to register scheduled job ${name}`);
         this.jobs.push(job);
+        this.logger.log(`Registered scheduled job: ${name} (${cron}, ${IST})`);
     }
     registerCmsJobs() {
         if (!this.config.enabled('CMS_SCHEDULER'))
             return;
         this.register('cms-buffer-check', '25 2 * * *', () => this.appService.checkBufferClients());
+        this.register('cms-buffer-ready-rotation', '45 * * * *', () => this.runOncePerIstDay('cms-buffer-ready-rotation', () => this.appService.rotateReadyBufferClients()));
         this.register('cms-buffer-join', '0 */3 * * *', () => this.appService.joinBufferClients());
         this.register('cms-buffer-info-refresh', '25 0 * * *', async () => {
             if (new Date().getUTCDate() % 5 === 0)
                 await this.appService.updateBufferClientInfo();
         });
         if (!this.enabled('LOCAL_SERVER')) {
-            this.afterStartup(60_000, () => this.appService.joinBufferClients());
+            this.afterStartup('cms-buffer-initial-join', 60_000, () => this.appService.joinBufferClients());
         }
     }
-    registerMaintenanceJobs() {
+    registerUmsJobs() {
+        if (!this.config.enabled('UMS_SCHEDULER'))
+            return;
+        this.register('maintenance-promote-client-check', '35 16 * * *', () => this.maintenance.checkPromoteClients());
+        this.register('maintenance-promote-client-join', '20 */3 * * *', async () => {
+            await this.maintenance.preparePromoteClientJoin();
+        });
+        this.register('maintenance-promote-info-refresh', '25 0 * * *', async () => {
+            if (new Date().getUTCDate() % 4 === 0) {
+                try {
+                    await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Updating Promote Clients Info`);
+                }
+                catch (error) {
+                    this.logger.error('UMS promote-info notification failed; continuing update', error instanceof Error ? error.stack : String(error));
+                }
+                await this.maintenance.refreshPromoteClientInfo();
+            }
+        });
+        this.register('maintenance-promote-ready-rotation', '55 * * * *', () => this.runOncePerIstDay('maintenance-promote-ready-rotation', () => this.maintenance.rotateReadyPromoteClients()));
+        this.afterStartup('ums-promote-initial-join', 4 * 60_000, () => this.maintenance.preparePromoteClientJoin());
+        this.register('maintenance-daily-promote-stats-reset', '25 0 * * *', () => this.runDailyPromoteReset());
+        this.register('maintenance-daily-promote-stats-reset-recovery', '30,45 0 * * *', () => this.runDailyPromoteReset());
+        if (this.isDailyResetRecoveryWindow()) {
+            this.afterStartup('ums-daily-promote-reset-recovery', 15_000, () => this.runDailyPromoteReset());
+        }
+    }
+    registerUmsTestJobs() {
         if (!this.config.enabled('UMS_TEST_SCHEDULER'))
             return;
+        this.register('maintenance-process-users', '0 */3 * * *', async () => {
+            await this.maintenance.processEligibleUsers(400, 0);
+        });
         this.register('maintenance-refresh-map-and-stat1', '0 * * * *', async () => {
             await this.clientService.refreshMap();
             await this.stat1Service.deleteAll();
         });
-        this.register('maintenance-process-users', '0 */3 * * *', async () => {
-            await this.maintenance.processEligibleUsers(400, 0);
-        });
-        this.register('maintenance-promote-client-check', '35 16 * * *', () => this.maintenance.checkPromoteClients());
         this.register('maintenance-active-channel-word-restrictions', '25 0 * * *', async () => {
-            if (new Date().getUTCDate() % 9 !== 0)
+            const utcDay = new Date().getUTCDate();
+            if (utcDay % 7 === 0) {
+                this.logger.log('UMS-test maintenance branch=day-mod-7');
+                await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Resetting Banned Channels`);
+                setTimeout(async () => {
+                }, 30_000);
+            }
+            if (utcDay % 9 !== 0)
                 return;
+            this.logger.log('UMS-test maintenance branch=day-mod-9-word-restrictions');
             await new Promise((resolve) => setTimeout(resolve, 30_000));
             await this.activeChannelsService.resetWordRestrictions();
         });
-        this.register('maintenance-daily-promote-stats-reset', '25 0 * * *', () => this.runDailyPromoteReset());
-        this.register('maintenance-daily-promote-stats-reset-recovery', '30,45 0 * * *', () => this.runDailyPromoteReset());
-        if (this.isDailyResetRecoveryWindow()) {
-            this.afterStartup(15_000, () => this.runDailyPromoteReset());
-        }
-        this.afterStartup(120_000, () => this.maintenance.processEligibleUsers(400, 0));
+        this.afterStartup('ums-test-initial-user-processing', 120_000, () => this.maintenance.processEligibleUsers(400, 0));
     }
-    afterStartup(delayMs, task) {
+    afterStartup(name, delayMs, task) {
         const timer = setTimeout(() => {
-            task().catch((error) => this.logger.error('Startup task failed', error instanceof Error ? error.stack : String(error)));
+            this.logger.log(`Starting startup task: ${name}`);
+            task()
+                .then(() => this.logger.log(`Completed startup task: ${name}`))
+                .catch((error) => this.logger.error(`Startup task failed: ${name}`, error instanceof Error ? error.stack : String(error)));
         }, delayMs);
         this.startupTimers.push(timer);
     }
@@ -207,6 +246,42 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
         }
         catch (error) {
             this.logger.error('Daily promoteStats reset completed, but its notification failed', error instanceof Error ? error.stack : String(error));
+        }
+    }
+    async runOncePerIstDay(name, task) {
+        const db = mongoose_1.default.connection.db;
+        if (!db)
+            throw new Error(`Mongo connection is unavailable for ${name}`);
+        const collection = db.collection('controlPlaneJobRuns');
+        const jobId = `${name}:${this.istDateKey()}`;
+        if (!(await this.claimJob(collection, jobId))) {
+            this.logger.warn(`Daily job already claimed or completed: ${jobId}`);
+            return;
+        }
+        try {
+            const attempted = await task();
+            if (!attempted) {
+                await collection.updateOne({ _id: jobId }, {
+                    $set: { deferredAt: new Date(), leaseExpiresAt: new Date(0) },
+                    $unset: { leaseOwner: '' },
+                });
+                return;
+            }
+            await collection.updateOne({ _id: jobId }, {
+                $set: { completedAt: new Date() },
+                $unset: { leaseOwner: '', leaseExpiresAt: '' },
+            });
+        }
+        catch (error) {
+            await collection.updateOne({ _id: jobId }, {
+                $set: {
+                    completedAt: new Date(),
+                    failedAt: new Date(),
+                    error: error instanceof Error ? error.message : String(error),
+                },
+                $unset: { leaseOwner: '', leaseExpiresAt: '' },
+            });
+            throw error;
         }
     }
     async resetPromoteStatsWithRetries(promoteStats) {

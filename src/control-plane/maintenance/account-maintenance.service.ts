@@ -1,9 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { sleep, type TotalList } from 'telegram/Helpers';
 import { Api } from 'telegram/tl';
 import type { Dialog } from 'telegram/tl/custom/dialog';
 import {
   ActiveChannelsService,
+  BufferClientService,
   ChannelsService,
   connectionManager,
   PromoteClientService,
@@ -12,20 +13,18 @@ import {
 } from '../../components';
 import { contains, parseError } from '../../utils';
 import { isEligibleDiscoveredChannel } from './channel-eligibility';
-import { RuntimeConfigService } from '../config/runtime-config.service';
 
 @Injectable()
-export class AccountMaintenanceService implements OnModuleDestroy {
+export class AccountMaintenanceService {
   private readonly logger = new Logger(AccountMaintenanceService.name);
   private running = false;
-  private readonly delayedJoinTimers: NodeJS.Timeout[] = [];
 
   constructor(
     private readonly usersService: UsersService,
     private readonly channelsService: ChannelsService,
     private readonly activeChannelsService: ActiveChannelsService,
+    private readonly bufferClientService: BufferClientService,
     private readonly promoteClientService: PromoteClientService,
-    private readonly config: RuntimeConfigService,
   ) {}
 
   async processEligibleUsers(
@@ -41,9 +40,10 @@ export class AccountMaintenanceService implements OnModuleDestroy {
 
     this.running = true;
     try {
+      this.logger.log(`Starting raw-user maintenance (limit=${limit}, skip=${skip})`);
       const users = await this.findEligibleUsers(limit, skip);
       for (const user of users) await this.updateUser(user);
-      this.schedulePromoteClientJoin();
+      this.logger.log(`Completed raw-user maintenance: processed=${users.length}`);
       return { processed: users.length, skipped: false };
     } finally {
       this.running = false;
@@ -51,30 +51,28 @@ export class AccountMaintenanceService implements OnModuleDestroy {
   }
 
   async checkPromoteClients(): Promise<void> {
+    this.logger.log('Delegating promote-client health check to UMS lifecycle owner');
     await this.promoteClientService.checkPromoteClients();
   }
 
-  onModuleDestroy(): void {
-    for (const timer of this.delayedJoinTimers) clearTimeout(timer);
+  async rotateReadyPromoteClients(): Promise<boolean> {
+    this.logger.log('Evaluating one READY promote-client rotation outcome');
+    return this.promoteClientService.rotateReadyPromoteClients();
   }
 
-  private schedulePromoteClientJoin(): void {
-    if (!this.config.enabled('UMS_TEST_SCHEDULER'))
-      return;
-    const timer = setTimeout(
-      () => {
-        this.promoteClientService
-          .joinchannelForPromoteClients()
-          .catch((error) =>
-            this.logger.error(
-              'Delayed promote-client join failed',
-              error instanceof Error ? error.stack : String(error),
-            ),
-          );
-      },
-      2 * 60 * 1000,
-    );
-    this.delayedJoinTimers.push(timer);
+  /**
+   * The UMS promote owner calls this independently of user processing.  Keeping
+   * the two operations separate prevents a user-maintenance run from silently
+   * creating a second promote join loop.
+   */
+  async preparePromoteClientJoin(): Promise<string> {
+    this.logger.log('Starting UMS-owned promote-client join preparation');
+    return this.promoteClientService.joinchannelForPromoteClients();
+  }
+
+  async refreshPromoteClientInfo(): Promise<void> {
+    this.logger.log('Refreshing promote-client information (UMS owner)');
+    await this.promoteClientService.updateInfo();
   }
 
   private async findEligibleUsers(
@@ -89,9 +87,30 @@ export class AccountMaintenanceService implements OnModuleDestroy {
     const threeMonthsAgo = new Date(now);
     threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 70);
 
+    // A mobile in either pool is owned by its lifecycle worker (CMS for
+    // buffer, UMS for promote).  UMS-test must never open that same Telegram
+    // session while it is doing the independent raw-user maintenance pass.
+    const [bufferClients, promoteClients] = await Promise.all([
+      this.bufferClientService.findAll(),
+      this.promoteClientService.findAll(),
+    ]);
+    const lifecycleMobiles = [
+      ...new Set(
+        [...bufferClients, ...promoteClients]
+          .map((client) => client.mobile)
+          .filter((mobile): mobile is string => Boolean(mobile)),
+      ),
+    ];
+    this.logger.log(
+      `Raw-user query excludes lifecycle pool mobiles: buffer=${bufferClients.length}, promote=${promoteClients.length}, unique=${lifecycleMobiles.length}`,
+    );
+
     return this.usersService.executeQuery(
       {
         expired: false,
+        ...(lifecycleMobiles.length
+          ? { mobile: { $nin: lifecycleMobiles } }
+          : {}),
         updatedAt: { $lt: weekAgo },
         $or: [
           { createdAt: { $gt: monthAgo }, updatedAt: { $lt: weekAgo } },

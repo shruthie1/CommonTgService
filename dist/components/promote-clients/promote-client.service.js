@@ -43,11 +43,18 @@ const base_client_service_1 = require("../shared/base-client.service");
 const client_helper_utils_1 = require("../shared/client-helper.utils");
 const enrollment_lock_1 = require("../shared/enrollment-lock");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService extends base_client_service_1.BaseClientService {
+    get checkingPromoteClientsSince() {
+        return this.activeMaintenanceRun?.startedAt || 0;
+    }
+    set checkingPromoteClientsSince(value) {
+        this.activeMaintenanceRun = value > 0
+            ? { name: 'legacy-promote-test-lock', startedAt: value }
+            : null;
+    }
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
         this.promoteClientModel = promoteClientModel;
         this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
-        this.checkingPromoteClientsSince = 0;
         this.bufferClientService = bufferClientServiceRef;
     }
     get model() {
@@ -641,98 +648,103 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping promotion';
         }
-        this.logger.log('Starting join channel process');
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
-        try {
-            const clients = await this.promoteClientModel
-                .find({
-                channels: { $lt: this.config.channelTarget },
-                mobile: { $nin: Array.from(preservedMobiles) },
-                status: 'active',
-            })
-                .sort({ channels: -1 })
-                .limit(this.config.maxMapSize);
-            const joinSet = new Set();
-            const leaveSet = new Set();
-            let successCount = 0;
-            let failCount = 0;
-            for (const document of clients) {
-                const mobile = document.mobile;
-                try {
-                    const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                    const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
-                    await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                    await this.update(mobile, { channels: channels.ids.length });
-                    if (channels.canSendFalseCount < 10) {
-                        const excludedIds = channels.ids;
-                        await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
-                        const isBelowThreshold = channels.ids.length < 220;
-                        const result = isBelowThreshold
-                            ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds)
-                            : await this.channelsService.getActiveChannels(25, 0, excludedIds);
-                        if (!this.joinChannelMap.has(mobile)) {
-                            if (this.safeSetJoinChannelMap(mobile, result)) {
-                                joinSet.add(mobile);
-                            }
-                        }
-                    }
-                    else {
-                        if (!this.leaveChannelMap.has(mobile)) {
-                            if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
-                                leaveSet.add(mobile);
-                            }
-                        }
-                    }
-                    successCount++;
-                }
-                catch (error) {
-                    failCount++;
-                    const errorDetails = (0, parseError_1.parseError)(error);
-                    if ((0, isPermanentError_1.default)(errorDetails)) {
-                        await (0, Helpers_1.sleep)(1000);
-                        const reason = await this.buildPermanentAccountReason(errorDetails.message);
-                        await this.deactivateClient(mobile, reason, { permanent: true });
-                    }
-                }
-                finally {
-                    await this.safeUnregisterClient(mobile);
-                    await (0, Helpers_1.sleep)(this.config.clientProcessingDelay + Math.random() * 5000);
-                }
-            }
-            await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
-            if (joinSet.size > 0) {
-                this.createTimeout(() => this.joinChannelQueue(), 2000);
-            }
-            if (leaveSet.size > 0) {
-                this.createTimeout(() => this.leaveChannelQueue(), 5000);
-            }
-            return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
+        if (!this.beginMaintenanceRun('preparePromoteJoinChannels')) {
+            return 'Warmup maintenance active, skipped';
         }
-        catch (error) {
-            this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
-            this.joinChannelMap.clear();
-            this.leaveChannelMap.clear();
-            this.clearJoinChannelInterval();
-            this.clearLeaveChannelInterval();
-            throw new Error('Failed to initiate channel joining process');
+        try {
+            this.logger.log('Starting join channel process');
+            const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
+            try {
+                const clients = await this.promoteClientModel
+                    .find({
+                    channels: { $lt: this.config.channelTarget },
+                    mobile: { $nin: Array.from(preservedMobiles) },
+                    status: 'active',
+                })
+                    .sort({ channels: -1 })
+                    .limit(this.config.maxMapSize);
+                const joinSet = new Set();
+                const leaveSet = new Set();
+                let successCount = 0;
+                let failCount = 0;
+                for (const document of clients) {
+                    const mobile = document.mobile;
+                    try {
+                        const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                        await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
+                        const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
+                        await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
+                        await this.update(mobile, { channels: channels.ids.length });
+                        if (channels.canSendFalseCount < 10) {
+                            const excludedIds = channels.ids;
+                            await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
+                            const isBelowThreshold = channels.ids.length < 220;
+                            const result = isBelowThreshold
+                                ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds)
+                                : await this.channelsService.getActiveChannels(25, 0, excludedIds);
+                            if (!this.joinChannelMap.has(mobile)) {
+                                if (this.safeSetJoinChannelMap(mobile, result)) {
+                                    joinSet.add(mobile);
+                                }
+                            }
+                        }
+                        else {
+                            if (!this.leaveChannelMap.has(mobile)) {
+                                if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
+                                    leaveSet.add(mobile);
+                                }
+                            }
+                        }
+                        successCount++;
+                    }
+                    catch (error) {
+                        failCount++;
+                        const errorDetails = (0, parseError_1.parseError)(error);
+                        if ((0, isPermanentError_1.default)(errorDetails)) {
+                            await (0, Helpers_1.sleep)(1000);
+                            const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                            await this.deactivateClient(mobile, reason, { permanent: true });
+                        }
+                    }
+                    finally {
+                        await this.safeUnregisterClient(mobile);
+                        await (0, Helpers_1.sleep)(this.config.clientProcessingDelay + Math.random() * 5000);
+                    }
+                }
+                await (0, Helpers_1.sleep)(6000 + Math.random() * 3000);
+                if (joinSet.size > 0) {
+                    this.createTimeout(() => this.joinChannelQueue(), 2000);
+                }
+                if (leaveSet.size > 0) {
+                    this.createTimeout(() => this.leaveChannelQueue(), 5000);
+                }
+                return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
+            }
+            catch (error) {
+                this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
+                this.joinChannelMap.clear();
+                this.leaveChannelMap.clear();
+                this.clearJoinChannelInterval();
+                this.clearLeaveChannelInterval();
+                throw new Error('Failed to initiate channel joining process');
+            }
+        }
+        finally {
+            this.endMaintenanceRun();
         }
     }
     async checkPromoteClients() {
-        const MAX_CHECK_DURATION = 10 * 60 * 1000;
-        if (this.checkingPromoteClientsSince > 0 && Date.now() - this.checkingPromoteClientsSince < MAX_CHECK_DURATION) {
-            this.logger.warn('checkPromoteClients already in progress, skipping concurrent call');
+        if (!this.beginMaintenanceRun('checkPromoteClients'))
             return;
-        }
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
+            this.endMaintenanceRun();
             return;
         }
-        this.checkingPromoteClientsSince = Date.now();
         try {
             await this._checkPromoteClientsInternal();
         }
@@ -745,7 +757,49 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             catch { }
         }
         finally {
-            this.checkingPromoteClientsSince = 0;
+            this.endMaintenanceRun();
+        }
+    }
+    async rotateReadyPromoteClients() {
+        if (!this.beginMaintenanceRun('rotateReadyPromoteClients'))
+            return false;
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ready promote rotation skipped: active client setup exists');
+            this.endMaintenanceRun();
+            return false;
+        }
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
+            this.logger.warn('Ready promote rotation skipped: channel join/leave work is active');
+            this.endMaintenanceRun();
+            return false;
+        }
+        try {
+            const clients = await this.clientService.findAll();
+            const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+            const readyClients = await this.promoteClientModel
+                .find({
+                clientId: { $exists: true, $ne: null },
+                status: 'active',
+                inUse: { $ne: true },
+                warmupPhase: base_client_service_1.WarmupPhase.READY,
+            })
+                .sort({ lastUpdateAttempt: 1, mobile: 1 })
+                .exec();
+            const { attempted, rotated, deferred, skipped } = await this.processReadyRotationSweep(readyClients, clientMap);
+            this.logger.log(`Ready promote rotation sweep complete: candidates=${readyClients.length}, attempted=${attempted}, rotated=${rotated}, deferred=${deferred}, skipped=${skipped}`);
+            return attempted > 0;
+        }
+        catch (error) {
+            const errMsg = (0, parseError_1.parseError)(error, 'rotateReadyPromoteClients').message;
+            this.logger.error(`Ready promote rotation sweep crashed: ${errMsg}`);
+            try {
+                await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`⚠️ READY Promote Rotation CRASHED\n\n${errMsg}`)}`);
+            }
+            catch { }
+            return false;
+        }
+        finally {
+            this.endMaintenanceRun();
         }
     }
     async _checkPromoteClientsInternal() {
@@ -784,6 +838,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now))
                 continue;
             const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
+            if (warmupPhase === base_client_service_1.WarmupPhase.READY)
+                continue;
             const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
             if (hasBeenUsed && warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(promoteClient.mobile, promoteClient, now);
@@ -796,7 +852,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now);
             const computedPhase = warmupAction.phase;
             const phaseBoost = {
-                [base_client_service_1.WarmupPhase.READY]: 25000,
                 [base_client_service_1.WarmupPhase.MATURING]: 15000,
                 [base_client_service_1.WarmupPhase.GROWING]: 10000,
                 [base_client_service_1.WarmupPhase.IDENTITY]: 7000,
@@ -810,7 +865,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 'update_username': 1500,
                 'update_name_bio': 1000,
                 'upload_photo': 1000,
-                'rotate_session': 2000,
             };
             const warmupBoost = phaseBoost[computedPhase] ?? 5000;
             const actionBonus = subStepBonus[warmupAction.action] || 0;

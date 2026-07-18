@@ -55,7 +55,17 @@ type PromoteClientQuery = Record<string, unknown>;
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
-    private checkingPromoteClientsSince: number = 0;
+
+    /** @deprecated Test compatibility alias for the single shared maintenance lock. */
+    private get checkingPromoteClientsSince(): number {
+        return this.activeMaintenanceRun?.startedAt || 0;
+    }
+
+    private set checkingPromoteClientsSince(value: number) {
+        this.activeMaintenanceRun = value > 0
+            ? { name: 'legacy-promote-test-lock', startedAt: value }
+            : null;
+    }
 
     private bufferClientService: BufferClientService;
 
@@ -781,18 +791,21 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping promotion';
         }
-
-        this.logger.log('Starting join channel process');
-
         // Don't destroy in-flight joins — skip if still processing
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-
-        const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
+        if (!this.beginMaintenanceRun('preparePromoteJoinChannels')) {
+            return 'Warmup maintenance active, skipped';
+        }
 
         try {
+            this.logger.log('Starting join channel process');
+
+            const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
+
+            try {
             const clients = await this.promoteClientModel
                 .find({
                     channels: { $lt: this.config.channelTarget },
@@ -865,29 +878,28 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             }
 
             return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
-        } catch (error) {
-            this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
-            this.joinChannelMap.clear();
-            this.leaveChannelMap.clear();
-            this.clearJoinChannelInterval();
-            this.clearLeaveChannelInterval();
-            throw new Error('Failed to initiate channel joining process');
+            } catch (error) {
+                this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
+                this.joinChannelMap.clear();
+                this.leaveChannelMap.clear();
+                this.clearJoinChannelInterval();
+                this.clearLeaveChannelInterval();
+                throw new Error('Failed to initiate channel joining process');
+            }
+        } finally {
+            this.endMaintenanceRun();
         }
     }
 
     // ---- Promote-specific: Check & process promote clients ----
 
     async checkPromoteClients() {
-        const MAX_CHECK_DURATION = 10 * 60 * 1000; // 10 minutes max
-        if (this.checkingPromoteClientsSince > 0 && Date.now() - this.checkingPromoteClientsSince < MAX_CHECK_DURATION) {
-            this.logger.warn('checkPromoteClients already in progress, skipping concurrent call');
-            return;
-        }
+        if (!this.beginMaintenanceRun('checkPromoteClients')) return;
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check promote channels as active client setup exists');
+            this.endMaintenanceRun();
             return;
         }
-        this.checkingPromoteClientsSince = Date.now();
         try {
             await this._checkPromoteClientsInternal();
         } catch (error) {
@@ -895,7 +907,57 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkPromoteClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
-            this.checkingPromoteClientsSince = 0;
+            this.endMaintenanceRun();
+        }
+    }
+
+    /**
+     * Rotates only READY accounts after the normal promote warmup pass.  It uses
+     * the same guard as that pass so Telegram session work cannot run in parallel
+     * with warmup maintenance or a client setup.
+     */
+    async rotateReadyPromoteClients(): Promise<boolean> {
+        if (!this.beginMaintenanceRun('rotateReadyPromoteClients')) return false;
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ready promote rotation skipped: active client setup exists');
+            this.endMaintenanceRun();
+            return false;
+        }
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
+            this.logger.warn('Ready promote rotation skipped: channel join/leave work is active');
+            this.endMaintenanceRun();
+            return false;
+        }
+
+        try {
+            const clients = await this.clientService.findAll();
+            const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+            const readyClients = await this.promoteClientModel
+                .find({
+                    clientId: { $exists: true, $ne: null },
+                    status: 'active',
+                    inUse: { $ne: true },
+                    warmupPhase: WarmupPhase.READY,
+                })
+                .sort({ lastUpdateAttempt: 1, mobile: 1 })
+                .exec();
+
+            const { attempted, rotated, deferred, skipped } = await this.processReadyRotationSweep(
+                readyClients,
+                clientMap,
+            );
+
+            this.logger.log(
+                `Ready promote rotation sweep complete: candidates=${readyClients.length}, attempted=${attempted}, rotated=${rotated}, deferred=${deferred}, skipped=${skipped}`,
+            );
+            return attempted > 0;
+        } catch (error) {
+            const errMsg = parseError(error, 'rotateReadyPromoteClients').message;
+            this.logger.error(`Ready promote rotation sweep crashed: ${errMsg}`);
+            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ READY Promote Rotation CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            return false;
+        } finally {
+            this.endMaintenanceRun();
         }
     }
 
@@ -944,9 +1006,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now)) continue;
 
             const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
-            // Only skip for backfill if the account is already fully operational (session_rotated).
-            // "ready" accounts with lastUsed set are pre-warmup-system accounts that need
-            // rotate_session to advance — never skip them here.
+            // READY -> SESSION_ROTATED is deliberately handled only by the paced
+            // ready-rotation scheduler. A normal maintenance run must never turn
+            // a catch-up batch into a burst of sensitive session work.
+            if (warmupPhase === WarmupPhase.READY) continue;
+            // Only skip for backfill if the account is already fully operational.
             const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
             if (hasBeenUsed && warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(promoteClient.mobile, promoteClient as PromoteClientDocument, now);
@@ -959,7 +1023,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const warmupAction = getWarmupPhaseAction(promoteClient, now);
             const computedPhase = warmupAction.phase;
             const phaseBoost: Record<string, number> = {
-                [WarmupPhase.READY]: 25000,
                 [WarmupPhase.MATURING]: 15000,
                 [WarmupPhase.GROWING]: 10000,
                 [WarmupPhase.IDENTITY]: 7000,
@@ -974,7 +1037,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 'update_username': 1500,
                 'update_name_bio': 1000,
                 'upload_photo': 1000,
-                'rotate_session': 2000,
             };
             const warmupBoost = phaseBoost[computedPhase] ?? 5000;
             const actionBonus = subStepBonus[warmupAction.action] || 0;

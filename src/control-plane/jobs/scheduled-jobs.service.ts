@@ -39,8 +39,16 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    const owners = this.config.activeSchedulers();
+    this.logger.log(
+      owners.length
+        ? `Scheduler owner enabled: ${owners[0]}`
+        : 'No scheduler owner enabled; API-only control-plane process',
+    );
     this.registerCmsJobs();
-    this.registerMaintenanceJobs();
+    this.registerUmsJobs();
+    this.registerUmsTestJobs();
+    this.logger.log(`Scheduler registration complete: ${this.jobs.length} jobs`);
   }
 
   onModuleDestroy(): void {
@@ -67,6 +75,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     });
     if (!job) throw new Error(`Unable to register scheduled job ${name}`);
     this.jobs.push(job);
+    this.logger.log(`Registered scheduled job: ${name} (${cron}, ${IST})`);
   }
 
   private registerCmsJobs(): void {
@@ -74,6 +83,13 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
 
     this.register('cms-buffer-check', '25 2 * * *', () =>
       this.appService.checkBufferClients(),
+    );
+    // Retry eligibility hourly, but persist one actual READY outcome per IST
+    // day. This makes a busy join/check window a safe deferral, never a burst.
+    this.register('cms-buffer-ready-rotation', '45 * * * *', () =>
+      this.runOncePerIstDay('cms-buffer-ready-rotation', () =>
+        this.appService.rotateReadyBufferClients(),
+      ),
     );
     this.register('cms-buffer-join', '0 */3 * * *', () =>
       this.appService.joinBufferClients(),
@@ -84,32 +100,51 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         await this.appService.updateBufferClientInfo();
     });
     if (!this.enabled('LOCAL_SERVER')) {
-      this.afterStartup(60_000, () => this.appService.joinBufferClients());
+      this.afterStartup('cms-buffer-initial-join', 60_000, () =>
+        this.appService.joinBufferClients(),
+      );
     }
   }
 
-  private registerMaintenanceJobs(): void {
-    if (!this.config.enabled('UMS_TEST_SCHEDULER')) return;
+  /**
+   * UMS owns the production promote-client lifecycle.  Keep these Telegram
+   * operations on the UMS process so CMS buffer work and UMS-test maintenance
+   * cannot create a second promote-client worker.
+   */
+  private registerUmsJobs(): void {
+    if (!this.config.enabled('UMS_SCHEDULER')) return;
 
-    this.register('maintenance-refresh-map-and-stat1', '0 * * * *', async () => {
-      await this.clientService.refreshMap();
-      await this.stat1Service.deleteAll();
-    });
-    this.register('maintenance-process-users', '0 */3 * * *', async () => {
-      await this.maintenance.processEligibleUsers(400, 0);
-    });
     this.register('maintenance-promote-client-check', '35 16 * * *', () =>
       this.maintenance.checkPromoteClients(),
     );
-    this.register(
-      'maintenance-active-channel-word-restrictions',
-      '25 0 * * *',
-      async () => {
-        // Original UMS-test evaluated UTC day, despite using an IST schedule.
-        if (new Date().getUTCDate() % 9 !== 0) return;
-        await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
-        await this.activeChannelsService.resetWordRestrictions();
-      },
+    // Keep promote joins independently paced and owned by UMS.  It is
+    // intentionally not chained to UMS-test's raw-user processing run.
+    this.register('maintenance-promote-client-join', '20 */3 * * *', async () => {
+      await this.maintenance.preparePromoteClientJoin();
+    });
+    this.register('maintenance-promote-info-refresh', '25 0 * * *', async () => {
+      // Original UMS-test used the UTC calendar day with an IST schedule.
+      if (new Date().getUTCDate() % 4 === 0) {
+        try {
+          await fetchWithTimeout(`${ppplbot()}&text=Updating Promote Clients Info`);
+        } catch (error) {
+          this.logger.error(
+            'UMS promote-info notification failed; continuing update',
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+        await this.maintenance.refreshPromoteClientInfo();
+      }
+    });
+    // Retry eligibility hourly, but persist one actual READY outcome per IST
+    // day. This makes a busy join/check window a safe deferral, never a burst.
+    this.register('maintenance-promote-ready-rotation', '55 * * * *', () =>
+      this.runOncePerIstDay('maintenance-promote-ready-rotation', () =>
+        this.maintenance.rotateReadyPromoteClients(),
+      ),
+    );
+    this.afterStartup('ums-promote-initial-join', 4 * 60_000, () =>
+      this.maintenance.preparePromoteClientJoin(),
     );
     this.register('maintenance-daily-promote-stats-reset', '25 0 * * *', () =>
       this.runDailyPromoteReset(),
@@ -120,21 +155,68 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       () => this.runDailyPromoteReset(),
     );
     if (this.isDailyResetRecoveryWindow()) {
-      this.afterStartup(15_000, () => this.runDailyPromoteReset());
+      this.afterStartup('ums-daily-promote-reset-recovery', 15_000, () =>
+        this.runDailyPromoteReset(),
+      );
     }
-    this.afterStartup(120_000, () =>
+  }
+
+  /**
+   * UMS-test owns raw-user processing and general maintenance.  It never runs
+   * CMS buffer or UMS promote lifecycle jobs; the user query also excludes
+   * every mobile currently present in either lifecycle pool.
+   */
+  private registerUmsTestJobs(): void {
+    if (!this.config.enabled('UMS_TEST_SCHEDULER')) return;
+
+    this.register('maintenance-process-users', '0 */3 * * *', async () => {
+      await this.maintenance.processEligibleUsers(400, 0);
+    });
+    this.register('maintenance-refresh-map-and-stat1', '0 * * * *', async () => {
+      await this.clientService.refreshMap();
+      await this.stat1Service.deleteAll();
+    });
+    this.register(
+      'maintenance-active-channel-word-restrictions',
+      '25 0 * * *',
+      async () => {
+        // Original UMS-test evaluated UTC day, despite using an IST schedule.
+        const utcDay = new Date().getUTCDate();
+        if (utcDay % 7 === 0) {
+          this.logger.log('UMS-test maintenance branch=day-mod-7');
+          await fetchWithTimeout(`${ppplbot()}&text=Resetting Banned Channels`);
+          setTimeout(async () => {
+            // await this.activeChannelsService.resetAvailableMsgs();
+            // await this.activeChannelsService.updateBannedChannels();
+            // await this.activeChannelsService.updateDefaultReactions();
+          }, 30_000);
+        }
+        if (utcDay % 9 !== 0) return;
+        this.logger.log('UMS-test maintenance branch=day-mod-9-word-restrictions');
+        await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
+        await this.activeChannelsService.resetWordRestrictions();
+      },
+    );
+    this.afterStartup('ums-test-initial-user-processing', 120_000, () =>
       this.maintenance.processEligibleUsers(400, 0),
     );
   }
 
-  private afterStartup(delayMs: number, task: () => Promise<unknown>): void {
+  private afterStartup(
+    name: string,
+    delayMs: number,
+    task: () => Promise<unknown>,
+  ): void {
     const timer = setTimeout(() => {
-      task().catch((error) =>
-        this.logger.error(
-          'Startup task failed',
-          error instanceof Error ? error.stack : String(error),
-        ),
-      );
+      this.logger.log(`Starting startup task: ${name}`);
+      task()
+        .then(() => this.logger.log(`Completed startup task: ${name}`))
+        .catch((error) =>
+          this.logger.error(
+            `Startup task failed: ${name}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }, delayMs);
     this.startupTimers.push(timer);
   }
@@ -240,6 +322,63 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         'Daily promoteStats reset completed, but its notification failed',
         error instanceof Error ? error.stack : String(error),
       );
+    }
+  }
+
+  /**
+   * Persist the daily rotation budget in Mongo so restarts or accidentally
+   * duplicated scheduler processes cannot create more than one pool-level
+   * rotation attempt on the same IST day. A failed attempt is completed too:
+   * it must not fan out into another account later that day.
+   */
+  private async runOncePerIstDay(
+    name: string,
+    task: () => Promise<boolean>,
+  ): Promise<void> {
+    const db = mongoose.connection.db;
+    if (!db) throw new Error(`Mongo connection is unavailable for ${name}`);
+
+    const collection = db.collection<any>('controlPlaneJobRuns');
+    const jobId = `${name}:${this.istDateKey()}`;
+    if (!(await this.claimJob(collection, jobId))) {
+      this.logger.warn(`Daily job already claimed or completed: ${jobId}`);
+      return;
+    }
+
+    try {
+      const attempted = await task();
+      if (!attempted) {
+        // No Telegram session action occurred (for example a join round owned
+        // the lock). Leave today's budget available for the next hourly check.
+        await collection.updateOne(
+          { _id: jobId },
+          {
+            $set: { deferredAt: new Date(), leaseExpiresAt: new Date(0) },
+            $unset: { leaseOwner: '' },
+          },
+        );
+        return;
+      }
+      await collection.updateOne(
+        { _id: jobId },
+        {
+          $set: { completedAt: new Date() },
+          $unset: { leaseOwner: '', leaseExpiresAt: '' },
+        },
+      );
+    } catch (error) {
+      await collection.updateOne(
+        { _id: jobId },
+        {
+          $set: {
+            completedAt: new Date(),
+            failedAt: new Date(),
+            error: error instanceof Error ? error.message : String(error),
+          },
+          $unset: { leaseOwner: '', leaseExpiresAt: '' },
+        },
+      );
+      throw error;
     }
   }
 

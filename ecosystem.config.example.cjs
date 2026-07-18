@@ -43,9 +43,6 @@ module.exports = {
         ...allOperationsOff,
         PORT: 5002,
         clientId: 'ums-test',
-        // Supply only isolated test config/database URLs here.
-        CONFIG_URL: 'REPLACE_WITH_ISOLATED_UMS_TEST_CONFIGURATION_URL',
-        CONFIG_URLS: 'REPLACE_WITH_ISOLATED_UMS_TEST_CONFIGURATION_URL',
         ENABLE_UMS_TEST_SCHEDULER: 'true',
       },
     },

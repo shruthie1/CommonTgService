@@ -544,7 +544,7 @@ describe('Service flow reliability', () => {
         expect((service as any).processClient).toHaveBeenCalledWith(warmDoc, { clientId: 'client-1', mobile: 'main-1' });
     });
 
-    test('checkPromoteClients skips health checks for ready accounts and processes them directly', async () => {
+    test('checkPromoteClients leaves ready accounts for the dedicated rotation worker', async () => {
         const readyDoc = {
             mobile: '90002',
             clientId: 'client-1',
@@ -586,7 +586,7 @@ describe('Service flow reliability', () => {
         await service.checkPromoteClients();
 
         expect(healthSpy).not.toHaveBeenCalled();
-        expect(processSpy).toHaveBeenCalledWith(readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+        expect(processSpy).not.toHaveBeenCalled();
     });
 
     test('checkPromoteClients performs health checks for session-rotated accounts before processing', async () => {
@@ -635,7 +635,7 @@ describe('Service flow reliability', () => {
         expect(healthSpy.mock.invocationCallOrder[0]).toBeLessThan(processSpy.mock.invocationCallOrder[0]);
     });
 
-    test('checkPromoteClients globally prioritizes ready accounts before older warming accounts', async () => {
+    test('checkPromoteClients skips ready accounts while continuing older warming accounts', async () => {
         const readyDoc = {
             mobile: '90011',
             clientId: 'client-1',
@@ -695,8 +695,8 @@ describe('Service flow reliability', () => {
 
         await service.checkPromoteClients();
 
-        expect(processSpy).toHaveBeenNthCalledWith(1, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
-        expect(processSpy).toHaveBeenNthCalledWith(2, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+        expect(processSpy).toHaveBeenCalledTimes(1);
+        expect(processSpy).toHaveBeenCalledWith(warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
     });
 
     test('checkPromoteClients does not enroll beyond the healthy per-client cap', async () => {
@@ -843,7 +843,7 @@ describe('Service flow reliability', () => {
         });
     });
 
-    test('checkBufferClients skips health checks for ready accounts and processes them directly', async () => {
+    test('checkBufferClients leaves ready accounts for the dedicated rotation worker', async () => {
         const readyDoc = {
             mobile: '91001',
             clientId: 'client-1',
@@ -894,10 +894,10 @@ describe('Service flow reliability', () => {
         await service.checkBufferClients();
 
         expect(healthSpy).not.toHaveBeenCalled();
-        expect(processSpy).toHaveBeenCalledWith(readyDoc, { clientId: 'client-1', mobile: 'main-1' });
+        expect(processSpy).not.toHaveBeenCalled();
     });
 
-    test('checkBufferClients globally prioritizes ready accounts before older warming accounts', async () => {
+    test('checkBufferClients skips ready accounts while continuing older warming accounts', async () => {
         const readyDoc = {
             mobile: '91011',
             clientId: 'client-1',
@@ -964,8 +964,8 @@ describe('Service flow reliability', () => {
 
         await service.checkBufferClients();
 
-        expect(processSpy).toHaveBeenNthCalledWith(1, readyDoc, { clientId: 'client-1', mobile: 'main-1' });
-        expect(processSpy).toHaveBeenNthCalledWith(2, warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+        expect(processSpy).toHaveBeenCalledTimes(1);
+        expect(processSpy).toHaveBeenCalledWith(warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
     });
 
     test('checkBufferClients does not enroll beyond the healthy per-client cap', async () => {

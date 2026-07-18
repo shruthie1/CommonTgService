@@ -701,9 +701,8 @@ describe('BufferClientService coverage', () => {
     // ─── checkBufferClients ──────────────────────────────────────────────────
 
     describe('checkBufferClients()', () => {
-        it('runs the full internal pipeline and advances a READY+lastUsed account to session_rotated', async () => {
-            // A previously-used READY account (all warmup prerequisites stamped) is processed by
-            // the real processClient orchestration: the DB-only fast path marks it session_rotated.
+        it('leaves READY+lastUsed accounts for the paced ready-rotation scheduler', async () => {
+            // Normal maintenance must never batch READY -> SESSION_ROTATED work.
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             await service.create(makeBufferClientData({
                 mobile: '15551800001', status: 'active', clientId: 'test-client-1',
@@ -717,10 +716,9 @@ describe('BufferClientService coverage', () => {
 
             await service.checkBufferClients();
 
-            // The real processClient persisted the phase transition.
             const after = await service.findOne('15551800001');
-            expect(after!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
-            expect(after!.sessionRotatedAt).toBeInstanceOf(Date);
+            expect(after!.warmupPhase).toBe(WarmupPhase.READY);
+            expect(after!.sessionRotatedAt ?? null).toBeNull();
             // The real summary notification was sent through the externally-mocked bots service.
             const summaryCall = botsService.sendMessageByCategory.mock.calls
                 .find((c) => typeof c[1] === 'string' && c[1].includes('Buffer Client Check Summary'));
@@ -763,6 +761,52 @@ describe('BufferClientService coverage', () => {
             await service.checkBufferClients();
             // The guard is always reset in the finally block even after a crash.
             expect((service as any).checkingBufferClientsSince).toBe(0);
+        });
+    });
+
+    describe('rotateReadyBufferClients()', () => {
+        it('rotates only non-primary, non-in-use READY accounts without a Telegram call when lastUsed is present', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            await service.create(makeBufferClientData({
+                mobile: '15551800101', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.READY, inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            await service.create(makeBufferClientData({
+                mobile: '15551800102', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.READY, inUse: true, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            await service.create(makeBufferClientData({
+                mobile: '15551800104', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.READY, inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            const rotateSpy = jest.spyOn(service, 'rotateSession');
+
+            await service.rotateReadyBufferClients();
+
+            expect((await service.findOne('15551800101'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
+            expect((await service.findOne('15551800102'))!.warmupPhase).toBe(WarmupPhase.READY);
+            expect((await service.findOne('15551800104'))!.warmupPhase).toBe(WarmupPhase.READY);
+            expect(rotateSpy).not.toHaveBeenCalled();
+            expect((service as any).checkingBufferClientsSince).toBe(0);
+        });
+
+        it('does not overlap an active buffer check', async () => {
+            await service.create(makeBufferClientData({
+                mobile: '15551800103', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.READY, inUse: false,
+            }));
+            (service as any).checkingBufferClientsSince = Date.now();
+
+            await service.rotateReadyBufferClients();
+
+            expect((await service.findOne('15551800103'))!.warmupPhase).toBe(WarmupPhase.READY);
+            (service as any).checkingBufferClientsSince = 0;
         });
     });
 

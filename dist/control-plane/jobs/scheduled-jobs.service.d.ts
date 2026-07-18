@@ -21,12 +21,14 @@ export declare class ScheduledJobsService implements OnModuleInit, OnModuleDestr
     onModuleDestroy(): void;
     private register;
     private registerCmsJobs;
-    private registerMaintenanceJobs;
+    private registerUmsJobs;
+    private registerUmsTestJobs;
     private afterStartup;
     private enabled;
     private istDateKey;
     private isDailyResetRecoveryWindow;
     private runDailyPromoteReset;
+    private runOncePerIstDay;
     private resetPromoteStatsWithRetries;
     private claimJob;
 }

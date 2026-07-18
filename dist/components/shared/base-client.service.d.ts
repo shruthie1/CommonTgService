@@ -77,6 +77,12 @@ export interface ProcessClientResult {
     updateCount: number;
     updateSummary?: string | null;
 }
+export interface ReadyRotationSweepResult {
+    attempted: number;
+    rotated: number;
+    deferred: number;
+    skipped: number;
+}
 type ObjectPathSegment = string | number;
 type MongoQuery = Record<string, unknown>;
 export interface WindowNeed {
@@ -132,6 +138,13 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
     protected readonly MAX_UPDATES_PER_CYCLE = 20;
+    protected readonly MAX_READY_ROTATIONS_PER_SWEEP = 1;
+    protected readonly MAX_MAINTENANCE_DURATION_MS: number;
+    protected readonly MAINTENANCE_LOCK_TTL_MS: number;
+    protected activeMaintenanceRun: {
+        name: string;
+        startedAt: number;
+    } | null;
     protected readonly STUCK_WARMUP_DAYS = 45;
     protected dailyJoinCounts: Map<string, number>;
     protected dailyJoinDate: string;
@@ -213,6 +226,11 @@ export declare abstract class BaseClientService<TDoc extends BaseClientDocument>
     private verifyOurPassword;
     protected set2fa(doc: TDoc, failedAttempts: number): Promise<number>;
     protected removeOtherAuths(doc: TDoc, failedAttempts: number): Promise<number>;
+    protected processReadyRotationSweep(readyClients: TDoc[], clientMap: ReadonlyMap<string, Client>, shouldSkip?: (doc: TDoc) => boolean): Promise<ReadyRotationSweepResult>;
+    private processReadyRotation;
+    protected beginMaintenanceRun(name: string): boolean;
+    protected endMaintenanceRun(): void;
+    protected isMaintenanceRunActive(): boolean;
     processClient(doc: TDoc, client: Client): Promise<ProcessClientResult>;
     protected backfillTimestamps(mobile: string, doc: TDoc, now: number): Promise<void>;
     joinChannelQueue(): Promise<void>;

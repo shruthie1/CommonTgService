@@ -1,23 +1,21 @@
-import { OnModuleDestroy } from '@nestjs/common';
-import { ActiveChannelsService, ChannelsService, PromoteClientService, UsersService } from '../../components';
-import { RuntimeConfigService } from '../config/runtime-config.service';
-export declare class AccountMaintenanceService implements OnModuleDestroy {
+import { ActiveChannelsService, BufferClientService, ChannelsService, PromoteClientService, UsersService } from '../../components';
+export declare class AccountMaintenanceService {
     private readonly usersService;
     private readonly channelsService;
     private readonly activeChannelsService;
+    private readonly bufferClientService;
     private readonly promoteClientService;
-    private readonly config;
     private readonly logger;
     private running;
-    private readonly delayedJoinTimers;
-    constructor(usersService: UsersService, channelsService: ChannelsService, activeChannelsService: ActiveChannelsService, promoteClientService: PromoteClientService, config: RuntimeConfigService);
+    constructor(usersService: UsersService, channelsService: ChannelsService, activeChannelsService: ActiveChannelsService, bufferClientService: BufferClientService, promoteClientService: PromoteClientService);
     processEligibleUsers(limit?: number, skip?: number): Promise<{
         processed: number;
         skipped: boolean;
     }>;
     checkPromoteClients(): Promise<void>;
-    onModuleDestroy(): void;
-    private schedulePromoteClientJoin;
+    rotateReadyPromoteClients(): Promise<boolean>;
+    preparePromoteClientJoin(): Promise<string>;
+    refreshPromoteClientInfo(): Promise<void>;
     private findEligibleUsers;
     private updateUser;
     private persistDiscoveredChannels;

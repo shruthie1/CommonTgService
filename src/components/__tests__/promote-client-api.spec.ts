@@ -154,6 +154,88 @@ describe('Promote Client API', () => {
         });
     });
 
+    describe('rotateReadyPromoteClients()', () => {
+        it('rotates READY, idle accounts through the existing lastUsed recovery path', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            await service.create(makePromoteClientData({
+                mobile: '15550100901', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            await service.create(makePromoteClientData({
+                mobile: '15550100902', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: true, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            await service.create(makePromoteClientData({
+                mobile: '15550100903', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            const rotateSpy = jest.spyOn(service, 'rotateSession');
+
+            await service.rotateReadyPromoteClients();
+
+            expect((await service.findOne('15550100901'))!.warmupPhase).toBe('session_rotated');
+            expect((await service.findOne('15550100902'))!.warmupPhase).toBe('ready');
+            expect((await service.findOne('15550100903'))!.warmupPhase).toBe('ready');
+            expect(rotateSpy).not.toHaveBeenCalled();
+            expect((service as any).checkingPromoteClientsSince).toBe(0);
+        });
+
+        it('attempts only one actual session rotation when the first attempt fails', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            for (const mobile of ['15550100911', '15550100912']) {
+                await service.create(makePromoteClientData({
+                    mobile, status: 'active', clientId: 'test-client-1',
+                    warmupPhase: 'ready', inUse: false, enrolledAt: past, channels: 250,
+                    privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                    profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+                }));
+            }
+            const rotateSpy = jest.spyOn(service, 'rotateSession').mockResolvedValue(false);
+
+            await service.rotateReadyPromoteClients();
+
+            expect(rotateSpy).toHaveBeenCalledTimes(1);
+            expect(rotateSpy).toHaveBeenCalledWith('15550100911');
+            expect((await service.findOne('15550100911'))!.failedUpdateAttempts).toBe(1);
+            expect((await service.findOne('15550100912'))!.warmupPhase).toBe('ready');
+        });
+
+        it('repairs stale READY metadata without running its missing warmup action', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const readyFields = {
+                status: 'active' as const, clientId: 'test-client-1', warmupPhase: 'ready' as const, inUse: false,
+                enrolledAt: past, channels: 250, privacyUpdatedAt: past, twoFASetAt: past,
+                otherAuthsRemovedAt: past, profilePicsDeletedAt: past, nameBioUpdatedAt: past,
+                usernameUpdatedAt: past,
+            };
+            await service.create(makePromoteClientData({
+                mobile: '15550100921', ...readyFields, profilePicsUpdatedAt: null,
+            }));
+            await service.create(makePromoteClientData({
+                mobile: '15550100922', ...readyFields, profilePicsUpdatedAt: past,
+            }));
+            const rotateSpy = jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
+                await service.update(mobile, {
+                    warmupPhase: 'session_rotated' as any,
+                    sessionRotatedAt: new Date(),
+                });
+                return true;
+            });
+
+            await service.rotateReadyPromoteClients();
+
+            expect((await service.findOne('15550100921'))!.warmupPhase).toBe('maturing');
+            expect(rotateSpy).toHaveBeenCalledTimes(1);
+            expect(rotateSpy).toHaveBeenCalledWith('15550100922');
+        });
+    });
+
     // ─── FIND ────────────────────────────────────────────────────────────────
 
     describe('findOne()', () => {

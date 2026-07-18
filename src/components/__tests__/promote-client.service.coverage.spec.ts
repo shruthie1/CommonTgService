@@ -390,9 +390,8 @@ describe('PromoteClientService coverage', () => {
             expect((service as any).checkingPromoteClientsSince).toBe(0);
         });
 
-        it('runs the full pipeline and advances a READY+lastUsed account to session_rotated', async () => {
-            // A previously-used READY account (all warmup prerequisites stamped) is processed by
-            // the real processClient orchestration: the DB-only fast path marks it session_rotated.
+        it('leaves READY+lastUsed accounts for the paced ready-rotation scheduler', async () => {
+            // Normal maintenance must never batch READY -> SESSION_ROTATED work.
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             await service.create(makePromoteClientData({
                 mobile: '15551800001', status: 'active', clientId: 'test-client-1', inUse: false,
@@ -406,8 +405,8 @@ describe('PromoteClientService coverage', () => {
             await service.checkPromoteClients();
 
             const after = await service.findOne('15551800001');
-            expect(after!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
-            expect(after!.sessionRotatedAt).toBeInstanceOf(Date);
+            expect(after!.warmupPhase).toBe(WarmupPhase.READY);
+            expect(after!.sessionRotatedAt ?? null).toBeNull();
             const summaryCall = botsService.sendMessageByCategory.mock.calls
                 .find((c) => typeof c[1] === 'string' && c[1].includes('Promote Client Check Summary'));
             expect(summaryCall).toBeDefined();

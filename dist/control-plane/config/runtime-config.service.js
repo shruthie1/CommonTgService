@@ -32,6 +32,10 @@ let RuntimeConfigService = class RuntimeConfigService {
             flag,
             bool(process.env[`ENABLE_${flag}`], DEFAULTS[flag]),
         ]));
+        const enabledSchedulers = this.activeSchedulers();
+        if (enabledSchedulers.length > 1) {
+            throw new Error(`Only one scheduler owner may be enabled per process; received ${enabledSchedulers.join(', ')}`);
+        }
     }
     enabled(scheduler) {
         return this.schedulers[scheduler];

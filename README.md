@@ -15,15 +15,22 @@ process; exactly three environment variables gate the scheduler groups.
 
 All scheduler flags default to `false`.
 
-| Owner | Enable flag |
-| --- | --- |
-| CMS | `ENABLE_CMS_SCHEDULER` |
-| UMS | `ENABLE_UMS_SCHEDULER` |
-| UMS-test | `ENABLE_UMS_TEST_SCHEDULER` |
+| Owner | Enable flag | Responsibility |
+| --- | --- | --- |
+| CMS | `ENABLE_CMS_SCHEDULER` | Buffer-client checks, joins, refresh, and buffer READY rotation |
+| UMS | `ENABLE_UMS_SCHEDULER` | Primary-client join/leave and retention, plus the complete promote-client lifecycle: checks, joins, info refresh, daily promotion-stat reset, and promote READY rotation |
+| UMS-test | `ENABLE_UMS_TEST_SCHEDULER` | Raw-user processing and general maintenance: map/stat cleanup and word-restriction reset |
 
-Enable at most one scheduler flag per process. UMS-test's group includes its
-legacy account-maintenance and daily reset jobs, so it must use its isolated
-configuration and database.
+Enable exactly one scheduler flag per process. All three processes may use the
+same intended production configuration and database: ownership is enforced by
+the scheduler flag, and raw-user processing excludes every buffer/promote pool
+mobile so it cannot open a lifecycle-owned Telegram session.
+
+At startup, each worker logs its enabled owner and every registered job. Job
+start/completion/failure, startup-task outcomes, UMS channel-cycle branch
+(`join` or `leave-all`), and raw-user pool exclusions are logged with the
+service name. These are the first log lines to use when verifying a PM2
+deployment.
 
 The Assets module exposes its file/folder API on every process. It contains no
 background worker, preserving the three scheduler groups above.
@@ -48,9 +55,8 @@ on), because webpack deliberately leaves Node dependencies external. Do not use
 Kubernetes for this deployment.
 
 Copy `.env.example` and `ecosystem.config.example.cjs` into the deployment
-configuration, set the real configuration URLs, and keep UMS-test on an
-isolated configuration/database. Never enable a destructive operation on more
-than one process.
+configuration, set the real configuration URLs, and enable exactly one
+scheduler flag on each process. Never run the same scheduler owner twice.
 
 ## Verification
 

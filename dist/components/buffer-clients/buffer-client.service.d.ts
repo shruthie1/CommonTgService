@@ -16,7 +16,8 @@ import { BaseClientUpdate, BaseClientService, ClientStatusType, ClientConfig } f
 export declare class BufferClientService extends BaseClientService<BufferClientDocument> {
     private bufferClientModel;
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT;
-    private checkingBufferClientsSince;
+    private get checkingBufferClientsSince();
+    private set checkingBufferClientsSince(value);
     private promoteClientService;
     constructor(bufferClientModel: Model<BufferClientDocument>, telegramService: TelegramService, usersService: UsersService, activeChannelsService: ActiveChannelsService, clientService: ClientService, channelsService: ChannelsService, promoteClientServiceRef: PromoteClientService, sessionService: SessionService, botsService: BotsService);
     private getPrimaryClientMobiles;
@@ -47,6 +48,7 @@ export declare class BufferClientService extends BaseClientService<BufferClientD
     diagnoseEnrollmentDecision(): Promise<Record<string, unknown>>;
     diagnoseWarmupPipeline(): Promise<Record<string, unknown>>;
     checkBufferClients(): Promise<void>;
+    rotateReadyBufferClients(): Promise<boolean>;
     private _checkBufferClientsInternal;
     updateInfo(): Promise<void>;
     joinchannelForBufferClients(skipExisting?: boolean, clientId?: string): Promise<string>;

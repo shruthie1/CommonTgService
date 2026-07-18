@@ -16,17 +16,15 @@ const Helpers_1 = require("telegram/Helpers");
 const components_1 = require("../../components");
 const utils_1 = require("../../utils");
 const channel_eligibility_1 = require("./channel-eligibility");
-const runtime_config_service_1 = require("../config/runtime-config.service");
 let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaintenanceService {
-    constructor(usersService, channelsService, activeChannelsService, promoteClientService, config) {
+    constructor(usersService, channelsService, activeChannelsService, bufferClientService, promoteClientService) {
         this.usersService = usersService;
         this.channelsService = channelsService;
         this.activeChannelsService = activeChannelsService;
+        this.bufferClientService = bufferClientService;
         this.promoteClientService = promoteClientService;
-        this.config = config;
         this.logger = new common_1.Logger(AccountMaintenanceService_1.name);
         this.running = false;
-        this.delayedJoinTimers = [];
     }
     async processEligibleUsers(limit = 300, skip = 0) {
         if (this.running) {
@@ -35,10 +33,11 @@ let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaint
         }
         this.running = true;
         try {
+            this.logger.log(`Starting raw-user maintenance (limit=${limit}, skip=${skip})`);
             const users = await this.findEligibleUsers(limit, skip);
             for (const user of users)
                 await this.updateUser(user);
-            this.schedulePromoteClientJoin();
+            this.logger.log(`Completed raw-user maintenance: processed=${users.length}`);
             return { processed: users.length, skipped: false };
         }
         finally {
@@ -46,21 +45,20 @@ let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaint
         }
     }
     async checkPromoteClients() {
+        this.logger.log('Delegating promote-client health check to UMS lifecycle owner');
         await this.promoteClientService.checkPromoteClients();
     }
-    onModuleDestroy() {
-        for (const timer of this.delayedJoinTimers)
-            clearTimeout(timer);
+    async rotateReadyPromoteClients() {
+        this.logger.log('Evaluating one READY promote-client rotation outcome');
+        return this.promoteClientService.rotateReadyPromoteClients();
     }
-    schedulePromoteClientJoin() {
-        if (!this.config.enabled('UMS_TEST_SCHEDULER'))
-            return;
-        const timer = setTimeout(() => {
-            this.promoteClientService
-                .joinchannelForPromoteClients()
-                .catch((error) => this.logger.error('Delayed promote-client join failed', error instanceof Error ? error.stack : String(error)));
-        }, 2 * 60 * 1000);
-        this.delayedJoinTimers.push(timer);
+    async preparePromoteClientJoin() {
+        this.logger.log('Starting UMS-owned promote-client join preparation');
+        return this.promoteClientService.joinchannelForPromoteClients();
+    }
+    async refreshPromoteClientInfo() {
+        this.logger.log('Refreshing promote-client information (UMS owner)');
+        await this.promoteClientService.updateInfo();
     }
     async findEligibleUsers(limit, skip) {
         const now = new Date();
@@ -70,8 +68,21 @@ let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaint
         monthAgo.setDate(monthAgo.getDate() - 30);
         const threeMonthsAgo = new Date(now);
         threeMonthsAgo.setDate(threeMonthsAgo.getDate() - 70);
+        const [bufferClients, promoteClients] = await Promise.all([
+            this.bufferClientService.findAll(),
+            this.promoteClientService.findAll(),
+        ]);
+        const lifecycleMobiles = [
+            ...new Set([...bufferClients, ...promoteClients]
+                .map((client) => client.mobile)
+                .filter((mobile) => Boolean(mobile))),
+        ];
+        this.logger.log(`Raw-user query excludes lifecycle pool mobiles: buffer=${bufferClients.length}, promote=${promoteClients.length}, unique=${lifecycleMobiles.length}`);
         return this.usersService.executeQuery({
             expired: false,
+            ...(lifecycleMobiles.length
+                ? { mobile: { $nin: lifecycleMobiles } }
+                : {}),
             updatedAt: { $lt: weekAgo },
             $or: [
                 { createdAt: { $gt: monthAgo }, updatedAt: { $lt: weekAgo } },
@@ -174,7 +185,7 @@ exports.AccountMaintenanceService = AccountMaintenanceService = AccountMaintenan
     __metadata("design:paramtypes", [components_1.UsersService,
         components_1.ChannelsService,
         components_1.ActiveChannelsService,
-        components_1.PromoteClientService,
-        runtime_config_service_1.RuntimeConfigService])
+        components_1.BufferClientService,
+        components_1.PromoteClientService])
 ], AccountMaintenanceService);
 //# sourceMappingURL=account-maintenance.service.js.map

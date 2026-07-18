@@ -318,6 +318,10 @@ class BaseClientService {
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
         this.MAX_UPDATES_PER_CYCLE = 20;
+        this.MAX_READY_ROTATIONS_PER_SWEEP = 1;
+        this.MAX_MAINTENANCE_DURATION_MS = 10 * 60 * 1000;
+        this.MAINTENANCE_LOCK_TTL_MS = 30 * 60 * 1000;
+        this.activeMaintenanceRun = null;
         this.STUCK_WARMUP_DAYS = 45;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
@@ -949,6 +953,123 @@ class BaseClientService {
             await this.safeUnregisterClient(doc.mobile);
         }
     }
+    async processReadyRotationSweep(readyClients, clientMap, shouldSkip = () => false) {
+        let attempted = 0;
+        let rotated = 0;
+        let deferred = 0;
+        let skipped = 0;
+        for (const readyClient of readyClients) {
+            if (attempted >= this.MAX_READY_ROTATIONS_PER_SWEEP)
+                break;
+            const client = readyClient.clientId
+                ? clientMap.get(readyClient.clientId)
+                : undefined;
+            if (!client || shouldSkip(readyClient)) {
+                skipped += 1;
+                continue;
+            }
+            const result = await this.processReadyRotation(readyClient, client);
+            if (result.updateSummary === 'ready_rotation_deferred') {
+                deferred += 1;
+                continue;
+            }
+            attempted += 1;
+            if (result.updateCount > 0)
+                rotated += result.updateCount;
+            else
+                deferred += 1;
+        }
+        return { attempted, rotated, deferred, skipped };
+    }
+    async processReadyRotation(doc, client) {
+        if (doc.inUse === true || !client) {
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        const now = Date.now();
+        try {
+            doc = await this.repairWarmupMetadata(doc, now);
+        }
+        catch (error) {
+            this.logger.warn(`READY rotation metadata repair failed for ${doc.mobile}:`, error);
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        if (doc.warmupPhase !== warmup_phases_1.WarmupPhase.READY) {
+            this.logger.warn(`READY rotation deferred for ${doc.mobile}: metadata now resolves to ${doc.warmupPhase || 'unset'}`);
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        if (warmupAction.action !== 'rotate_session') {
+            this.logger.warn(`READY rotation deferred for ${doc.mobile}: resolved action is ${warmupAction.action}`);
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        if (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUsed) > 0) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            await this.update(doc.mobile, {
+                warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
+                ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
+            });
+            this.logger.log(`Recovered already-used READY ${this.clientType} client ${doc.mobile} without a Telegram session rotation`);
+            return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
+        }
+        await this.update(doc.mobile, { lastUpdateAttempt: new Date(now) });
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        try {
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
+            const rotated = await this.rotateSession(doc.mobile);
+            if (rotated) {
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`, { parseMode: 'HTML' });
+                return { updateCount: 1, updateSummary: 'rotate_session' };
+            }
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${failedAttempts + 1} fails`, { parseMode: 'HTML' });
+            return { updateCount: 0, updateSummary: 'ready_rotation_attempt_failed' };
+        }
+        catch (error) {
+            const errorDetails = this.handleError(error, `READY rotation error for ${this.clientType} client`, doc.mobile);
+            const failCount = failedAttempts + 1;
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failCount,
+                lastUpdateFailure: new Date(),
+            });
+            if ((0, isPermanentError_1.default)(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
+            }
+            this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: rotate_session — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails.message?.substring(0, 120) || 'unknown'}`, { parseMode: 'HTML' });
+            return { updateCount: 0, updateSummary: 'ready_rotation_attempt_failed' };
+        }
+        finally {
+            await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
+        }
+    }
+    beginMaintenanceRun(name) {
+        if (!this.activeMaintenanceRun) {
+            this.activeMaintenanceRun = { name, startedAt: Date.now() };
+            return true;
+        }
+        const elapsedMs = Date.now() - this.activeMaintenanceRun.startedAt;
+        if (elapsedMs >= this.MAINTENANCE_LOCK_TTL_MS) {
+            this.logger.error(`Maintenance lock overdue: ${this.activeMaintenanceRun.name} has run for ${Math.floor(elapsedMs / 1000)}s; keeping lock to prevent overlapping Telegram work`);
+        }
+        const duration = Math.floor(elapsedMs / 1000);
+        const overdue = elapsedMs >= this.MAX_MAINTENANCE_DURATION_MS ? ' (past advisory duration)' : '';
+        this.logger.warn(`Skipping ${name}: ${this.activeMaintenanceRun.name} is still running for ${duration}s${overdue}`);
+        return false;
+    }
+    endMaintenanceRun() {
+        this.activeMaintenanceRun = null;
+    }
+    isMaintenanceRunActive() {
+        return this.activeMaintenanceRun !== null;
+    }
     async processClient(doc, client) {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
@@ -1212,6 +1333,11 @@ class BaseClientService {
             await this.scheduleNextJoinRound();
             return;
         }
+        if (!this.beginMaintenanceRun('processJoinChannelInterval')) {
+            this.logger.warn('Deferring join-channel round while another warmup operation is active');
+            await this.scheduleNextJoinRound();
+            return;
+        }
         this.isJoinChannelProcessing = true;
         try {
             await this.processJoinChannelSequentially();
@@ -1221,6 +1347,7 @@ class BaseClientService {
         }
         finally {
             this.isJoinChannelProcessing = false;
+            this.endMaintenanceRun();
             await this.scheduleNextJoinRound();
         }
     }
@@ -1408,6 +1535,11 @@ class BaseClientService {
             this.clearLeaveChannelInterval();
             return;
         }
+        if (!this.beginMaintenanceRun('processLeaveChannelInterval')) {
+            this.logger.warn('Deferring leave-channel round while another warmup operation is active');
+            this.scheduleNextLeaveRound();
+            return;
+        }
         this.isLeaveChannelProcessing = true;
         try {
             await this.processLeaveChannelSequentially();
@@ -1417,6 +1549,7 @@ class BaseClientService {
         }
         finally {
             this.isLeaveChannelProcessing = false;
+            this.endMaintenanceRun();
             this.scheduleNextLeaveRound();
             if (!this.joinChannelIntervalId && !this.isJoinChannelProcessing) {
                 this.scheduleNextJoinRound();

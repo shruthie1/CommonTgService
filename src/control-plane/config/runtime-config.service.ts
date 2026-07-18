@@ -31,6 +31,13 @@ export class RuntimeConfigService {
         bool(process.env[`ENABLE_${flag}`], DEFAULTS[flag]),
       ]),
     ) as Record<SchedulerFlag, boolean>;
+
+    const enabledSchedulers = this.activeSchedulers();
+    if (enabledSchedulers.length > 1) {
+      throw new Error(
+        `Only one scheduler owner may be enabled per process; received ${enabledSchedulers.join(', ')}`,
+      );
+    }
   }
 
   enabled(scheduler: SchedulerFlag): boolean {

@@ -145,6 +145,14 @@ export interface ProcessClientResult {
     updateSummary?: string | null;
 }
 
+export interface ReadyRotationSweepResult {
+    /** Number of candidates that reached a terminal ready-rotation outcome this run. */
+    attempted: number;
+    rotated: number;
+    deferred: number;
+    skipped: number;
+}
+
 type PasswordVerificationStatus = 'ours' | 'foreign' | 'unknown';
 type ObjectPathSegment = string | number;
 type MongoQuery = Record<string, unknown>;
@@ -221,6 +229,17 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
     protected readonly MAX_UPDATES_PER_CYCLE = 20;
+    // Session rotation is deliberately paced. A normal warmup pass never handles
+    // READY accounts; the dedicated scheduler handles at most one terminal READY
+    // outcome per run to avoid bursts of sensitive Telegram session activity.
+    protected readonly MAX_READY_ROTATIONS_PER_SWEEP = 1;
+    protected readonly MAX_MAINTENANCE_DURATION_MS = 10 * 60 * 1000;
+    // This is an alert threshold, not an automatic unlock. Releasing an in-memory
+    // lock while its Telegram promise is still alive would permit overlapping work.
+    // A stuck run must be investigated/restarted; `finally` remains the only normal
+    // release path.
+    protected readonly MAINTENANCE_LOCK_TTL_MS = 30 * 60 * 1000;
+    protected activeMaintenanceRun: { name: string; startedAt: number } | null = null;
     /** A non-terminal account still warming past this many days is stuck and gets retired. */
     protected readonly STUCK_WARMUP_DAYS = 45;
     protected dailyJoinCounts: Map<string, number> = new Map();
@@ -1303,6 +1322,181 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     // ---- Main Warmup Processing (replaces processBufferClient / processPromoteClient) ----
 
+    /**
+     * Shared execution path for the dedicated READY-only rotation scheduler.
+     * This never calls the generic warmup processor: a stale READY document must
+     * not cause privacy/profile/2FA work from a session-rotation job.
+     */
+    protected async processReadyRotationSweep(
+        readyClients: TDoc[],
+        clientMap: ReadonlyMap<string, Client>,
+        shouldSkip: (doc: TDoc) => boolean = () => false,
+    ): Promise<ReadyRotationSweepResult> {
+        let attempted = 0;
+        let rotated = 0;
+        let deferred = 0;
+        let skipped = 0;
+
+        for (const readyClient of readyClients) {
+            if (attempted >= this.MAX_READY_ROTATIONS_PER_SWEEP) break;
+            const client = readyClient.clientId
+                ? clientMap.get(readyClient.clientId)
+                : undefined;
+            if (!client || shouldSkip(readyClient)) {
+                skipped += 1;
+                continue;
+            }
+
+            const result = await this.processReadyRotation(readyClient, client);
+            // DB-only validation failures are allowed to fall through to another
+            // candidate. Once a candidate is actually completed/recovered or a
+            // session rotation is attempted (even if it fails), stop this run.
+            if (result.updateSummary === 'ready_rotation_deferred') {
+                deferred += 1;
+                continue;
+            }
+            attempted += 1;
+            if (result.updateCount > 0) rotated += result.updateCount;
+            else deferred += 1;
+        }
+
+        return { attempted, rotated, deferred, skipped };
+    }
+
+    /**
+     * Strict READY-only path. It may repair stale DB metadata, but it performs a
+     * Telegram operation only when the repaired document still resolves to
+     * `rotate_session`.
+     */
+    private async processReadyRotation(doc: TDoc, client: Client): Promise<ProcessClientResult> {
+        if (doc.inUse === true || !client) {
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+
+        const now = Date.now();
+        try {
+            doc = await this.repairWarmupMetadata(doc, now);
+        } catch (error) {
+            this.logger.warn(`READY rotation metadata repair failed for ${doc.mobile}:`, error);
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+
+        if (doc.warmupPhase !== WarmupPhase.READY) {
+            this.logger.warn(
+                `READY rotation deferred for ${doc.mobile}: metadata now resolves to ${doc.warmupPhase || 'unset'}`,
+            );
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+
+        const warmupAction = getWarmupPhaseAction(doc, now);
+        if (warmupAction.action !== 'rotate_session') {
+            this.logger.warn(
+                `READY rotation deferred for ${doc.mobile}: resolved action is ${warmupAction.action}`,
+            );
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+
+        // Legacy records that are already being used must not create another
+        // session. Retain the existing recovery behavior, but only after the
+        // strict READY validation above.
+        if (ClientHelperUtils.getTimestamp(doc.lastUsed) > 0) {
+            await this.backfillTimestamps(doc.mobile, doc, now);
+            await this.update(doc.mobile, {
+                warmupPhase: WarmupPhase.SESSION_ROTATED,
+                ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
+            });
+            this.logger.log(`Recovered already-used READY ${this.clientType} client ${doc.mobile} without a Telegram session rotation`);
+            return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
+        }
+
+        // Record the attempt before connecting to Telegram. A crash or a false
+        // return therefore still consumes this run and receives normal cooldown
+        // handling rather than cascading to another account.
+        await this.update(doc.mobile, { lastUpdateAttempt: new Date(now) });
+        const failedAttempts = doc.failedUpdateAttempts || 0;
+        try {
+            await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
+            const rotated = await this.rotateSession(doc.mobile);
+            if (rotated) {
+                this.botsService.sendMessageByCategory(
+                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                    `<b>WARMUP COMPLETE</b> ${this.clientType} ${doc.mobile} — session rotated, ${doc.channels || 0} channels`,
+                    { parseMode: 'HTML' },
+                );
+                return { updateCount: 1, updateSummary: 'rotate_session' };
+            }
+
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>WARMUP FAILED</b> ${this.clientType} ${doc.mobile}: rotate_session — ${failedAttempts + 1} fails`,
+                { parseMode: 'HTML' },
+            );
+            return { updateCount: 0, updateSummary: 'ready_rotation_attempt_failed' };
+        } catch (error: unknown) {
+            const errorDetails = this.handleError(error, `READY rotation error for ${this.clientType} client`, doc.mobile);
+            const failCount = failedAttempts + 1;
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failCount,
+                lastUpdateFailure: new Date(),
+            });
+            if (isPermanentError(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
+            }
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                `<b>WARMUP ERROR</b> ${this.clientType} ${doc.mobile}: rotate_session — ${failCount}/${this.MAX_FAILED_ATTEMPTS} fails\n${errorDetails.message?.substring(0, 120) || 'unknown'}`,
+                { parseMode: 'HTML' },
+            );
+            return { updateCount: 0, updateSummary: 'ready_rotation_attempt_failed' };
+        } finally {
+            await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
+        }
+    }
+
+    /**
+     * Warmup checks, ready rotation, and channel joins mutate the same
+     * account/session state. Never release this lock while its operation may
+     * still be alive: a timeout is observability only, not authorization to
+     * overlap Telegram work.
+     */
+    protected beginMaintenanceRun(name: string): boolean {
+        if (!this.activeMaintenanceRun) {
+            this.activeMaintenanceRun = { name, startedAt: Date.now() };
+            return true;
+        }
+
+        const elapsedMs = Date.now() - this.activeMaintenanceRun.startedAt;
+        if (elapsedMs >= this.MAINTENANCE_LOCK_TTL_MS) {
+            this.logger.error(
+                `Maintenance lock overdue: ${this.activeMaintenanceRun.name} has run for ${Math.floor(elapsedMs / 1000)}s; keeping lock to prevent overlapping Telegram work`,
+            );
+        }
+        const duration = Math.floor(elapsedMs / 1000);
+        const overdue = elapsedMs >= this.MAX_MAINTENANCE_DURATION_MS ? ' (past advisory duration)' : '';
+        this.logger.warn(
+            `Skipping ${name}: ${this.activeMaintenanceRun.name} is still running for ${duration}s${overdue}`,
+        );
+        return false;
+    }
+
+    protected endMaintenanceRun(): void {
+        this.activeMaintenanceRun = null;
+    }
+
+    protected isMaintenanceRunActive(): boolean {
+        return this.activeMaintenanceRun !== null;
+    }
+
     async processClient(doc: TDoc, client: Client): Promise<ProcessClientResult> {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
@@ -1639,6 +1833,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             await this.scheduleNextJoinRound();
             return;
         }
+        if (!this.beginMaintenanceRun('processJoinChannelInterval')) {
+            this.logger.warn('Deferring join-channel round while another warmup operation is active');
+            await this.scheduleNextJoinRound();
+            return;
+        }
 
         this.isJoinChannelProcessing = true;
         try {
@@ -1647,6 +1846,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error('Error in join channel queue', error);
         } finally {
             this.isJoinChannelProcessing = false;
+            this.endMaintenanceRun();
             // Schedule next round (randomized) instead of fixed interval
             await this.scheduleNextJoinRound();
         }
@@ -1902,6 +2102,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.clearLeaveChannelInterval();
             return;
         }
+        if (!this.beginMaintenanceRun('processLeaveChannelInterval')) {
+            this.logger.warn('Deferring leave-channel round while another warmup operation is active');
+            this.scheduleNextLeaveRound();
+            return;
+        }
 
         this.isLeaveChannelProcessing = true;
         try {
@@ -1910,6 +2115,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error('Error in leave channel queue', error);
         } finally {
             this.isLeaveChannelProcessing = false;
+            this.endMaintenanceRun();
             this.scheduleNextLeaveRound();
 
             // After leave processing, kick the join loop if it's idle — accounts that

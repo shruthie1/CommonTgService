@@ -96,7 +96,17 @@ type WarmupSimulationSkip = { mobile: string; action: string; priority?: number;
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
-    private checkingBufferClientsSince: number = 0;
+
+    /** @deprecated Test compatibility alias for the single shared maintenance lock. */
+    private get checkingBufferClientsSince(): number {
+        return this.activeMaintenanceRun?.startedAt || 0;
+    }
+
+    private set checkingBufferClientsSince(value: number) {
+        this.activeMaintenanceRun = value > 0
+            ? { name: 'legacy-buffer-test-lock', startedAt: value }
+            : null;
+    }
 
     private promoteClientService: PromoteClientService;
 
@@ -1178,16 +1188,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Check & process buffer clients ----
 
     async checkBufferClients() {
-        const MAX_CHECK_DURATION = 10 * 60 * 1000; // 10 minutes max
-        if (this.checkingBufferClientsSince > 0 && Date.now() - this.checkingBufferClientsSince < MAX_CHECK_DURATION) {
-            this.logger.warn('checkBufferClients already in progress, skipping concurrent call');
-            return;
-        }
+        if (!this.beginMaintenanceRun('checkBufferClients')) return;
         if (this.telegramService.hasActiveClientSetup()) {
             this.logger.warn('Ignored active check buffer channels as active client setup exists');
+            this.endMaintenanceRun();
             return;
         }
-        this.checkingBufferClientsSince = Date.now();
         try {
             await this._checkBufferClientsInternal();
         } catch (error) {
@@ -1195,7 +1201,62 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.error(`checkBufferClients crashed: ${errMsg}`);
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkBufferClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
-            this.checkingBufferClientsSince = 0;
+            this.endMaintenanceRun();
+        }
+    }
+
+    /**
+     * Rotates only accounts which the normal warmup pass has already marked READY.
+     * This deliberately shares the main-check lock: rotation must never overlap a
+     * warmup/check pass or an active client setup.  The normal pass owns all phase
+     * transitions; this pass only closes the READY -> SESSION_ROTATED gap.
+     */
+    async rotateReadyBufferClients(): Promise<boolean> {
+        if (!this.beginMaintenanceRun('rotateReadyBufferClients')) return false;
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ready buffer rotation skipped: active client setup exists');
+            this.endMaintenanceRun();
+            return false;
+        }
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
+            this.logger.warn('Ready buffer rotation skipped: channel join/leave work is active');
+            this.endMaintenanceRun();
+            return false;
+        }
+
+        try {
+            const clients = await this.clientService.findAll();
+            const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+            const primaryClientMobiles = new Set(
+                clients.filter((client) => !!client.mobile).map((client) => client.mobile),
+            );
+            const readyClients = await this.bufferClientModel
+                .find({
+                    clientId: { $exists: true, $ne: null },
+                    status: 'active',
+                    inUse: { $ne: true },
+                    warmupPhase: WarmupPhase.READY,
+                })
+                .sort({ lastUpdateAttempt: 1, mobile: 1 })
+                .exec();
+
+            const { attempted, rotated, deferred, skipped } = await this.processReadyRotationSweep(
+                readyClients,
+                clientMap,
+                (bufferClient) => this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles),
+            );
+
+            this.logger.log(
+                `Ready buffer rotation sweep complete: candidates=${readyClients.length}, attempted=${attempted}, rotated=${rotated}, deferred=${deferred}, skipped=${skipped}`,
+            );
+            return attempted > 0;
+        } catch (error) {
+            const errMsg = parseError(error, 'rotateReadyBufferClients').message;
+            this.logger.error(`Ready buffer rotation sweep crashed: ${errMsg}`);
+            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ READY Buffer Rotation CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            return false;
+        } finally {
+            this.endMaintenanceRun();
         }
     }
 
@@ -1254,9 +1315,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
             const lastUsed = ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
             const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
-            // Only skip for backfill if the account is already fully operational (session_rotated).
-            // "ready" accounts with lastUsed set are pre-warmup-system accounts that need
-            // rotate_session to advance — never skip them here.
+            // READY -> SESSION_ROTATED is deliberately handled only by the paced
+            // ready-rotation scheduler. A normal maintenance run must never turn
+            // a catch-up batch into a burst of sensitive session work.
+            if (warmupPhase === WarmupPhase.READY) continue;
+            // Only skip for backfill if the account is already fully operational.
             if (lastUsed > 0 && warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 await this.backfillTimestamps(bufferClient.mobile, bufferClient, now);
                 continue;
@@ -1271,7 +1334,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const warmupAction = getWarmupPhaseAction(bufferClient, now);
             const computedPhase = warmupAction.phase;
             const phaseBoost: Record<string, number> = {
-                [WarmupPhase.READY]: 25000,            // rush to complete
                 [WarmupPhase.MATURING]: 15000,         // almost done
                 [WarmupPhase.GROWING]: 10000,          // mid-pipeline
                 [WarmupPhase.IDENTITY]: 7000,          // early-mid
@@ -1289,7 +1351,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 'update_username': 1500,     // last identity step
                 'update_name_bio': 1000,     // middle identity step
                 'upload_photo': 1000,        // maturing step
-                'rotate_session': 2000,      // final step — ready to use
             };
             const warmupBoost = phaseBoost[computedPhase] ?? 5000;
             const actionBonus = subStepBonus[warmupAction.action] || 0;
@@ -1422,17 +1483,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (this.telegramService.hasActiveClientSetup()) {
             return 'Active client setup exists, skipping';
         }
-
-        this.logger.log('Starting join channel process for buffer clients');
-
         // Don't destroy in-flight joins — skip if still processing
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
+        if (!this.beginMaintenanceRun('prepareBufferJoinChannels')) {
+            return 'Warmup maintenance active, skipped';
+        }
 
-        // Store clientId scope so refills stay within the same client
-        this.joinScopeClientId = clientId || null;
+        this.logger.log('Starting join channel process for buffer clients');
+        try {
+            // Store clientId scope so refills stay within the same client
+            this.joinScopeClientId = clientId || null;
 
         const primaryClientMobiles = await this.getPrimaryClientMobiles(clientId);
         const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
@@ -1508,7 +1571,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.createTimeout(() => this.leaveChannelQueue(), ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
         }
 
-        return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
+            return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
+        } finally {
+            this.endMaintenanceRun();
+        }
     }
 
     // ---- Buffer-specific: Create buffer client from user (redesigned — no removeOtherAuths, no 2FA, no new session) ----

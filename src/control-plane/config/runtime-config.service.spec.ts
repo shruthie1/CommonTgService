@@ -34,10 +34,19 @@ describe('RuntimeConfigService', () => {
     expect(config.enabled('UMS_TEST_SCHEDULER')).toBe(false);
   });
 
+  it('rejects two scheduler owners in the same process', () => {
+    process.env.ENABLE_CMS_SCHEDULER = 'true';
+    process.env.ENABLE_UMS_SCHEDULER = 'true';
+
+    expect(() => new RuntimeConfigService()).toThrow(
+      'Only one scheduler owner may be enabled per process',
+    );
+  });
+
   it('keeps the three-process PM2 template aligned with the scheduler registry', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const template = require('../../../ecosystem.config.example.cjs') as {
-      apps: Array<{ env: Record<string, string> }>;
+      apps: Array<{ name: string; env: Record<string, string> }>;
     };
     const expected = keys.sort();
 
@@ -47,5 +56,9 @@ describe('RuntimeConfigService', () => {
         .sort();
       expect(actual).toEqual(expected);
     }
+
+    const umsTest = template.apps.find((app) => app.name === 'ums-test');
+    expect(umsTest?.env.CONFIG_URL).toBeUndefined();
+    expect(umsTest?.env.CONFIG_URLS).toBeUndefined();
   });
 });

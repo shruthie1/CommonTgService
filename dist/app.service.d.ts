@@ -38,6 +38,7 @@ export declare class AppService implements OnModuleInit, OnModuleDestroy {
     onModuleInit(): void;
     setupClient(clientId: string, query: SetupClientQueryDto): Promise<void>;
     checkBufferClients(): Promise<void>;
+    rotateReadyBufferClients(): Promise<boolean>;
     joinBufferClients(): Promise<void>;
     updateBufferClientInfo(): Promise<void>;
     forwardGetRequest(externalUrl: string, queryParams: Record<string, unknown>): Promise<any>;

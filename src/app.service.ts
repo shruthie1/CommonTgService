@@ -79,6 +79,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     console.log('App Module initiated !!');
 
     if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
+      this.logger.log('Starting UMS access-data cleanup interval (every 15 minutes)');
       this.cleanupInterval = setInterval(
         () => this.cleanupOldAccessData(),
         15 * 60 * 1000,
@@ -92,6 +93,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           '25 2,9,16 * * * ',
           'Asia/Kolkata',
           async () => {
+            this.logger.log('Starting UMS primary-client channel join/leave cycle');
             try {
               await fetchWithTimeout(
                 `${ppplbot()}&text=ExecutingjoinchannelForClients-${process.env.clientId}`,
@@ -103,10 +105,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             try {
               // Original UMS used the UTC calendar day with an IST schedule.
               if (new Date().getUTCDate() % 3 === 1) {
+                this.logger.log('UMS channel cycle branch=leave-all');
                 await this.leaveChannelsAll();
               } else {
+                this.logger.log('UMS channel cycle branch=join');
                 await this.joinchannelForClients();
               }
+              this.logger.log('Completed UMS primary-client channel join/leave cycle');
             } catch (error) {
               parseError(error, 'UMS scheduled channel join failed');
             }
@@ -121,12 +126,16 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           '0 3 * * * ',
           'Asia/Kolkata',
           async () => {
+            this.logger.log('Starting UMS user-data/timestamp retention');
             try {
               const res = await this.userDataService.removeRedundantData();
               await this.timestampService.clear();
               console.log(
                 'Deleted userdata older than month | count: ',
                 res.deletedCount,
+              );
+              this.logger.log(
+                `Completed UMS user-data/timestamp retention: deleted=${res.deletedCount}`,
               );
             } catch (e) {
               console.error('Error Deleteing old userData', e);
@@ -176,6 +185,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async checkBufferClients(): Promise<void> {
     await this.bufferClientService.checkBufferClients();
+  }
+
+  async rotateReadyBufferClients(): Promise<boolean> {
+    return this.bufferClientService.rotateReadyBufferClients();
   }
 
   async joinBufferClients(): Promise<void> {
