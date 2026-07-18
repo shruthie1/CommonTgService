@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
-import type { Db } from 'mongodb';
 import * as schedule from 'node-schedule-tz';
 import {
   ActiveChannelsService,
@@ -410,7 +409,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
-  private requireDatabase(jobName: string): Db {
+  private requireDatabase(jobName: string): NonNullable<Connection['db']> {
     const db = this.connection.db;
     if (!db) {
       throw new Error(`Mongo connection is unavailable for ${jobName}`);
