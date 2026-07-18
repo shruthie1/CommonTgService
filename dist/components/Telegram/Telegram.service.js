@@ -978,6 +978,12 @@ let TelegramService = TelegramService_1 = class TelegramService {
             throw new Error(`Failed to get bot info: ${error.message}`);
         }
     }
+    async promoteBotInChannel(mobile, channelId, botId, botUsername, permissions) {
+        const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
+        this.logger.info(mobile, 'Promoting bot in channel', { channelId, botId, botUsername });
+        await telegramClient.promoteToAdmin(channelId, botUsername, permissions);
+        this.logger.info(mobile, 'Bot promoted in channel', { channelId, botId, botUsername });
+    }
     async setupBotInChannel(mobile, channelId, botId, botUsername, permissions) {
         const telegramClient = await connection_manager_1.connectionManager.getClient(mobile);
         this.logger.info(mobile, 'Setup bot in channel', { channelId, botId, botUsername });

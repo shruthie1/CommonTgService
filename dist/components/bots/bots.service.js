@@ -69,9 +69,12 @@ let BotsService = BotsService_1 = class BotsService {
         this.moduleRef = moduleRef;
         this.flushInterval = 300000;
         this.maxPendingUpdates = 100;
-        this.maxReplacementsPerRun = 1;
         this.minHealthyBotsPerCategory = 2;
-        this.maxTopUpsPerRun = 2;
+        this.maxBotCreationsPerRun = 1;
+        this.maxPendingAdminRepairsPerRun = 1;
+        this.maxPendingAdminRepairAttempts = 3;
+        this.healthLeaseMs = 30 * 60 * 1000;
+        this.healthLeaseId = `${process.pid}:${Math.random().toString(36).slice(2)}`;
         this.healthCheckJob = null;
         this.flushTimer = null;
         this.destroyed = false;
@@ -86,6 +89,12 @@ let BotsService = BotsService_1 = class BotsService {
         return this.moduleRef.get(users_service_1.UsersService, { strict: false });
     }
     async onModuleInit() {
+        try {
+            await this.migrateLegacyLifecycle();
+        }
+        catch (err) {
+            console.error('[BotHealth] lifecycle migration deferred; Mongo unavailable at startup', err?.message || err);
+        }
         await this.initializeCache();
         this.startPeriodicFlush();
         if (this.isBotHealthJobEnabled()) {
@@ -123,6 +132,80 @@ let BotsService = BotsService_1 = class BotsService {
         if (this.flushTimer) {
             clearInterval(this.flushTimer);
             this.flushTimer = null;
+        }
+    }
+    async migrateLegacyLifecycle() {
+        const legacyBots = await this.botModel.find({ lifecycle: { $exists: false } }).lean().exec();
+        if (legacyBots.length === 0)
+            return;
+        const now = new Date();
+        await this.botModel.bulkWrite(legacyBots.map(bot => ({
+            updateOne: {
+                filter: { _id: bot._id, lifecycle: { $exists: false } },
+                update: { $set: this.legacyLifecycleUpdate(bot, now) },
+            },
+        })));
+        console.log(`[BotHealth] migrated lifecycle metadata for ${legacyBots.length} legacy bot record(s)`);
+    }
+    legacyLifecycleUpdate(bot, now = new Date()) {
+        const reason = bot.deadReason || '';
+        if (bot.status !== 'inactive') {
+            return { lifecycle: 'active_verified', lifecycleReason: 'migrated legacy active record', lifecycleUpdatedAt: now, repairAttempts: 0 };
+        }
+        if (/awaiting.*admin|admin.*add/i.test(reason)) {
+            return { lifecycle: 'pending_admin', lifecycleReason: reason || 'migrated pending channel-admin verification', lifecycleUpdatedAt: now, repairAttempts: 0 };
+        }
+        if (/getme|token|unauthori[sz]ed|revoked|invalid/i.test(reason)) {
+            return { lifecycle: 'dead_token', lifecycleReason: reason || 'migrated token failure', lifecycleUpdatedAt: now, repairAttempts: 0 };
+        }
+        return { lifecycle: 'manual_attention', lifecycleReason: reason || 'migrated inactive record with unknown cause', lifecycleUpdatedAt: now, repairAttempts: 0 };
+    }
+    lifecycleOf(bot) {
+        if (bot.lifecycle)
+            return bot.lifecycle;
+        return this.legacyLifecycleUpdate(bot).lifecycle;
+    }
+    isSelectable(bot) {
+        return this.lifecycleOf(bot) === 'active_verified';
+    }
+    nextRepairDate(attempts, now = Date.now()) {
+        const delay = Math.min(24 * 60 * 60 * 1000, 5 * 60 * 1000 * (2 ** Math.max(0, attempts - 1)));
+        return new Date(now + delay);
+    }
+    async refreshBotCache() {
+        await this.flushPendingStats();
+        this.cache.flushAll();
+    }
+    evictBotFromSendCache(bot) {
+        const id = bot._id?.toString();
+        if (!id || !bot.category)
+            return;
+        this.cache.del(`bot:${id}`);
+        const categoryKey = `category:${bot.category}`;
+        const cached = this.cache.get(categoryKey);
+        if (cached)
+            this.cache.set(categoryKey, cached.filter(item => item._id.toString() !== id));
+        this.cache.del('all-bots');
+    }
+    async acquireHealthLease() {
+        const now = new Date();
+        try {
+            const res = await this.botModel.db.collection('botHealthLeases').findOneAndUpdate({ _id: 'bot-health', $or: [{ expiresAt: { $lte: now } }, { holderId: this.healthLeaseId }] }, { $set: { holderId: this.healthLeaseId, acquiredAt: now, expiresAt: new Date(now.getTime() + this.healthLeaseMs) } }, { upsert: true, returnDocument: 'after' });
+            return res?.holderId === this.healthLeaseId;
+        }
+        catch (err) {
+            if (err?.code === 11000)
+                return false;
+            console.error('[BotHealth] unable to acquire distributed lease; skipping run', err?.message || err);
+            return false;
+        }
+    }
+    async releaseHealthLease() {
+        try {
+            await this.botModel.db.collection('botHealthLeases').deleteOne({ _id: 'bot-health', holderId: this.healthLeaseId });
+        }
+        catch (err) {
+            console.warn('[BotHealth] unable to release distributed lease; it will expire', err?.message || err);
         }
     }
     async initializeCache() {
@@ -188,6 +271,17 @@ let BotsService = BotsService_1 = class BotsService {
         }
     }
     async createBot(createBotDto) {
+        const { token, category, channelId, description } = createBotDto;
+        return this.createBotRecord({
+            token,
+            category,
+            channelId,
+            description,
+            lifecycle: 'pending_admin',
+            lifecycleReason: 'awaiting channel-admin verification',
+        });
+    }
+    async createBotRecord(createBotDto) {
         const username = await this.fetchUsername(createBotDto.token);
         if (!username) {
             throw new Error('Invalid bot token or unable to fetch bot username');
@@ -198,6 +292,12 @@ let BotsService = BotsService_1 = class BotsService {
         }
         const createdBot = new this.botModel({
             ...createBotDto,
+            lifecycle: createBotDto.lifecycle || 'pending_admin',
+            lifecycleReason: createBotDto.lifecycleReason || 'awaiting channel-admin verification',
+            lifecycleUpdatedAt: new Date(),
+            repairAttempts: 0,
+            nextRepairAt: new Date(),
+            status: createBotDto.lifecycle === 'active_verified' ? 'active' : 'inactive',
             username,
             lastUsed: new Date(),
             stats: {
@@ -217,6 +317,7 @@ let BotsService = BotsService_1 = class BotsService {
         cachedBots.push(savedBot.toObject());
         this.cache.set(`category:${createBotDto.category}`, cachedBots.sort((a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()));
         this.cache.set(`bot:${savedBot._id}`, savedBot.toObject());
+        this.cache.del('all-bots');
         return savedBot;
     }
     async getBots(category) {
@@ -270,6 +371,14 @@ let BotsService = BotsService_1 = class BotsService {
         return bot;
     }
     async updateBot(id, updateBotDto) {
+        const lifecycleFields = [
+            'status', 'lifecycle', 'lifecycleReason', 'lifecycleUpdatedAt',
+            'lastValidatedAt', 'lastAdminVerifiedAt', 'repairAttempts', 'nextRepairAt',
+            'deadStatus', 'deadReason', 'deadAt', 'createdByMobile', 'replacedBotUsername',
+        ];
+        if (lifecycleFields.some(field => updateBotDto[field] !== undefined)) {
+            throw new common_1.BadRequestException('Bot lifecycle fields are managed only by the health workflow');
+        }
         const bot = await this.botModel
             .findByIdAndUpdate(id, { ...updateBotDto, lastUsed: new Date() }, { new: true })
             .lean()
@@ -311,12 +420,9 @@ let BotsService = BotsService_1 = class BotsService {
             this.cache.set(`category:${category}`, availableBots);
             availableBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
         }
-        const liveBots = availableBots.filter(b => b.status !== 'inactive');
-        if (liveBots.length > 0) {
-            availableBots = liveBots;
-        }
+        availableBots = availableBots.filter(bot => this.isSelectable(bot));
         if (availableBots.length === 0) {
-            console.error(`No bots found for category: ${category}`);
+            await this.alertCategoryUnhealthy(category);
             return false;
         }
         for (const bot of availableBots) {
@@ -338,6 +444,16 @@ let BotsService = BotsService_1 = class BotsService {
         }
         console.error(`Failed to send for category ${category} after trying all ${availableBots.length} available bot(s).`);
         return false;
+    }
+    async alertCategoryUnhealthy(category) {
+        const key = `category-unhealthy-alert:${category}`;
+        if (this.cache.get(key))
+            return;
+        this.cache.set(key, true, 60 * 60);
+        console.error(JSON.stringify({ event: 'bot_category_unhealthy', category, requiredLifecycle: 'active_verified' }));
+        if (category !== channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS) {
+            await this.notify(`<b>Bot category unhealthy</b>\nCategory: ${category}\nNo verified active bot is eligible to send. Repair is required.`);
+        }
     }
     async sendMessageByCategory(category, message, options, allowServiceName = true) {
         return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options, allowServiceName);
@@ -439,6 +555,10 @@ let BotsService = BotsService_1 = class BotsService {
         return success;
     }
     async executeSendMessage(bot, text, options, allowServiceName = true) {
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct send through non-verified bot @${bot.username}`);
+            return false;
+        }
         try {
             const response = await axios_1.default.post(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
                 chat_id: bot.channelId,
@@ -462,6 +582,10 @@ let BotsService = BotsService_1 = class BotsService {
         }
     }
     async executeSendMedia(bot, method, media, options = {}) {
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct ${method} through non-verified bot @${bot.username}`);
+            return false;
+        }
         const formData = new form_data_1.default();
         formData.append('chat_id', bot.channelId);
         const mediaField = method.replace('send', '').toLowerCase();
@@ -500,6 +624,10 @@ let BotsService = BotsService_1 = class BotsService {
         }
     }
     async executeSendMediaGroup(bot, media, options) {
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct sendMediaGroup through non-verified bot @${bot.username}`);
+            return false;
+        }
         const formData = new form_data_1.default();
         formData.append('chat_id', bot.channelId);
         const mediaArray = media.map((item, i) => {
@@ -688,94 +816,225 @@ let BotsService = BotsService_1 = class BotsService {
     }
     isFloodSignal(err) {
         const m = [err?.message, err?.errorMessage, err?.code, String(err || '')].filter(Boolean).join(' ').toLowerCase();
-        return /flood|too many|spam|420|peer_flood|slowmode/.test(m);
+        return /flood|too many|rate.?limit|spam|420|peer_flood|slowmode/.test(m);
     }
     async checkBotToken(token) {
         try {
             const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getMe`, { timeout: 12000 });
-            return res.data?.ok === true ? 'alive' : 'unknown';
+            return res.data?.ok === true ? { verdict: 'alive', status: res.status } : { verdict: 'unknown', status: res.status };
         }
         catch (error) {
             const status = error?.response?.status;
             if (status === 401 || status === 403 || status === 404)
-                return 'dead';
-            return 'unknown';
+                return { verdict: 'dead', status };
+            return { verdict: 'unknown', status };
         }
     }
-    async validateAndReplaceBots() {
+    async validateAndReplaceBots(options = {}) {
+        const empty = (failure) => ({
+            checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0,
+            failures: [failure], dryRun: Boolean(options.dryRun), proposedActions: [],
+        });
         if (this.replaceInProgress) {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
-            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0, failures: ['already running (this pod)'] };
+            return empty('already running (this pod)');
+        }
+        if (!(await this.acquireHealthLease())) {
+            console.warn('[BotHealth] validateAndReplaceBots lease held by another CMS process — skipping');
+            return empty('already running (distributed lease)');
         }
         this.replaceInProgress = true;
         const failures = [];
+        const proposedActions = [];
         let alive = 0, dead = 0, unknown = 0, replaced = 0;
         const deadBots = [];
+        let creationBudget = this.maxBotCreationsPerRun;
+        let stopPrivilegedWork = false;
         try {
+            if (!options.dryRun)
+                await this.migrateLegacyLifecycle();
             const bots = await this.botModel.find().lean().exec();
             for (const bot of bots) {
-                const verdict = await this.checkBotToken(bot.token);
-                if (verdict === 'alive') {
+                const check = await this.checkBotToken(bot.token);
+                const lifecycle = this.lifecycleOf(bot);
+                if (check.verdict === 'alive') {
                     alive++;
-                    if (bot.status === 'inactive') {
-                        await this.botModel.updateOne({ _id: bot._id }, { $set: { status: 'active', deadReason: null }, $unset: { deadAt: '' } }).exec();
+                    if (lifecycle === 'dead_token') {
+                        proposedActions.push(`recover @${bot.username} from dead_token after live getMe`);
+                        if (!options.dryRun) {
+                            await this.botModel.updateOne({ _id: bot._id, lifecycle: 'dead_token' }, {
+                                $set: { lifecycle: 'active_verified', lifecycleReason: 'token recovered by getMe', lifecycleUpdatedAt: new Date(), status: 'active', lastValidatedAt: new Date(), repairAttempts: 0 },
+                                $unset: { deadAt: '', deadReason: '', deadStatus: '', nextRepairAt: '' },
+                            }).exec();
+                        }
                     }
-                    else {
+                    else if (!options.dryRun) {
                         await this.botModel.updateOne({ _id: bot._id }, { $set: { lastValidatedAt: new Date() } }).exec();
                     }
                 }
-                else if (verdict === 'dead') {
+                else if (check.verdict === 'dead') {
                     dead++;
-                    if (bot.status !== 'inactive') {
-                        await this.botModel.updateOne({ _id: bot._id }, { $set: { status: 'inactive', deadReason: 'getMe 401 Unauthorized (token revoked)', deadAt: new Date() } }).exec();
+                    if (lifecycle !== 'dead_token') {
+                        proposedActions.push(`retire @${bot.username} as dead_token (getMe ${check.status})`);
+                        if (!options.dryRun) {
+                            await this.botModel.updateOne({ _id: bot._id }, {
+                                $set: { lifecycle: 'dead_token', lifecycleReason: `getMe ${check.status} permanent token failure`, lifecycleUpdatedAt: new Date(), status: 'inactive', deadReason: `getMe ${check.status} permanent token failure`, deadStatus: check.status, deadAt: new Date() },
+                                $unset: { nextRepairAt: '' },
+                            }).exec();
+                            this.evictBotFromSendCache(bot);
+                        }
                         console.warn(`[BotHealth] marked dead: @${bot.username} (${bot.category})`);
                     }
                     deadBots.push({ username: bot.username, category: bot.category, channelId: bot.channelId, token: bot.token });
                 }
                 else {
                     unknown++;
+                    const attempts = (bot.repairAttempts || 0) + 1;
+                    proposedActions.push(`retry token validation for @${bot.username} after transient ${check.status || 'network'} failure`);
+                    if (!options.dryRun) {
+                        await this.botModel.updateOne({ _id: bot._id }, { $set: { nextRepairAt: this.nextRepairDate(attempts) } }).exec();
+                    }
                 }
                 await this.sleep(1200);
             }
-            await this.flushPendingStats();
-            this.cache.flushAll();
-            const toReplace = deadBots.slice(0, this.maxReplacementsPerRun);
-            for (const deadBot of toReplace) {
+            if (!options.dryRun)
+                await this.refreshBotCache();
+            const pendingRepair = await this.reconcilePendingAdminBots(options);
+            failures.push(...pendingRepair.failures);
+            proposedActions.push(...pendingRepair.proposedActions);
+            stopPrivilegedWork = pendingRepair.stopPrivilegedWork;
+            for (const deadBot of deadBots) {
+                if (creationBudget <= 0 || stopPrivilegedWork)
+                    break;
                 try {
-                    const newBot = await this.replaceDeadBot(deadBot);
-                    if (newBot)
-                        replaced++;
+                    proposedActions.push(`replace dead @${deadBot.username} in ${deadBot.category}`);
+                    creationBudget--;
+                    if (!options.dryRun) {
+                        const newBot = await this.replaceDeadBot(deadBot);
+                        if (newBot)
+                            replaced++;
+                    }
                 }
                 catch (err) {
                     const msg = `replace @${deadBot.username} (${deadBot.category}): ${err?.message || err}`;
                     failures.push(msg);
                     (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, true);
-                    if (/flood|too many|rate/i.test(err?.message || '')) {
-                        failures.push('BotFather rate-limit hit — aborting further replacements this run');
+                    if (this.isFloodSignal(err)) {
+                        failures.push('flood/spam signal — aborting all remaining repair work this run');
+                        stopPrivilegedWork = true;
                         break;
                     }
                 }
             }
             let toppedUp = 0;
-            try {
-                const topUp = await this.topUpCategoriesToMinHealthy();
-                toppedUp = topUp.toppedUp;
-                failures.push(...topUp.topUpFailures);
+            if (!stopPrivilegedWork && creationBudget > 0) {
+                try {
+                    const topUp = await this.topUpCategoriesToMinHealthy(creationBudget, options.dryRun);
+                    toppedUp = topUp.toppedUp;
+                    creationBudget -= topUp.creationAttempts;
+                    failures.push(...topUp.topUpFailures);
+                    proposedActions.push(...topUp.proposedActions);
+                    stopPrivilegedWork = topUp.stopPrivilegedWork;
+                }
+                catch (err) {
+                    const msg = `top-up pass failed: ${err?.message || err}`;
+                    failures.push(msg);
+                    (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, false);
+                }
             }
-            catch (err) {
-                const msg = `top-up pass failed: ${err?.message || err}`;
-                failures.push(msg);
-                (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, false);
+            if (!options.dryRun) {
+                await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
             }
-            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
-            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures };
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions };
         }
         finally {
             this.replaceInProgress = false;
+            await this.releaseHealthLease();
         }
     }
+    async reconcilePendingAdminBots(options) {
+        const failures = [];
+        const proposedActions = [];
+        const now = new Date();
+        let stopPrivilegedWork = false;
+        const pending = await this.botModel
+            .find({ lifecycle: 'pending_admin', $or: [{ nextRepairAt: { $exists: false } }, { nextRepairAt: { $lte: now } }] })
+            .sort({ nextRepairAt: 1, createdAt: 1 })
+            .limit(this.maxPendingAdminRepairsPerRun)
+            .lean()
+            .exec();
+        for (const bot of pending) {
+            const attempts = bot.repairAttempts || 0;
+            if (attempts >= this.maxPendingAdminRepairAttempts) {
+                proposedActions.push(`move @${bot.username} to manual_attention after ${attempts} failed admin repairs`);
+                if (!options.dryRun) {
+                    await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                        $set: { lifecycle: 'manual_attention', lifecycleReason: 'channel-admin verification retry limit reached', lifecycleUpdatedAt: now, status: 'inactive' },
+                        $unset: { nextRepairAt: '' },
+                    }).exec();
+                }
+                continue;
+            }
+            if (options.dryRun) {
+                proposedActions.push(`reconcile pending-admin @${bot.username} in ${bot.channelId}`);
+                continue;
+            }
+            try {
+                const info = await this.telegramService.getBotInfo(bot.token);
+                const botId = String(info?.id || '');
+                if (!botId)
+                    throw new Error('could not resolve pending bot id');
+                const alreadyAdmin = await this.verifyBotIsChannelAdmin(bot.channelId, botId);
+                if (alreadyAdmin) {
+                    proposedActions.push(`activate verified pending-admin @${bot.username}`);
+                    if (!options.dryRun) {
+                        await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                            $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: now, lastAdminVerifiedAt: now, status: 'active', repairAttempts: attempts },
+                            $unset: { deadReason: '', nextRepairAt: '' },
+                        }).exec();
+                    }
+                    continue;
+                }
+                proposedActions.push(`add/verify pending-admin @${bot.username} in ${bot.channelId}`);
+                if (!options.dryRun) {
+                    await this.addBotToChannelAsAdmin(bot.channelId, bot.token, bot.username);
+                    if (!(await this.verifyBotIsChannelAdmin(bot.channelId, botId))) {
+                        throw new Error('post-add verification failed: bot is not listed as a channel admin');
+                    }
+                    await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                        $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', repairAttempts: attempts },
+                        $unset: { deadReason: '', nextRepairAt: '' },
+                    }).exec();
+                }
+            }
+            catch (err) {
+                const nextAttempts = attempts + 1;
+                const msg = `pending-admin @${bot.username}: ${err?.message || err}`;
+                failures.push(msg);
+                if (!options.dryRun) {
+                    await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                        $set: {
+                            repairAttempts: nextAttempts,
+                            lifecycleReason: `admin reconciliation failed: ${(err?.message || String(err)).slice(0, 180)}`,
+                            lifecycleUpdatedAt: new Date(),
+                            nextRepairAt: this.nextRepairDate(nextAttempts),
+                            status: 'inactive',
+                        },
+                    }).exec();
+                }
+                if (this.isFloodSignal(err)) {
+                    failures.push('flood/spam signal during pending-admin reconciliation — aborting remaining privileged work');
+                    stopPrivilegedWork = true;
+                    break;
+                }
+            }
+        }
+        if (!options.dryRun)
+            await this.refreshBotCache();
+        return { failures, proposedActions, stopPrivilegedWork };
+    }
     async provisionBotForCategory(category, channelId, opts = {}) {
-        const candidates = await this.pickHealthyCreatorCandidates(5);
+        const candidates = await this.pickHealthyCreatorCandidates(1);
         if (candidates.length === 0) {
             throw new Error('no healthy user account available to create bot');
         }
@@ -800,7 +1059,7 @@ let BotsService = BotsService_1 = class BotsService {
                     username = res.username;
                     break;
                 }
-                lastErr = new Error(`BotFather did not return a valid token (got: ${String(res?.botToken).slice(0, 20)})`);
+                lastErr = new Error('BotFather did not return a valid token');
             }
             catch (err) {
                 lastErr = err;
@@ -821,22 +1080,31 @@ let BotsService = BotsService_1 = class BotsService {
         }
         const creatorHandle = creator.username ? `@${creator.username}` : (creator.firstName || 'unknown');
         const description = `${creator.mobile} ${creatorHandle}`.slice(0, 512);
-        const saved = await this.createBot({ token: botToken, category, channelId, description });
-        await this.botModel.updateOne({ _id: saved._id }, { $set: { createdByMobile: creator.mobile, ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}), status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } }).exec();
+        const saved = await this.createBotRecord({
+            token: botToken,
+            category,
+            channelId,
+            description,
+            lifecycle: 'pending_admin',
+            lifecycleReason: 'awaiting channel-admin add',
+            createdByMobile: creator.mobile,
+            ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}),
+        });
         try {
             const botId = await this.addBotToChannelAsAdmin(channelId, botToken, username);
             const verified = await this.verifyBotIsChannelAdmin(channelId, botId);
             if (!verified) {
                 throw new Error('post-add verification failed: bot is not listed as an admin of the channel');
             }
-            await this.botModel.updateOne({ _id: saved._id }, { $set: { status: 'active' }, $unset: { deadReason: '' } }).exec();
-            await this.flushPendingStats();
-            this.cache.flushAll();
+            await this.botModel.updateOne({ _id: saved._id }, { $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', lastValidatedAt: new Date(), repairAttempts: 0 }, $unset: { deadReason: '', nextRepairAt: '' } }).exec();
+            await this.refreshBotCache();
             console.log(`[BotHealth] provisioned @${username} (${category}) via ${creator.mobile} — active`);
             return { saved, username, active: true };
         }
         catch (err) {
             (0, utils_1.parseError)(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
+            await this.botModel.updateOne({ _id: saved._id, lifecycle: 'pending_admin' }, { $set: { repairAttempts: 1, lifecycleReason: `admin setup failed: ${(err?.message || String(err)).slice(0, 180)}`, lifecycleUpdatedAt: new Date(), nextRepairAt: this.nextRepairDate(1), status: 'inactive' } }).exec();
+            await this.refreshBotCache();
             await this.notify(`<b>Bot created but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
             console.log(`[BotHealth] provisioned @${username} (${category}) — created but NOT yet admin (inactive)`);
             return { saved, username, active: false };
@@ -856,20 +1124,23 @@ let BotsService = BotsService_1 = class BotsService {
         console.log(`[BotHealth] replaced dead @${deadBot.username} (${deadBot.category}) — active`);
         return saved;
     }
-    async topUpCategoriesToMinHealthy() {
+    async topUpCategoriesToMinHealthy(creationBudget, dryRun) {
         const topUpFailures = [];
+        const proposedActions = [];
         let toppedUp = 0;
+        let creationAttempts = 0;
+        let stopPrivilegedWork = false;
         const all = await this.botModel.find().lean().exec();
         const byCategory = all.reduce((acc, b) => {
             (acc[b.category] = acc[b.category] || []).push(b);
             return acc;
         }, {});
         for (const [category, list] of Object.entries(byCategory)) {
-            if (toppedUp >= this.maxTopUpsPerRun) {
-                topUpFailures.push(`top-up cap (${this.maxTopUpsPerRun}) reached — remaining low categories deferred to next run`);
+            if (creationAttempts >= creationBudget) {
+                topUpFailures.push(`global creation budget (${creationBudget}) reached — remaining low categories deferred to next run`);
                 break;
             }
-            const liveCount = list.filter(b => b.status !== 'inactive').length;
+            const liveCount = list.filter(b => this.isSelectable(b)).length;
             const deficit = this.minHealthyBotsPerCategory - liveCount;
             if (deficit <= 0)
                 continue;
@@ -878,9 +1149,15 @@ let BotsService = BotsService_1 = class BotsService {
                 topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
                 continue;
             }
-            const need = Math.min(deficit, this.maxTopUpsPerRun - toppedUp);
+            const need = Math.min(deficit, creationBudget - creationAttempts);
             for (let i = 0; i < need; i++) {
                 try {
+                    proposedActions.push(`top up ${category} in ${channelId}`);
+                    if (dryRun) {
+                        creationAttempts++;
+                        continue;
+                    }
+                    creationAttempts++;
                     const { active, username } = await this.provisionBotForCategory(category, channelId);
                     if (active) {
                         toppedUp++;
@@ -896,13 +1173,14 @@ let BotsService = BotsService_1 = class BotsService {
                     (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, false);
                     if (this.isFloodSignal(err) || /flood|too many|rate/i.test(err?.message || '')) {
                         topUpFailures.push('flood/rate signal — aborting further top-ups this run');
-                        return { toppedUp, topUpFailures };
+                        stopPrivilegedWork = true;
+                        return { toppedUp, creationAttempts, topUpFailures, proposedActions, stopPrivilegedWork };
                     }
                     break;
                 }
             }
         }
-        return { toppedUp, topUpFailures };
+        return { toppedUp, creationAttempts, topUpFailures, proposedActions, stopPrivilegedWork };
     }
     async addBotToChannelAsAdmin(channelId, botToken, botUsername) {
         const botInfo = await this.telegramService.getBotInfo(botToken);
@@ -920,7 +1198,7 @@ let BotsService = BotsService_1 = class BotsService {
         const granted = await this.intersectWithPromoterRights(adminMobile, channelId, desired);
         await this.humanDelay();
         try {
-            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, granted);
+            await this.telegramService.promoteBotInChannel(adminMobile, channelId, botId, botUsername, granted);
         }
         catch (err) {
             if (this.isFloodSignal(err)) {

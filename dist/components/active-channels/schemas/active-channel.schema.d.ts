@@ -13,8 +13,6 @@ export declare class ActiveChannel {
     megagroup?: boolean;
     wordRestriction?: number;
     dMRestriction?: number;
-    recentUniqueUsers?: number;
-    lastUniqueUserCheckAt?: number;
     availableMsgs?: string[];
     banned?: boolean;
     bannedAt?: number | null;
@@ -26,10 +24,7 @@ export declare class ActiveChannel {
     lastMessageTime?: number;
     messageIndex?: number;
     messageId?: number;
-    tempBan?: boolean;
     deletedCount?: number;
-    starred?: boolean;
-    score?: number;
 }
 export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChannel, import("mongoose").Model<ActiveChannel, any, any, any, any, any, ActiveChannel>, {}, {}, {}, {}, import("mongoose").DefaultSchemaOptions, ActiveChannel, Document<unknown, {}, ActiveChannel, {
     id: string;
@@ -148,24 +143,6 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
     }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
     }>>;
-    recentUniqueUsers?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
-        id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
-        id: string;
-    }>>;
-    lastUniqueUserCheckAt?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
-        id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
-        id: string;
-    }>>;
     availableMsgs?: import("mongoose").SchemaDefinitionProperty<string[], ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
@@ -265,34 +242,7 @@ export declare const ActiveChannelSchema: import("mongoose").Schema<ActiveChanne
     }, "id"> & import("mongoose").HydratedDocumentOverrides<{
         id: string;
     }>>;
-    tempBan?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
-        id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
-        id: string;
-    }>>;
     deletedCount?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
-        id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
-        id: string;
-    }>>;
-    starred?: import("mongoose").SchemaDefinitionProperty<boolean, ActiveChannel, Document<unknown, {}, ActiveChannel, {
-        id: string;
-    }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
-        _id: import("mongoose").Types.ObjectId;
-    } & {
-        __v: number;
-    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
-        id: string;
-    }>>;
-    score?: import("mongoose").SchemaDefinitionProperty<number, ActiveChannel, Document<unknown, {}, ActiveChannel, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<ActiveChannel & {
         _id: import("mongoose").Types.ObjectId;

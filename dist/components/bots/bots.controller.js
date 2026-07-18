@@ -29,13 +29,14 @@ let BotsController = class BotsController {
     async createBot(createBotDto) {
         return this.botsService.createBot(createBotDto);
     }
-    async validateAndReplace(async) {
+    async validateAndReplace(async, dryRun) {
         const runInBackground = String(async ?? '').toLowerCase() === 'true' || async === '1';
+        const options = { dryRun: String(dryRun ?? '').toLowerCase() === 'true' || dryRun === '1' };
         if (runInBackground) {
-            void this.botsService.validateAndReplaceBots().catch(() => undefined);
-            return { started: true, mode: 'async', note: 'running in background; see the Bot Health Check summary notification' };
+            void this.botsService.validateAndReplaceBots(options).catch(() => undefined);
+            return { started: true, mode: 'async', dryRun: options.dryRun, note: 'running in background; inspect CMS logs for the summary' };
         }
-        return this.botsService.validateAndReplaceBots();
+        return this.botsService.validateAndReplaceBots(options);
     }
     async getBots(category) {
         return this.botsService.getBots(category);
@@ -140,7 +141,7 @@ __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({
         summary: 'Create a new bot',
-        description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.'
+        description: 'Registers a Telegram bot as pending channel-admin verification. It becomes eligible for message distribution only after the health workflow verifies its channel-admin membership.'
     }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Bot has been successfully created' }),
     (0, swagger_1.ApiResponse)({ status: 400, description: 'Invalid bot configuration provided' }),
@@ -155,13 +156,15 @@ __decorate([
     (0, common_1.Post)('validate-and-replace'),
     (0, swagger_1.ApiOperation)({
         summary: 'Validate all bots and auto-replace dead ones',
-        description: 'Runs the health check now: getMe every bot, mark 401s inactive, conservatively replace dead bots via BotFather, and top up any category below 2 healthy bots (create → add to channel as admin → verify). Also runs daily on a schedule. Pass ?async=true to start it in the BACKGROUND and return immediately (the full run takes minutes due to human-paced admin promotes); default awaits the summary.'
+        description: 'Runs the lifecycle-safe health check: getMe every bot, retire only permanent token failures, reconcile pending channel admins, then use at most one shared BotFather creation budget for replacement or top-up. Pass ?dryRun=true to report actions without bot-state writes or Telegram mutations; pass ?async=true to run in the background.'
     }),
     (0, swagger_1.ApiQuery)({ name: 'async', required: false, description: 'true = fire-and-forget (returns immediately), false/omitted = await the full summary' }),
+    (0, swagger_1.ApiQuery)({ name: 'dryRun', required: false, description: 'true = validate and report proposed transitions without bot-state writes, BotFather creation, or channel promotion (the short-lived run lease is still acquired)' }),
     (0, swagger_1.ApiResponse)({ status: 201, description: 'Validation + replacement summary (or {started:true} when async)' }),
     __param(0, (0, common_1.Query)('async')),
+    __param(1, (0, common_1.Query)('dryRun')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], BotsController.prototype, "validateAndReplace", null);
 __decorate([
@@ -200,7 +203,7 @@ __decorate([
     (0, common_1.Patch)(':id'),
     (0, swagger_1.ApiOperation)({
         summary: 'Update a bot',
-        description: 'Updates the configuration of an existing bot. Only provided fields will be modified.'
+        description: 'Updates non-lifecycle bot configuration. Lifecycle, health, and verification fields are managed only by the health workflow.'
     }),
     (0, swagger_1.ApiResponse)({ status: 200, description: 'Bot updated successfully' }),
     (0, swagger_1.ApiResponse)({ status: 404, description: 'Bot not found' }),

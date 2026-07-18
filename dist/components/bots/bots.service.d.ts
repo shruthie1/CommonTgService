@@ -9,6 +9,20 @@ export interface DeadBotInfo {
     channelId: string;
     token: string;
 }
+interface BotHealthRunOptions {
+    dryRun?: boolean;
+}
+export interface BotHealthRunResult {
+    checked: number;
+    alive: number;
+    dead: number;
+    unknown: number;
+    replaced: number;
+    toppedUp: number;
+    failures: string[];
+    dryRun: boolean;
+    proposedActions: string[];
+}
 export interface SendMessageOptions {
     parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';
     disableWebPagePreview?: boolean;
@@ -88,9 +102,12 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private static readonly HEALTH_JOB_NAME;
     private static readonly HEALTH_JOB_CRON;
     private static readonly HEALTH_JOB_TZ;
-    private readonly maxReplacementsPerRun;
     private readonly minHealthyBotsPerCategory;
-    private readonly maxTopUpsPerRun;
+    private readonly maxBotCreationsPerRun;
+    private readonly maxPendingAdminRepairsPerRun;
+    private readonly maxPendingAdminRepairAttempts;
+    private readonly healthLeaseMs;
+    private readonly healthLeaseId;
     private healthCheckJob;
     private flushTimer;
     private destroyed;
@@ -102,6 +119,15 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private isBotHealthJobEnabled;
     private scheduleBotHealthCheck;
     onModuleDestroy(): void;
+    private migrateLegacyLifecycle;
+    private legacyLifecycleUpdate;
+    private lifecycleOf;
+    private isSelectable;
+    private nextRepairDate;
+    private refreshBotCache;
+    private evictBotFromSendCache;
+    private acquireHealthLease;
+    private releaseHealthLease;
     private initializeCache;
     private startPeriodicFlush;
     private flushPendingStats;
@@ -111,11 +137,13 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
         channelId: string;
         description?: string;
     }): Promise<BotDocument>;
+    private createBotRecord;
     getBots(category?: ChannelCategory): Promise<BotDocument[]>;
     getBotById(id: string): Promise<BotDocument>;
     updateBot(id: string, updateBotDto: Partial<Bot>): Promise<BotDocument>;
     deleteBot(id: string): Promise<void>;
     private sendByCategoryWithFailover;
+    private alertCategoryUnhealthy;
     sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions, allowServiceName?: boolean): Promise<boolean>;
     sendPhotoByCategory(category: ChannelCategory, photo: string | Buffer, options?: PhotoOptions): Promise<boolean>;
     sendVideoByCategory(category: ChannelCategory, video: string | Buffer, options?: VideoOptions): Promise<boolean>;
@@ -147,15 +175,8 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private humanDelay;
     private isFloodSignal;
     private checkBotToken;
-    validateAndReplaceBots(): Promise<{
-        checked: number;
-        alive: number;
-        dead: number;
-        unknown: number;
-        replaced: number;
-        toppedUp: number;
-        failures: string[];
-    }>;
+    validateAndReplaceBots(options?: BotHealthRunOptions): Promise<BotHealthRunResult>;
+    private reconcilePendingAdminBots;
     private provisionBotForCategory;
     private replaceDeadBot;
     private topUpCategoriesToMinHealthy;
@@ -171,3 +192,4 @@ export declare class BotsService implements OnModuleInit, OnModuleDestroy {
     private notify;
     private sendHealthSummary;
 }
+export {};

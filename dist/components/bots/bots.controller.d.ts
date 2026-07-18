@@ -10,17 +10,10 @@ export declare class BotsController {
     private readonly botsService;
     constructor(botsService: BotsService);
     createBot(createBotDto: CreateBotDto): Promise<import("./schemas/bot.schema").BotDocument>;
-    validateAndReplace(async?: string): Promise<{
-        checked: number;
-        alive: number;
-        dead: number;
-        unknown: number;
-        replaced: number;
-        toppedUp: number;
-        failures: string[];
-    } | {
+    validateAndReplace(async?: string, dryRun?: string): Promise<import("./bots.service").BotHealthRunResult | {
         started: boolean;
         mode: string;
+        dryRun: boolean;
         note: string;
     }>;
     getBots(category?: ChannelCategory): Promise<import("./schemas/bot.schema").BotDocument[]>;

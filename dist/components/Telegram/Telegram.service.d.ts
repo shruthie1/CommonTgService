@@ -310,6 +310,18 @@ export declare class TelegramService implements OnModuleDestroy {
     getTopPrivateChats(mobile: string, limit?: number, enrichMedia?: boolean, offsetDate?: number): Promise<import("./TelegramManager").TopPrivateChatsResult>;
     addBotsToChannel(mobile: string, channelIds?: string[]): Promise<void>;
     getBotInfo(token: string): Promise<any>;
+    promoteBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {
+        changeInfo?: boolean;
+        postMessages?: boolean;
+        editMessages?: boolean;
+        deleteMessages?: boolean;
+        banUsers?: boolean;
+        inviteUsers?: boolean;
+        pinMessages?: boolean;
+        addAdmins?: boolean;
+        anonymous?: boolean;
+        manageCall?: boolean;
+    }): Promise<void>;
     setupBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {
         changeInfo?: boolean;
         postMessages?: boolean;

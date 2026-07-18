@@ -52,6 +52,41 @@ __decorate([
     __metadata("design:type", String)
 ], Bot.prototype, "status", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ enum: ['active_verified', 'dead_token', 'pending_admin', 'manual_attention'] }),
+    (0, mongoose_1.Prop)({ enum: ['active_verified', 'dead_token', 'pending_admin', 'manual_attention'], default: 'active_verified', index: true }),
+    __metadata("design:type", String)
+], Bot.prototype, "lifecycle", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Machine-readable or operator-facing lifecycle reason' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", String)
+], Bot.prototype, "lifecycleReason", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false }),
+    (0, mongoose_1.Prop)({ default: Date.now }),
+    __metadata("design:type", Date)
+], Bot.prototype, "lifecycleUpdatedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Last time channel-admin membership was verified' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Bot.prototype, "lastAdminVerifiedAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Bounded reconciliation attempts for pending-admin bots' }),
+    (0, mongoose_1.Prop)({ default: 0 }),
+    __metadata("design:type", Number)
+], Bot.prototype, "repairAttempts", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'Earliest time a reconciliation or transient validation retry may run' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Date)
+], Bot.prototype, "nextRepairAt", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ required: false, description: 'HTTP status which permanently invalidated this token' }),
+    (0, mongoose_1.Prop)(),
+    __metadata("design:type", Number)
+], Bot.prototype, "deadStatus", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ required: false, description: 'Why the bot was marked inactive' }),
     (0, mongoose_1.Prop)(),
     __metadata("design:type", String)

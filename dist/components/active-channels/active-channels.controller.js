@@ -80,7 +80,7 @@ __decorate([
 ], ActiveChannelsController.prototype, "createMultiple", null);
 __decorate([
     (0, common_1.Post)('auto-heal'),
-    (0, swagger_1.ApiOperation)({ summary: 'Clear time-expired reactRestricted / tempBan flags so channels can recover' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Clear time-expired reactRestricted flags so channels can recover' }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
@@ -100,7 +100,7 @@ __decorate([
     (0, swagger_1.ApiQuery)({ name: 'sortBy', required: false, type: String }),
     (0, swagger_1.ApiQuery)({ name: 'sortOrder', required: false, type: String }),
     (0, swagger_1.ApiQuery)({ name: 'search', required: false, type: String }),
-    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | temp_banned | with_errors | exhausted | high_deleted' }),
+    (0, swagger_1.ApiQuery)({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | with_errors | exhausted | high_deleted' }),
     __param(0, (0, common_1.Query)('page')),
     __param(1, (0, common_1.Query)('limit')),
     __param(2, (0, common_1.Query)('sortBy')),

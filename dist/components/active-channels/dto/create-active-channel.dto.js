@@ -17,13 +17,9 @@ class CreateActiveChannelDto {
         this.reactRestricted = false;
         this.wordRestriction = 0;
         this.dMRestriction = 0;
-        this.recentUniqueUsers = 0;
-        this.lastUniqueUserCheckAt = 0;
         this.banned = false;
         this.bannedAt = null;
         this.private = false;
-        this.starred = false;
-        this.score = 0;
     }
 }
 exports.CreateActiveChannelDto = CreateActiveChannelDto;
@@ -76,14 +72,6 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateActiveChannelDto.prototype, "dMRestriction", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: 0, required: false }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "recentUniqueUsers", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ default: 0, required: false }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "lastUniqueUserCheckAt", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ type: [String] }),
     __metadata("design:type", Array)
 ], CreateActiveChannelDto.prototype, "availableMsgs", void 0);
@@ -110,12 +98,4 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], CreateActiveChannelDto.prototype, "private", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
-    __metadata("design:type", Boolean)
-], CreateActiveChannelDto.prototype, "starred", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Channel score', default: 0, required: false }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "score", void 0);
 //# sourceMappingURL=create-active-channel.dto.js.map

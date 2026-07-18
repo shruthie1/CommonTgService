@@ -33,7 +33,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         this.MIN_PARTICIPANTS_COUNT = 600;
         this.logger = new common_1.Logger(ActiveChannelsService_1.name);
         this.REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
-        this.TEMP_BAN_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
         this.legacySendabilityRepaired = false;
     }
     async onModuleInit() {
@@ -53,15 +52,12 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     async autoHealChannels() {
         const now = Date.now();
         const reactCutoff = new Date(now - this.REACT_RESTRICTED_HEAL_MS);
-        const tempBanCutoff = now - this.TEMP_BAN_HEAL_MS;
         const reactResult = await this.activeChannelModel.updateMany({ reactRestricted: true, reactRestrictedAt: { $ne: null, $lte: reactCutoff } }, { $set: { reactRestricted: false, reactRestrictedAt: null, updatedAt: new Date() } });
-        const tempBanResult = await this.activeChannelModel.updateMany({ tempBan: true, bannedAt: { $ne: null, $lte: tempBanCutoff } }, { $set: { tempBan: false, bannedAt: null, updatedAt: new Date() } });
         const reactRestrictedHealed = reactResult.modifiedCount || 0;
-        const tempBanHealed = tempBanResult.modifiedCount || 0;
-        if (reactRestrictedHealed > 0 || tempBanHealed > 0) {
-            this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed}, tempBan on ${tempBanHealed} channel(s)`);
+        if (reactRestrictedHealed > 0) {
+            this.logger.log(`Channel auto-heal: cleared reactRestricted on ${reactRestrictedHealed} channel(s)`);
         }
-        return { reactRestrictedHealed, tempBanHealed };
+        return { reactRestrictedHealed };
     }
     async create(createActiveChannelDto) {
         try {
@@ -107,10 +103,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                     'reactRestricted',
                     'wordRestriction',
                     'dMRestriction',
-                    'recentUniqueUsers',
-                    'lastUniqueUserCheckAt',
-                    'starred',
-                    'score',
                 ]);
                 const defaults = {
                     channelId: dto.channelId,
@@ -123,8 +115,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                     reactRestricted: false,
                     wordRestriction: 0,
                     dMRestriction: 0,
-                    recentUniqueUsers: 0,
-                    lastUniqueUserCheckAt: 0,
                     availableMsgs: [],
                     banned: false,
                     bannedAt: null,
@@ -297,7 +287,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                         banned: { $ne: true },
                         forbidden: { $ne: true },
                         private: { $ne: true },
-                        tempBan: { $ne: true },
                     },
                 ],
             };
@@ -375,12 +364,10 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                                 restricted: { $sum: { $cond: [{ $eq: ['$restricted', true] }, 1, 0] } },
                                 banned: { $sum: { $cond: [{ $eq: ['$banned', true] }, 1, 0] } },
                                 forbidden: { $sum: { $cond: [{ $eq: ['$forbidden', true] }, 1, 0] } },
-                                tempBan: { $sum: { $cond: [{ $eq: ['$tempBan', true] }, 1, 0] } },
                                 reactRestricted: { $sum: { $cond: [{ $eq: ['$reactRestricted', true] }, 1, 0] } },
                                 isPrivate: { $sum: { $cond: [{ $eq: ['$private', true] }, 1, 0] } },
                                 broadcast: { $sum: { $cond: [{ $eq: ['$broadcast', true] }, 1, 0] } },
                                 megagroup: { $sum: { $cond: [{ $eq: ['$megagroup', true] }, 1, 0] } },
-                                starred: { $sum: { $cond: [{ $eq: ['$starred', true] }, 1, 0] } },
                                 withUsername: { $sum: { $cond: [{ $and: [{ $ne: ['$username', null] }, { $ne: ['$username', ''] }] }, 1, 0] } },
                             },
                         },
@@ -509,12 +496,10 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 restricted: overview.restricted || 0,
                 banned: overview.banned || 0,
                 forbidden: overview.forbidden || 0,
-                tempBan: overview.tempBan || 0,
                 reactRestricted: overview.reactRestricted || 0,
                 private: overview.isPrivate || 0,
                 broadcast: overview.broadcast || 0,
                 megagroup: overview.megagroup || 0,
-                starred: overview.starred || 0,
                 withUsername: overview.withUsername || 0,
             },
             messages: {
@@ -581,8 +566,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         else if (filter === 'banned') {
             query.$or = [{ banned: true }, { forbidden: true }];
         }
-        else if (filter === 'temp_banned')
-            query.tempBan = true;
         else if (filter === 'with_errors') {
             query.lastErrorType = { $ne: null, $exists: true };
         }

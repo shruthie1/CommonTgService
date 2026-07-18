@@ -1,6 +1,7 @@
 import { Document } from 'mongoose';
 import { ChannelCategory } from '../channel-category.enum';
 export type BotDocument = Bot & Document;
+export type BotLifecycle = 'active_verified' | 'dead_token' | 'pending_admin' | 'manual_attention';
 export declare class Bot {
     token: string;
     username: string;
@@ -9,6 +10,13 @@ export declare class Bot {
     description?: string;
     lastUsed: Date;
     status: 'active' | 'inactive';
+    lifecycle: BotLifecycle;
+    lifecycleReason?: string;
+    lifecycleUpdatedAt: Date;
+    lastAdminVerifiedAt?: Date;
+    repairAttempts: number;
+    nextRepairAt?: Date;
+    deadStatus?: number;
     deadReason?: string;
     deadAt?: Date;
     lastValidatedAt?: Date;
@@ -90,6 +98,69 @@ export declare const BotSchema: import("mongoose").Schema<Bot, import("mongoose"
         id: string;
     }>>;
     status?: import("mongoose").SchemaDefinitionProperty<"active" | "inactive", Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    lifecycle?: import("mongoose").SchemaDefinitionProperty<BotLifecycle, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    lifecycleReason?: import("mongoose").SchemaDefinitionProperty<string, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    lifecycleUpdatedAt?: import("mongoose").SchemaDefinitionProperty<Date, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    lastAdminVerifiedAt?: import("mongoose").SchemaDefinitionProperty<Date, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    repairAttempts?: import("mongoose").SchemaDefinitionProperty<number, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    nextRepairAt?: import("mongoose").SchemaDefinitionProperty<Date, Bot, Document<unknown, {}, Bot, {
+        id: string;
+    }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
+        _id: import("mongoose").Types.ObjectId;
+    } & {
+        __v: number;
+    }, "id"> & import("mongoose").HydratedDocumentOverrides<{
+        id: string;
+    }>>;
+    deadStatus?: import("mongoose").SchemaDefinitionProperty<number, Bot, Document<unknown, {}, Bot, {
         id: string;
     }, import("mongoose").DefaultSchemaOptions> & Omit<Bot & {
         _id: import("mongoose").Types.ObjectId;

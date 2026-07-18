@@ -546,8 +546,6 @@ class BaseClientService {
             return false;
         if (channel.private === true)
             return false;
-        if ('tempBan' in channel && channel.tempBan === true)
-            return false;
         return true;
     }
     safeSetLeaveChannelMap(mobile, channels) {
