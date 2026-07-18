@@ -670,15 +670,13 @@ let AppService = AppService_1 = class AppService {
         }
         const reply3 = await this.getPromotionStats();
         console.log(reply3);
-        return `<div>
-        <div style="display: flex; margin-bottom: 60px">
-          <div style="flex: 1;">${reply} </div>
-      < div style = "flex: 1; " > ${reply2} </div>
+        return `<div style="font-family: system-ui, sans-serif; line-height: 1.45; padding: 16px;">
+        <div style="display: flex; gap: 32px; margin-bottom: 32px; align-items: flex-start;">
+          <div style="flex: 1; min-width: 0;">${reply}</div>
+          <div style="flex: 1; min-width: 0;">${reply2}</div>
         </div>
-        < div style = "display: flex;" >
-          <div style="flex: 1; " > ${reply3} </div>
-            </div>
-            </div>`;
+        <div>${reply3}</div>
+      </div>`;
     }
     async getPromotionStats() {
         let resp = '';

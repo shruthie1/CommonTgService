@@ -388,17 +388,18 @@ let AppController = AppController_1 = class AppController {
     }
     async getData(res) {
         this.appService.checkAndRefresh();
-        res.setHeader('Content-Type', 'text/html');
-        let resp = '<html><head></head><body>';
-        resp += await this.appService.getData();
-        resp += '</body></html>';
-        resp += `<script>
-                console.log("hi");
-                setInterval(() => {
-                  window.location.reload();
-                }, 20000);
-            </script>`;
-        res.send(resp);
+        const data = await this.appService.getData();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(`<!doctype html>
+      <html>
+        <head><title>UMS dashboard</title></head>
+        <body>
+          ${data}
+          <script>
+            setInterval(() => window.location.reload(), 20000);
+          </script>
+        </body>
+      </html>`);
     }
 };
 exports.AppController = AppController;

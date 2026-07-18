@@ -709,17 +709,18 @@ let AppController = AppController_1 = class AppController {
     }
     async getData(res) {
         this.appService.checkAndRefresh();
-        res.setHeader('Content-Type', 'text/html');
-        let resp = '<html><head></head><body>';
-        resp += await this.appService.getData();
-        resp += '</body></html>';
-        resp += `<script>
-                console.log("hi");
-                setInterval(() => {
-                  window.location.reload();
-                }, 20000);
-            </script>`;
-        res.send(resp);
+        const data = await this.appService.getData();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(`<!doctype html>
+      <html>
+        <head><title>UMS dashboard</title></head>
+        <body>
+          ${data}
+          <script>
+            setInterval(() => window.location.reload(), 20000);
+          </script>
+        </body>
+      </html>`);
     }
 };
 exports.AppController = AppController;
@@ -1868,15 +1869,13 @@ let AppService = AppService_1 = class AppService {
         }
         const reply3 = await this.getPromotionStats();
         console.log(reply3);
-        return `<div>
-        <div style="display: flex; margin-bottom: 60px">
-          <div style="flex: 1;">${reply} </div>
-      < div style = "flex: 1; " > ${reply2} </div>
+        return `<div style="font-family: system-ui, sans-serif; line-height: 1.45; padding: 16px;">
+        <div style="display: flex; gap: 32px; margin-bottom: 32px; align-items: flex-start;">
+          <div style="flex: 1; min-width: 0;">${reply}</div>
+          <div style="flex: 1; min-width: 0;">${reply2}</div>
         </div>
-        < div style = "display: flex;" >
-          <div style="flex: 1; " > ${reply3} </div>
-            </div>
-            </div>`;
+        <div>${reply3}</div>
+      </div>`;
     }
     async getPromotionStats() {
         let resp = '';
