@@ -100,7 +100,11 @@ export declare class AppService implements OnModuleInit, OnModuleDestroy {
     extractNumberFromString(inputString: any): number;
     createInitializedObject(): Promise<{}>;
     getData(): Promise<string>;
-    getPromotionStats(): Promise<string>;
+    getPromotionStats(): Promise<{
+        rows: string;
+        summary: string;
+    }>;
+    private renderPromotionSummary;
     private renderOverviewRow;
     private renderOverviewMetric;
     private renderPromotionRow;

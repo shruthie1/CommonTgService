@@ -383,6 +383,7 @@ const client_service_1 = __webpack_require__(/*! ./components/clients/client.ser
 const app_service_1 = __webpack_require__(/*! ./app.service */ "./src/app.service.ts");
 const cloudflare_cache_interceptor_1 = __webpack_require__(/*! ./interceptors/cloudflare-cache.interceptor */ "./src/interceptors/cloudflare-cache.interceptor.ts");
 const no_cache_decorator_1 = __webpack_require__(/*! ./decorators/no-cache.decorator */ "./src/decorators/no-cache.decorator.ts");
+const status_dashboard_view_1 = __webpack_require__(/*! ./dashboard/status-dashboard.view */ "./src/dashboard/status-dashboard.view.ts");
 let AppController = AppController_1 = class AppController {
     constructor(clientService, appService) {
         this.clientService = clientService;
@@ -711,70 +712,7 @@ let AppController = AppController_1 = class AppController {
         this.appService.checkAndRefresh();
         const data = await this.appService.getData();
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(`<!doctype html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <meta name="theme-color" content="#111827">
-          <title>Status</title>
-          <style>
-            :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-            * { box-sizing: border-box; }
-            body { margin: 0; min-width: 320px; background: #111827; color: #f8fafc; }
-            .dashboard { width: min(1120px, 100%); margin: 0 auto; padding: 24px 16px 40px; }
-            .dashboard-header { margin: 4px 0 20px; }
-            .dashboard-eyebrow { margin: 0 0 6px; color: #67e8f9; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-            h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
-            .dashboard-subtitle { margin: 8px 0 0; color: #94a3b8; font-size: 14px; }
-            .dashboard-card { overflow: hidden; border: 1px solid #334155; border-radius: 16px; background: #1e293b; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); }
-            .dashboard-card-wide { margin-top: 16px; }
-            .overview-row { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.2fr) minmax(0, 1.2fr); border-bottom: 1px solid rgba(148, 163, 184, .16); }
-            .overview-row > * { min-width: 0; padding: 11px 14px; border-right: 1px solid rgba(148, 163, 184, .16); }
-            .overview-row > *:last-child { border-right: 0; }
-            .overview-heading, .promotion-heading { background: #26354b; color: #e0f2fe; font-size: 13px; font-weight: 800; }
-            .overview-client, .promotion-client { color: #e2e8f0; font-size: 14px; overflow-wrap: anywhere; }
-            .overview-metric { display: grid; gap: 5px; }
-            .overview-count, .promotion-count { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
-            .overview-names { overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.35; }
-            .promotion-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px minmax(140px, .8fr); align-items: center; border-bottom: 1px solid rgba(148, 163, 184, .16); }
-            .promotion-row > * { min-width: 0; padding: 11px 14px; }
-            .promotion-row:last-child { border-bottom: 0; }
-            .promotion-duration { font-size: 13px; font-weight: 800; }
-            .promotion-duration.age-fresh { color: #4ade80; }
-            .promotion-duration.age-recent { color: #2dd4bf; }
-            .promotion-duration.age-watch { color: #facc15; }
-            .promotion-duration.age-aging { color: #fb923c; }
-            .promotion-duration.age-stale { color: #fb7185; }
-            .promotion-duration.age-critical { color: #f43f5e; }
-            .promotion-duration.age-inactive { color: #94a3b8; }
-            .metric-empty { margin: 0; padding: 20px 16px; color: #94a3b8; font-size: 14px; text-align: center; }
-            @media (max-width: 680px) {
-              body { overflow: hidden; }
-              .dashboard { height: 100dvh; padding: 7px; overflow: hidden; }
-              .dashboard-header { margin: 0 0 5px; }
-              h1 { font-size: 18px; }
-              .dashboard-card { border-radius: 8px; box-shadow: none; }
-              .dashboard-card-wide { margin-top: 6px; }
-              .overview-row { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); }
-              .overview-row > *, .promotion-row > * { padding: 4px 5px; }
-              .overview-heading, .promotion-heading { font-size: 9px; }
-              .overview-client, .promotion-client { font-size: 9px; }
-              .overview-metric { gap: 1px; }
-              .overview-count, .promotion-count { font-size: 12px; line-height: 1; }
-              .overview-names { font-size: 8px; line-height: 1.05; }
-              .promotion-row { grid-template-columns: minmax(0, 1fr) 42px 78px; min-height: 21px; }
-              .promotion-duration { font-size: 9px; line-height: 1; white-space: nowrap; }
-              .metric-empty { padding: 8px; font-size: 10px; }
-            }
-          </style>
-        </head>
-        <body>
-          ${data}
-          <script>
-            setInterval(() => window.location.reload(), 20000);
-          </script>
-        </body>
-      </html>`);
+        res.send((0, status_dashboard_view_1.renderStatusDashboardDocument)(data));
     }
 };
 exports.AppController = AppController;
@@ -1923,10 +1861,11 @@ let AppService = AppService_1 = class AppService {
             overviewRows += this.renderOverviewRow(profile, pendingDemos, userData.names, userData.fullShowNames, fullShows);
         }
         overviewRows = overviewRows || '<p class="metric-empty">No pending demos or full-show users</p>';
-        const promotionRows = await this.getPromotionStats();
+        const promotionStats = await this.getPromotionStats();
         return `<main class="dashboard">
         <header class="dashboard-header">
           <h1>Status</h1>
+          <button class="refresh-button" type="button" aria-label="Refresh status" title="Refresh">↻</button>
         </header>
         <section class="dashboard-card dashboard-overview">
           <div class="overview-table" role="table" aria-label="Demo and full-show status">
@@ -1945,20 +1884,48 @@ let AppService = AppService_1 = class AppService {
               <span role="columnheader">Count</span>
               <span role="columnheader">Duration</span>
             </div>
-            ${promotionRows}
+            ${promotionStats.rows}
           </div>
+          ${promotionStats.summary}
         </section>
       </main>`;
     }
     async getPromotionStats() {
-        let resp = '';
+        let rows = '';
+        const stageCounts = {
+            'age-fresh': 0,
+            'age-recent': 0,
+            'age-watch': 0,
+            'age-aging': 0,
+            'age-stale': 0,
+            'age-critical': 0,
+            'age-inactive': 0,
+        };
         const result = await this.promoteStatService.findAll();
         result.sort((a, b) => Number(b.totalCount || 0) - Number(a.totalCount || 0));
         for (const data of result) {
             const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
-            resp += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
+            stageCounts[age.tone]++;
+            rows += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
         }
-        return resp;
+        return {
+            rows,
+            summary: this.renderPromotionSummary(stageCounts),
+        };
+    }
+    renderPromotionSummary(stageCounts) {
+        const stages = [
+            ['age-fresh', '0–4m'],
+            ['age-recent', '5–14m'],
+            ['age-watch', '15–29m'],
+            ['age-aging', '30–59m'],
+            ['age-stale', '60–89m'],
+            ['age-critical', '90m+'],
+            ['age-inactive', 'Idle'],
+        ];
+        return `<div class="promotion-summary" aria-label="Promotion duration summary">${stages
+            .map(([tone, label]) => `<span class="promotion-summary-item ${tone}">${label} <strong>${stageCounts[tone]}</strong></span>`)
+            .join('')}</div>`;
     }
     renderOverviewRow(client, demoCount, demoNames, fullShowNames, fullShowCount) {
         return `<div class="overview-row" role="row">
@@ -1987,33 +1954,34 @@ let AppService = AppService_1 = class AppService {
         }
         const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
         if (elapsedSeconds < 60) {
-            return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
+            return { text: `${elapsedSeconds}s`, tone: 'age-fresh' };
         }
         const minutes = Math.floor(elapsedSeconds / 60);
+        const remainingSeconds = elapsedSeconds % 60;
         if (minutes < 5) {
-            return { text: `${minutes} min ago`, tone: 'age-fresh' };
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-fresh' };
         }
         if (minutes < 15) {
-            return { text: `${minutes} min ago`, tone: 'age-recent' };
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-recent' };
         }
         if (minutes < 30) {
-            return { text: `${minutes} min ago`, tone: 'age-watch' };
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-watch' };
         }
         if (minutes < 60) {
-            return { text: `${minutes} min ago`, tone: 'age-aging' };
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-aging' };
         }
         const hours = Math.floor(minutes / 60);
         const remainingMinutes = minutes % 60;
         if (hours < 24) {
             return {
-                text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
+                text: `${hours}h${remainingMinutes ? ` ${remainingMinutes}m` : ''}`,
                 tone: minutes < 90 ? 'age-stale' : 'age-critical',
             };
         }
         const days = Math.floor(hours / 24);
         const remainingHours = hours % 24;
         return {
-            text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
+            text: `${days}d${remainingHours ? ` ${remainingHours}h` : ''}`,
             tone: 'age-critical',
         };
     }
@@ -47933,6 +47901,102 @@ function isEligibleDiscoveredChannel(channel) {
     const regex = /(wife|adult|lanj|chat|𝑭𝒂𝒎𝒊𝒍𝒚|𝙏𝙖𝙢𝙞𝙡|𝐒𝐖𝐀𝐏|lesb|aunty|girl|boy|tamil|kannad|telugu|hindi|paid|coupl|cpl|randi|bhab|boy|girl|friend|frnd|boob|pussy|dating|swap|gay|sex|bitch|love|video|service|real|call|desi)/i;
     return Boolean((channel.title && regex.test(channel.title)) ||
         (channel.username && regex.test(channel.username)));
+}
+
+
+/***/ },
+
+/***/ "./src/dashboard/status-dashboard.view.ts"
+/*!************************************************!*\
+  !*** ./src/dashboard/status-dashboard.view.ts ***!
+  \************************************************/
+(__unused_webpack_module, exports) {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.renderStatusDashboardDocument = renderStatusDashboardDocument;
+function renderStatusDashboardDocument(content) {
+    return `<!doctype html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#111827">
+        <title>Status</title>
+        <style>
+          :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+          * { box-sizing: border-box; }
+          body { margin: 0; min-width: 320px; background: #111827; color: #f8fafc; }
+          .dashboard { width: min(1120px, 100%); margin: 0 auto; padding: 24px 16px 40px; }
+          .dashboard-header { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 20px; }
+          h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
+          .refresh-button { width: 36px; height: 36px; border: 1px solid #475569; border-radius: 10px; background: #1e293b; color: #67e8f9; font-size: 24px; line-height: 1; cursor: pointer; }
+          .refresh-button:active { transform: rotate(180deg); }
+          .dashboard-card { overflow: hidden; border: 1px solid #334155; border-radius: 16px; background: #1e293b; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); }
+          .dashboard-card-wide { margin-top: 16px; }
+          .overview-row { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.2fr) minmax(0, 1.2fr); border-bottom: 1px solid rgba(148, 163, 184, .16); }
+          .overview-row > * { min-width: 0; padding: 11px 14px; border-right: 1px solid rgba(148, 163, 184, .16); }
+          .overview-row > *:last-child { border-right: 0; }
+          .overview-heading, .promotion-heading { background: #26354b; color: #e0f2fe; font-size: 13px; font-weight: 800; }
+          .overview-client, .promotion-client { color: #e2e8f0; font-size: 14px; overflow-wrap: anywhere; }
+          .overview-metric { display: grid; gap: 5px; }
+          .overview-count, .promotion-count { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
+          .overview-names { overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.35; }
+          .promotion-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px minmax(140px, .8fr); align-items: center; border-bottom: 1px solid rgba(148, 163, 184, .16); }
+          .promotion-row > * { min-width: 0; padding: 11px 14px; }
+          .promotion-row:last-child { border-bottom: 0; }
+          .promotion-duration { font-size: 13px; font-weight: 800; }
+          .promotion-duration.age-fresh, .promotion-summary-item.age-fresh { color: #4ade80; }
+          .promotion-duration.age-recent, .promotion-summary-item.age-recent { color: #2dd4bf; }
+          .promotion-duration.age-watch, .promotion-summary-item.age-watch { color: #facc15; }
+          .promotion-duration.age-aging, .promotion-summary-item.age-aging { color: #fb923c; }
+          .promotion-duration.age-stale, .promotion-summary-item.age-stale { color: #fb7185; }
+          .promotion-duration.age-critical, .promotion-summary-item.age-critical { color: #f43f5e; }
+          .promotion-duration.age-inactive, .promotion-summary-item.age-inactive { color: #f43f5e; }
+          .promotion-summary { display: flex; flex-wrap: wrap; gap: 5px 10px; padding: 9px 12px; border-top: 1px solid rgba(148, 163, 184, .16); background: #172033; }
+          .promotion-summary-item { font-size: 11px; font-weight: 700; white-space: nowrap; }
+          .promotion-summary-item strong { font-size: 13px; }
+          .metric-empty { margin: 0; padding: 20px 16px; color: #94a3b8; font-size: 14px; text-align: center; }
+          @media (max-width: 680px) {
+            body { overflow: hidden; }
+            .dashboard { height: 100dvh; padding: 7px; overflow: hidden; }
+            .dashboard-header { margin: 0 0 5px; }
+            h1 { font-size: 18px; }
+            .refresh-button { width: 25px; height: 25px; border-radius: 7px; font-size: 18px; }
+            .dashboard-card { border-radius: 8px; box-shadow: none; }
+            .dashboard-card-wide { margin-top: 6px; }
+            .overview-row { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); }
+            .overview-row > *, .promotion-row > * { padding: 4px 5px; }
+            .overview-heading, .promotion-heading { font-size: 9px; }
+            .overview-client, .promotion-client { font-size: 9px; }
+            .overview-metric { gap: 1px; }
+            .overview-count, .promotion-count { font-size: 12px; line-height: 1; }
+            .overview-names { font-size: 8px; line-height: 1.05; }
+            .promotion-row { grid-template-columns: minmax(0, 1fr) 42px 78px; min-height: 21px; }
+            .promotion-duration { font-size: 9px; line-height: 1; white-space: nowrap; }
+            .promotion-summary { justify-content: space-between; gap: 3px 6px; padding: 5px 7px; }
+            .promotion-summary-item { font-size: 8px; }
+            .promotion-summary-item strong { font-size: 10px; }
+            .metric-empty { padding: 8px; font-size: 10px; }
+          }
+        </style>
+      </head>
+      <body>
+        ${content}
+        <script>
+          setInterval(() => window.location.reload(), 20000);
+          const refreshStatus = () => window.location.reload();
+          document.querySelector('.refresh-button').addEventListener('click', refreshStatus);
+          let touchStartY = 0;
+          document.addEventListener('touchstart', (event) => {
+            touchStartY = event.touches[0].clientY;
+          }, { passive: true });
+          document.addEventListener('touchend', (event) => {
+            const pullDistance = event.changedTouches[0].clientY - touchStartY;
+            if (touchStartY < 100 && pullDistance > 70) refreshStatus();
+          }, { passive: true });
+        </script>
+      </body>
+    </html>`;
 }
 
 

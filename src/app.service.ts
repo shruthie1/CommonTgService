@@ -878,11 +878,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
     overviewRows = overviewRows || '<p class="metric-empty">No pending demos or full-show users</p>';
 
-    const promotionRows = await this.getPromotionStats();
+    const promotionStats = await this.getPromotionStats();
 
     return `<main class="dashboard">
         <header class="dashboard-header">
           <h1>Status</h1>
+          <button class="refresh-button" type="button" aria-label="Refresh status" title="Refresh">↻</button>
         </header>
         <section class="dashboard-card dashboard-overview">
           <div class="overview-table" role="table" aria-label="Demo and full-show status">
@@ -901,21 +902,50 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
               <span role="columnheader">Count</span>
               <span role="columnheader">Duration</span>
             </div>
-            ${promotionRows}
+            ${promotionStats.rows}
           </div>
+          ${promotionStats.summary}
         </section>
       </main>`;
   }
 
-  async getPromotionStats(): Promise<string> {
-    let resp = '';
+  async getPromotionStats(): Promise<{ rows: string; summary: string }> {
+    let rows = '';
+    const stageCounts: Record<string, number> = {
+      'age-fresh': 0,
+      'age-recent': 0,
+      'age-watch': 0,
+      'age-aging': 0,
+      'age-stale': 0,
+      'age-critical': 0,
+      'age-inactive': 0,
+    };
     const result = await this.promoteStatService.findAll();
     result.sort((a: any, b: any) => Number(b.totalCount || 0) - Number(a.totalCount || 0));
     for (const data of result) {
       const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
-      resp += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
+      stageCounts[age.tone]++;
+      rows += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
     }
-    return resp;
+    return {
+      rows,
+      summary: this.renderPromotionSummary(stageCounts),
+    };
+  }
+
+  private renderPromotionSummary(stageCounts: Record<string, number>): string {
+    const stages = [
+      ['age-fresh', '0–4m'],
+      ['age-recent', '5–14m'],
+      ['age-watch', '15–29m'],
+      ['age-aging', '30–59m'],
+      ['age-stale', '60–89m'],
+      ['age-critical', '90m+'],
+      ['age-inactive', 'Idle'],
+    ];
+    return `<div class="promotion-summary" aria-label="Promotion duration summary">${stages
+      .map(([tone, label]) => `<span class="promotion-summary-item ${tone}">${label} <strong>${stageCounts[tone]}</strong></span>`)
+      .join('')}</div>`;
   }
 
   private renderOverviewRow(
@@ -963,28 +993,29 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
     const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
     if (elapsedSeconds < 60) {
-      return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
+      return { text: `${elapsedSeconds}s`, tone: 'age-fresh' };
     }
 
     const minutes = Math.floor(elapsedSeconds / 60);
+    const remainingSeconds = elapsedSeconds % 60;
     if (minutes < 5) {
-      return { text: `${minutes} min ago`, tone: 'age-fresh' };
+      return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-fresh' };
     }
     if (minutes < 15) {
-      return { text: `${minutes} min ago`, tone: 'age-recent' };
+      return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-recent' };
     }
     if (minutes < 30) {
-      return { text: `${minutes} min ago`, tone: 'age-watch' };
+      return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-watch' };
     }
     if (minutes < 60) {
-      return { text: `${minutes} min ago`, tone: 'age-aging' };
+      return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-aging' };
     }
 
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
     if (hours < 24) {
       return {
-        text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
+        text: `${hours}h${remainingMinutes ? ` ${remainingMinutes}m` : ''}`,
         tone: minutes < 90 ? 'age-stale' : 'age-critical',
       };
     }
@@ -992,7 +1023,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const days = Math.floor(hours / 24);
     const remainingHours = hours % 24;
     return {
-      text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
+      text: `${days}d${remainingHours ? ` ${remainingHours}h` : ''}`,
       tone: 'age-critical',
     };
   }
