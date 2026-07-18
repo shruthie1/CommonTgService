@@ -1497,6 +1497,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return this.activeMaintenanceRun !== null;
     }
 
+    /**
+     * READY rotation may overlap join/leave work because terminal warmup phases
+     * are excluded from both join candidate queries. Other maintenance still
+     * changes warmup/session state and remains serialized with rotation.
+     */
+    protected isJoinOrLeaveMaintenanceRun(): boolean {
+        return this.activeMaintenanceRun?.name === 'prepareBufferJoinChannels'
+            || this.activeMaintenanceRun?.name === 'preparePromoteJoinChannels'
+            || this.activeMaintenanceRun?.name === 'processJoinChannelInterval'
+            || this.activeMaintenanceRun?.name === 'processLeaveChannelInterval';
+    }
+
     async processClient(doc: TDoc, client: Client): Promise<ProcessClientResult> {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);

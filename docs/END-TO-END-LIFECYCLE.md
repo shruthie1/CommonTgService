@@ -101,8 +101,8 @@ Warmup is driven by:
 - `processClient()` only performs one warmup action per call.
 - Warmup actions are gated by a 2-hour cooldown via `lastUpdateAttempt`.
 - Health checks run independently from warmup.
-- Join scheduling is gated to `growing` and later phases, and shares the warmup-operation lock with checks and rotations.
-- Normal maintenance explicitly skips `ready` accounts. READY -> SESSION_ROTATED is a separate, strict session-rotation path; stale READY metadata is repaired without Telegram work rather than running another warmup action.
+- Join scheduling selects active, below-target accounts except the terminal `ready` and `session_rotated` phases. Documents without `warmupPhase` remain eligible for backward compatibility.
+- Normal maintenance explicitly skips `ready` accounts. READY -> SESSION_ROTATED is a separate, strict session-rotation path; stale READY metadata is repaired without Telegram work rather than running another warmup action. READY rotation may run alongside join/leave work because terminal-phase accounts are excluded from that work; checks and other warmup maintenance remain serialized.
 - CMS and UMS each check READY rotation eligibility hourly at staggered minutes. Mongo-backed daily job claims ensure each pool has at most one rotation outcome per IST day, including a failed attempt; a busy/no-candidate run releases its claim for the next hourly check.
 - A maintenance lock that exceeds 30 minutes is logged as overdue but is not force-released; releasing it while the Telegram promise is alive would allow overlapping account work. Recover an actually stuck run by investigating/restarting the owning process.
 

@@ -55,6 +55,7 @@ type PromoteClientQuery = Record<string, unknown>;
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
+    private readyRotationInProgress = false;
 
     /** @deprecated Test compatibility alias for the single shared maintenance lock. */
     private get checkingPromoteClientsSince(): number {
@@ -535,6 +536,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             status: 'active',
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
+            // Terminal warmup accounts must never re-enter channel joining.
+            // `$nin` keeps documents with a missing legacy phase eligible.
+            warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
         };
         if (clientId) query.clientId = clientId;
 
@@ -811,6 +815,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     channels: { $lt: this.config.channelTarget },
                     mobile: { $nin: Array.from(preservedMobiles) },
                     status: 'active',
+                    warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
                 })
                 .sort({ channels: -1 })
                 .limit(this.config.maxMapSize);
@@ -912,23 +917,24 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     /**
-     * Rotates only READY accounts after the normal promote warmup pass.  It uses
-     * the same guard as that pass so Telegram session work cannot run in parallel
-     * with warmup maintenance or a client setup.
+     * Rotates only READY accounts after the normal promote warmup pass. Checks
+     * and setup remain serialized; joins/leaves may proceed for other mobiles.
      */
     async rotateReadyPromoteClients(): Promise<boolean> {
-        if (!this.beginMaintenanceRun('rotateReadyPromoteClients')) return false;
-        if (this.telegramService.hasActiveClientSetup()) {
-            this.logger.warn('Ready promote rotation skipped: active client setup exists');
-            this.endMaintenanceRun();
+        if (this.readyRotationInProgress) {
+            this.logger.warn('Ready promote rotation skipped: another ready rotation is already running');
             return false;
         }
-        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
-            this.logger.warn('Ready promote rotation skipped: channel join/leave work is active');
-            this.endMaintenanceRun();
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ready promote rotation skipped: active client setup exists');
+            return false;
+        }
+        if (this.isMaintenanceRunActive() && !this.isJoinOrLeaveMaintenanceRun()) {
+            this.logger.warn('Ready promote rotation skipped: non-join maintenance is active');
             return false;
         }
 
+        this.readyRotationInProgress = true;
         try {
             const clients = await this.clientService.findAll();
             const clientMap = new Map(clients.map((client) => [client.clientId, client]));
@@ -945,6 +951,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const { attempted, rotated, deferred, skipped } = await this.processReadyRotationSweep(
                 readyClients,
                 clientMap,
+                (promoteClient) => this.joinChannelMap.has(promoteClient.mobile)
+                    || this.leaveChannelMap.has(promoteClient.mobile),
             );
 
             this.logger.log(
@@ -957,7 +965,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ READY Promote Rotation CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
             return false;
         } finally {
-            this.endMaintenanceRun();
+            this.readyRotationInProgress = false;
         }
     }
 

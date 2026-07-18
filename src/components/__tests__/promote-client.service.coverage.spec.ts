@@ -271,6 +271,22 @@ describe('PromoteClientService coverage', () => {
             expect(added).toBe(1);
         });
 
+        it('excludes READY and SESSION_ROTATED accounts while retaining legacy phase-less accounts', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551500004', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.READY }));
+            await service.create(makePromoteClientData({ mobile: '15551500005', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.SESSION_ROTATED }));
+            await service.create(makePromoteClientData({ mobile: '15551500006', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateOne({ mobile: '15551500006' }, { $unset: { warmupPhase: '' } });
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            expect(await service.refillJoinQueue('test-client-1')).toBe(1);
+            expect((service as any).joinChannelMap.has('15551500004')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500005')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500006')).toBe(true);
+        });
+
         it('queues a leave when too many unsendable channels', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500002', channels: 50, status: 'active', clientId: 'test-client-1' }));
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);

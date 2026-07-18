@@ -487,6 +487,22 @@ describe('BufferClientService coverage', () => {
             expect((service as any).joinChannelMap.get('15551500001')).toEqual([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
         });
 
+        it('excludes READY and SESSION_ROTATED accounts while retaining legacy phase-less accounts', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500004', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.READY }));
+            await service.create(makeBufferClientData({ mobile: '15551500005', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.SESSION_ROTATED }));
+            await service.create(makeBufferClientData({ mobile: '15551500006', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateOne({ mobile: '15551500006' }, { $unset: { warmupPhase: '' } });
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            expect(await service.refillJoinQueue('test-client-1')).toBe(1);
+            expect((service as any).joinChannelMap.has('15551500004')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500005')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500006')).toBe(true);
+        });
+
         it('skips the live primary client mobile', async () => {
             // Buffer doc shares the same mobile that the active client uses as primary.
             // create() runs before we point clientService at it, so the cross-pool guard
@@ -807,6 +823,22 @@ describe('BufferClientService coverage', () => {
 
             expect((await service.findOne('15551800103'))!.warmupPhase).toBe(WarmupPhase.READY);
             (service as any).checkingBufferClientsSince = 0;
+        });
+
+        it('runs during join maintenance while excluding a stale queued READY mobile', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            await service.create(makeBufferClientData({
+                mobile: '15551800105', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.READY, inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            (service as any).activeMaintenanceRun = { name: 'processJoinChannelInterval', startedAt: Date.now() };
+
+            await service.rotateReadyBufferClients();
+
+            expect((await service.findOne('15551800105'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
+            (service as any).activeMaintenanceRun = null;
         });
     });
 

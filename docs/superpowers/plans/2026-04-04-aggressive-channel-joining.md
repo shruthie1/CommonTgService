@@ -4,7 +4,7 @@
 
 **Goal:** Make channel joining self-sustaining with round-robin distribution and 20 channels/day/account cap, triggered by existing 3-hour HTTP scheduler.
 
-**Architecture:** Add daily join tracking + auto-refill to `BaseClientService`. When `joinChannelMap` drains, `scheduleNextJoinRound()` calls a new `refillJoinQueue()` abstract method instead of stopping. Each subclass implements `refillJoinQueue()` to re-query its model for eligible mobiles. The per-mobile join cap changes from `maxJoinsPerSession` (8, process all at once) to `joinsPerMobilePerRound` (3, then rotate). Warmup phase filter removed from join queries.
+**Architecture:** Add daily join tracking + auto-refill to `BaseClientService`. When `joinChannelMap` drains, `scheduleNextJoinRound()` calls a new `refillJoinQueue()` abstract method instead of stopping. Each subclass implements `refillJoinQueue()` to re-query its model for eligible mobiles. The per-mobile join cap changes from `maxJoinsPerSession` (8, process all at once) to `joinsPerMobilePerRound` (3, then rotate). Current behavior excludes only terminal `ready` and `session_rotated` phases from join queries; missing legacy phases remain eligible.
 
 **Tech Stack:** TypeScript, NestJS, Mongoose, Jest
 

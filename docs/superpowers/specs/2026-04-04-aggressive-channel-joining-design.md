@@ -154,12 +154,11 @@ private async fetchJoinableChannels(
 
 No `excludedIds` (would require TG call). `tryJoiningChannel` handles already-joined channels gracefully.
 
-**Modify `joinchannelForBufferClients()` — warmup filter removed:**
+**Current terminal-phase guard in `joinchannelForBufferClients()` and `refillJoinQueue()`:**
 ```typescript
-// OLD:
-warmupPhase: { $in: ['growing', 'maturing', 'ready', 'session_rotated'] },
-
-// NEW: removed — any active account below channelTarget joins
+// Keep legacy documents eligible, but do not send completed warmup accounts
+// back through channel joining while READY rotation is pending or complete.
+warmupPhase: { $nin: ['ready', 'session_rotated'] },
 ```
 
 The existing method continues to work as the HTTP entry point. It does the full flow (TG connection for real channel count, proper excludedIds). The `refillJoinQueue` is the lightweight refill for between triggers.
@@ -168,7 +167,9 @@ The existing method continues to work as the HTTP entry point. It does the full 
 
 Same pattern as buffer — implement `refillJoinQueue()` and `fetchJoinableChannels()` querying `promoteClientModel`.
 
-Remove warmup phase filter from `joinchannelForPromoteClients()` query.
+Apply the same terminal-phase guard to `joinchannelForPromoteClients()` and both
+refill queries. This permits READY rotation and joining to run concurrently for
+different accounts without re-joining a terminal warmup account.
 
 #### 4. Config values
 

@@ -96,6 +96,7 @@ type WarmupSimulationSkip = { mobile: string; action: string; priority?: number;
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
+    private readyRotationInProgress = false;
 
     /** @deprecated Test compatibility alias for the single shared maintenance lock. */
     private get checkingBufferClientsSince(): number {
@@ -746,6 +747,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             status: 'active',
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(excludedMobiles) },
+            // Terminal warmup accounts must never re-enter channel joining.
+            // `$nin` keeps documents with a missing legacy phase eligible.
+            warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
         };
         if (clientId) query.clientId = clientId;
         this.logger.debug('Refill join queue query prepared', {
@@ -1207,23 +1211,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     /**
      * Rotates only accounts which the normal warmup pass has already marked READY.
-     * This deliberately shares the main-check lock: rotation must never overlap a
-     * warmup/check pass or an active client setup.  The normal pass owns all phase
-     * transitions; this pass only closes the READY -> SESSION_ROTATED gap.
+     * Checks and setup remain serialized; joins/leaves may proceed for other
+     * mobiles because terminal phases are excluded from their candidate queries.
      */
     async rotateReadyBufferClients(): Promise<boolean> {
-        if (!this.beginMaintenanceRun('rotateReadyBufferClients')) return false;
-        if (this.telegramService.hasActiveClientSetup()) {
-            this.logger.warn('Ready buffer rotation skipped: active client setup exists');
-            this.endMaintenanceRun();
+        if (this.readyRotationInProgress) {
+            this.logger.warn('Ready buffer rotation skipped: another ready rotation is already running');
             return false;
         }
-        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
-            this.logger.warn('Ready buffer rotation skipped: channel join/leave work is active');
-            this.endMaintenanceRun();
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ready buffer rotation skipped: active client setup exists');
+            return false;
+        }
+        if (this.isMaintenanceRunActive() && !this.isJoinOrLeaveMaintenanceRun()) {
+            this.logger.warn('Ready buffer rotation skipped: non-join maintenance is active');
             return false;
         }
 
+        this.readyRotationInProgress = true;
         try {
             const clients = await this.clientService.findAll();
             const clientMap = new Map(clients.map((client) => [client.clientId, client]));
@@ -1243,7 +1248,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const { attempted, rotated, deferred, skipped } = await this.processReadyRotationSweep(
                 readyClients,
                 clientMap,
-                (bufferClient) => this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles),
+                (bufferClient) => this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)
+                    || this.joinChannelMap.has(bufferClient.mobile)
+                    || this.leaveChannelMap.has(bufferClient.mobile),
             );
 
             this.logger.log(
@@ -1256,7 +1263,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ READY Buffer Rotation CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
             return false;
         } finally {
-            this.endMaintenanceRun();
+            this.readyRotationInProgress = false;
         }
     }
 
@@ -1503,6 +1510,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
             status: 'active',
+            warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
         };
         if (clientId) query.clientId = clientId;
         this.logger.info('Prepared buffer join-channel sweep', {
