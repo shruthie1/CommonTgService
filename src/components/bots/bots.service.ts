@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -7,7 +7,7 @@ import FormData from 'form-data';
 import NodeCache from 'node-cache';
 import * as schedule from 'node-schedule-tz';
 import { parseError } from '../../utils';
-import { Bot, BotDocument } from './schemas/bot.schema';
+import { Bot, BotDocument, BotLifecycle } from './schemas/bot.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { UsersService } from '../users/users.service';
 
@@ -21,6 +21,35 @@ export interface DeadBotInfo {
     category: ChannelCategory;
     channelId: string;
     token: string;
+}
+
+interface TokenCheckResult {
+    verdict: 'alive' | 'dead' | 'unknown';
+    status?: number;
+}
+
+interface BotHealthRunOptions {
+    /** Reads and validates tokens, but never writes bot state or touches Telegram user accounts. */
+    dryRun?: boolean;
+}
+
+export interface BotHealthRunResult {
+    checked: number;
+    alive: number;
+    dead: number;
+    unknown: number;
+    replaced: number;
+    toppedUp: number;
+    failures: string[];
+    dryRun: boolean;
+    proposedActions: string[];
+}
+
+interface BotHealthLease {
+    _id: string;
+    holderId: string;
+    acquiredAt: Date;
+    expiresAt: Date;
 }
 
 export interface SendMessageOptions {
@@ -114,16 +143,18 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private static readonly HEALTH_JOB_NAME = 'bot-health-check';
     private static readonly HEALTH_JOB_CRON = '30 3 * * *'; // daily 03:30, off-peak
     private static readonly HEALTH_JOB_TZ = 'Asia/Kolkata';
-    // Conservative: replace at most this many dead bots per run to avoid BotFather rate-limits / flags.
-    private readonly maxReplacementsPerRun = 1;
     // Every category should keep at least this many HEALTHY (active + admin-verified) bots so a
     // single dead bot never leaves a channel dark. After the dead-replacement pass, the health run
     // tops up any category below this floor by provisioning fresh bots (random creator → BotFather
     // → channel-admin add → verify).
     private readonly minHealthyBotsPerCategory = 2;
-    // Cap NEW bots created for top-up across ALL categories per run — BotFather flood safety
-    // (separate from replacements). Keeps a run from creating a burst of accounts.
-    private readonly maxTopUpsPerRun = 2;
+    // Replacement and redundancy top-up share one BotFather creation budget. A run can never
+    // turn one dead token plus two low categories into a burst of privileged Telegram actions.
+    private readonly maxBotCreationsPerRun = 1;
+    private readonly maxPendingAdminRepairsPerRun = 1;
+    private readonly maxPendingAdminRepairAttempts = 3;
+    private readonly healthLeaseMs = 30 * 60 * 1000;
+    private readonly healthLeaseId = `${process.pid}:${Math.random().toString(36).slice(2)}`;
     private healthCheckJob: schedule.Job | null = null;
     private flushTimer: ReturnType<typeof setInterval> | null = null;
     private destroyed = false;
@@ -149,16 +180,21 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     async onModuleInit(): Promise<void> {
+        try {
+            await this.migrateLegacyLifecycle();
+        } catch (err: any) {
+            // Preserve CMS availability if Mongo is briefly unavailable at boot. Legacy records
+            // are still classified safely in-memory by lifecycleOf until the next health run.
+            console.error('[BotHealth] lifecycle migration deferred; Mongo unavailable at startup', err?.message || err);
+        }
         await this.initializeCache();
         // Start periodic flush of pending stat updates (safe to run on every pod — it only
         // writes each pod's own accumulated counters).
         this.startPeriodicFlush();
         // The daily bot health-check + auto-replace loop is DANGEROUS to run on more than one
         // pod at once: N pods = N concurrent BotFather bot-creations + admin-promotion bursts,
-        // which is exactly what gets the manager account flood-banned. There is no cross-pod
-        // lock here (replaceInProgress is per-process only), so we gate the scheduler behind an
-        // env flag the operator sets on EXACTLY ONE pod. Default OFF — no pod runs it unless
-        // explicitly enabled.
+        // which is exactly what gets the manager account flood-banned. The Mongo lease protects
+        // every scheduler/manual invocation; the env gate still keeps scheduled ownership clear.
         if (this.isBotHealthJobEnabled()) {
             console.log('[BotHealth] BOT_HEALTH_JOB_ENABLED is set on this pod — scheduling daily job');
             this.scheduleBotHealthCheck();
@@ -169,9 +205,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
     /**
      * Whether THIS pod should run the daily bot-health scheduler. Must be enabled on exactly
-     * ONE pod to avoid concurrent BotFather bursts across replicas (ban risk). The manual
-     * POST /bots/validate-and-replace endpoint is NOT gated by this — it's an explicit operator
-     * action, but it shares the same per-process replaceInProgress guard.
+     * ONE pod to make scheduler ownership explicit. The Mongo-backed lease additionally protects
+     * the manual endpoint and a misconfigured second scheduler from concurrent repair work.
      */
     private isBotHealthJobEnabled(): boolean {
         const v = (process.env.BOT_HEALTH_JOB_ENABLED || '').trim().toLowerCase();
@@ -203,6 +238,91 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         try { this.healthCheckJob?.cancel?.(); } catch { /* noop */ }
         this.healthCheckJob = null;
         if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = null; }
+    }
+
+    /** Map pre-lifecycle documents once, retaining their legacy fields for old callers. */
+    private async migrateLegacyLifecycle(): Promise<void> {
+        const legacyBots = await this.botModel.find({ lifecycle: { $exists: false } }).lean().exec();
+        if (legacyBots.length === 0) return;
+        const now = new Date();
+        await this.botModel.bulkWrite(legacyBots.map(bot => ({
+            updateOne: {
+                filter: { _id: bot._id, lifecycle: { $exists: false } },
+                update: { $set: this.legacyLifecycleUpdate(bot, now) },
+            },
+        })));
+        console.log(`[BotHealth] migrated lifecycle metadata for ${legacyBots.length} legacy bot record(s)`);
+    }
+
+    private legacyLifecycleUpdate(bot: Partial<Bot>, now = new Date()): Pick<Bot, 'lifecycle' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'repairAttempts'> {
+        const reason = bot.deadReason || '';
+        if (bot.status !== 'inactive') {
+            return { lifecycle: 'active_verified', lifecycleReason: 'migrated legacy active record', lifecycleUpdatedAt: now, repairAttempts: 0 };
+        }
+        if (/awaiting.*admin|admin.*add/i.test(reason)) {
+            return { lifecycle: 'pending_admin', lifecycleReason: reason || 'migrated pending channel-admin verification', lifecycleUpdatedAt: now, repairAttempts: 0 };
+        }
+        if (/getme|token|unauthori[sz]ed|revoked|invalid/i.test(reason)) {
+            return { lifecycle: 'dead_token', lifecycleReason: reason || 'migrated token failure', lifecycleUpdatedAt: now, repairAttempts: 0 };
+        }
+        return { lifecycle: 'manual_attention', lifecycleReason: reason || 'migrated inactive record with unknown cause', lifecycleUpdatedAt: now, repairAttempts: 0 };
+    }
+
+    private lifecycleOf(bot: Partial<Bot>): BotLifecycle {
+        if (bot.lifecycle) return bot.lifecycle;
+        return this.legacyLifecycleUpdate(bot).lifecycle;
+    }
+
+    private isSelectable(bot: Partial<Bot>): boolean {
+        return this.lifecycleOf(bot) === 'active_verified';
+    }
+
+    private nextRepairDate(attempts: number, now = Date.now()): Date {
+        // 5m, 10m, 20m ... capped at 24h. Pending-admin reconciliation is intentionally slow.
+        const delay = Math.min(24 * 60 * 60 * 1000, 5 * 60 * 1000 * (2 ** Math.max(0, attempts - 1)));
+        return new Date(now + delay);
+    }
+
+    private async refreshBotCache(): Promise<void> {
+        await this.flushPendingStats();
+        this.cache.flushAll();
+    }
+
+    /** Remove a newly unsafe bot from warm send caches without dropping pending stat counters. */
+    private evictBotFromSendCache(bot: Partial<Bot> & { _id?: any }): void {
+        const id = bot._id?.toString();
+        if (!id || !bot.category) return;
+        this.cache.del(`bot:${id}`);
+        const categoryKey = `category:${bot.category}`;
+        const cached = this.cache.get<BotDocument[]>(categoryKey);
+        if (cached) this.cache.set(categoryKey, cached.filter(item => item._id.toString() !== id));
+        this.cache.del('all-bots');
+    }
+
+    /** A Mongo lease protects scheduler/manual calls across CMS processes and crash restarts. */
+    private async acquireHealthLease(): Promise<boolean> {
+        const now = new Date();
+        try {
+            const res = await this.botModel.db.collection<BotHealthLease>('botHealthLeases').findOneAndUpdate(
+                { _id: 'bot-health', $or: [{ expiresAt: { $lte: now } }, { holderId: this.healthLeaseId }] },
+                { $set: { holderId: this.healthLeaseId, acquiredAt: now, expiresAt: new Date(now.getTime() + this.healthLeaseMs) } },
+                { upsert: true, returnDocument: 'after' },
+            );
+            return res?.holderId === this.healthLeaseId;
+        } catch (err: any) {
+            // A duplicate-key race means another runner won an initially-empty lease. Fail closed.
+            if (err?.code === 11000) return false;
+            console.error('[BotHealth] unable to acquire distributed lease; skipping run', err?.message || err);
+            return false;
+        }
+    }
+
+    private async releaseHealthLease(): Promise<void> {
+        try {
+            await this.botModel.db.collection<BotHealthLease>('botHealthLeases').deleteOne({ _id: 'bot-health', holderId: this.healthLeaseId });
+        } catch (err: any) {
+            console.warn('[BotHealth] unable to release distributed lease; it will expire', err?.message || err);
+        }
     }
 
     private async initializeCache(): Promise<void> {
@@ -276,11 +396,36 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    /** Registering a token through the public API never makes it send-eligible. */
     async createBot(createBotDto: {
         token: string;
         category: ChannelCategory;
         channelId: string;
         description?: string;
+    }): Promise<BotDocument> {
+        // Pick fields explicitly: global validation intentionally preserves unknown properties for
+        // older APIs, but callers must not be able to smuggle a lifecycle into this path.
+        const { token, category, channelId, description } = createBotDto;
+        return this.createBotRecord({
+            token,
+            category,
+            channelId,
+            description,
+            lifecycle: 'pending_admin',
+            lifecycleReason: 'awaiting channel-admin verification',
+        });
+    }
+
+    /** Internal-only persistence path used by BotFather provisioning. */
+    private async createBotRecord(createBotDto: {
+        token: string;
+        category: ChannelCategory;
+        channelId: string;
+        description?: string;
+        lifecycle?: BotLifecycle;
+        lifecycleReason?: string;
+        createdByMobile?: string;
+        replacedBotUsername?: string;
     }): Promise<BotDocument> {
         const username = await this.fetchUsername(createBotDto.token);
         if (!username) {
@@ -294,6 +439,14 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
         const createdBot = new this.botModel({
             ...createBotDto,
+            // A manually registered token is not proof that the bot is an admin in its target
+            // channel. It remains non-selectable until the reconciliation verifies membership.
+            lifecycle: createBotDto.lifecycle || 'pending_admin',
+            lifecycleReason: createBotDto.lifecycleReason || 'awaiting channel-admin verification',
+            lifecycleUpdatedAt: new Date(),
+            repairAttempts: 0,
+            nextRepairAt: new Date(),
+            status: createBotDto.lifecycle === 'active_verified' ? 'active' : 'inactive',
             username,
             lastUsed: new Date(),
             stats: {
@@ -317,6 +470,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             (a, b) => new Date(a.lastUsed).getTime() - new Date(b.lastUsed).getTime()
         ));
         this.cache.set(`bot:${savedBot._id}`, savedBot.toObject());
+        this.cache.del('all-bots');
         return savedBot;
     }
 
@@ -378,6 +532,14 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     async updateBot(id: string, updateBotDto: Partial<Bot>): Promise<BotDocument> {
+        const lifecycleFields: Array<keyof Bot> = [
+            'status', 'lifecycle', 'lifecycleReason', 'lifecycleUpdatedAt',
+            'lastValidatedAt', 'lastAdminVerifiedAt', 'repairAttempts', 'nextRepairAt',
+            'deadStatus', 'deadReason', 'deadAt', 'createdByMobile', 'replacedBotUsername',
+        ];
+        if (lifecycleFields.some(field => updateBotDto[field] !== undefined)) {
+            throw new BadRequestException('Bot lifecycle fields are managed only by the health workflow');
+        }
         const bot = await this.botModel
             .findByIdAndUpdate(id, { ...updateBotDto, lastUsed: new Date() }, { new: true })
             .lean()
@@ -428,17 +590,12 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             availableBots.forEach(bot => this.cache.set(`bot:${bot._id}`, bot));
         }
 
-        // Exclude bots already known-dead (token revoked). They still live in the cache/DB
-        // for reporting + replacement, but must never be selected for sending — that's what
-        // produced repeated 401s. Fall back to the full list only if every bot is flagged
-        // dead (better to try a maybe-recovered one than send nothing).
-        const liveBots = availableBots.filter(b => b.status !== 'inactive');
-        if (liveBots.length > 0) {
-            availableBots = liveBots;
-        }
+        // Do not ever fall back to inactive, pending-admin, or manual-attention records. A
+        // valid token is not enough to send: only a separately verified channel admin is safe.
+        availableBots = availableBots.filter(bot => this.isSelectable(bot));
 
         if (availableBots.length === 0) {
-            console.error(`No bots found for category: ${category}`);
+            await this.alertCategoryUnhealthy(category);
             return false;
         }
 
@@ -463,6 +620,17 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
         console.error(`Failed to send for category ${category} after trying all ${availableBots.length} available bot(s).`);
         return false;
+    }
+
+    private async alertCategoryUnhealthy(category: ChannelCategory): Promise<void> {
+        const key = `category-unhealthy-alert:${category}`;
+        if (this.cache.get<boolean>(key)) return;
+        this.cache.set(key, true, 60 * 60);
+        console.error(JSON.stringify({ event: 'bot_category_unhealthy', category, requiredLifecycle: 'active_verified' }));
+        // Avoid recursive notification attempts if the notification category itself is unhealthy.
+        if (category !== ChannelCategory.ACCOUNT_NOTIFICATIONS) {
+            await this.notify(`<b>Bot category unhealthy</b>\nCategory: ${category}\nNo verified active bot is eligible to send. Repair is required.`);
+        }
     }
 
     async sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
@@ -583,6 +751,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async executeSendMessage(bot: BotDocument, text: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct send through non-verified bot @${bot.username}`);
+            return false;
+        }
         try {
             const response = await axios.post(
                 `https://api.telegram.org/bot${bot.token}/sendMessage`,
@@ -610,6 +782,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async executeSendMedia(bot: BotDocument, method: string, media: Buffer | string, options: any = {}): Promise<boolean> {
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct ${method} through non-verified bot @${bot.username}`);
+            return false;
+        }
         const formData = new FormData();
         formData.append('chat_id', bot.channelId);
 
@@ -649,6 +825,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async executeSendMediaGroup(bot: BotDocument, media: MediaGroupItem[], options?: MediaGroupOptions): Promise<boolean> {
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct sendMediaGroup through non-verified bot @${bot.username}`);
+            return false;
+        }
         const formData = new FormData();
         formData.append('chat_id', bot.channelId);
 
@@ -851,7 +1031,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private isFloodSignal(err: any): boolean {
         // GramJS surfaces flood info variously (.message, .errorMessage, .code) — check all.
         const m = [err?.message, err?.errorMessage, err?.code, String(err || '')].filter(Boolean).join(' ').toLowerCase();
-        return /flood|too many|spam|420|peer_flood|slowmode/.test(m);
+        return /flood|too many|rate.?limit|spam|420|peer_flood|slowmode/.test(m);
     }
 
     /**
@@ -862,14 +1042,14 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * We deliberately keep 429 (rate limit) and 5xx (Telegram-side) as 'unknown' so a transient
      * blip never retires a live bot; only client-side permanent auth failures count as dead.
      */
-    private async checkBotToken(token: string): Promise<'alive' | 'dead' | 'unknown'> {
+    private async checkBotToken(token: string): Promise<TokenCheckResult> {
         try {
             const res = await axios.get(`https://api.telegram.org/bot${token}/getMe`, { timeout: 12000 });
-            return res.data?.ok === true ? 'alive' : 'unknown';
+            return res.data?.ok === true ? { verdict: 'alive', status: res.status } : { verdict: 'unknown', status: res.status };
         } catch (error: any) {
             const status = error?.response?.status;
-            if (status === 401 || status === 403 || status === 404) return 'dead';
-            return 'unknown';
+            if (status === 401 || status === 403 || status === 404) return { verdict: 'dead', status };
+            return { verdict: 'unknown', status };
         }
     }
 
@@ -879,63 +1059,98 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * description = "<creatorMobile> @<creatorUsername>". New bot is added to the dead
      * bot's channel as admin (via an admin account resolved from the channel).
      */
-    async validateAndReplaceBots(): Promise<{ checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; failures: string[] }> {
+    async validateAndReplaceBots(options: BotHealthRunOptions = {}): Promise<BotHealthRunResult> {
+        const empty = (failure: string): BotHealthRunResult => ({
+            checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0,
+            failures: [failure], dryRun: Boolean(options.dryRun), proposedActions: [],
+        });
         // Per-process guard: catches same-pod overlap (scheduled tick + a manual endpoint call).
-        // Multi-pod safety is handled by the BOT_HEALTH_JOB_ENABLED env gate — the scheduler runs
-        // on exactly ONE pod, so no cross-pod lock is needed.
         if (this.replaceInProgress) {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
-            return { checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0, failures: ['already running (this pod)'] };
+            return empty('already running (this pod)');
+        }
+        if (!(await this.acquireHealthLease())) {
+            console.warn('[BotHealth] validateAndReplaceBots lease held by another CMS process — skipping');
+            return empty('already running (distributed lease)');
         }
         this.replaceInProgress = true;
         const failures: string[] = [];
+        const proposedActions: string[] = [];
         let alive = 0, dead = 0, unknown = 0, replaced = 0;
         const deadBots: DeadBotInfo[] = [];
+        let creationBudget = this.maxBotCreationsPerRun;
+        let stopPrivilegedWork = false;
         try {
+            if (!options.dryRun) await this.migrateLegacyLifecycle();
             const bots = await this.botModel.find().lean().exec();
             for (const bot of bots) {
-                const verdict = await this.checkBotToken(bot.token);
-                if (verdict === 'alive') {
+                const check = await this.checkBotToken(bot.token);
+                const lifecycle = this.lifecycleOf(bot);
+                if (check.verdict === 'alive') {
                     alive++;
-                    // Recover: a previously-dead bot that now validates goes back to active.
-                    if (bot.status === 'inactive') {
-                        await this.botModel.updateOne({ _id: bot._id }, { $set: { status: 'active', deadReason: null }, $unset: { deadAt: '' } }).exec();
-                    } else {
+                    // Only an explicitly token-retired record may recover from getMe. A pending
+                    // channel-admin record stays pending until membership is separately proved.
+                    if (lifecycle === 'dead_token') {
+                        proposedActions.push(`recover @${bot.username} from dead_token after live getMe`);
+                        if (!options.dryRun) {
+                            await this.botModel.updateOne({ _id: bot._id, lifecycle: 'dead_token' }, {
+                                $set: { lifecycle: 'active_verified', lifecycleReason: 'token recovered by getMe', lifecycleUpdatedAt: new Date(), status: 'active', lastValidatedAt: new Date(), repairAttempts: 0 },
+                                $unset: { deadAt: '', deadReason: '', deadStatus: '', nextRepairAt: '' },
+                            }).exec();
+                        }
+                    } else if (!options.dryRun) {
                         await this.botModel.updateOne({ _id: bot._id }, { $set: { lastValidatedAt: new Date() } }).exec();
                     }
-                } else if (verdict === 'dead') {
+                } else if (check.verdict === 'dead') {
                     dead++;
-                    if (bot.status !== 'inactive') {
-                        await this.botModel.updateOne({ _id: bot._id }, { $set: { status: 'inactive', deadReason: 'getMe 401 Unauthorized (token revoked)', deadAt: new Date() } }).exec();
+                    if (lifecycle !== 'dead_token') {
+                        proposedActions.push(`retire @${bot.username} as dead_token (getMe ${check.status})`);
+                        if (!options.dryRun) {
+                            await this.botModel.updateOne({ _id: bot._id }, {
+                                $set: { lifecycle: 'dead_token', lifecycleReason: `getMe ${check.status} permanent token failure`, lifecycleUpdatedAt: new Date(), status: 'inactive', deadReason: `getMe ${check.status} permanent token failure`, deadStatus: check.status, deadAt: new Date() },
+                                $unset: { nextRepairAt: '' },
+                            }).exec();
+                            this.evictBotFromSendCache(bot);
+                        }
                         console.warn(`[BotHealth] marked dead: @${bot.username} (${bot.category})`);
                     }
                     deadBots.push({ username: bot.username, category: bot.category, channelId: bot.channelId, token: bot.token });
                 } else {
                     unknown++;
+                    const attempts = (bot.repairAttempts || 0) + 1;
+                    proposedActions.push(`retry token validation for @${bot.username} after transient ${check.status || 'network'} failure`);
+                    if (!options.dryRun) {
+                        await this.botModel.updateOne({ _id: bot._id }, { $set: { nextRepairAt: this.nextRepairDate(attempts) } }).exec();
+                    }
                 }
                 await this.sleep(1200); // space getMe calls to avoid Telegram rate-limits
             }
 
-            // Persist any accumulated stat counters BEFORE flushing the cache — flushAll()
-            // wipes the whole NodeCache including the unflushed `pendingStats` key, which would
-            // silently drop message/media counters since the last 5-min flush.
-            await this.flushPendingStats();
-            // Invalidate caches so dead bots stop being selected immediately.
-            this.cache.flushAll();
+            if (!options.dryRun) await this.refreshBotCache();
 
-            // Conservatively replace dead bots (cap per run).
-            const toReplace = deadBots.slice(0, this.maxReplacementsPerRun);
-            for (const deadBot of toReplace) {
+            const pendingRepair = await this.reconcilePendingAdminBots(options);
+            failures.push(...pendingRepair.failures);
+            proposedActions.push(...pendingRepair.proposedActions);
+            stopPrivilegedWork = pendingRepair.stopPrivilegedWork;
+
+            // Retire only permanently dead tokens. Replacement and top-up consume the same
+            // single creation budget, and any flood/spam signal stops all remaining work.
+            for (const deadBot of deadBots) {
+                if (creationBudget <= 0 || stopPrivilegedWork) break;
                 try {
-                    const newBot = await this.replaceDeadBot(deadBot);
-                    if (newBot) replaced++;
+                    proposedActions.push(`replace dead @${deadBot.username} in ${deadBot.category}`);
+                    creationBudget--;
+                    if (!options.dryRun) {
+                        const newBot = await this.replaceDeadBot(deadBot);
+                        if (newBot) replaced++;
+                    }
                 } catch (err: any) {
                     const msg = `replace @${deadBot.username} (${deadBot.category}): ${err?.message || err}`;
                     failures.push(msg);
                     parseError(err, `[BotHealth] ${msg}`, true);
-                    // If BotFather rate-limited us, stop replacing this run.
-                    if (/flood|too many|rate/i.test(err?.message || '')) {
-                        failures.push('BotFather rate-limit hit — aborting further replacements this run');
+                    if (this.isFloodSignal(err)) {
+                        failures.push('flood/spam signal — aborting all remaining repair work this run');
+                        stopPrivilegedWork = true;
                         break;
                     }
                 }
@@ -944,21 +1159,114 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             // Redundancy top-up: after replacing dead bots, ensure every category still has at
             // least minHealthyBotsPerCategory live bots (so one death never leaves a channel dark).
             let toppedUp = 0;
-            try {
-                const topUp = await this.topUpCategoriesToMinHealthy();
-                toppedUp = topUp.toppedUp;
-                failures.push(...topUp.topUpFailures);
-            } catch (err: any) {
-                const msg = `top-up pass failed: ${err?.message || err}`;
-                failures.push(msg);
-                parseError(err, `[BotHealth] ${msg}`, false);
+            if (!stopPrivilegedWork && creationBudget > 0) {
+                try {
+                    const topUp = await this.topUpCategoriesToMinHealthy(creationBudget, options.dryRun);
+                    toppedUp = topUp.toppedUp;
+                    creationBudget -= topUp.creationAttempts;
+                    failures.push(...topUp.topUpFailures);
+                    proposedActions.push(...topUp.proposedActions);
+                    stopPrivilegedWork = topUp.stopPrivilegedWork;
+                } catch (err: any) {
+                    const msg = `top-up pass failed: ${err?.message || err}`;
+                    failures.push(msg);
+                    parseError(err, `[BotHealth] ${msg}`, false);
+                }
             }
 
-            await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
-            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures };
+            if (!options.dryRun) {
+                await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
+            }
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions };
         } finally {
             this.replaceInProgress = false;
+            await this.releaseHealthLease();
         }
+    }
+
+    /** Reconcile pending bot records without treating a valid token as proof of channel access. */
+    private async reconcilePendingAdminBots(options: BotHealthRunOptions): Promise<{ failures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean }> {
+        const failures: string[] = [];
+        const proposedActions: string[] = [];
+        const now = new Date();
+        let stopPrivilegedWork = false;
+        const pending = await this.botModel
+            .find({ lifecycle: 'pending_admin', $or: [{ nextRepairAt: { $exists: false } }, { nextRepairAt: { $lte: now } }] })
+            .sort({ nextRepairAt: 1, createdAt: 1 })
+            .limit(this.maxPendingAdminRepairsPerRun)
+            .lean()
+            .exec();
+
+        for (const bot of pending) {
+            const attempts = bot.repairAttempts || 0;
+            if (attempts >= this.maxPendingAdminRepairAttempts) {
+                proposedActions.push(`move @${bot.username} to manual_attention after ${attempts} failed admin repairs`);
+                if (!options.dryRun) {
+                    await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                        $set: { lifecycle: 'manual_attention', lifecycleReason: 'channel-admin verification retry limit reached', lifecycleUpdatedAt: now, status: 'inactive' },
+                        $unset: { nextRepairAt: '' },
+                    }).exec();
+                }
+                continue;
+            }
+            if (options.dryRun) {
+                // Dry-run validates tokens above, then reports the bounded reconciliation that a
+                // real run would attempt. Do not connect accounts, query channel admins, trigger
+                // fetchWithTimeout notifications, or perform any Telegram mutation.
+                proposedActions.push(`reconcile pending-admin @${bot.username} in ${bot.channelId}`);
+                continue;
+            }
+            try {
+                const info = await this.telegramService.getBotInfo(bot.token);
+                const botId = String(info?.id || '');
+                if (!botId) throw new Error('could not resolve pending bot id');
+                const alreadyAdmin = await this.verifyBotIsChannelAdmin(bot.channelId, botId);
+                if (alreadyAdmin) {
+                    proposedActions.push(`activate verified pending-admin @${bot.username}`);
+                    if (!options.dryRun) {
+                        await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                            $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: now, lastAdminVerifiedAt: now, status: 'active', repairAttempts: attempts },
+                            $unset: { deadReason: '', nextRepairAt: '' },
+                        }).exec();
+                    }
+                    continue;
+                }
+
+                proposedActions.push(`add/verify pending-admin @${bot.username} in ${bot.channelId}`);
+                if (!options.dryRun) {
+                    await this.addBotToChannelAsAdmin(bot.channelId, bot.token, bot.username);
+                    if (!(await this.verifyBotIsChannelAdmin(bot.channelId, botId))) {
+                        throw new Error('post-add verification failed: bot is not listed as a channel admin');
+                    }
+                    await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                        $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', repairAttempts: attempts },
+                        $unset: { deadReason: '', nextRepairAt: '' },
+                    }).exec();
+                }
+            } catch (err: any) {
+                const nextAttempts = attempts + 1;
+                const msg = `pending-admin @${bot.username}: ${err?.message || err}`;
+                failures.push(msg);
+                if (!options.dryRun) {
+                    await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
+                        $set: {
+                            repairAttempts: nextAttempts,
+                            lifecycleReason: `admin reconciliation failed: ${(err?.message || String(err)).slice(0, 180)}`,
+                            lifecycleUpdatedAt: new Date(),
+                            nextRepairAt: this.nextRepairDate(nextAttempts),
+                            status: 'inactive',
+                        },
+                    }).exec();
+                }
+                if (this.isFloodSignal(err)) {
+                    failures.push('flood/spam signal during pending-admin reconciliation — aborting remaining privileged work');
+                    stopPrivilegedWork = true;
+                    break;
+                }
+            }
+        }
+        if (!options.dryRun) await this.refreshBotCache();
+        return { failures, proposedActions, stopPrivilegedWork };
     }
 
     /**
@@ -976,7 +1284,9 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         // 1. Get several random healthy creator candidates (NOT channel managers; foreign numbers
         //    preferred). We try them in order because any given account may be BotFather-restricted
         //    ("cannot create new bots") — we skip those and move to the next rather than failing.
-        const candidates = await this.pickHealthyCreatorCandidates(5);
+        // One creator attempt per provision keeps the global creation budget meaningful. A
+        // later run can choose a different healthy account after any non-flood failure.
+        const candidates = await this.pickHealthyCreatorCandidates(1);
         if (candidates.length === 0) {
             throw new Error('no healthy user account available to create bot');
         }
@@ -1004,7 +1314,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     username = res.username;
                     break;
                 }
-                lastErr = new Error(`BotFather did not return a valid token (got: ${String(res?.botToken).slice(0, 20)})`);
+                lastErr = new Error('BotFather did not return a valid token');
             } catch (err: any) {
                 lastErr = err;
                 const msg = err?.message || String(err);
@@ -1028,14 +1338,18 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const creatorHandle = creator.username ? `@${creator.username}` : (creator.firstName || 'unknown');
         const description = `${creator.mobile} ${creatorHandle}`.slice(0, 512);
 
-        // 3. Persist the new bot as INACTIVE first. We only flip it to 'active' once it is
-        //    VERIFIED admin in the channel (step 4). Persisting active-then-adding would leave
-        //    a selectable-but-unusable bot in rotation if the channel-add silently fails.
-        const saved = await this.createBot({ token: botToken, category, channelId, description });
-        await this.botModel.updateOne(
-            { _id: saved._id },
-            { $set: { createdByMobile: creator.mobile, ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}), status: 'inactive', deadReason: 'awaiting channel-admin add', lastValidatedAt: new Date() } },
-        ).exec();
+        // 3. Persist as pending_admin in the initial write. There is never an active/selectable
+        //    interval before the channel membership has been verified.
+        const saved = await this.createBotRecord({
+            token: botToken,
+            category,
+            channelId,
+            description,
+            lifecycle: 'pending_admin',
+            lifecycleReason: 'awaiting channel-admin add',
+            createdByMobile: creator.mobile,
+            ...(opts.replacesUsername ? { replacedBotUsername: opts.replacesUsername } : {}),
+        });
 
         // 4. Add the new bot to its channel as admin AND verify it. Only on verified success
         //    do we activate it. On failure it stays inactive (never selected) + we alert.
@@ -1047,14 +1361,18 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
             await this.botModel.updateOne(
                 { _id: saved._id },
-                { $set: { status: 'active' }, $unset: { deadReason: '' } },
+                { $set: { lifecycle: 'active_verified', lifecycleReason: 'channel-admin membership verified', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', lastValidatedAt: new Date(), repairAttempts: 0 }, $unset: { deadReason: '', nextRepairAt: '' } },
             ).exec();
-            await this.flushPendingStats(); // don't lose counters when we drop the cache next
-            this.cache.flushAll(); // refresh caches so the now-active bot becomes selectable
+            await this.refreshBotCache();
             console.log(`[BotHealth] provisioned @${username} (${category}) via ${creator.mobile} — active`);
             return { saved, username, active: true };
         } catch (err: any) {
             parseError(err, `[BotHealth] created @${username} but failed to add/verify in channel ${channelId} — left INACTIVE`, false);
+            await this.botModel.updateOne(
+                { _id: saved._id, lifecycle: 'pending_admin' },
+                { $set: { repairAttempts: 1, lifecycleReason: `admin setup failed: ${(err?.message || String(err)).slice(0, 180)}`, lifecycleUpdatedAt: new Date(), nextRepairAt: this.nextRepairDate(1), status: 'inactive' } },
+            ).exec();
+            await this.refreshBotCache();
             await this.notify(`<b>Bot created but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
             console.log(`[BotHealth] provisioned @${username} (${category}) — created but NOT yet admin (inactive)`);
             return { saved, username, active: false };
@@ -1081,12 +1399,18 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     /**
      * Ensure every category holds at least `minHealthyBotsPerCategory` HEALTHY (active) bots.
      * Runs AFTER the dead-replacement pass so a just-revived/just-replaced bot counts. Provisions
-     * fresh bots for any category below the floor, capped by `maxTopUpsPerRun` across all
-     * categories (BotFather flood safety). Returns how many new bots were provisioned active.
+     * fresh bots for any category below the floor, subject to the run's shared BotFather creation
+     * budget (BotFather flood safety). Returns how many new bots were provisioned active.
      */
-    private async topUpCategoriesToMinHealthy(): Promise<{ toppedUp: number; topUpFailures: string[] }> {
+    private async topUpCategoriesToMinHealthy(
+        creationBudget: number,
+        dryRun: boolean,
+    ): Promise<{ toppedUp: number; creationAttempts: number; topUpFailures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean }> {
         const topUpFailures: string[] = [];
+        const proposedActions: string[] = [];
         let toppedUp = 0;
+        let creationAttempts = 0;
+        let stopPrivilegedWork = false;
         // Re-read from DB (post replacement) grouped by category, counting only live (active) bots.
         const all = await this.botModel.find().lean().exec();
         const byCategory = all.reduce((acc, b) => {
@@ -1095,11 +1419,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }, {} as Record<string, BotDocument[]>);
 
         for (const [category, list] of Object.entries(byCategory)) {
-            if (toppedUp >= this.maxTopUpsPerRun) {
-                topUpFailures.push(`top-up cap (${this.maxTopUpsPerRun}) reached — remaining low categories deferred to next run`);
+            if (creationAttempts >= creationBudget) {
+                topUpFailures.push(`global creation budget (${creationBudget}) reached — remaining low categories deferred to next run`);
                 break;
             }
-            const liveCount = list.filter(b => b.status !== 'inactive').length;
+            const liveCount = list.filter(b => this.isSelectable(b)).length;
             const deficit = this.minHealthyBotsPerCategory - liveCount;
             if (deficit <= 0) continue;
             // channelId to use for the new bot(s): take it from any existing doc in the category
@@ -1109,9 +1433,15 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
                 continue;
             }
-            const need = Math.min(deficit, this.maxTopUpsPerRun - toppedUp);
+            const need = Math.min(deficit, creationBudget - creationAttempts);
             for (let i = 0; i < need; i++) {
                 try {
+                    proposedActions.push(`top up ${category} in ${channelId}`);
+                    if (dryRun) {
+                        creationAttempts++;
+                        continue;
+                    }
+                    creationAttempts++;
                     const { active, username } = await this.provisionBotForCategory(category as ChannelCategory, channelId);
                     if (active) {
                         toppedUp++;
@@ -1126,13 +1456,14 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     // Flood on BotFather / manager account → stop all further top-ups this run.
                     if (this.isFloodSignal(err) || /flood|too many|rate/i.test(err?.message || '')) {
                         topUpFailures.push('flood/rate signal — aborting further top-ups this run');
-                        return { toppedUp, topUpFailures };
+                        stopPrivilegedWork = true;
+                        return { toppedUp, creationAttempts, topUpFailures, proposedActions, stopPrivilegedWork };
                     }
                     break; // move to next category on a non-flood error
                 }
             }
         }
-        return { toppedUp, topUpFailures };
+        return { toppedUp, creationAttempts, topUpFailures, proposedActions, stopPrivilegedWork };
     }
 
     /**
@@ -1165,7 +1496,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         // account's admin actions don't cluster into a scripted burst (ban risk).
         await this.humanDelay();
         try {
-            await this.telegramService.setupBotInChannel(adminMobile, channelId, botId, botUsername, granted);
+            await this.telegramService.promoteBotInChannel(adminMobile, channelId, botId, botUsername, granted);
         } catch (err) {
             if (this.isFloodSignal(err)) {
                 // Do NOT retry — a flood/spam signal on the manager account means back off entirely.

@@ -180,6 +180,48 @@ describe('timeout notification branch', () => {
     });
 });
 
+describe('diagnostic redaction', () => {
+    test('does not include Telegram bot tokens or query values in failure notifications', async () => {
+        axiosFn.mockRejectedValueOnce(axiosError({ code: 'ECONNRESET' }));
+        const logSpy = jest.spyOn(console, 'log').mockImplementation();
+        const errorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+        try {
+            await fetchWithTimeout(
+                'https://api.telegram.org/bot123456:secret-token/sendMessage?chat_id=-100123&text=private-message',
+                {},
+                0,
+            );
+
+            const notifications = sendMessageByCategory.mock.calls.map((call) => String(call[1])).join('\n');
+            const diagnostics = [...logSpy.mock.calls, ...errorSpy.mock.calls].flat().join('\n');
+            expect(notifications).toContain('/bot[REDACTED]/sendMessage?[REDACTED]');
+            expect(diagnostics).toContain('/bot[REDACTED]/sendMessage?[REDACTED]');
+            for (const secret of ['123456:secret-token', 'private-message', '-100123']) {
+                expect(notifications).not.toContain(secret);
+                expect(diagnostics).not.toContain(secret);
+            }
+        } finally {
+            logSpy.mockRestore();
+            errorSpy.mockRestore();
+        }
+    });
+
+    test('never bypasses or emits a raw Telegram bot URL after a 403', async () => {
+        process.env.bypassURL = 'https://bypass.example.com/execute';
+        axiosFn.mockRejectedValue(axiosError({ status: 403, message: 'forbidden' }));
+        const tokenUrl = 'https://api.telegram.org/bot123456:secret-token/getMe?chat_id=-100123';
+
+        await fetchWithTimeout(tokenUrl, {}, 0);
+
+        const notifications = sendMessageByCategory.mock.calls.map((call) => String(call[1])).join('\n');
+        expect(axiosFn.create).not.toHaveBeenCalled();
+        expect(notifications).not.toContain('123456:secret-token');
+        expect(notifications).not.toContain('-100123');
+        expect(notifications).toContain('/bot[REDACTED]/getMe?[REDACTED]');
+    });
+});
+
 describe('bypass branch (403/495)', () => {
     test('403 with successful bypass returns bypass response', async () => {
         process.env.bypassURL = 'https://bypass.example.com/execute';

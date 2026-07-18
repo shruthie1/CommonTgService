@@ -1278,6 +1278,29 @@ export class TelegramService implements OnModuleDestroy {
         }
     }
 
+    /**
+     * Health-repair path: perform exactly one privileged promotion and propagate its error so
+     * callers can stop immediately on FLOOD/PEER_FLOOD. The legacy setupBotInChannel helper
+     * intentionally remains best-effort for bulk manual setup callers.
+     */
+    async promoteBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {
+        changeInfo?: boolean;
+        postMessages?: boolean;
+        editMessages?: boolean;
+        deleteMessages?: boolean;
+        banUsers?: boolean;
+        inviteUsers?: boolean;
+        pinMessages?: boolean;
+        addAdmins?: boolean;
+        anonymous?: boolean;
+        manageCall?: boolean;
+    }): Promise<void> {
+        const telegramClient = await connectionManager.getClient(mobile);
+        this.logger.info(mobile, 'Promoting bot in channel', { channelId, botId, botUsername });
+        await telegramClient.promoteToAdmin(channelId, botUsername, permissions);
+        this.logger.info(mobile, 'Bot promoted in channel', { channelId, botId, botUsername });
+    }
+
     async setupBotInChannel(mobile: string, channelId: string, botId: string, botUsername: string, permissions: {
         changeInfo?: boolean;
         postMessages?: boolean;

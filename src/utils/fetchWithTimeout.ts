@@ -200,15 +200,14 @@ async function makeBypassRequest(
   );
 
   // Handle binary responses
-  const responseContentType = response ? String(response.headers['content-type'] ?? '') : '';
   if (
     response &&
     (options.responseType === 'arraybuffer' ||
-      responseContentType.includes('application/octet-stream') ||
-      responseContentType.includes('image/') ||
-      responseContentType.includes('audio/') ||
-      responseContentType.includes('video/') ||
-      responseContentType.includes('application/pdf'))
+      response.headers['content-type']?.includes('application/octet-stream') ||
+      response.headers['content-type']?.includes('image/') ||
+      response.headers['content-type']?.includes('audio/') ||
+      response.headers['content-type']?.includes('video/') ||
+      response.headers['content-type']?.includes('application/pdf'))
   ) {
     response.data = Buffer.from(response.data);
   }
@@ -229,12 +228,34 @@ function parseUrl(url: string): { host: string; endpoint: string } | null {
 
   try {
     const parsedUrl = new URL(url);
+    // Routes and query values can contain bot tokens, recipient IDs, and message text.
+    // Keep enough route context for diagnostics without persisting request secrets.
+    const safePathname = parsedUrl.pathname.replace(
+      /\/bot[^/]+(?=\/|$)/i,
+      '/bot[REDACTED]',
+    );
     return {
       host: parsedUrl.host,
-      endpoint: parsedUrl.pathname + parsedUrl.search,
+      endpoint: `${safePathname}${parsedUrl.search ? '?[REDACTED]' : ''}`,
     };
   } catch (error) {
     return null;
+  }
+}
+
+function formatUrlForDiagnostics(url: string): string {
+  const parsedUrl = parseUrl(url);
+  return parsedUrl ? `${parsedUrl.host}${parsedUrl.endpoint}` : '[invalid URL]';
+}
+
+/** Bot API URLs embed an account credential in their path and must never leave this process. */
+function isTelegramBotApiUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.hostname.toLowerCase() === 'api.telegram.org'
+      && /^\/bot[^/]+(?:\/|$)/i.test(parsedUrl.pathname);
+  } catch {
+    return false;
   }
 }
 
@@ -258,7 +279,7 @@ export async function fetchWithTimeout(
   options: FetchWithTimeoutOptions = {},
   maxRetries?: number, // Kept for backward compatibility
 ): Promise<AxiosResponse | undefined> {
-  console.log(`Fetching URL: ${url} with options:`, options);
+  console.log(`Fetching request: ${formatUrlForDiagnostics(url)} method=${options.method || 'GET'}`);
   // Input validation
   if (!url) {
     console.error('URL is empty');
@@ -287,7 +308,7 @@ export async function fetchWithTimeout(
   // Parse URL for error reporting
   const urlInfo = parseUrl(url);
   if (!urlInfo) {
-    console.error(`Invalid URL: ${url}`);
+    console.error('Invalid URL');
     return undefined;
   }
 
@@ -370,7 +391,7 @@ export async function fetchWithTimeout(
           parsedError.status === 408);
 
       // Handle 403/495 with bypass
-      if (parsedError.status === 403 || parsedError.status === 495) {
+      if ((parsedError.status === 403 || parsedError.status === 495) && !isTelegramBotApiUrl(url)) {
         try {
           const bypassResponse = await makeBypassRequest(url, options);
           if (bypassResponse) {
@@ -401,7 +422,7 @@ export async function fetchWithTimeout(
           await notifyInternal(
             `Bypass attempt failed`,
             {
-              message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${url}`}`,
+              message: `host=${host}\nendpoint=${endpoint}\n${`msg: ${errorDetails.slice(0, 150)}\nURL: ${host}${endpoint}`}`,
             },
             notificationConfig,
           );

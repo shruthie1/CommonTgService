@@ -29,7 +29,7 @@ export class BotsController {
   @Post()
   @ApiOperation({
     summary: 'Create a new bot',
-    description: 'Creates a new Telegram bot with the provided configuration. The bot will be registered in the system and can be used for message distribution.' })
+    description: 'Registers a Telegram bot as pending channel-admin verification. It becomes eligible for message distribution only after the health workflow verifies its channel-admin membership.' })
   @ApiResponse({ status: 201, description: 'Bot has been successfully created' })
   @ApiResponse({ status: 400, description: 'Invalid bot configuration provided' })
   @ApiResponse({ status: 409, description: 'Bot with the same token already exists' })
@@ -41,18 +41,20 @@ export class BotsController {
   @Post('validate-and-replace')
   @ApiOperation({
     summary: 'Validate all bots and auto-replace dead ones',
-    description: 'Runs the health check now: getMe every bot, mark 401s inactive, conservatively replace dead bots via BotFather, and top up any category below 2 healthy bots (create → add to channel as admin → verify). Also runs daily on a schedule. Pass ?async=true to start it in the BACKGROUND and return immediately (the full run takes minutes due to human-paced admin promotes); default awaits the summary.' })
+    description: 'Runs the lifecycle-safe health check: getMe every bot, retire only permanent token failures, reconcile pending channel admins, then use at most one shared BotFather creation budget for replacement or top-up. Pass ?dryRun=true to report actions without bot-state writes or Telegram mutations; pass ?async=true to run in the background.' })
   @ApiQuery({ name: 'async', required: false, description: 'true = fire-and-forget (returns immediately), false/omitted = await the full summary' })
+  @ApiQuery({ name: 'dryRun', required: false, description: 'true = validate and report proposed transitions without bot-state writes, BotFather creation, or channel promotion (the short-lived run lease is still acquired)' })
   @ApiResponse({ status: 201, description: 'Validation + replacement summary (or {started:true} when async)' })
-  async validateAndReplace(@Query('async') async?: string) {
+  async validateAndReplace(@Query('async') async?: string, @Query('dryRun') dryRun?: string) {
     const runInBackground = String(async ?? '').toLowerCase() === 'true' || async === '1';
+    const options = { dryRun: String(dryRun ?? '').toLowerCase() === 'true' || dryRun === '1' };
     if (runInBackground) {
       // Fire-and-forget: the run can take minutes (human-paced promotes) — don't hold the HTTP
       // client open. Errors are already caught + reported inside validateAndReplaceBots.
-      void this.botsService.validateAndReplaceBots().catch(() => undefined);
-      return { started: true, mode: 'async', note: 'running in background; see the Bot Health Check summary notification' };
+      void this.botsService.validateAndReplaceBots(options).catch(() => undefined);
+      return { started: true, mode: 'async', dryRun: options.dryRun, note: 'running in background; inspect CMS logs for the summary' };
     }
-    return this.botsService.validateAndReplaceBots();
+    return this.botsService.validateAndReplaceBots(options);
   }
 
   @Get()
@@ -84,7 +86,7 @@ export class BotsController {
   @Patch(':id')
   @ApiOperation({
     summary: 'Update a bot',
-    description: 'Updates the configuration of an existing bot. Only provided fields will be modified.' })
+    description: 'Updates non-lifecycle bot configuration. Lifecycle, health, and verification fields are managed only by the health workflow.' })
   @ApiResponse({ status: 200, description: 'Bot updated successfully' })
   @ApiResponse({ status: 404, description: 'Bot not found' })
   @ApiResponse({ status: 400, description: 'Invalid update parameters' })
@@ -437,4 +439,3 @@ export class BotsController {
   }
 
 }
-

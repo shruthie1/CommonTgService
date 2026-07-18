@@ -4,6 +4,7 @@ import { ChannelCategory } from '../channel-category.enum';
 function makeService(overrides: any = {}) {
   return {
     createBot: jest.fn().mockResolvedValue({ _id: '1' }),
+    validateAndReplaceBots: jest.fn().mockResolvedValue({ checked: 0, dryRun: false }),
     getBots: jest.fn().mockResolvedValue([]),
     getBotById: jest.fn().mockResolvedValue({ category: ChannelCategory.PROM_LOGS2 }),
     updateBot: jest.fn().mockResolvedValue({ _id: '1' }),
@@ -37,6 +38,13 @@ describe('BotsController - management', () => {
     await c.getBots(ChannelCategory.PROM_LOGS2);
     await c.getBots();
     expect(svc.getBots).toHaveBeenCalledTimes(2);
+  });
+
+  test('validate-and-replace forwards dryRun without requiring async mode', async () => {
+    const svc = makeService();
+    const c = new BotsController(svc as any);
+    await c.validateAndReplace(undefined, 'true');
+    expect(svc.validateAndReplaceBots).toHaveBeenCalledWith({ dryRun: true });
   });
 
   test('getBotById', async () => {

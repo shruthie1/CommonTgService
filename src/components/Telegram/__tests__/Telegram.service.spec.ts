@@ -1024,6 +1024,13 @@ describe('TelegramService — bot helpers', () => {
         await expect(svc.setupBotInChannel('m', 'ch', 'bid', 'buser', {})).resolves.toBeUndefined();
     });
 
+    test('promoteBotInChannel performs one promotion and propagates a flood error', async () => {
+        const promoteToAdmin = jest.fn().mockRejectedValue(new Error('FLOOD_WAIT_60'));
+        const { svc } = makeService({ promoteToAdmin });
+        await expect(svc.promoteBotInChannel('m', 'ch', 'bid', 'buser', {})).rejects.toThrow('FLOOD_WAIT_60');
+        expect(promoteToAdmin).toHaveBeenCalledTimes(1);
+    });
+
     test('createBot delegates', async () => {
         const { svc } = makeService();
         expect(await svc.createBot('m', { name: 'b' } as any)).toEqual({ botToken: 'tok' });

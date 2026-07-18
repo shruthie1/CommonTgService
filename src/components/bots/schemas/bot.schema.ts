@@ -5,6 +5,16 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export type BotDocument = Bot & Document;
 
+/**
+ * A bot must be explicitly verified as a channel admin before it can be used for sends.
+ * `status` remains during the migration because older CMS callers and records still use it.
+ */
+export type BotLifecycle =
+  | 'active_verified'
+  | 'dead_token'
+  | 'pending_admin'
+  | 'manual_attention';
+
 @Schema({ timestamps: true })
 export class Bot {
   @ApiProperty()
@@ -31,11 +41,38 @@ export class Bot {
   @Prop({ default: Date.now })
   lastUsed: Date;
 
-  // Health lifecycle. 'active' bots are eligible for selection; 'inactive' ones
-  // (token revoked — getMe returned 401) are excluded and queued for replacement.
+  // Legacy compatibility only. Eligibility is controlled exclusively by `lifecycle`.
   @ApiProperty({ enum: ['active', 'inactive'], default: 'active' })
   @Prop({ default: 'active', enum: ['active', 'inactive'] })
   status: 'active' | 'inactive';
+
+  @ApiProperty({ enum: ['active_verified', 'dead_token', 'pending_admin', 'manual_attention'] })
+  @Prop({ enum: ['active_verified', 'dead_token', 'pending_admin', 'manual_attention'], default: 'active_verified', index: true })
+  lifecycle: BotLifecycle;
+
+  @ApiProperty({ required: false, description: 'Machine-readable or operator-facing lifecycle reason' })
+  @Prop()
+  lifecycleReason?: string;
+
+  @ApiProperty({ required: false })
+  @Prop({ default: Date.now })
+  lifecycleUpdatedAt: Date;
+
+  @ApiProperty({ required: false, description: 'Last time channel-admin membership was verified' })
+  @Prop()
+  lastAdminVerifiedAt?: Date;
+
+  @ApiProperty({ required: false, description: 'Bounded reconciliation attempts for pending-admin bots' })
+  @Prop({ default: 0 })
+  repairAttempts: number;
+
+  @ApiProperty({ required: false, description: 'Earliest time a reconciliation or transient validation retry may run' })
+  @Prop()
+  nextRepairAt?: Date;
+
+  @ApiProperty({ required: false, description: 'HTTP status which permanently invalidated this token' })
+  @Prop()
+  deadStatus?: number;
 
   @ApiProperty({ required: false, description: 'Why the bot was marked inactive' })
   @Prop()

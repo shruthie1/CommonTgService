@@ -67,6 +67,23 @@ function axiosOk(data: any = { ok: true, result: { username: 'fetched_bot' } }) 
 }
 
 describe('BotsService - lifecycle / cache init', () => {
+  test('migrates legacy status/deadReason records without removing legacy fields', async () => {
+    const legacyId = new mongoose.Types.ObjectId();
+    await model.collection.insertOne({
+      _id: legacyId,
+      token: 'legacy_token', username: 'legacy_bot', category: ChannelCategory.UNVDS,
+      channelId: '-100legacy', status: 'inactive', deadReason: 'awaiting channel-admin add',
+      lastUsed: new Date(), stats: { ...baseStats },
+    });
+
+    await (service as any).migrateLegacyLifecycle();
+
+    const migrated = await model.findById(legacyId).lean();
+    expect(migrated.lifecycle).toBe('pending_admin');
+    expect(migrated.status).toBe('inactive');
+    expect(migrated.deadReason).toBe('awaiting channel-admin add');
+  });
+
   test('onModuleInit initializes cache and starts periodic flush', async () => {
     // Capture the interval handle so we can clear it (avoid open handle / leaks).
     let captured: any;
@@ -127,6 +144,8 @@ describe('BotsService - createBot', () => {
       channelId: '-100999',
     });
     expect(bot.username).toBe('fetched_bot');
+    expect(bot.lifecycle).toBe('pending_admin');
+    expect(bot.status).toBe('inactive');
     const inDb = await model.findOne({ token: 'valid_token_123456' });
     expect(inDb).toBeTruthy();
     // cache updated
@@ -178,6 +197,17 @@ describe('BotsService - createBot', () => {
     await expect(service.createBot({
       token: 'dup_token_123456', category: ChannelCategory.PROM_LOGS2, channelId: '-1',
     })).rejects.toThrow('already exists');
+  });
+
+  test('ignores a caller-supplied active lifecycle and keeps a manual registration pending', async () => {
+    mockedAxios.get.mockResolvedValue(axiosOk());
+    const bot = await service.createBot({
+      token: 'untrusted_lifecycle_token', category: ChannelCategory.PROM_LOGS2, channelId: '-1',
+      lifecycle: 'active_verified',
+    } as any);
+
+    expect(bot.lifecycle).toBe('pending_admin');
+    expect(bot.status).toBe('inactive');
   });
 });
 
@@ -248,6 +278,12 @@ describe('BotsService - getBotById', () => {
 });
 
 describe('BotsService - updateBot / deleteBot', () => {
+  test('rejects lifecycle fields through the generic update path', async () => {
+    const bot = await seedBot();
+    await expect(service.updateBot(bot._id.toString(), { lifecycle: 'active_verified' } as any))
+      .rejects.toThrow('lifecycle fields are managed');
+  });
+
   test('updateBot updates and refreshes caches', async () => {
     const bot = await seedBot();
     const updated = await service.updateBot(bot._id.toString(), { channelId: '-100555' });
@@ -476,6 +512,14 @@ describe('BotsService - sendByCategoryWithFailover', () => {
     expect(ok).toBe(false);
   });
 
+  test('all non-verified bots → false and makes zero Telegram send calls', async () => {
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, status: 'inactive', lifecycle: 'pending_admin' });
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, status: 'inactive', lifecycle: 'dead_token' });
+
+    expect(await service.sendMessageByCategory(ChannelCategory.SAVED_MESSAGES, 'hi')).toBe(false);
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
   test('all bots fail → false', async () => {
     await seedBot({ category: ChannelCategory.HTTP_FAILURES });
     await seedBot({ category: ChannelCategory.HTTP_FAILURES });
@@ -631,7 +675,7 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
         return { botToken: `${700000000 + createdCount}:AAF${'x'.repeat(32)}`, username: `newbot_${createdCount}` };
       }),
       getBotInfo: jest.fn(async () => ({ id: `${900 + createdCount}`, username: `newbot_${createdCount}` })),
-      setupBotInChannel: jest.fn(async () => undefined),
+      promoteBotInChannel: jest.fn(async () => undefined),
       // resolveChannelAdminMobile scores admins by permissions and matches userId → our accounts;
       // verifyBotIsChannelAdmin checks the bot id is present. Return the MANAGER as a full-rights
       // admin (addAdmins+post so it's selected as promoter) + the just-created bot id.
@@ -709,5 +753,154 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     const res = await service.validateAndReplaceBots();
     expect(res).toMatchObject({ toppedUp: 0, replaced: 0 });
     (service as any).replaceInProgress = false;
+  });
+
+  test('pending_admin + live getMe remains pending until channel-admin verification succeeds', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    mockedAxios.get.mockResolvedValue(axiosOk());
+    (service as any).sleep = jest.fn(async () => undefined);
+    await seedBot({ category: ChannelCategory.UNVDS, status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findOne({ category: ChannelCategory.UNVDS });
+    expect(bot.lifecycle).toBe('pending_admin');
+    expect(bot.status).toBe('inactive');
+  });
+
+  test('dry-run reports pending reconciliation without touching Telegram user-account services', async () => {
+    mockModuleRef.get.mockReset().mockImplementation(() => { throw new Error('must not resolve TelegramService in dry-run'); });
+    mockedAxios.get.mockResolvedValue(axiosOk());
+    (service as any).sleep = jest.fn(async () => undefined);
+    const seeded = await seedBot({ category: ChannelCategory.UNVDS, status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    const result = await service.validateAndReplaceBots({ dryRun: true });
+
+    const bot = await model.findById(seeded._id);
+    expect(bot.lifecycle).toBe('pending_admin');
+    expect(bot.repairAttempts).toBe(0);
+    expect(result.proposedActions).toContain(`reconcile pending-admin @${seeded.username} in ${seeded.channelId}`);
+    expect(mockModuleRef.get).not.toHaveBeenCalled();
+  });
+
+  test('pending_admin becomes active_verified only after the admin check succeeds', async () => {
+    wireHealthyDeps();
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100pending', status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findOne({ category: ChannelCategory.UNVDS });
+    expect(bot.lifecycle).toBe('active_verified');
+    expect(bot.status).toBe('active');
+    expect(bot.lastAdminVerifiedAt).toBeTruthy();
+  });
+
+  test('flood during pending-admin promotion stops replacement and top-up work', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    const { telegramService } = wireHealthyDeps();
+    telegramService.getGroupAdmins.mockResolvedValue([
+      { userId: MANAGER.tgId, rank: 'manager', permissions: { addAdmins: true, postMessages: true } },
+    ]);
+    telegramService.promoteBotInChannel.mockRejectedValue(new Error('FLOOD_WAIT_60'));
+    await seedBot({ category: ChannelCategory.UNVDS, status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+    await seedBot({ category: ChannelCategory.USER_WARNINGS, channelId: '-100low' });
+
+    const result = await service.validateAndReplaceBots();
+
+    expect(result.failures.join('\n')).toMatch(/flood\/spam signal/i);
+    expect(telegramService.createBot).not.toHaveBeenCalled();
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('dead_token recovers only when getMe explicitly validates the retained token', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    mockedAxios.get.mockResolvedValue(axiosOk());
+    (service as any).sleep = jest.fn(async () => undefined);
+    const seeded = await seedBot({ category: ChannelCategory.UNVDS, status: 'inactive', lifecycle: 'dead_token' });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findById(seeded._id);
+    expect(bot.lifecycle).toBe('active_verified');
+    expect(bot.status).toBe('active');
+  });
+
+  test.each([401, 403, 404])('permanent getMe %s retires the token with its actual status', async (status) => {
+    mockedAxios.get.mockRejectedValue({ response: { status } });
+    (service as any).sleep = jest.fn(async () => undefined);
+    const seeded = await seedBot({ category: ChannelCategory.UNVDS });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findById(seeded._id);
+    expect(bot.lifecycle).toBe('dead_token');
+    expect(bot.status).toBe('inactive');
+    expect(bot.deadStatus).toBe(status);
+  });
+
+  test('evicts a newly dead bot from a warm send cache before the health scan completes', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    mockedAxios.get.mockRejectedValue({ response: { status: 401 } });
+    const seeded = await seedBot({ category: ChannelCategory.UNVDS });
+    await service.getBots(ChannelCategory.UNVDS); // warm the category send cache
+    let presentDuringScan = true;
+    (service as any).sleep = jest.fn(async (ms: number) => {
+      if (ms === 1200) {
+        const cached = (service as any).cache.get(`category:${ChannelCategory.UNVDS}`) || [];
+        presentDuringScan = cached.some((bot: any) => bot._id.toString() === seeded._id.toString());
+      }
+    });
+
+    await service.validateAndReplaceBots();
+
+    expect(presentDuringScan).toBe(false);
+  });
+
+  test.each([429, 500])('transient getMe %s keeps lifecycle unchanged and schedules retry', async (status) => {
+    mockedAxios.get.mockRejectedValue({ response: { status } });
+    (service as any).sleep = jest.fn(async () => undefined);
+    const seeded = await seedBot({ category: ChannelCategory.UNVDS });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findById(seeded._id);
+    expect(bot.lifecycle).toBe('active_verified');
+    expect(bot.nextRepairAt).toBeTruthy();
+  });
+
+  test('network getMe errors keep lifecycle unchanged and schedule retry', async () => {
+    mockedAxios.get.mockRejectedValue(new Error('network unavailable'));
+    (service as any).sleep = jest.fn(async () => undefined);
+    const seeded = await seedBot({ category: ChannelCategory.UNVDS });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findById(seeded._id);
+    expect(bot.lifecycle).toBe('active_verified');
+    expect(bot.nextRepairAt).toBeTruthy();
+  });
+
+  test('global creation budget is shared between dead-token replacement and top-up', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    wireHealthyDeps();
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('dead_token')) throw { response: { status: 401 } };
+      return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+    });
+    await seedBot({ token: 'dead_token', category: ChannelCategory.UNVDS, channelId: '-100dead' });
+    await seedBot({ category: ChannelCategory.USER_WARNINGS, channelId: '-100low' });
+
+    const result = await service.validateAndReplaceBots();
+
+    expect(result.replaced).toBe(1);
+    expect(createdCount).toBe(1);
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('distributed lease lets only one CMS service enter a health run', async () => {
+    const other = new BotsService(model, mockModuleRef as any);
+    expect(await (service as any).acquireHealthLease()).toBe(true);
+    expect(await (other as any).acquireHealthLease()).toBe(false);
+    await (service as any).releaseHealthLease();
   });
 });
