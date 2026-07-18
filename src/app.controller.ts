@@ -617,9 +617,12 @@ export class AppController {
             .promotion-row > * { min-width: 0; padding: 11px 14px; }
             .promotion-row:last-child { border-bottom: 0; }
             .promotion-duration { font-size: 13px; font-weight: 800; }
-            .promotion-duration.age-fresh { color: #6ee7b7; }
-            .promotion-duration.age-aging { color: #fcd34d; }
+            .promotion-duration.age-fresh { color: #4ade80; }
+            .promotion-duration.age-recent { color: #2dd4bf; }
+            .promotion-duration.age-watch { color: #facc15; }
+            .promotion-duration.age-aging { color: #fb923c; }
             .promotion-duration.age-stale { color: #fb7185; }
+            .promotion-duration.age-critical { color: #f43f5e; }
             .promotion-duration.age-inactive { color: #94a3b8; }
             .metric-empty { margin: 0; padding: 20px 16px; color: #94a3b8; font-size: 14px; text-align: center; }
             @media (max-width: 680px) {

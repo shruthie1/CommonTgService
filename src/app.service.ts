@@ -967,8 +967,17 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
 
     const minutes = Math.floor(elapsedSeconds / 60);
+    if (minutes < 5) {
+      return { text: `${minutes} min ago`, tone: 'age-fresh' };
+    }
+    if (minutes < 15) {
+      return { text: `${minutes} min ago`, tone: 'age-recent' };
+    }
+    if (minutes < 30) {
+      return { text: `${minutes} min ago`, tone: 'age-watch' };
+    }
     if (minutes < 60) {
-      return { text: `${minutes} min ago`, tone: minutes <= 15 ? 'age-fresh' : 'age-aging' };
+      return { text: `${minutes} min ago`, tone: 'age-aging' };
     }
 
     const hours = Math.floor(minutes / 60);
@@ -976,7 +985,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (hours < 24) {
       return {
         text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
-        tone: 'age-stale',
+        tone: minutes < 90 ? 'age-stale' : 'age-critical',
       };
     }
 
@@ -984,7 +993,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const remainingHours = hours % 24;
     return {
       text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
-      tone: 'age-stale',
+      tone: 'age-critical',
     };
   }
 

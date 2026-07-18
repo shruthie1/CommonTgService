@@ -740,9 +740,12 @@ let AppController = AppController_1 = class AppController {
             .promotion-row > * { min-width: 0; padding: 11px 14px; }
             .promotion-row:last-child { border-bottom: 0; }
             .promotion-duration { font-size: 13px; font-weight: 800; }
-            .promotion-duration.age-fresh { color: #6ee7b7; }
-            .promotion-duration.age-aging { color: #fcd34d; }
+            .promotion-duration.age-fresh { color: #4ade80; }
+            .promotion-duration.age-recent { color: #2dd4bf; }
+            .promotion-duration.age-watch { color: #facc15; }
+            .promotion-duration.age-aging { color: #fb923c; }
             .promotion-duration.age-stale { color: #fb7185; }
+            .promotion-duration.age-critical { color: #f43f5e; }
             .promotion-duration.age-inactive { color: #94a3b8; }
             .metric-empty { margin: 0; padding: 20px 16px; color: #94a3b8; font-size: 14px; text-align: center; }
             @media (max-width: 680px) {
@@ -1987,22 +1990,31 @@ let AppService = AppService_1 = class AppService {
             return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
         }
         const minutes = Math.floor(elapsedSeconds / 60);
+        if (minutes < 5) {
+            return { text: `${minutes} min ago`, tone: 'age-fresh' };
+        }
+        if (minutes < 15) {
+            return { text: `${minutes} min ago`, tone: 'age-recent' };
+        }
+        if (minutes < 30) {
+            return { text: `${minutes} min ago`, tone: 'age-watch' };
+        }
         if (minutes < 60) {
-            return { text: `${minutes} min ago`, tone: minutes <= 15 ? 'age-fresh' : 'age-aging' };
+            return { text: `${minutes} min ago`, tone: 'age-aging' };
         }
         const hours = Math.floor(minutes / 60);
         const remainingMinutes = minutes % 60;
         if (hours < 24) {
             return {
                 text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
-                tone: 'age-stale',
+                tone: minutes < 90 ? 'age-stale' : 'age-critical',
             };
         }
         const days = Math.floor(hours / 24);
         const remainingHours = hours % 24;
         return {
             text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
-            tone: 'age-stale',
+            tone: 'age-critical',
         };
     }
     escapeDashboardHtml(value) {
