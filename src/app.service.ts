@@ -904,8 +904,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             </div>
             ${promotionStats.rows}
           </div>
-          ${promotionStats.summary}
         </section>
+        ${promotionStats.summary}
       </main>`;
   }
 
@@ -935,17 +935,28 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   private renderPromotionSummary(stageCounts: Record<string, number>): string {
     const stages = [
-      ['age-fresh', '0–4m'],
-      ['age-recent', '5–14m'],
-      ['age-watch', '15–29m'],
-      ['age-aging', '30–59m'],
-      ['age-stale', '60–89m'],
-      ['age-critical', '90m+'],
-      ['age-inactive', 'Idle'],
+      ['age-fresh', 'Fresh', '0–4m'],
+      ['age-recent', 'Live', '5–14m'],
+      ['age-watch', 'Watch', '15–29m'],
+      ['age-aging', 'Slow', '30–59m'],
+      ['age-stale', 'Stale', '60–89m'],
+      ['age-critical', 'Old', '90m+'],
+      ['age-inactive', 'Inactive', 'No activity'],
     ];
-    return `<div class="promotion-summary" aria-label="Promotion duration summary">${stages
-      .map(([tone, label]) => `<span class="promotion-summary-item ${tone}">${label} <strong>${stageCounts[tone]}</strong></span>`)
-      .join('')}</div>`;
+    const segments = stages
+      .map(([tone, label, range]) => {
+        const count = stageCounts[tone];
+        return `<span class="stage-segment ${tone}" style="flex-grow:${Math.max(count, 0.25)}" aria-label="${label}: ${count} (${range})"><strong>${count || ''}</strong></span>`;
+      })
+      .join('');
+    const legend = stages
+      .map(([tone, label, range]) => `<span class="stage-legend-item ${tone}"><strong>${stageCounts[tone]}</strong><span>${label}</span><small>${range}</small></span>`)
+      .join('');
+
+    return `<section class="dashboard-card dashboard-card-wide promotion-summary-card" aria-label="Promotion activity stages">
+      <div class="stage-bar" role="img" aria-label="Promotion activity duration stages from fresh to inactive">${segments}</div>
+      <div class="stage-legend">${legend}</div>
+    </section>`;
   }
 
   private renderOverviewRow(
