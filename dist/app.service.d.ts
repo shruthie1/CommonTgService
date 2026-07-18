@@ -101,7 +101,10 @@ export declare class AppService implements OnModuleInit, OnModuleDestroy {
     createInitializedObject(): Promise<{}>;
     getData(): Promise<string>;
     getPromotionStats(): Promise<string>;
-    private renderDashboardRow;
+    private renderOverviewRow;
+    private renderOverviewMetric;
+    private renderPromotionRow;
+    private formatDashboardAge;
     private escapeDashboardHtml;
     checkAndRefresh(): Promise<void>;
     onModuleDestroy(): void;

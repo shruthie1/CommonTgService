@@ -857,51 +857,52 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
 
     const profileDataArray = Object.entries(profileData);
-    profileDataArray.sort(
-      (a: any, b: any) => b[1].totalpendingDemos - a[1].totalpendingDemos,
+    profileDataArray.sort((a: any, b: any) =>
+      (b[1].totalpendingDemos + b[1].fullShowPPl) -
+      (a[1].totalpendingDemos + a[1].fullShowPPl),
     );
-    let reply = '';
+    let overviewRows = '';
     for (const [profile, userData] of profileDataArray) {
-      reply += this.renderDashboardRow(
+      const pendingDemos = (userData as any).totalpendingDemos;
+      const fullShows = (userData as any).fullShowPPl;
+      if (pendingDemos <= 0 && fullShows <= 0) {
+        continue;
+      }
+      overviewRows += this.renderOverviewRow(
         profile,
-        (userData as any).totalpendingDemos,
+        pendingDemos,
         (userData as any).names,
-      );
-    }
-
-    profileDataArray.sort(
-      (a: any, b: any) => b[1].fullShowPPl - a[1].fullShowPPl,
-    );
-    let reply2 = '';
-    for (const [profile, userData] of profileDataArray) {
-      reply2 += this.renderDashboardRow(
-        profile,
-        (userData as any).fullShowPPl,
         (userData as any).fullShowNames,
+        fullShows,
       );
     }
+    overviewRows = overviewRows || '<p class="metric-empty">No pending demos or full-show users</p>';
 
-    const reply3 = await this.getPromotionStats();
+    const promotionRows = await this.getPromotionStats();
 
     return `<main class="dashboard">
         <header class="dashboard-header">
-          <p class="dashboard-eyebrow">Live overview</p>
-          <h1>UMS dashboard</h1>
-          <p class="dashboard-subtitle">Refreshes automatically every 20 seconds</p>
+          <h1>Status</h1>
         </header>
-        <div class="dashboard-grid">
-          <section class="dashboard-card">
-            <h2>Pending demos</h2>
-            <div class="metric-list">${reply}</div>
-          </section>
-          <section class="dashboard-card">
-            <h2>Full-show users</h2>
-            <div class="metric-list">${reply2}</div>
-          </section>
-        </div>
-        <section class="dashboard-card dashboard-card-wide">
-          <h2>Promotion stats</h2>
-          <div class="metric-list">${reply3}</div>
+        <section class="dashboard-card dashboard-overview">
+          <div class="overview-table" role="table" aria-label="Demo and full-show status">
+            <div class="overview-row overview-heading" role="row">
+              <span role="columnheader">Client</span>
+              <span role="columnheader">Demos</span>
+              <span role="columnheader">Full show</span>
+            </div>
+            ${overviewRows}
+          </div>
+        </section>
+        <section class="dashboard-card dashboard-card-wide dashboard-card-promotion">
+          <div class="promotion-table" role="table" aria-label="Promotion status">
+            <div class="promotion-row promotion-heading" role="row">
+              <span role="columnheader">Client</span>
+              <span role="columnheader">Count</span>
+              <span role="columnheader">Duration</span>
+            </div>
+            ${promotionRows}
+          </div>
         </section>
       </main>`;
   }
@@ -910,25 +911,80 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     let resp = '';
     const result = await this.promoteStatService.findAll();
     for (const data of result) {
-      const minutes = data.totalCount > 0
-        ? Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)
-        : '';
-      resp += this.renderDashboardRow(data.client, data.totalCount, minutes ? `${minutes} min ago` : '');
+      const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
+      resp += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
     }
     return resp;
   }
 
-  private renderDashboardRow(
-    label: unknown,
-    count: unknown,
-    details: unknown,
+  private renderOverviewRow(
+    client: unknown,
+    demoCount: unknown,
+    demoNames: unknown,
+    fullShowNames: unknown,
+    fullShowCount: unknown,
   ): string {
-    const safeDetails = this.escapeDashboardHtml(details).trim();
-    return `<div class="metric-row">
-      <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
-      <strong class="metric-value">${this.escapeDashboardHtml(count)}</strong>
-      ${safeDetails ? `<span class="metric-detail">${safeDetails}</span>` : ''}
+    return `<div class="overview-row" role="row">
+      <strong class="overview-client" role="cell">${this.escapeDashboardHtml(String(client).toUpperCase())}</strong>
+      ${this.renderOverviewMetric(demoCount, demoNames)}
+      ${this.renderOverviewMetric(fullShowCount, fullShowNames)}
     </div>`;
+  }
+
+  private renderOverviewMetric(count: unknown, names: unknown): string {
+    const safeNames = this.escapeDashboardHtml(names).trim();
+    return `<span class="overview-metric" role="cell">
+      <strong class="overview-count">${this.escapeDashboardHtml(count)}</strong>
+      <span class="overview-names">${safeNames || '—'}</span>
+    </span>`;
+  }
+
+  private renderPromotionRow(
+    client: unknown,
+    count: unknown,
+    duration: string,
+    tone: string,
+  ): string {
+    return `<div class="promotion-row" role="row">
+      <strong class="promotion-client" role="cell">${this.escapeDashboardHtml(String(client).toUpperCase())}</strong>
+      <strong class="promotion-count" role="cell">${this.escapeDashboardHtml(count)}</strong>
+      <span class="promotion-duration ${tone}" role="cell">${this.escapeDashboardHtml(duration)}</span>
+    </div>`;
+  }
+
+  private formatDashboardAge(
+    timestamp: unknown,
+    hasActivity: boolean,
+  ): { text: string; tone: string } {
+    if (!hasActivity || !Number.isFinite(Number(timestamp))) {
+      return { text: 'Not active', tone: 'age-inactive' };
+    }
+
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
+    if (elapsedSeconds < 60) {
+      return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
+    }
+
+    const minutes = Math.floor(elapsedSeconds / 60);
+    if (minutes < 60) {
+      return { text: `${minutes} min ago`, tone: minutes <= 15 ? 'age-fresh' : 'age-aging' };
+    }
+
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    if (hours < 24) {
+      return {
+        text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
+        tone: 'age-stale',
+      };
+    }
+
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return {
+      text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
+      tone: 'age-stale',
+    };
   }
 
   private escapeDashboardHtml(value: unknown): string {

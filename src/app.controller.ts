@@ -593,7 +593,7 @@ export class AppController {
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <meta name="theme-color" content="#111827">
-          <title>UMS dashboard</title>
+          <title>Status</title>
           <style>
             :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
             * { box-sizing: border-box; }
@@ -603,17 +603,43 @@ export class AppController {
             .dashboard-eyebrow { margin: 0 0 6px; color: #67e8f9; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
             h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
             .dashboard-subtitle { margin: 8px 0 0; color: #94a3b8; font-size: 14px; }
-            .dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
             .dashboard-card { overflow: hidden; border: 1px solid #334155; border-radius: 16px; background: #1e293b; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); }
             .dashboard-card-wide { margin-top: 16px; }
-            h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #334155; background: #26354b; color: #e0f2fe; font-size: 15px; }
-            .metric-list { padding: 4px 0; }
-            .metric-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid rgba(148, 163, 184, .16); }
-            .metric-row:last-child { border-bottom: 0; }
-            .metric-label { min-width: 0; overflow-wrap: anywhere; color: #e2e8f0; font-size: 14px; font-weight: 700; }
-            .metric-value { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
-            .metric-detail { grid-column: 1 / -1; overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.45; }
-            @media (max-width: 680px) { .dashboard { padding: 16px 12px 28px; } .dashboard-grid { grid-template-columns: 1fr; } .dashboard-card-wide { margin-top: 16px; } .metric-row { padding: 12px 14px; } }
+            .overview-row { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.2fr) minmax(0, 1.2fr); border-bottom: 1px solid rgba(148, 163, 184, .16); }
+            .overview-row > * { min-width: 0; padding: 11px 14px; border-right: 1px solid rgba(148, 163, 184, .16); }
+            .overview-row > *:last-child { border-right: 0; }
+            .overview-heading, .promotion-heading { background: #26354b; color: #e0f2fe; font-size: 13px; font-weight: 800; }
+            .overview-client, .promotion-client { color: #e2e8f0; font-size: 14px; overflow-wrap: anywhere; }
+            .overview-metric { display: grid; gap: 5px; }
+            .overview-count, .promotion-count { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
+            .overview-names { overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.35; }
+            .promotion-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px minmax(140px, .8fr); align-items: center; border-bottom: 1px solid rgba(148, 163, 184, .16); }
+            .promotion-row > * { min-width: 0; padding: 11px 14px; }
+            .promotion-row:last-child { border-bottom: 0; }
+            .promotion-duration { font-size: 13px; font-weight: 800; }
+            .promotion-duration.age-fresh { color: #6ee7b7; }
+            .promotion-duration.age-aging { color: #fcd34d; }
+            .promotion-duration.age-stale { color: #fb7185; }
+            .promotion-duration.age-inactive { color: #94a3b8; }
+            .metric-empty { margin: 0; padding: 20px 16px; color: #94a3b8; font-size: 14px; text-align: center; }
+            @media (max-width: 680px) {
+              body { overflow: hidden; }
+              .dashboard { height: 100dvh; padding: 7px; overflow: hidden; }
+              .dashboard-header { margin: 0 0 5px; }
+              h1 { font-size: 18px; }
+              .dashboard-card { border-radius: 8px; box-shadow: none; }
+              .dashboard-card-wide { margin-top: 6px; }
+              .overview-row { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); }
+              .overview-row > *, .promotion-row > * { padding: 4px 5px; }
+              .overview-heading, .promotion-heading { font-size: 9px; }
+              .overview-client, .promotion-client { font-size: 9px; }
+              .overview-metric { gap: 1px; }
+              .overview-count, .promotion-count { font-size: 12px; line-height: 1; }
+              .overview-names { font-size: 8px; line-height: 1.05; }
+              .promotion-row { grid-template-columns: minmax(0, 1fr) 42px 78px; min-height: 21px; }
+              .promotion-duration { font-size: 9px; line-height: 1; white-space: nowrap; }
+              .metric-empty { padding: 8px; font-size: 10px; }
+            }
           </style>
         </head>
         <body>

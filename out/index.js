@@ -716,7 +716,7 @@ let AppController = AppController_1 = class AppController {
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <meta name="theme-color" content="#111827">
-          <title>UMS dashboard</title>
+          <title>Status</title>
           <style>
             :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
             * { box-sizing: border-box; }
@@ -726,17 +726,43 @@ let AppController = AppController_1 = class AppController {
             .dashboard-eyebrow { margin: 0 0 6px; color: #67e8f9; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
             h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
             .dashboard-subtitle { margin: 8px 0 0; color: #94a3b8; font-size: 14px; }
-            .dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
             .dashboard-card { overflow: hidden; border: 1px solid #334155; border-radius: 16px; background: #1e293b; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); }
             .dashboard-card-wide { margin-top: 16px; }
-            h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #334155; background: #26354b; color: #e0f2fe; font-size: 15px; }
-            .metric-list { padding: 4px 0; }
-            .metric-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid rgba(148, 163, 184, .16); }
-            .metric-row:last-child { border-bottom: 0; }
-            .metric-label { min-width: 0; overflow-wrap: anywhere; color: #e2e8f0; font-size: 14px; font-weight: 700; }
-            .metric-value { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
-            .metric-detail { grid-column: 1 / -1; overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.45; }
-            @media (max-width: 680px) { .dashboard { padding: 16px 12px 28px; } .dashboard-grid { grid-template-columns: 1fr; } .dashboard-card-wide { margin-top: 16px; } .metric-row { padding: 12px 14px; } }
+            .overview-row { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.2fr) minmax(0, 1.2fr); border-bottom: 1px solid rgba(148, 163, 184, .16); }
+            .overview-row > * { min-width: 0; padding: 11px 14px; border-right: 1px solid rgba(148, 163, 184, .16); }
+            .overview-row > *:last-child { border-right: 0; }
+            .overview-heading, .promotion-heading { background: #26354b; color: #e0f2fe; font-size: 13px; font-weight: 800; }
+            .overview-client, .promotion-client { color: #e2e8f0; font-size: 14px; overflow-wrap: anywhere; }
+            .overview-metric { display: grid; gap: 5px; }
+            .overview-count, .promotion-count { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
+            .overview-names { overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.35; }
+            .promotion-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px minmax(140px, .8fr); align-items: center; border-bottom: 1px solid rgba(148, 163, 184, .16); }
+            .promotion-row > * { min-width: 0; padding: 11px 14px; }
+            .promotion-row:last-child { border-bottom: 0; }
+            .promotion-duration { font-size: 13px; font-weight: 800; }
+            .promotion-duration.age-fresh { color: #6ee7b7; }
+            .promotion-duration.age-aging { color: #fcd34d; }
+            .promotion-duration.age-stale { color: #fb7185; }
+            .promotion-duration.age-inactive { color: #94a3b8; }
+            .metric-empty { margin: 0; padding: 20px 16px; color: #94a3b8; font-size: 14px; text-align: center; }
+            @media (max-width: 680px) {
+              body { overflow: hidden; }
+              .dashboard { height: 100dvh; padding: 7px; overflow: hidden; }
+              .dashboard-header { margin: 0 0 5px; }
+              h1 { font-size: 18px; }
+              .dashboard-card { border-radius: 8px; box-shadow: none; }
+              .dashboard-card-wide { margin-top: 6px; }
+              .overview-row { grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); }
+              .overview-row > *, .promotion-row > * { padding: 4px 5px; }
+              .overview-heading, .promotion-heading { font-size: 9px; }
+              .overview-client, .promotion-client { font-size: 9px; }
+              .overview-metric { gap: 1px; }
+              .overview-count, .promotion-count { font-size: 12px; line-height: 1; }
+              .overview-names { font-size: 8px; line-height: 1.05; }
+              .promotion-row { grid-template-columns: minmax(0, 1fr) 42px 78px; min-height: 21px; }
+              .promotion-duration { font-size: 9px; line-height: 1; white-space: nowrap; }
+              .metric-empty { padding: 8px; font-size: 10px; }
+            }
           </style>
         </head>
         <body>
@@ -1882,36 +1908,42 @@ let AppService = AppService_1 = class AppService {
             }
         }
         const profileDataArray = Object.entries(profileData);
-        profileDataArray.sort((a, b) => b[1].totalpendingDemos - a[1].totalpendingDemos);
-        let reply = '';
+        profileDataArray.sort((a, b) => (b[1].totalpendingDemos + b[1].fullShowPPl) -
+            (a[1].totalpendingDemos + a[1].fullShowPPl));
+        let overviewRows = '';
         for (const [profile, userData] of profileDataArray) {
-            reply += this.renderDashboardRow(profile, userData.totalpendingDemos, userData.names);
+            const pendingDemos = userData.totalpendingDemos;
+            const fullShows = userData.fullShowPPl;
+            if (pendingDemos <= 0 && fullShows <= 0) {
+                continue;
+            }
+            overviewRows += this.renderOverviewRow(profile, pendingDemos, userData.names, userData.fullShowNames, fullShows);
         }
-        profileDataArray.sort((a, b) => b[1].fullShowPPl - a[1].fullShowPPl);
-        let reply2 = '';
-        for (const [profile, userData] of profileDataArray) {
-            reply2 += this.renderDashboardRow(profile, userData.fullShowPPl, userData.fullShowNames);
-        }
-        const reply3 = await this.getPromotionStats();
+        overviewRows = overviewRows || '<p class="metric-empty">No pending demos or full-show users</p>';
+        const promotionRows = await this.getPromotionStats();
         return `<main class="dashboard">
         <header class="dashboard-header">
-          <p class="dashboard-eyebrow">Live overview</p>
-          <h1>UMS dashboard</h1>
-          <p class="dashboard-subtitle">Refreshes automatically every 20 seconds</p>
+          <h1>Status</h1>
         </header>
-        <div class="dashboard-grid">
-          <section class="dashboard-card">
-            <h2>Pending demos</h2>
-            <div class="metric-list">${reply}</div>
-          </section>
-          <section class="dashboard-card">
-            <h2>Full-show users</h2>
-            <div class="metric-list">${reply2}</div>
-          </section>
-        </div>
-        <section class="dashboard-card dashboard-card-wide">
-          <h2>Promotion stats</h2>
-          <div class="metric-list">${reply3}</div>
+        <section class="dashboard-card dashboard-overview">
+          <div class="overview-table" role="table" aria-label="Demo and full-show status">
+            <div class="overview-row overview-heading" role="row">
+              <span role="columnheader">Client</span>
+              <span role="columnheader">Demos</span>
+              <span role="columnheader">Full show</span>
+            </div>
+            ${overviewRows}
+          </div>
+        </section>
+        <section class="dashboard-card dashboard-card-wide dashboard-card-promotion">
+          <div class="promotion-table" role="table" aria-label="Promotion status">
+            <div class="promotion-row promotion-heading" role="row">
+              <span role="columnheader">Client</span>
+              <span role="columnheader">Count</span>
+              <span role="columnheader">Duration</span>
+            </div>
+            ${promotionRows}
+          </div>
         </section>
       </main>`;
     }
@@ -1919,20 +1951,58 @@ let AppService = AppService_1 = class AppService {
         let resp = '';
         const result = await this.promoteStatService.findAll();
         for (const data of result) {
-            const minutes = data.totalCount > 0
-                ? Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)
-                : '';
-            resp += this.renderDashboardRow(data.client, data.totalCount, minutes ? `${minutes} min ago` : '');
+            const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
+            resp += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
         }
         return resp;
     }
-    renderDashboardRow(label, count, details) {
-        const safeDetails = this.escapeDashboardHtml(details).trim();
-        return `<div class="metric-row">
-      <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
-      <strong class="metric-value">${this.escapeDashboardHtml(count)}</strong>
-      ${safeDetails ? `<span class="metric-detail">${safeDetails}</span>` : ''}
+    renderOverviewRow(client, demoCount, demoNames, fullShowNames, fullShowCount) {
+        return `<div class="overview-row" role="row">
+      <strong class="overview-client" role="cell">${this.escapeDashboardHtml(String(client).toUpperCase())}</strong>
+      ${this.renderOverviewMetric(demoCount, demoNames)}
+      ${this.renderOverviewMetric(fullShowCount, fullShowNames)}
     </div>`;
+    }
+    renderOverviewMetric(count, names) {
+        const safeNames = this.escapeDashboardHtml(names).trim();
+        return `<span class="overview-metric" role="cell">
+      <strong class="overview-count">${this.escapeDashboardHtml(count)}</strong>
+      <span class="overview-names">${safeNames || '—'}</span>
+    </span>`;
+    }
+    renderPromotionRow(client, count, duration, tone) {
+        return `<div class="promotion-row" role="row">
+      <strong class="promotion-client" role="cell">${this.escapeDashboardHtml(String(client).toUpperCase())}</strong>
+      <strong class="promotion-count" role="cell">${this.escapeDashboardHtml(count)}</strong>
+      <span class="promotion-duration ${tone}" role="cell">${this.escapeDashboardHtml(duration)}</span>
+    </div>`;
+    }
+    formatDashboardAge(timestamp, hasActivity) {
+        if (!hasActivity || !Number.isFinite(Number(timestamp))) {
+            return { text: 'Not active', tone: 'age-inactive' };
+        }
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
+        if (elapsedSeconds < 60) {
+            return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
+        }
+        const minutes = Math.floor(elapsedSeconds / 60);
+        if (minutes < 60) {
+            return { text: `${minutes} min ago`, tone: minutes <= 15 ? 'age-fresh' : 'age-aging' };
+        }
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        if (hours < 24) {
+            return {
+                text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
+                tone: 'age-stale',
+            };
+        }
+        const days = Math.floor(hours / 24);
+        const remainingHours = hours % 24;
+        return {
+            text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
+            tone: 'age-stale',
+        };
     }
     escapeDashboardHtml(value) {
         return String(value ?? '').replace(/[&<>'"]/g, (character) => ({

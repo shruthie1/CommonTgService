@@ -671,44 +671,81 @@ let AppService = AppService_1 = class AppService {
         const reply3 = await this.getPromotionStats();
         return `<main class="dashboard">
         <header class="dashboard-header">
-          <p class="dashboard-eyebrow">Live overview</p>
-          <h1>UMS dashboard</h1>
-          <p class="dashboard-subtitle">Refreshes automatically every 20 seconds</p>
+          <h1>Status</h1>
         </header>
+        <nav class="dashboard-tabs" aria-label="Dashboard sections">
+          <button class="dashboard-tab is-active" type="button" data-dashboard-tab="pending">Pending</button>
+          <button class="dashboard-tab" type="button" data-dashboard-tab="full-show">Full show</button>
+          <button class="dashboard-tab" type="button" data-dashboard-tab="promotion">Promotion</button>
+        </nav>
         <div class="dashboard-grid">
-          <section class="dashboard-card">
+          <section class="dashboard-card dashboard-card-pending is-active" data-dashboard-panel="pending">
             <h2>Pending demos</h2>
             <div class="metric-list">${reply}</div>
           </section>
-          <section class="dashboard-card">
+          <section class="dashboard-card dashboard-card-full-show" data-dashboard-panel="full-show">
             <h2>Full-show users</h2>
             <div class="metric-list">${reply2}</div>
           </section>
         </div>
-        <section class="dashboard-card dashboard-card-wide">
+        <section class="dashboard-card dashboard-card-wide dashboard-card-promotion" data-dashboard-panel="promotion">
           <h2>Promotion stats</h2>
           <div class="metric-list">${reply3}</div>
         </section>
+        <dialog class="metric-dialog" id="metric-dialog" aria-labelledby="metric-dialog-title">
+          <div class="metric-dialog-header">
+            <strong id="metric-dialog-title"></strong>
+            <button class="metric-dialog-close" type="button" aria-label="Close details">×</button>
+          </div>
+          <p id="metric-dialog-detail"></p>
+        </dialog>
       </main>`;
     }
     async getPromotionStats() {
         let resp = '';
         const result = await this.promoteStatService.findAll();
         for (const data of result) {
-            const minutes = data.totalCount > 0
-                ? Number((Date.now() - data.lastUpdatedTimeStamp) / (1000 * 60)).toFixed(2)
-                : '';
-            resp += this.renderDashboardRow(data.client, data.totalCount, minutes ? `${minutes} min ago` : '');
+            const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
+            resp += this.renderDashboardRow(data.client, data.totalCount, age.text, age.tone);
         }
         return resp;
     }
-    renderDashboardRow(label, count, details) {
+    renderDashboardRow(label, count, details, detailTone = '') {
         const safeDetails = this.escapeDashboardHtml(details).trim();
-        return `<div class="metric-row">
+        const safeLabel = this.escapeDashboardHtml(String(label).toUpperCase());
+        const safeCount = this.escapeDashboardHtml(count);
+        return `<button class="metric-row" type="button" data-dashboard-label="${safeLabel}" data-dashboard-count="${safeCount}" data-dashboard-detail="${safeDetails}">
       <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
-      <strong class="metric-value">${this.escapeDashboardHtml(count)}</strong>
-      ${safeDetails ? `<span class="metric-detail">${safeDetails}</span>` : ''}
-    </div>`;
+      <strong class="metric-value">${safeCount}</strong>
+      ${safeDetails ? `<span class="metric-detail ${detailTone}">${safeDetails}</span>` : ''}
+    </button>`;
+    }
+    formatDashboardAge(timestamp, hasActivity) {
+        if (!hasActivity || !Number.isFinite(Number(timestamp))) {
+            return { text: 'Not active', tone: 'age-inactive' };
+        }
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
+        if (elapsedSeconds < 60) {
+            return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
+        }
+        const minutes = Math.floor(elapsedSeconds / 60);
+        if (minutes < 60) {
+            return { text: `${minutes} min ago`, tone: minutes <= 15 ? 'age-fresh' : 'age-aging' };
+        }
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        if (hours < 24) {
+            return {
+                text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
+                tone: 'age-stale',
+            };
+        }
+        const days = Math.floor(hours / 24);
+        const remainingHours = hours % 24;
+        return {
+            text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
+            tone: 'age-stale',
+        };
     }
     escapeDashboardHtml(value) {
         return String(value ?? '').replace(/[&<>'"]/g, (character) => ({
