@@ -910,6 +910,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   async getPromotionStats(): Promise<string> {
     let resp = '';
     const result = await this.promoteStatService.findAll();
+    result.sort((a: any, b: any) => Number(b.totalCount || 0) - Number(a.totalCount || 0));
     for (const data of result) {
       const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
       resp += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
