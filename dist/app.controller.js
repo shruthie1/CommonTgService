@@ -62,6 +62,7 @@ const client_service_1 = require("./components/clients/client.service");
 const app_service_1 = require("./app.service");
 const cloudflare_cache_interceptor_1 = require("./interceptors/cloudflare-cache.interceptor");
 const no_cache_decorator_1 = require("./decorators/no-cache.decorator");
+const status_dashboard_view_1 = require("./dashboard/status-dashboard.view");
 let AppController = AppController_1 = class AppController {
     constructor(clientService, appService) {
         this.clientService = clientService;
@@ -326,6 +327,9 @@ let AppController = AppController_1 = class AppController {
             (0, utils_1.parseError)(e);
         }
     }
+    async webTelemetry(message) {
+        return this.appService.sendPaymentTelemetry(message);
+    }
     async sendToAll(query) {
         try {
             const decodedEndpoint = decodeURIComponent(query);
@@ -390,93 +394,7 @@ let AppController = AppController_1 = class AppController {
         this.appService.checkAndRefresh();
         const data = await this.appService.getData();
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(`<!doctype html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <meta name="theme-color" content="#111827">
-          <title>Status</title>
-          <style>
-            :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-            * { box-sizing: border-box; }
-            body { margin: 0; min-width: 320px; background: #111827; color: #f8fafc; }
-            .dashboard { width: min(1120px, 100%); margin: 0 auto; padding: 24px 16px 40px; }
-            .dashboard-header { margin: 4px 0 20px; }
-            .dashboard-eyebrow { margin: 0 0 6px; color: #67e8f9; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-            h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.03em; }
-            .dashboard-subtitle { margin: 8px 0 0; color: #94a3b8; font-size: 14px; }
-            .dashboard-tabs { display: none; }
-            .dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-            .dashboard-card { overflow: hidden; border: 1px solid #334155; border-radius: 16px; background: #1e293b; box-shadow: 0 14px 36px rgba(0, 0, 0, .24); }
-            .dashboard-card-wide { margin-top: 16px; }
-            h2 { margin: 0; padding: 14px 16px; border-bottom: 1px solid #334155; background: #26354b; color: #e0f2fe; font-size: 15px; }
-            .metric-list { padding: 4px 0; }
-            .metric-row { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 12px 16px; border: 0; border-bottom: 1px solid rgba(148, 163, 184, .16); background: transparent; color: inherit; text-align: left; cursor: pointer; }
-            .metric-row:hover, .metric-row:focus-visible { background: rgba(103, 232, 249, .08); outline: none; }
-            .metric-row:last-child { border-bottom: 0; }
-            .metric-label { min-width: 0; overflow-wrap: anywhere; color: #e2e8f0; font-size: 14px; font-weight: 700; }
-            .metric-value { color: #5eead4; font-size: 18px; font-variant-numeric: tabular-nums; }
-            .metric-detail { grid-column: 1 / -1; overflow-wrap: anywhere; color: #94a3b8; font-size: 12px; line-height: 1.45; }
-            .metric-detail.age-fresh { color: #6ee7b7; }
-            .metric-detail.age-aging { color: #fcd34d; }
-            .metric-detail.age-stale { color: #fb7185; font-weight: 800; }
-            .metric-detail.age-inactive { color: #94a3b8; }
-            .metric-dialog { width: min(460px, calc(100% - 32px)); border: 1px solid #475569; border-radius: 16px; padding: 0; background: #1e293b; color: #f8fafc; box-shadow: 0 22px 60px rgba(0, 0, 0, .55); }
-            .metric-dialog::backdrop { background: rgba(2, 6, 23, .78); }
-            .metric-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #334155; color: #67e8f9; }
-            .metric-dialog-close { border: 0; border-radius: 8px; padding: 2px 10px 5px; background: #334155; color: #f8fafc; font-size: 22px; line-height: 1; cursor: pointer; }
-            .metric-dialog p { max-height: 50vh; margin: 0; overflow: auto; padding: 16px; color: #cbd5e1; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-            @media (max-width: 680px) {
-              body { overflow: hidden; }
-              .dashboard { display: flex; height: 100dvh; padding: 10px; flex-direction: column; overflow: hidden; }
-              .dashboard-header { margin: 0 0 8px; }
-              .dashboard-eyebrow { margin-bottom: 2px; font-size: 9px; }
-              h1 { font-size: 22px; }
-              .dashboard-subtitle { margin-top: 2px; font-size: 10px; }
-              .dashboard-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
-              .dashboard-tab { overflow: hidden; border: 1px solid #475569; border-radius: 9px; padding: 8px 4px; background: #1e293b; color: #cbd5e1; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-              .dashboard-tab.is-active { border-color: #22d3ee; background: #164e63; color: #ecfeff; }
-              .dashboard-grid { display: block; min-height: 0; flex: 1; }
-              .dashboard-card { display: none; height: 100%; border-radius: 12px; box-shadow: none; }
-              .dashboard-card.is-active { display: flex; flex-direction: column; }
-              .dashboard-card-wide { margin-top: 0; }
-              h2 { padding: 9px 10px; font-size: 13px; }
-              .metric-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; align-content: start; padding: 5px; overflow: hidden; }
-              .metric-row { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 2px; align-items: center; min-height: 35px; padding: 5px 6px; border: 1px solid rgba(148, 163, 184, .18); border-radius: 8px; background: rgba(15, 23, 42, .55); }
-              .metric-row:last-child { border-bottom: 1px solid rgba(148, 163, 184, .18); }
-              .metric-label { overflow: hidden; font-size: 10px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
-              .metric-value { font-size: 14px; line-height: 1; }
-              .metric-row:has(.age-fresh) { border-color: rgba(52, 211, 153, .42); }
-              .metric-row:has(.age-aging) { border-color: rgba(251, 191, 36, .52); }
-              .metric-row:has(.age-stale) { border-color: rgba(251, 113, 133, .58); background: rgba(159, 18, 57, .16); }
-              .metric-detail { display: none; }
-              .metric-detail.age-fresh, .metric-detail.age-aging, .metric-detail.age-stale, .metric-detail.age-inactive { display: block; grid-column: 1 / -1; overflow: hidden; font-size: 9px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
-            }
-          </style>
-        </head>
-        <body>
-          ${data}
-          <script>
-            setInterval(() => window.location.reload(), 20000);
-            const tabs = document.querySelectorAll('[data-dashboard-tab]');
-            const panels = document.querySelectorAll('[data-dashboard-panel]');
-            tabs.forEach((tab) => tab.addEventListener('click', () => {
-              const selected = tab.dataset.dashboardTab;
-              tabs.forEach((item) => item.classList.toggle('is-active', item === tab));
-              panels.forEach((panel) => panel.classList.toggle('is-active', panel.dataset.dashboardPanel === selected));
-            }));
-            const detailDialog = document.getElementById('metric-dialog');
-            const detailTitle = document.getElementById('metric-dialog-title');
-            const detailText = document.getElementById('metric-dialog-detail');
-            document.querySelectorAll('.metric-row').forEach((row) => row.addEventListener('click', () => {
-              detailTitle.textContent = row.dataset.dashboardLabel + ': ' + row.dataset.dashboardCount;
-              detailText.textContent = row.dataset.dashboardDetail || 'No additional details.';
-              detailDialog.showModal();
-            }));
-            document.querySelector('.metric-dialog-close').addEventListener('click', () => detailDialog.close());
-          </script>
-        </body>
-      </html>`);
+        res.send((0, status_dashboard_view_1.renderStatusDashboardDocument)(data));
     }
 };
 exports.AppController = AppController;
@@ -632,6 +550,16 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "sendToChannel", null);
+__decorate([
+    (0, common_1.Post)('webTelemetry'),
+    (0, swagger_1.ApiOperation)({ summary: 'Send website telemetry to the fixed telemetry channel' }),
+    (0, swagger_1.ApiBody)({ schema: { type: 'object', required: ['message'], properties: { message: { type: 'string', maxLength: 3500 } } } }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Telemetry accepted for delivery' }),
+    __param(0, (0, common_1.Body)('message')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "webTelemetry", null);
 __decorate([
     (0, common_1.Get)('sendToAll'),
     (0, swagger_1.ApiOperation)({ summary: 'Send endpoint to all clients' }),

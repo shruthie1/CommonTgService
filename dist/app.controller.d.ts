@@ -46,6 +46,9 @@ export declare class AppController {
         videos: any[];
     }>;
     sendToChannel(message: string, chatId: string, token: string): Promise<any>;
+    webTelemetry(message: string): Promise<{
+        ok: boolean;
+    }>;
     sendToAll(query: string): Promise<string>;
     joinChannelsforBufferClients(): Promise<string>;
     maskedCls(query: object): Promise<any>;

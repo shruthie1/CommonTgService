@@ -15,6 +15,7 @@ var ChannelCategory;
     ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
     ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
     ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
+    ChannelCategory["WEB_TELEMETRY"] = "WEB_TELEMETRY";
     ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
     ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
     ChannelCategory["UNVDS"] = "UNVDS";

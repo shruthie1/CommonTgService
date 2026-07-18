@@ -416,6 +416,14 @@ export class AppController {
     }
   }
 
+  @Post('webTelemetry')
+  @ApiOperation({ summary: 'Send website telemetry to the fixed telemetry channel' })
+  @ApiBody({ schema: { type: 'object', required: ['message'], properties: { message: { type: 'string', maxLength: 3500 } } } })
+  @ApiResponse({ status: 200, description: 'Telemetry accepted for delivery' })
+  async webTelemetry(@Body('message') message: string) {
+    return this.appService.sendPaymentTelemetry(message);
+  }
+
   @Get('sendToAll')
   @ApiOperation({ summary: 'Send endpoint to all clients' })
   @ApiQuery({ name: 'query', description: 'Endpoint to send', type: String, required: true })

@@ -79,6 +79,9 @@ export declare class AppService implements OnModuleInit, OnModuleDestroy {
     }>;
     private static readonly CHANNEL_CATEGORY_MAP;
     sendToChannel(chatId: string, token: string, message: string): Promise<any>;
+    sendPaymentTelemetry(message: string): Promise<{
+        ok: boolean;
+    }>;
     findAllMasked(query: object): Promise<Partial<import("./components").Client>[]>;
     portalData(query: object): Promise<{
         client: Partial<import("./components").Client>;

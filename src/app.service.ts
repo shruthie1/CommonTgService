@@ -565,6 +565,23 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     return (await fetchWithTimeout(url, {}, 0))?.data;
   }
 
+  /**
+   * Fixed-destination telemetry sender for the payment site. The caller cannot choose a
+   * Telegram chat, bot token, or category; routing stays inside CommonTgService.
+   */
+  async sendPaymentTelemetry(message: string): Promise<{ ok: boolean }> {
+    const normalized = String(message ?? '').trim();
+    if (!normalized) return { ok: false };
+    const bounded = normalized.slice(0, 3500);
+    const sent = await this.botsService.sendMessageByCategory(
+      ChannelCategory.WEB_TELEMETRY,
+      bounded,
+      { parseMode: 'HTML' },
+      false,
+    );
+    return { ok: Boolean(sent) };
+  }
+
   async findAllMasked(query: object) {
     return await this.clientService.findAllMasked();
   }

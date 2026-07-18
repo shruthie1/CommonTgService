@@ -438,6 +438,14 @@ let AppService = AppService_1 = class AppService {
         const url = `${(0, utils_1.ppplbot)(chatId, token)}&parse_mode=MarkdownV2&text=${encodedMessage}`;
         return (await (0, utils_1.fetchWithTimeout)(url, {}, 0))?.data;
     }
+    async sendPaymentTelemetry(message) {
+        const normalized = String(message ?? '').trim();
+        if (!normalized)
+            return { ok: false };
+        const bounded = normalized.slice(0, 3500);
+        const sent = await this.botsService.sendMessageByCategory(components_1.ChannelCategory.WEB_TELEMETRY, bounded, { parseMode: 'HTML' }, false);
+        return { ok: Boolean(sent) };
+    }
     async findAllMasked(query) {
         return await this.clientService.findAllMasked();
     }
@@ -658,67 +666,114 @@ let AppService = AppService_1 = class AppService {
             }
         }
         const profileDataArray = Object.entries(profileData);
-        profileDataArray.sort((a, b) => b[1].totalpendingDemos - a[1].totalpendingDemos);
-        let reply = '';
+        profileDataArray.sort((a, b) => (b[1].totalpendingDemos + b[1].fullShowPPl) -
+            (a[1].totalpendingDemos + a[1].fullShowPPl));
+        let overviewRows = '';
         for (const [profile, userData] of profileDataArray) {
-            reply += this.renderDashboardRow(profile, userData.totalpendingDemos, userData.names);
+            const pendingDemos = userData.totalpendingDemos;
+            const fullShows = userData.fullShowPPl;
+            if (pendingDemos <= 0 && fullShows <= 0) {
+                continue;
+            }
+            overviewRows += this.renderOverviewRow(profile, pendingDemos, userData.names, userData.fullShowNames, fullShows);
         }
-        profileDataArray.sort((a, b) => b[1].fullShowPPl - a[1].fullShowPPl);
-        let reply2 = '';
-        for (const [profile, userData] of profileDataArray) {
-            reply2 += this.renderDashboardRow(profile, userData.fullShowPPl, userData.fullShowNames);
-        }
-        const reply3 = await this.getPromotionStats();
+        overviewRows = overviewRows || '<p class="metric-empty">No pending demos or full-show users</p>';
+        const promotionStats = await this.getPromotionStats();
         return `<main class="dashboard">
         <header class="dashboard-header">
           <h1>Status</h1>
         </header>
-        <nav class="dashboard-tabs" aria-label="Dashboard sections">
-          <button class="dashboard-tab is-active" type="button" data-dashboard-tab="pending">Pending</button>
-          <button class="dashboard-tab" type="button" data-dashboard-tab="full-show">Full show</button>
-          <button class="dashboard-tab" type="button" data-dashboard-tab="promotion">Promotion</button>
-        </nav>
-        <div class="dashboard-grid">
-          <section class="dashboard-card dashboard-card-pending is-active" data-dashboard-panel="pending">
-            <h2>Pending demos</h2>
-            <div class="metric-list">${reply}</div>
-          </section>
-          <section class="dashboard-card dashboard-card-full-show" data-dashboard-panel="full-show">
-            <h2>Full-show users</h2>
-            <div class="metric-list">${reply2}</div>
-          </section>
-        </div>
-        <section class="dashboard-card dashboard-card-wide dashboard-card-promotion" data-dashboard-panel="promotion">
-          <h2>Promotion stats</h2>
-          <div class="metric-list">${reply3}</div>
-        </section>
-        <dialog class="metric-dialog" id="metric-dialog" aria-labelledby="metric-dialog-title">
-          <div class="metric-dialog-header">
-            <strong id="metric-dialog-title"></strong>
-            <button class="metric-dialog-close" type="button" aria-label="Close details">×</button>
+        <section class="dashboard-card dashboard-overview">
+          <div class="overview-table" role="table" aria-label="Demo and full-show status">
+            <div class="overview-row overview-heading" role="row">
+              <span role="columnheader">Client</span>
+              <span role="columnheader">Demos</span>
+              <span role="columnheader">Full show</span>
+            </div>
+            ${overviewRows}
           </div>
-          <p id="metric-dialog-detail"></p>
-        </dialog>
+        </section>
+        <section class="dashboard-card dashboard-card-wide dashboard-card-promotion">
+          <div class="promotion-table" role="table" aria-label="Promotion status">
+            <div class="promotion-row promotion-heading" role="row">
+              <span role="columnheader">Client</span>
+              <span role="columnheader">Count</span>
+              <span role="columnheader">Duration</span>
+            </div>
+            ${promotionStats.rows}
+          </div>
+        </section>
+        ${promotionStats.summary}
+        <button class="refresh-button" type="button" aria-label="Refresh status" title="Refresh">↻</button>
       </main>`;
     }
     async getPromotionStats() {
-        let resp = '';
+        let rows = '';
+        const stageCounts = {
+            'age-fresh': 0,
+            'age-recent': 0,
+            'age-watch': 0,
+            'age-aging': 0,
+            'age-stale': 0,
+            'age-critical': 0,
+            'age-inactive': 0,
+        };
         const result = await this.promoteStatService.findAll();
+        result.sort((a, b) => Number(b.totalCount || 0) - Number(a.totalCount || 0));
         for (const data of result) {
             const age = this.formatDashboardAge(data.lastUpdatedTimeStamp, data.totalCount > 0);
-            resp += this.renderDashboardRow(data.client, data.totalCount, age.text, age.tone);
+            stageCounts[age.tone]++;
+            rows += this.renderPromotionRow(data.client, data.totalCount, age.text, age.tone);
         }
-        return resp;
+        return {
+            rows,
+            summary: this.renderPromotionSummary(stageCounts),
+        };
     }
-    renderDashboardRow(label, count, details, detailTone = '') {
-        const safeDetails = this.escapeDashboardHtml(details).trim();
-        const safeLabel = this.escapeDashboardHtml(String(label).toUpperCase());
-        const safeCount = this.escapeDashboardHtml(count);
-        return `<button class="metric-row" type="button" data-dashboard-label="${safeLabel}" data-dashboard-count="${safeCount}" data-dashboard-detail="${safeDetails}">
-      <span class="metric-label">${this.escapeDashboardHtml(String(label).toUpperCase())}</span>
-      <strong class="metric-value">${safeCount}</strong>
-      ${safeDetails ? `<span class="metric-detail ${detailTone}">${safeDetails}</span>` : ''}
-    </button>`;
+    renderPromotionSummary(stageCounts) {
+        const stages = [
+            ['age-fresh', 'Fresh', '0–4m'],
+            ['age-recent', 'Live', '5–14m'],
+            ['age-watch', 'Watch', '15–29m'],
+            ['age-aging', 'Slow', '30–59m'],
+            ['age-stale', 'Stale', '60–89m'],
+            ['age-critical', 'Old', '90m+'],
+            ['age-inactive', 'Inactive', 'No activity'],
+        ];
+        const segments = stages
+            .map(([tone, label, range]) => {
+            const count = stageCounts[tone];
+            return `<span class="stage-segment ${tone}" style="flex-grow:${Math.max(count, 0.25)}" aria-label="${label}: ${count} (${range})"><strong>${count || ''}</strong></span>`;
+        })
+            .join('');
+        const legend = stages
+            .map(([tone, label, range]) => `<span class="stage-legend-item ${tone}"><strong>${stageCounts[tone]}</strong><span>${label}</span><small>${range}</small></span>`)
+            .join('');
+        return `<section class="dashboard-card dashboard-card-wide promotion-summary-card" aria-label="Promotion activity stages">
+      <div class="stage-bar" role="img" aria-label="Promotion activity duration stages from fresh to inactive">${segments}</div>
+      <div class="stage-legend">${legend}</div>
+    </section>`;
+    }
+    renderOverviewRow(client, demoCount, demoNames, fullShowNames, fullShowCount) {
+        return `<div class="overview-row" role="row">
+      <strong class="overview-client" role="cell">${this.escapeDashboardHtml(String(client).toUpperCase())}</strong>
+      ${this.renderOverviewMetric(demoCount, demoNames)}
+      ${this.renderOverviewMetric(fullShowCount, fullShowNames)}
+    </div>`;
+    }
+    renderOverviewMetric(count, names) {
+        const safeNames = this.escapeDashboardHtml(names).trim();
+        return `<span class="overview-metric" role="cell">
+      <strong class="overview-count">${this.escapeDashboardHtml(count)}</strong>
+      <span class="overview-names">${safeNames || '—'}</span>
+    </span>`;
+    }
+    renderPromotionRow(client, count, duration, tone) {
+        return `<div class="promotion-row" role="row">
+      <strong class="promotion-client" role="cell">${this.escapeDashboardHtml(String(client).toUpperCase())}</strong>
+      <strong class="promotion-count" role="cell">${this.escapeDashboardHtml(count)}</strong>
+      <span class="promotion-duration ${tone}" role="cell">${this.escapeDashboardHtml(duration)}</span>
+    </div>`;
     }
     formatDashboardAge(timestamp, hasActivity) {
         if (!hasActivity || !Number.isFinite(Number(timestamp))) {
@@ -726,25 +781,35 @@ let AppService = AppService_1 = class AppService {
         }
         const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
         if (elapsedSeconds < 60) {
-            return { text: `${elapsedSeconds} sec ago`, tone: 'age-fresh' };
+            return { text: `${elapsedSeconds}s`, tone: 'age-fresh' };
         }
         const minutes = Math.floor(elapsedSeconds / 60);
+        const remainingSeconds = elapsedSeconds % 60;
+        if (minutes < 5) {
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-fresh' };
+        }
+        if (minutes < 15) {
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-recent' };
+        }
+        if (minutes < 30) {
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-watch' };
+        }
         if (minutes < 60) {
-            return { text: `${minutes} min ago`, tone: minutes <= 15 ? 'age-fresh' : 'age-aging' };
+            return { text: `${minutes}m ${remainingSeconds}s`, tone: 'age-aging' };
         }
         const hours = Math.floor(minutes / 60);
         const remainingMinutes = minutes % 60;
         if (hours < 24) {
             return {
-                text: `${hours} hr${remainingMinutes ? ` ${remainingMinutes} min` : ''} ago`,
-                tone: 'age-stale',
+                text: `${hours}h${remainingMinutes ? ` ${remainingMinutes}m` : ''}`,
+                tone: minutes < 90 ? 'age-stale' : 'age-critical',
             };
         }
         const days = Math.floor(hours / 24);
         const remainingHours = hours % 24;
         return {
-            text: `${days} day${days === 1 ? '' : 's'}${remainingHours ? ` ${remainingHours} hr` : ''} ago`,
-            tone: 'age-stale',
+            text: `${days}d${remainingHours ? ` ${remainingHours}h` : ''}`,
+            tone: 'age-critical',
         };
     }
     escapeDashboardHtml(value) {
