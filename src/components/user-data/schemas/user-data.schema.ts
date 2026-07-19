@@ -75,6 +75,13 @@ export class UserData {
     @Prop({ type: [String], required: true, default: [] })
     videos: string[];
 
+    /** Canonical common-channel IDs observed when this DM was attributed. */
+    @Prop({ type: [String], required: true, default: [] })
+    attributionChannelIds: string[];
+
+    @Prop({ required: true, default: 0 })
+    attributionUpdatedAt: number;
+
     @Prop({ required: false })
     lastActiveTime?: Date;
 

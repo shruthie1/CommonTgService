@@ -98,6 +98,8 @@ describe('UserDataService', () => {
                 picsSent: 0,
                 videos: [],
                 fullShow: 0,
+                attributionChannelIds: [],
+                attributionUpdatedAt: 0,
             });
         });
     });

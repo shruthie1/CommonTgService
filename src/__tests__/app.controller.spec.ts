@@ -34,11 +34,17 @@ function makeRes() {
 
 describe('AppController', () => {
   let controller: AppController;
+  const clientService = { refreshMap: jest.fn() };
+  const appService = {
+    setupClient: jest.fn(),
+    forwardGetRequest: jest.fn(),
+    processEligibleUsers: jest.fn(),
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockedAxios.isAxiosError.mockReturnValue(false);
-    controller = new AppController({} as any, {} as any);
+    controller = new AppController(clientService as any, appService as any);
   });
 
   it('getHello returns greeting', () => {

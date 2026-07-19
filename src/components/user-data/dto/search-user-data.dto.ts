@@ -55,4 +55,10 @@ export class SearchDto {
 
   @ApiPropertyOptional({ description: 'Number of demo pictures sent', type: Number })
   picsSent?: number;
+
+  @ApiPropertyOptional({ description: 'Canonical common-channel IDs used for promotion attribution', type: [String] })
+  attributionChannelIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Unix timestamp of the latest attribution lookup', type: Number })
+  attributionUpdatedAt?: number;
 }

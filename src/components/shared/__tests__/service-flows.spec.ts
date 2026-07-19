@@ -536,7 +536,7 @@ describe('Service flow reliability', () => {
         expect(processSpy).not.toHaveBeenCalled();
     });
 
-    test('checkPromoteClients performs health checks for session-rotated accounts before processing', async () => {
+    test('checkPromoteClients leaves session-rotated accounts to the promotion runtime', async () => {
         const rotatedDoc = {
             mobile: '90003',
             clientId: 'client-1',
@@ -577,9 +577,8 @@ describe('Service flow reliability', () => {
 
         await service.checkPromoteClients();
 
-        expect(healthSpy).toHaveBeenCalledWith('90003', 0, expect.any(Number));
-        expect(processSpy).toHaveBeenCalledWith(rotatedDoc, { clientId: 'client-1', mobile: 'main-1' });
-        expect(healthSpy.mock.invocationCallOrder[0]).toBeLessThan(processSpy.mock.invocationCallOrder[0]);
+        expect(healthSpy).not.toHaveBeenCalled();
+        expect(processSpy).not.toHaveBeenCalled();
     });
 
     test('checkPromoteClients skips ready accounts while continuing older warming accounts', async () => {
@@ -1084,8 +1083,21 @@ describe('Service flow reliability', () => {
         await service.joinchannelForBufferClients(true);
 
         expect(capturedQuery?.$or).toEqual([
-            { warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] } },
-            { channels: { $lt: 200 } },
+            {
+                warmupPhase: {
+                    $in: [
+                        WarmupPhase.ENROLLED,
+                        WarmupPhase.SETTLING,
+                        WarmupPhase.IDENTITY,
+                        WarmupPhase.GROWING,
+                        WarmupPhase.MATURING,
+                    ],
+                },
+            },
+            {
+                warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+                channels: { $lt: 200 },
+            },
         ]);
         expect(capturedQuery?.status).toEqual('active');
     });

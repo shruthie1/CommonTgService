@@ -487,7 +487,7 @@ describe('BufferClientService coverage', () => {
             expect((service as any).joinChannelMap.get('15551500001')).toEqual([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
         });
 
-        it('recovers below-floor terminal accounts while retaining operational terminal supply', async () => {
+        it('recovers below-floor terminal accounts while rejecting phase-less legacy records', async () => {
             // create() deliberately starts every document in enrolled; move these two
             // fixtures through the storage state explicitly to exercise terminal selection.
             await service.create(makeBufferClientData({ mobile: '15551500004', channels: 200, status: 'active', clientId: 'test-client-1' }));
@@ -507,10 +507,10 @@ describe('BufferClientService coverage', () => {
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
             activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
 
-            expect(await service.refillJoinQueue('test-client-1')).toBe(2);
+            expect(await service.refillJoinQueue('test-client-1')).toBe(1);
             expect((service as any).joinChannelMap.has('15551500004')).toBe(false);
             expect((service as any).joinChannelMap.has('15551500005')).toBe(true);
-            expect((service as any).joinChannelMap.has('15551500006')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551500006')).toBe(false);
         });
 
         it('queues terminal recovery before higher-channel warming accounts', async () => {

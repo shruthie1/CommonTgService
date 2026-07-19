@@ -37,6 +37,14 @@ describe('ClientRegistry', () => {
         expect(a).toBe(b);
     });
 
+    it('does not let maintenance intervals keep the process alive', () => {
+        const inactiveCleanup = (registry as any).inactiveClientCleanupInterval;
+        const expiredLockCleanup = (registry as any).expiredLockCleanupInterval;
+
+        expect(inactiveCleanup.hasRef()).toBe(false);
+        expect(expiredLockCleanup.hasRef()).toBe(false);
+    });
+
     describe('acquireLock / releaseLock', () => {
         it('acquires a lock when none exists', async () => {
             const id = await registry.acquireLock('111');

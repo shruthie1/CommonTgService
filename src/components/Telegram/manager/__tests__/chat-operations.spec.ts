@@ -1269,66 +1269,91 @@ describe('chat-operations', () => {
         afterEach(() => jest.useRealTimers());
 
         async function runWithTimers<T>(p: Promise<T>): Promise<T> {
-            await jest.runAllTimersAsync();
-            return p;
+            // Advance a bounded window instead of runAllTimersAsync(): importing the
+            // Telegram stack starts a recurring cleanup interval, so draining *all*
+            // timers never terminates and eventually exhausts the Jest heap.
+            const guarded = p.then(
+                value => ({ value, error: undefined }),
+                error => ({ value: undefined, error }),
+            );
+            await jest.advanceTimersByTimeAsync(45_000);
+            const result = await guarded;
+            if (result.error) throw result.error;
+            return result.value as T;
+        }
+
+        function makeBotFatherClient(replies: string[]) {
+            let latestId = 1;
+            const sendMessage = jest.fn().mockResolvedValue(undefined);
+            const sendFile = jest.fn().mockResolvedValue(undefined);
+            const getMessages = jest.fn(async (_entity: unknown, options: { limit: number }) => {
+                if (options.limit === 1) {
+                    return [{ id: latestId, out: false, message: 'previous reply' }];
+                }
+                const message = replies.shift();
+                if (!message) return [];
+                latestId += 1;
+                return [{ id: latestId, out: false, message }];
+            });
+            return {
+                getEntity: jest.fn().mockResolvedValue(makeUser('1000')),
+                sendMessage,
+                sendFile,
+                getMessages,
+            };
         }
 
         test('throws when no client', async () => {
             await expect(createBot(makeCtx(null), { name: 'B', username: 'b_bot' })).rejects.toThrow('Client not initialized');
         });
         test('creates bot with token, description, about, photo', async () => {
-            const entity = makeUser('1000');
-            const sendMessage = jest.fn().mockResolvedValue(undefined);
-            const sendFile = jest.fn().mockResolvedValue(undefined);
-            const getMessages = jest.fn().mockResolvedValue([{ message: 'Done! Use this token 123456:ABCdefGHI to access' }]);
-            const ctx = makeCtx({
-                getEntity: jest.fn().mockResolvedValue(entity),
-                sendMessage, sendFile, getMessages,
-            });
+            const client = makeBotFatherClient([
+                'Cancelled.',
+                'Alright, a new bot. How are we going to call it?',
+                'Good. Now choose a username for your bot.',
+                'Done! Use this token 123456:ABCdefGHI to access',
+            ]);
+            const ctx = makeCtx(client);
             const r = await runWithTimers(createBot(ctx, {
                 name: 'MyBot', username: 'mybot_bot', description: 'desc', aboutText: 'about', profilePhotoUrl: 'http://x',
             }));
             expect(r.botToken).toBe('123456:ABCdefGHI');
             expect(r.username).toBe('mybot_bot');
+            expect(client.sendFile).toHaveBeenCalled();
         });
         test('modifies username when not ending in _bot', async () => {
-            const sendMessage = jest.fn().mockResolvedValue(undefined);
-            const getMessages = jest.fn().mockResolvedValue([{ message: 'use this token 999:XYZ now' }]);
-            const ctx = makeCtx({
-                getEntity: jest.fn().mockResolvedValue(makeUser('1000')),
-                sendMessage, getMessages,
-            });
+            const ctx = makeCtx(makeBotFatherClient([
+                'Cancelled.',
+                'Choose a name for your bot.',
+                'Now choose a username.',
+                'Use this token 999:XYZ now',
+            ]));
             const r = await runWithTimers(createBot(ctx, { name: 'B', username: 'myname' }));
             expect(r.username).toMatch(/_bot$/);
         });
         test('throws when no response from BotFather', async () => {
-            const ctx = makeCtx({
-                getEntity: jest.fn().mockResolvedValue(makeUser('1000')),
-                sendMessage: jest.fn().mockResolvedValue(undefined),
-                getMessages: jest.fn().mockResolvedValue([]),
-            });
-            const assertion = expect(createBot(ctx, { name: 'B', username: 'b_bot' })).rejects.toThrow(/No response received/);
-            await jest.runAllTimersAsync();
-            await assertion;
+            const ctx = makeCtx(makeBotFatherClient([]));
+            await expect(runWithTimers(createBot(ctx, { name: 'B', username: 'b_bot' })))
+                .rejects.toThrow(/No response from BotFather/);
         });
         test('throws when token not in response', async () => {
-            const ctx = makeCtx({
-                getEntity: jest.fn().mockResolvedValue(makeUser('1000')),
-                sendMessage: jest.fn().mockResolvedValue(undefined),
-                getMessages: jest.fn().mockResolvedValue([{ message: 'sorry, that name is taken' }]),
-            });
-            const assertion = expect(createBot(ctx, { name: 'B', username: 'b_bot' })).rejects.toThrow(/Bot creation failed/);
-            await jest.runAllTimersAsync();
-            await assertion;
+            const ctx = makeCtx(makeBotFatherClient([
+                'Cancelled.',
+                'Choose a name for your bot.',
+                'Now choose a username.',
+                'Unexpected BotFather reply.',
+            ]));
+            await expect(runWithTimers(createBot(ctx, { name: 'B', username: 'b_bot' })))
+                .rejects.toThrow(/Bot creation failed/);
         });
         test('photo error is caught and logged', async () => {
             downloadFileFromUrlMock.mockRejectedValue(new Error('photo dl'));
-            const ctx = makeCtx({
-                getEntity: jest.fn().mockResolvedValue(makeUser('1000')),
-                sendMessage: jest.fn().mockResolvedValue(undefined),
-                sendFile: jest.fn(),
-                getMessages: jest.fn().mockResolvedValue([{ message: 'use this token 1:A now' }]),
-            });
+            const ctx = makeCtx(makeBotFatherClient([
+                'Cancelled.',
+                'Choose a name for your bot.',
+                'Now choose a username.',
+                'Use this token 1:A now',
+            ]));
             const r = await runWithTimers(createBot(ctx, { name: 'B', username: 'b_bot', profilePhotoUrl: 'http://x' }));
             expect(r.botToken).toBe('1:A');
             expect(ctx.logger.error).toHaveBeenCalled();

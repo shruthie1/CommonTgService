@@ -236,10 +236,9 @@ describe('processClient — all exit paths', () => {
         expect(result.updateCount).toBe(0);
     });
 
-    // A genuinely terminal account has all security + identity timestamps set, so
-    // repairWarmupMetadata (which now runs first) won't demote it for missing
-    // prerequisites. Tests of the lastUsed-in-terminal-phase shortcut must use a
-    // complete doc, otherwise the account is correctly demoted instead of skipped.
+    // Complete lifecycle timestamps are required by the dedicated READY rotation
+    // scheduler. `lastUsed` is operational history only and must never substitute
+    // for an explicit backup-session rotation.
     const terminalTimestamps = () => ({
         privacyUpdatedAt: new Date('2026-03-05T12:00:00.000Z'),
         twoFASetAt: new Date('2026-03-06T12:00:00.000Z'),
@@ -250,17 +249,21 @@ describe('processClient — all exit paths', () => {
         profilePicsUpdatedAt: new Date('2026-03-15T12:00:00.000Z'),
     });
 
-    test('EXIT 6: session_rotated account with lastUsed → backfill and skip', async () => {
+    test('EXIT 6: session_rotated account with lastUsed → waits without lifecycle backfill', async () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SESSION_ROTATED,
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
             ...terminalTimestamps(),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(result.updateSummary).toBe('backfill_timestamps');
+        expect(result.updateSummary).toBeUndefined();
+        expect(service.updateMock).not.toHaveBeenCalledWith(
+            doc.mobile,
+            expect.objectContaining({ warmupPhase: expect.anything() }),
+        );
     });
 
-    test('EXIT 6a: READY account with lastUsed → mark session_rotated without Telegram rotation', async () => {
+    test('EXIT 6a: READY account with lastUsed → still performs explicit Telegram rotation', async () => {
         const rotateSpy = jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.READY,
@@ -268,30 +271,22 @@ describe('processClient — all exit paths', () => {
             ...terminalTimestamps(),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(result.updateSummary).toBe('mark_session_rotated_from_last_used');
-        expect(rotateSpy).not.toHaveBeenCalled();
-        expect(service.updateMock).toHaveBeenCalledWith(
-            doc.mobile,
-            expect.objectContaining({
-                warmupPhase: WarmupPhase.SESSION_ROTATED,
-                sessionRotatedAt: expect.any(Date),
-            }),
-        );
+        expect(result.updateSummary).toBe('rotate_session');
+        expect(rotateSpy).toHaveBeenCalledWith(doc.mobile);
     });
 
-    test('EXIT 6c: terminal phase + lastUsed but MISSING security prerequisites → repaired/demoted, NOT skipped', async () => {
-        // Regression guard for the H1 fix: an account claiming SESSION_ROTATED with a
-        // lastUsed but no 2FA/auth-removal proof must be demoted by repairWarmupMetadata
-        // first, NOT auto-treated as configured. It must not short-circuit to
-        // backfill_timestamps / mark_session_rotated.
+    test('EXIT 6c: terminal phase with incomplete legacy metadata is not inferred or rewritten', async () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SESSION_ROTATED,
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
             // intentionally NO security timestamps
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(result.updateSummary).not.toBe('backfill_timestamps');
-        expect(result.updateSummary).not.toBe('mark_session_rotated_from_last_used');
+        expect(result.updateSummary).toBeUndefined();
+        expect(service.updateMock).not.toHaveBeenCalledWith(
+            doc.mobile,
+            expect.objectContaining({ warmupPhase: expect.anything() }),
+        );
     });
 
     test('EXIT 6b: SETTLING account with lastUsed → still processes (not terminal)', async () => {
@@ -1511,131 +1506,35 @@ describe('Real MongoDB: full warmup lifecycle', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 12. repairWarmupMetadata — inferWarmupPhaseFromProgress
+// 12. Explicit lifecycle metadata contract
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('repairWarmupMetadata — phase inference', () => {
-    const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
-
+describe('processClient — explicit lifecycle metadata', () => {
     afterEach(() => { jest.restoreAllMocks(); });
 
-    test('no warmupPhase + only privacy done → infers SETTLING', async () => {
+    test('rejects a legacy document without warmupPhase instead of inferring progress', async () => {
         const service = new TestBaseService();
-        const doc = {
-            mobile: '9990099001',
+        const doc = makeDoc({
             warmupPhase: null,
-            warmupJitter: 0,
-            enrolledAt: null,
-            createdAt: null,
-            privacyUpdatedAt: daysAgo(5, mockNow),
-        } as any;
+            privacyUpdatedAt: new Date(),
+        });
 
-        await (service as any).repairWarmupMetadata(doc, mockNow);
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '9990099001',
-            expect.objectContaining({ warmupPhase: WarmupPhase.SETTLING }),
-        );
-    });
-
-    test('warmupPhase=ENROLLED but all identity done → advances to GROWING', async () => {
-        const service = new TestBaseService();
-        const doc = {
-            mobile: '9990099002',
-            warmupPhase: WarmupPhase.ENROLLED,
-            warmupJitter: 0,
-            enrolledAt: daysAgo(20, mockNow),
-            createdAt: daysAgo(20, mockNow),
-            privacyUpdatedAt: daysAgo(18, mockNow),
-            twoFASetAt: daysAgo(16, mockNow),
-            otherAuthsRemovedAt: daysAgo(14, mockNow),
-            profilePicsDeletedAt: daysAgo(12, mockNow),
-            nameBioUpdatedAt: daysAgo(10, mockNow),
-            usernameUpdatedAt: daysAgo(8, mockNow),
-            channels: 50,
-        } as any;
-
-        await (service as any).repairWarmupMetadata(doc, mockNow);
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '9990099002',
-            expect.objectContaining({ warmupPhase: WarmupPhase.GROWING }),
-        );
-    });
-
-    test('already correct phase → no update needed', async () => {
-        const service = new TestBaseService();
-        const doc = {
-            mobile: '9990099003',
-            warmupPhase: WarmupPhase.SETTLING,
-            warmupJitter: 0,
-            enrolledAt: daysAgo(5, mockNow),
-            createdAt: daysAgo(5, mockNow),
-            privacyUpdatedAt: daysAgo(3, mockNow),
-        } as any;
-
-        const result = await (service as any).repairWarmupMetadata(doc, mockNow);
+        const result = await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(result).toEqual({ updateCount: 0, updateSummary: 'incomplete_lifecycle_metadata' });
         expect(service.updateMock).not.toHaveBeenCalled();
-        // Should return original doc
-        expect(result).toBe(doc);
     });
 
-    test('missing enrolledAt → backfills from createdAt', async () => {
+    test('rejects a legacy document without enrolledAt instead of backfilling createdAt', async () => {
         const service = new TestBaseService();
-        const createdAt = daysAgo(10, mockNow);
-        const doc = {
-            mobile: '9990099004',
+        const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
-            warmupJitter: 0,
             enrolledAt: null,
-            createdAt,
-            privacyUpdatedAt: daysAgo(8, mockNow),
-        } as any;
+            createdAt: new Date(),
+        });
 
-        await (service as any).repairWarmupMetadata(doc, mockNow);
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '9990099004',
-            expect.objectContaining({ enrolledAt: createdAt }),
-        );
-    });
-
-    test('corrects advanced phase when mandatory settling steps are missing', async () => {
-        const service = new TestBaseService();
-        const doc = {
-            mobile: '9990099005',
-            warmupPhase: WarmupPhase.GROWING, // Already at growing
-            warmupJitter: 0,
-            enrolledAt: daysAgo(15, mockNow),
-            createdAt: daysAgo(15, mockNow),
-            privacyUpdatedAt: daysAgo(13, mockNow),
-            twoFASetAt: daysAgo(11, mockNow),
-            // 2FA was set, but removeOtherAuths was never stamped, so growing is unsafe.
-        } as any;
-
-        await (service as any).repairWarmupMetadata(doc, mockNow);
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '9990099005',
-            expect.objectContaining({ warmupPhase: WarmupPhase.SETTLING }),
-        );
-    });
-
-    test('does not move backwards when prerequisites for stored phase are complete', async () => {
-        const service = new TestBaseService();
-        const doc = {
-            mobile: '9990099006',
-            warmupPhase: WarmupPhase.GROWING,
-            warmupJitter: 0,
-            enrolledAt: daysAgo(15, mockNow),
-            createdAt: daysAgo(15, mockNow),
-            privacyUpdatedAt: daysAgo(13, mockNow),
-            twoFASetAt: daysAgo(11, mockNow),
-            otherAuthsRemovedAt: daysAgo(9, mockNow),
-            profilePicsDeletedAt: daysAgo(7, mockNow),
-            nameBioUpdatedAt: daysAgo(5, mockNow),
-            usernameUpdatedAt: daysAgo(3, mockNow),
-        } as any;
-
-        const result = await (service as any).repairWarmupMetadata(doc, mockNow);
+        const result = await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(result).toEqual({ updateCount: 0, updateSummary: 'incomplete_lifecycle_metadata' });
         expect(service.updateMock).not.toHaveBeenCalled();
-        expect(result).toBe(doc);
     });
 });
 
@@ -1667,31 +1566,34 @@ describe('Cooldown calculation', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 14. Phase rank ordering (used by repairWarmupMetadata)
+// 14. Terminal phase action contract
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('Phase rank ordering', () => {
-    test('phases are ordered: enrolled < settling < identity < growing < maturing < ready < session_rotated', () => {
-        const service = new TestBaseService();
-        const ranks = [
-            WarmupPhase.ENROLLED,
-            WarmupPhase.SETTLING,
-            WarmupPhase.IDENTITY,
-            WarmupPhase.GROWING,
-            WarmupPhase.MATURING,
-            WarmupPhase.READY,
-            WarmupPhase.SESSION_ROTATED,
-        ].map(p => (service as any).getWarmupPhaseRank(p));
+describe('Terminal phase action contract', () => {
+    const now = new Date('2026-04-11T12:00:00.000Z').getTime();
 
-        for (let i = 1; i < ranks.length; i++) {
-            expect(ranks[i]).toBeGreaterThan(ranks[i - 1]);
-        }
+    test('READY requires an explicit session rotation regardless of lastUsed', () => {
+        const action = getWarmupPhaseAction(makeDoc({
+            warmupPhase: WarmupPhase.READY,
+            lastUsed: new Date('2026-04-10T12:00:00.000Z'),
+            sessionRotatedAt: null,
+        }), now);
+
+        expect(action).toEqual(expect.objectContaining({
+            phase: WarmupPhase.READY,
+            action: 'rotate_session',
+        }));
     });
 
-    test('unknown phase returns rank -1 (not found)', () => {
-        const service = new TestBaseService();
-        expect((service as any).getWarmupPhaseRank('garbage')).toBe(-1);
-        expect((service as any).getWarmupPhaseRank(null)).toBe(-1);
-        expect((service as any).getWarmupPhaseRank(undefined)).toBe(-1);
+    test('SESSION_ROTATED remains terminal and performs no lifecycle work', () => {
+        const action = getWarmupPhaseAction(makeDoc({
+            warmupPhase: WarmupPhase.SESSION_ROTATED,
+            lastUsed: new Date('2026-04-10T12:00:00.000Z'),
+        }), now);
+
+        expect(action).toEqual(expect.objectContaining({
+            phase: WarmupPhase.SESSION_ROTATED,
+            action: 'wait',
+        }));
     });
 });

@@ -137,6 +137,24 @@ describe('setProcessListeners', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it('clears the shutdown fallback timer when cleanup finishes first', async () => {
+    jest.useFakeTimers();
+    try {
+      setProcessListeners(jest.fn().mockResolvedValue(undefined));
+      process.emit('SIGTERM' as any);
+
+      // Let the async shutdown function pass through Promise.race and finally.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(jest.getTimerCount()).toBe(0);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('still exits if no onShutdown callback is provided (back-compat)', () => {
     setProcessListeners();
     process.emit('SIGINT' as any);

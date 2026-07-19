@@ -59,17 +59,17 @@ describe('BufferClient Mongo integration', () => {
     expect(found?.warmupJitter).toBe(0);
     expect(found?.assignedProfilePics).toEqual([]);
     expect(found?.username).toBeNull();
-    expect(found?.enrolledAt).toBeNull();
+    expect(found?.enrolledAt).toBeInstanceOf(Date);
     expect(found?.createdAt).toBeInstanceOf(Date);
     expect(found?.updatedAt).toBeInstanceOf(Date);
   });
 
-  it('matches both null and missing warmup dates with `{ enrolledAt: null }`', async () => {
-    await BufferClientModel.create(createBufferClient({
+  it('rejects null enrolledAt on new documents while migration queries still find legacy missing dates', async () => {
+    await expect(BufferClientModel.create(createBufferClient({
       mobile: '155500000001',
       session: 'session-null',
       enrolledAt: null,
-    }));
+    }))).rejects.toThrow(/enrolledAt.*required/i);
 
     await connection.db.collection('bufferClients').insertOne(createBufferClient({
       mobile: '155500000002',
@@ -80,7 +80,7 @@ describe('BufferClient Mongo integration', () => {
     const matches = await BufferClientModel.find({ enrolledAt: null }).lean();
     const matchedMobiles = matches.map((doc) => doc.mobile).sort();
 
-    expect(matchedMobiles).toEqual(['155500000001', '155500000002']);
+    expect(matchedMobiles).toEqual(['155500000002']);
   });
 
   it('persists warmup progress through findOneAndUpdate', async () => {

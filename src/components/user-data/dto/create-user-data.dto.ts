@@ -63,4 +63,10 @@ export class CreateUserDataDto {
 
     @ApiProperty({ description: 'videos' })
     videos: string[];
+
+    @ApiProperty({ description: 'Canonical common-channel IDs used for promotion attribution', default: [] })
+    attributionChannelIds: string[];
+
+    @ApiProperty({ description: 'Unix timestamp of the latest attribution lookup', default: 0 })
+    attributionUpdatedAt: number;
 }

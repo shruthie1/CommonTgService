@@ -33,13 +33,19 @@ export function setProcessListeners(onShutdown?: () => Promise<void>) {
     const cleanup = onShutdown ?? shutdownHandler;
     if (cleanup) {
       // Run graceful cleanup, but never let a hung close block the exit indefinitely.
+      let shutdownTimeout: NodeJS.Timeout | undefined;
       try {
+        const timeout = new Promise<void>((resolve) => {
+          shutdownTimeout = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
+        });
         await Promise.race([
           cleanup(),
-          new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+          timeout,
         ]);
       } catch (err) {
         console.error('❌ Error during graceful shutdown:', err);
+      } finally {
+        if (shutdownTimeout) clearTimeout(shutdownTimeout);
       }
     }
     process.exit(0);

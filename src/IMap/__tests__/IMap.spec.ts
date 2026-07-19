@@ -356,10 +356,14 @@ describe('MailReader — connection lifecycle', () => {
         imap.connectMode = 'hang';
         const factory = jest.fn(() => imap as any);
         const reader = MailReader.createForTest(factory);
-        // first connect creates the imap and hangs; we don't await it
-        reader.connectToMail(10000).catch(() => undefined);
-        // imap created exactly once even though a second connect would ensureImap again
+
+        // Both callers share the in-flight connection. Use a short bounded timeout and
+        // settle both promises so this test cannot leave a live timer behind.
+        const firstConnect = reader.connectToMail(20);
+        const secondConnect = reader.connectToMail(20);
         expect(factory).toHaveBeenCalledTimes(1);
+        await expect(firstConnect).rejects.toThrow(/timed out after 20ms/);
+        await expect(secondConnect).rejects.toThrow(/timed out after 20ms/);
     });
 });
 

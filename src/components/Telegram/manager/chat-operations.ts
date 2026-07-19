@@ -1223,7 +1223,11 @@ export async function createBot(ctx: TgContext, options: {
         // for the actual reply between each step keeps us in lockstep with the conversation.
         const waitForBotFatherReply = async (afterId: number, timeoutMs = 15000): Promise<string> => {
             const deadline = Date.now() + timeoutMs;
-            while (Date.now() < deadline) {
+            // Keep an attempt bound in addition to the wall-clock deadline. This
+            // prevents a tight infinite loop if the clock stalls or sleep is
+            // replaced by an immediate resolver in a test/runtime adapter.
+            const maxAttempts = Math.max(1, Math.ceil(timeoutMs / 1000));
+            for (let attempt = 0; attempt < maxAttempts && Date.now() < deadline; attempt++) {
                 await sleep(1000);
                 const msgs = await client.getMessages(entity, { limit: 5 });
                 const reply = (msgs || [])

@@ -18,6 +18,8 @@ export class ClientRegistry {
     private readonly clients = new Map<string, ClientInfo>();
     private readonly logger = new TelegramLogger('clientRegistry');
     private readonly locks = new Map<string, { acquired: Date; lockId: string }>();
+    private readonly inactiveClientCleanupInterval: NodeJS.Timeout;
+    private readonly expiredLockCleanupInterval: NodeJS.Timeout;
 
     // Maximum time to wait for a lock (in ms)
     private readonly LOCK_TIMEOUT = 30000; // 30 seconds
@@ -29,9 +31,20 @@ export class ClientRegistry {
     private readonly CLIENT_TIMEOUT = 300000; // 5 minutes
 
     private constructor() {
-        // Start cleanup interval
-        setInterval(() => this.cleanupInactiveClients(), 60000); // Run every minute
-        setInterval(() => this.cleanupExpiredLocks(), 30000); // Run every 30 seconds
+        this.inactiveClientCleanupInterval = setInterval(
+            () => void this.cleanupInactiveClients(),
+            60000,
+        );
+        this.expiredLockCleanupInterval = setInterval(
+            () => this.cleanupExpiredLocks(),
+            30000,
+        );
+
+        // These maintenance timers must not keep a test worker or a shutting-down
+        // service alive by themselves. They continue to run normally while Nest/PM2
+        // keeps the process active.
+        this.inactiveClientCleanupInterval.unref?.();
+        this.expiredLockCleanupInterval.unref?.();
     }
 
     public static getInstance(): ClientRegistry {
