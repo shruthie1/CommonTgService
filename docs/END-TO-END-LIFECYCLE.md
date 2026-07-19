@@ -24,6 +24,23 @@ This document is intentionally concise and operational. It is meant to replace s
 - `clients`
   The currently assigned main account per `clientId` used by `tg-aut-local`.
 
+## Conversation-State Contract (`userData`)
+
+`userData` is owned by `tg-aut-local`; it stores one conversation-state document per
+`(chatId, profile)`. `promote-clients-local` may read it to recognize a downstream
+conversion, but must never create or decorate a user record.
+
+The canonical runtime fields are `totalCount`, `lastMsgTimeStamp`, `picCount`,
+`picsSent`, `videos`, `prfCount`, `paidCount`, `limitTime`, `canReply`, `payAmount`,
+`highestPayAmount`, `paidReply`, `demoGiven`, `secondShow`, `fullShow`, `cheatCount`,
+`callTime`, `username`, and `accessHash`. `canReply` is always numeric and defaults to
+`1`; `picsSent` is always a numeric counter and defaults to `0`.
+
+CommonTgService mirrors this schema for its inspection/admin API. Its update endpoints
+never upsert: a missing conversation is a `404`, rather than a partially initialized
+document. `picsSent` is the only accepted/stored picture-counter key. Attribution belongs
+to dedicated promotion-claim/channel-intelligence records, not to `userData`.
+
 ## Lifecycle Overview
 
 1. Account is registered into `users`.
@@ -31,7 +48,7 @@ This document is intentionally concise and operational. It is meant to replace s
 3. CommonTgService warms the account through phase-based warmup.
 4. Promote accounts are consumed directly by `promote-clients-local`.
 5. Buffer accounts are candidates for `setupClient()` swaps into `clients` for `tg-aut-local`.
-6. Used accounts are archived back into `bufferClients` with a future `availableDate`, or marked inactive on hard failures.
+6. Replaced accounts return to `bufferClients` with a future `availableDate`, or are marked inactive on hard failures.
 
 ## Stage 1: Registration
 
@@ -101,14 +118,15 @@ Warmup is driven by:
 - `processClient()` only performs one warmup action per call.
 - Warmup actions are gated by a 2-hour cooldown via `lastUpdateAttempt`.
 - Health checks run independently from warmup.
-- Join scheduling selects active, below-target accounts except the terminal `ready` and `session_rotated` phases. Documents without `warmupPhase` remain eligible for backward compatibility.
-- Normal maintenance explicitly skips `ready` accounts. READY -> SESSION_ROTATED is a separate, strict session-rotation path; stale READY metadata is repaired without Telegram work rather than running another warmup action. READY rotation may run alongside join/leave work because terminal-phase accounts are excluded from that work; checks and other warmup maintenance remain serialized.
-- CMS and UMS each check READY rotation eligibility hourly at staggered minutes. Mongo-backed daily job claims ensure each pool has at most one rotation outcome per IST day, including a failed attempt; a busy/no-candidate run releases its claim for the next hourly check.
+- Join scheduling selects active accounts below the role's channel target. Terminal `ready` and `session_rotated` accounts are excluded once they meet the role's operational floor; underfilled terminal accounts stay in the join queue until their real count reaches it. Buffer terminal-recovery accounts are ordered ahead of normal warming candidates, highest verified count first, without changing Telegram pacing or per-account limits.
+- `warmupPhase` and `enrolledAt` are mandatory lifecycle fields. Missing metadata is rejected by runtime jobs and corrected only by an explicit database migration.
+- Normal maintenance explicitly skips `ready` and `session_rotated` accounts. READY -> SESSION_ROTATED is a separate, strict session-rotation path. It never infers phase, backfills lifecycle timestamps, or treats `lastUsed` as evidence of a completed rotation. It rechecks active, non-primary ownership, the role channel floor, every prerequisite timestamp, and the absence of `sessionRotatedAt` immediately before creating a backup. There is no bulk session-refresh API. READY rotation may run alongside join/leave work because terminal-phase accounts are excluded from normal warmup work; checks and other warmup maintenance remain serialized.
+- CMS checks buffer READY rotation at minute `45`, and UMS checks promote READY rotation at minute `55`. Each owner may complete at most one candidate per hourly run; the per-pool maintenance lock makes busy/no-candidate runs defer safely without overlapping joins or checks.
 - A maintenance lock that exceeds 30 minutes is logged as overdue but is not force-released; releasing it while the Telegram promise is alive would allow overlapping account work. Recover an actually stuck run by investigating/restarting the owning process.
 
-## Stage 4: Promote Usage in `promote-clients-local`
+## Stage 4: Promote Usage in `tg-platform/apps/promote-clients`
 
-`promote-clients-local` consumes `promoteClients` directly from Mongo.
+The deployed promotion runtime consumes `promoteClients` directly from Mongo.
 
 ### Current availability query
 
@@ -119,8 +137,10 @@ Warmup is driven by:
 - `channels >= 230`
 - `createdAt < now - 7 days`
 - `status = 'active'`
+- `warmupPhase = 'session_rotated'`
 
-Notably, this code path does not currently filter on `warmupPhase`.
+The same predicate is rechecked immediately before a selected mobile is connected.
+There is no phase-less or timestamp-based fallback.
 
 ### Runtime cooldown / retirement flow
 
@@ -154,6 +174,9 @@ These call:
 
 `GET {tgmanager}/setupClient/{clientId}?archiveOld=...&formalities=...`
 
+`archiveOld` is the backward-compatible query-field name; when true, the replaced
+primary is returned to the buffer pool rather than archived.
+
 ## Stage 6: `setupClient()` Swap in CommonTgService
 
 `ClientService.setupClient()` is the bridge from warmed `bufferClients` into the live `clients` account used by `tg-aut-local`.
@@ -163,11 +186,13 @@ These call:
 Current query requires:
 
 - same `clientId`
-- `mobile != existing client mobile`
+- requested `mobile`, when supplied; otherwise any mobile different from the existing client mobile
 - `createdAt <= now - 15 days`
 - `availableDate <= today`
-- `channels > 200`
+- `channels >= 200`
 - `status = 'active'`
+- `inUse != true`
+- `warmupPhase = 'session_rotated'`
 
 This is the practical “buffer is mature enough to become the main account” gate.
 
@@ -178,23 +203,33 @@ This is the practical “buffer is mature enough to become the main account” g
 3. Set active setup state in `TelegramService`
 4. Connect the new buffer account
 5. Update username/profile bits for the new account
-6. Update `clients.mobile`, `clients.username`, and `clients.session`
-7. Trigger old process restart through `deployKey`
-8. Archive the old main account back into `bufferClients`
-9. Mark the new buffer account `inUse=true` and `lastUsed=now`
+6. Atomically update `clients.mobile`, `clients.username`, `clients.session`, and mirrored persona `name`
+7. In the same MongoDB transaction, mark the new buffer account `inUse=true` and `lastUsed=now`
+8. Trigger the process restart through `deployKey`
+9. Return the replaced main account to `bufferClients`
 
-### Old main account archival
+### Replaced main account return to pool
 
-`archiveOldClient()` writes the old main account back into `bufferClients` with:
+`returnOldClientToBufferPool()` writes the replaced main account back into `bufferClients` with:
 
 - same `clientId`
 - previous live `session`
-- `availableDate = now + (days + 1)`
-- `channels = 170`
+- `availableDate = now + days`
+- `channels = max(250, previously recorded buffer count)`
 - `status = 'active'` unless `days > 35`, then inactive
 - `inUse = false`
+- `lastUsed = now`
+- `warmupPhase = 'session_rotated'` and `sessionRotatedAt = null`
 
-So a used main account re-enters the buffer pool on a delayed reuse schedule.
+So a used main account re-enters the buffer pool on a delayed reuse schedule as terminal
+supply with a 250-channel minimum. The periodic terminal health check later reconciles the
+real Telegram count. If that verified count falls below the buffer operating floor (200),
+the join sweep can then provide capacity-recovery joins; it does not rewind warmup or create
+a replacement session.
+
+Its retained `lastUsed` and null `sessionRotatedAt` document that no additional Telegram
+session was created. This keeps session creation limited to accounts that have never been
+used and have no recorded rotation.
 
 ## Stage 7: Session Strategy
 
@@ -230,6 +265,18 @@ Operational reuse gate used heavily by:
 - `setupClient()` buffer swap eligibility
 - aggregate availability views
 
+`setupClient.days` is an integer in the inclusive range 0–35. This is enforced by the API
+DTO so a malformed or legacy caller cannot strand an active buffer account with an arbitrary
+future availability date.
+
+### Pool planning
+
+Both pools use the same short-horizon and replenishment-horizon calculation. Short-horizon
+deficits are reported for operational visibility, while enrollment is driven by the three-to-
+four-week horizon that a newly enrolled account can actually reach. This prevents repeated
+over-enrollment for a same-day gap that warmup cannot repair. Operational channel floors
+remain role-specific: 200 for buffer swaps and 230 for promotion runtime selection.
+
 ### `lastUsed`
 
 Marks that the account has actually been consumed in production.
@@ -238,17 +285,11 @@ Marks that the account has actually been consumed in production.
 
 Prevents the same buffer/promote record from being treated as idle while it is actively assigned.
 
-## Important Current Caveat
+## Runtime invariant
 
-The warmup engine is phase-aware, but not every usage/availability query across repos is.
-
-In particular:
-
-- CommonTgService join scheduling is phase-gated
-- `setupClient()` effectively gates by age/channels/availableDate
-- `promote-clients-local` availability still primarily gates by `availableDate`, age, channels, and status
-
-If a future change wants “only ready/session_rotated accounts may be used anywhere”, that rule must be enforced in the selection queries, not just in the warmup state machine.
+Promotion runtime selection is phase-aware: only active `session_rotated` records at the
+230-channel floor can connect. CommonTgService owns lifecycle transitions; tg-platform
+enforces the terminal runtime gate before both selection and connection.
 
 ## Recommended Source of Truth
 
@@ -256,9 +297,9 @@ For current behavior, prefer code in this order:
 
 1. `CommonTgService-local/src/components/shared/*`
 2. `CommonTgService-local/src/components/clients/client.service.ts`
-3. `promote-clients-local/src/dbservice.ts`
-4. `promote-clients-local/src/setupNewMobile.ts`
-5. `tg-aut-local/src/utils.ts`
+3. `tg-platform/apps/promote-clients/src/core/dbservice.ts`
+4. `tg-platform/apps/promote-clients/src/core/mobile-manager.ts`
+5. `tg-platform/apps/tg-aut/src/core/*`
 6. `tg-aut-local/src/TelegramManager.ts`
 
 Older lifecycle docs in other repos may describe pre-redesign behavior and should be treated as historical unless updated against current code.

@@ -58,11 +58,11 @@ Severity: **CRIT** (account silently lost/stuck forever) · **HIGH** (stuck unti
 - **Fix:** Added `existsByMobile: jest.fn().mockResolvedValue(false)` to both stubs.
 - **Status:** ✅ Fixed.
 
-### BUG-6 — Old primary stranded `inUse=true` on transient archival failure — HIGH (account lost from pool)
-- **Where:** `clients/client.service.ts` `archiveOldClient` catch (line ~809-819).
-- **Cause:** After the swap cutover commits, `handleClientArchival` → `archiveOldClient` archives the OLD primary (which is `inUse=true`, `status=active`) back to the buffer pool. If `assertDistinctUserBackupSession` (line 789, creates a fresh session) throws a **transient** error, the catch only marks inactive for *permanent* errors; the transient `else` branch logs "Not Deleting user" and does nothing. The old mobile keeps `inUse=true` + `status=active`, so it is excluded from every selection query (`inUse: {$ne:true}`). It is only ever cleared by the *next* `setPrimaryInUse` for that clientId (revoke-others updateMany) — which may never come if the new primary stays healthy. Account silently lost from the pool.
-- **Fix:** In the transient branch, release the reservation: set `inUse=false`, `status=active`, push `availableDate` forward `(days+1)` (mirrors the transient-recycle at line ~569) so the account returns to the pool for a later retry instead of being stranded. Wrapped in `.catch` so a release-write failure is logged, not thrown.
-- **Test:** `client-archival.spec.ts` → "releases the reservation … on a TRANSIENT error during archival (BUG-6)".
+### BUG-6 — Replaced primary stranded `inUse=true` on transient pool-return failure — HIGH (account lost from pool)
+- **Where:** `clients/client.service.ts` `returnOldClientToBufferPool` catch.
+- **Cause:** After the swap cutover commits, `handleReplacedClient` → `returnOldClientToBufferPool` returns the replaced primary (which is `inUse=true`, `status=active`) to the buffer pool. If `assertDistinctUserBackupSession` throws a **transient** error, the old mobile can remain `inUse=true` + `status=active`, excluding it from every selection query (`inUse: {$ne:true}`). It is only otherwise cleared by the next `setPrimaryInUse` for that clientId, which may never come if the new primary stays healthy.
+- **Fix:** In the transient branch, release the reservation: set `inUse=false`, `status=active`, push `availableDate` forward by the requested `days` so the account returns to the pool for a later retry instead of being stranded. Wrapped in `.catch` so a release-write failure is logged, not thrown.
+- **Test:** `client-archival.spec.ts` → "releases the reservation … on a TRANSIENT error during pool return (BUG-6)".
 - **Status:** ✅ Fixed, tsc clean, `nest build` clean, 660/660 tests pass.
 
 ### BUG-1 class — full sweep complete

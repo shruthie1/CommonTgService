@@ -90,7 +90,7 @@ the GramJS field is `blocked`; CSV export with `includeBlocked` never marked any
 invalid Date threw `RangeError: Invalid time value`, crashing the media-list endpoint.
 **Fix:** `safeIsoString()` helper at all 6 sites.
 
-### 7. 🔴 client.service archiveOldClient: stranded buffer on transient error
+### 7. 🔴 client.service pool return: stranded buffer on transient error
 `client.service.ts` — on a *transient* error after cutover, the old primary buffer client
 was left `inUse=true`/`status=active`, permanently excluding it from all future selection.
 **Fix:** release the reservation (`inUse=false`) and push `availableDate` forward to return
