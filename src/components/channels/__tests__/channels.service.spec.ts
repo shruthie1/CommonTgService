@@ -11,7 +11,7 @@ function execQuery<T>(result: T) {
 }
 
 describe('ChannelsService channel-state persistence', () => {
-  test('createMultiple carries fresh Telegram sendability fields into existing documents', async () => {
+  test('createMultiple updates canonical identity/live state and preserves bans', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
     const service = new ChannelsService({ bulkWrite } as any);
 
@@ -24,9 +24,6 @@ describe('ChannelsService channel-state persistence', () => {
         megagroup: true,
         broadcast: false,
         canSendMsgs: true,
-        restricted: false,
-        sendMessages: false,
-        sendPlain: false,
         private: false,
         forbidden: false,
         banned: false,
@@ -34,26 +31,28 @@ describe('ChannelsService channel-state persistence', () => {
       },
     ]);
 
-    expect(bulkWrite).toHaveBeenCalledWith([
-      expect.objectContaining({
-        updateOne: expect.objectContaining({
-          filter: { channelId: '123' },
-          update: expect.objectContaining({
-            $set: expect.objectContaining({
-              canSendMsgs: true,
-              sendMessages: false,
-              sendPlain: false,
-              broadcast: false,
-              restricted: false,
-              private: false,
-              forbidden: false,
-              banned: false,
-              bannedAt: null,
-            }),
-          }),
-        }),
-      }),
-    ], { ordered: false });
+    expect(bulkWrite).toHaveBeenCalledWith(expect.any(Array), { ordered: false });
+    const operation = (bulkWrite.mock.calls as any)[0][0][0].updateOne.update[0].$set;
+    expect(operation.title).toEqual({ $literal: 'adult chat' });
+    expect(operation.username).toEqual({ $literal: 'adult_chat' });
+    expect(operation.participantsCount).toEqual({ $literal: 1200 });
+    expect(operation.private).toEqual({ $literal: false });
+    expect(operation.broadcast).toEqual({ $literal: false });
+    expect(operation.banned).toEqual(expect.any(Object));
+    expect(operation.forbidden).toEqual(expect.any(Object));
+    expect(operation.canSendMsgs).toEqual(expect.objectContaining({ $cond: expect.any(Array) }));
+  });
+
+  test('new catalog rows fail closed when no live sendability fact is supplied', async () => {
+    const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
+    const service = new ChannelsService({ bulkWrite } as any);
+
+    await service.createMultiple([{ channelId: 'unverified', title: 'Unverified' }]);
+
+    const operation = (bulkWrite.mock.calls as any)[0][0][0].updateOne.update[0].$set;
+    expect(operation.canSendMsgs.$cond[2]).toEqual({
+      $ifNull: ['$canSendMsgs', { $literal: false }],
+    });
   });
 
   test('createMultiple rejects malformed batches before creating bad upserts', async () => {

@@ -20,25 +20,13 @@ export class Channel {
   @Prop({ default: false })
   broadcast: boolean;
 
-  @ApiProperty({ default: true })
-  @Prop({ default: true })
+  @ApiProperty({ default: false })
+  @Prop({ default: false })
   canSendMsgs: boolean;
 
   @ApiProperty({ type: Number, default: 0 })
   @Prop({ type: mongoose.Schema.Types.Number, default: 0 })
   participantsCount: number;
-
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  restricted: boolean;
-
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  sendMessages: boolean;
-
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  sendPlain: boolean;
 
   @ApiProperty({ required: true })
   @Prop({ required: true })
@@ -67,14 +55,6 @@ export class Channel {
   @ApiProperty({ default: null, type: Date })
   @Prop({ default: null })
   reactRestrictedAt: Date | null;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ default: 0 })
-  wordRestriction: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ default: 0 })
-  dMRestriction: number;
 
   @ApiProperty({ type: [String], default: [] })
   @Prop({ type: [mongoose.Schema.Types.Mixed], default: [] })

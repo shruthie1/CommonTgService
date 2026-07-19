@@ -14,43 +14,44 @@ export class UserData {
     @Prop({ required: true })
     chatId: string;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     totalCount: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     picCount: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     lastMsgTimeStamp: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     limitTime: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     paidCount: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     prfCount: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 1 })
     canReply: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     payAmount: number;
 
-    @Prop({ required: true })
+    // Empty strings are the canonical tg-aut defaults until Telegram identity data is known.
+    @Prop({ required: false, default: '' })
     username: string;
 
-    @Prop({ required: true })
+    @Prop({ required: false, default: '' })
     accessHash: string;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: true })
     paidReply: boolean;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: false })
     demoGiven: boolean;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: false })
     secondShow: boolean;
 
     @Prop({ required: true, default: 0 })
@@ -59,29 +60,29 @@ export class UserData {
     @Prop({ required: true })
     profile: string;
 
-    @Prop({ required: true })
-    picSent: boolean;
+    @Prop({ required: true, default: 0 })
+    picsSent: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     highestPayAmount: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     cheatCount: number;
 
-    @Prop({ required: true })
+    @Prop({ required: true, default: 0 })
     callTime: number;
 
-    @Prop({ required: false, default:[] })
-    videos: number[];
+    @Prop({ type: [String], required: true, default: [] })
+    videos: string[];
 
-    @Prop({ type: [String], required: false, default: undefined })
-    promotionChannels?: string[];
+    @Prop({ required: false })
+    lastActiveTime?: Date;
 
-    @Prop({ required: false, default: undefined })
-    attributionMethod?: string;
-
-    @Prop({ type: Number, required: false, default: undefined })
-    attributedAt?: number;
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
+
+// tg-aut creates exactly one conversation-state document per profile/chat pair.
+// Declaring the existing production index here keeps CommonTgService's schema contract
+// aligned without changing the live index definition.
+UserDataSchema.index({ chatId: 1, profile: 1 }, { unique: true, name: 'chatId_Profile' });

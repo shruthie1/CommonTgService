@@ -47,7 +47,7 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     @ApiPropertyOptional({ description: 'Timestamp of the latest organic activity execution.'})
     organicActivityAt?: Date;
     @ApiPropertyOptional({ description: 'Timestamp when a backup session was created.'})
-    sessionRotatedAt?: Date;
+    sessionRotatedAt?: Date | null;
 
     @ApiPropertyOptional({ description: 'Assigned first name (set during setupClient)' })
     @IsOptional()

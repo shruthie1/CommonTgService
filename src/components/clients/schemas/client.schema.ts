@@ -65,6 +65,10 @@ export class Client {
     @Prop({ required: true })
     product: string;
 
+    @ApiProperty({ description: 'Optional main-account label', required: false })
+    @Prop({ required: false, default: null })
+    mainAccount?: string | null;
+
     @ApiProperty({ description: 'Paytm QR ID', required: false })
     @Prop({ required: false, default: null })
     qrId: string;

@@ -84,8 +84,8 @@ export class BufferClientController {
 
   @Post('sessions/refresh')
   @ApiOperation({
-    summary: 'Refresh buffer client sessions explicitly',
-    description: 'Dry-runs by default. Pass apply=true to start session rotation for ready/session_rotated buffer clients.',
+    summary: 'Retired unsafe bulk session-refresh endpoint',
+    description: 'Bulk session creation is disabled. Session rotation is owned exclusively by the strict READY scheduler.',
   })
   @ApiBody({
     schema: {
@@ -99,17 +99,16 @@ export class BufferClientController {
   })
   @ApiOkResponse({ schema: { type: 'object', additionalProperties: true } })
   async refreshBufferSessions(@Body() body: { apply?: boolean; mobile?: string } = {}): Promise<any> {
-    const mobile = typeof body?.mobile === 'string' && body.mobile.trim() ? body.mobile.trim() : undefined;
-    if (body?.apply !== true) {
-      return this.clientService.updateAllClientSessions({ dryRun: true, mobile });
+    if (body?.apply === true) {
+      throw new BadRequestException(
+        'Bulk session refresh is disabled. Only the strict READY rotation scheduler may create a backup session.',
+      );
     }
-
-    this.clientService.updateAllClientSessions({ dryRun: false, mobile }).catch((error) => {
-      // Fire-and-forget endpoint; keep failures visible in service logs.
-       
-      console.error('Error refreshing buffer client sessions:', error);
-    });
-    return { initiated: true, dryRun: false, mobile: mobile || null };
+    return {
+      dryRun: true,
+      disabled: true,
+      reason: 'Bulk session refresh is disabled; session_rotated accounts must never be rotated again.',
+    };
   }
 
   @Get('diagnoseWarmup')

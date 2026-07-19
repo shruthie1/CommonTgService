@@ -12,6 +12,7 @@ import {
   UsersService,
 } from '../../components';
 import { contains, parseError } from '../../utils';
+import { getTelegramChannelLiveFacts } from '../../utils/telegram-utils/channel-live-facts';
 import { isEligibleDiscoveredChannel } from './channel-eligibility';
 
 @Injectable()
@@ -210,24 +211,43 @@ export class AccountMaintenanceService {
   private async persistDiscoveredChannels(
     dialogs: TotalList<Dialog>,
   ): Promise<void> {
-    const channels = dialogs
-      .filter((dialog) => dialog.isChannel || dialog.isGroup)
-      .map((dialog) => dialog.entity as Api.Channel)
-      .filter(
-        (channel) =>
-          !channel.broadcast &&
-          !channel.defaultBannedRights?.sendMessages &&
-          (channel.participantsCount || 0) > 50 &&
-          isEligibleDiscoveredChannel(channel),
-      )
-      .map((channel) => ({
-        channelId: channel.id.toString(),
-        participantsCount: channel.participantsCount,
-        title: channel.title,
-        broadcast: channel.broadcast,
-        megagroup: channel.megagroup,
-        username: channel.username,
-      }));
+    const now = Date.now();
+    const discovered = await Promise.all(
+      dialogs
+        .filter((dialog) => dialog.isChannel || dialog.isGroup)
+        .map(async (dialog) => {
+          const channel = dialog.entity as Api.Channel;
+          if (!isEligibleDiscoveredChannel(channel)) return null;
+
+          // This uses the same complete Telegram fact calculation as runtime
+          // hydration. Discovery must never mark a restricted, left, private,
+          // forbidden, broadcast, or write-restricted dialog as sendable.
+          const facts = await getTelegramChannelLiveFacts(
+            { getEntity: async () => channel },
+            { channelId: channel.id, entity: channel },
+          );
+          if (!facts || !facts.canSendMsgs || (facts.participantsCount ?? 0) <= 50) {
+            return null;
+          }
+
+          return {
+            channelId: facts.channelId,
+            canSendMsgs: true,
+            private: false,
+            lastHydrationStatus: 'success',
+            lastHydrationReason: 'live_sendable',
+            lastHydratedAt: now,
+            lastLiveCheckedAt: now,
+            participantsCount: facts.participantsCount,
+            accessHash: channel.accessHash?.toString(),
+            title: facts.title ?? '',
+            broadcast: facts.broadcast,
+            megagroup: facts.megagroup,
+            username: facts.username ?? '',
+          };
+        }),
+    );
+    const channels = discovered.filter((channel): channel is NonNullable<typeof channel> => channel !== null);
 
     if (!channels.length) return;
     await this.channelsService.createMultiple(channels);

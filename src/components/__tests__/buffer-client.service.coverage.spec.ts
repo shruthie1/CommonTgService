@@ -487,20 +487,47 @@ describe('BufferClientService coverage', () => {
             expect((service as any).joinChannelMap.get('15551500001')).toEqual([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
         });
 
-        it('excludes READY and SESSION_ROTATED accounts while retaining legacy phase-less accounts', async () => {
-            await service.create(makeBufferClientData({ mobile: '15551500004', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.READY }));
-            await service.create(makeBufferClientData({ mobile: '15551500005', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.SESSION_ROTATED }));
+        it('recovers below-floor terminal accounts while retaining operational terminal supply', async () => {
+            // create() deliberately starts every document in enrolled; move these two
+            // fixtures through the storage state explicitly to exercise terminal selection.
+            await service.create(makeBufferClientData({ mobile: '15551500004', channels: 200, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makeBufferClientData({ mobile: '15551500005', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makeBufferClientData({ mobile: '15551500006', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551500004' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551500005' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
             await BufferClientModel.collection.updateOne({ mobile: '15551500006' }, { $unset: { warmupPhase: '' } });
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
             activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
 
-            expect(await service.refillJoinQueue('test-client-1')).toBe(1);
+            expect(await service.refillJoinQueue('test-client-1')).toBe(2);
             expect((service as any).joinChannelMap.has('15551500004')).toBe(false);
-            expect((service as any).joinChannelMap.has('15551500005')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500005')).toBe(true);
             expect((service as any).joinChannelMap.has('15551500006')).toBe(true);
+        });
+
+        it('queues terminal recovery before higher-channel warming accounts', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500007', channels: 300, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makeBufferClientData({ mobile: '15551500008', channels: 190, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551500008' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
+            const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            await service.refillJoinQueue('test-client-1');
+
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500008', '15551500007']);
         });
 
         it('skips the live primary client mobile', async () => {
@@ -680,6 +707,10 @@ describe('BufferClientService coverage', () => {
                 mobile: '15551710102', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'session_rotated', lastUsed: new Date(),
             })); // rotated + used
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551710102' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
             const report = await service.diagnoseWarmupPipeline();
             expect((report.skippedReasons as any).is_primary_mobile).toBe(1);
             expect((report.skippedReasons as any).in_use).toBe(1);
@@ -693,11 +724,22 @@ describe('BufferClientService coverage', () => {
                 warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 2,
                 lastUpdateFailure: longAgo,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551710200' },
+                // create() always starts a fresh account in ENROLLED. Make the
+                // diagnostic fixture explicitly old so it exercises the stuck
+                // account branch rather than the normal enrolled flow.
+                { $set: { warmupPhase: WarmupPhase.SETTLING, enrolledAt: longAgo } },
+            );
             await service.create(makeBufferClientData({
                 mobile: '15551710201', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'settling', enrolledAt: new Date(), failedUpdateAttempts: 5,
                 lastUpdateFailure: new Date(),
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551710201' },
+                { $set: { warmupPhase: WarmupPhase.SETTLING } },
+            );
             const report = await service.diagnoseWarmupPipeline();
             // Both active settling docs are eligible candidates...
             expect(report.totalActive).toBe(2);
@@ -727,6 +769,10 @@ describe('BufferClientService coverage', () => {
                 profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past,
                 profilePicsUpdatedAt: past, channels: 250,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551800001' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
             // usersService.search is consulted by backfill/hasDistinctUsersBackupSession — keep it empty.
             usersService.search.mockResolvedValue([]);
 
@@ -801,14 +847,25 @@ describe('BufferClientService coverage', () => {
                 privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
                 profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
             }));
-            const rotateSpy = jest.spyOn(service, 'rotateSession');
+            await BufferClientModel.collection.updateMany(
+                { mobile: { $in: ['15551800101', '15551800102', '15551800104'] } },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            const rotateSpy = jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
+                await service.update(mobile, {
+                    warmupPhase: WarmupPhase.SESSION_ROTATED,
+                    sessionRotatedAt: new Date(),
+                });
+                return true;
+            });
 
             await service.rotateReadyBufferClients();
 
             expect((await service.findOne('15551800101'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
             expect((await service.findOne('15551800102'))!.warmupPhase).toBe(WarmupPhase.READY);
             expect((await service.findOne('15551800104'))!.warmupPhase).toBe(WarmupPhase.READY);
-            expect(rotateSpy).not.toHaveBeenCalled();
+            expect(rotateSpy).toHaveBeenCalledTimes(1);
+            expect(rotateSpy).toHaveBeenCalledWith('15551800101');
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });
 
@@ -817,6 +874,10 @@ describe('BufferClientService coverage', () => {
                 mobile: '15551800103', status: 'active', clientId: 'test-client-1',
                 warmupPhase: WarmupPhase.READY, inUse: false,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551800103' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
             (service as any).checkingBufferClientsSince = Date.now();
 
             await service.rotateReadyBufferClients();
@@ -833,7 +894,19 @@ describe('BufferClientService coverage', () => {
                 privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
                 profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551800105' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
             (service as any).activeMaintenanceRun = { name: 'processJoinChannelInterval', startedAt: Date.now() };
+
+            jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
+                await service.update(mobile, {
+                    warmupPhase: WarmupPhase.SESSION_ROTATED,
+                    sessionRotatedAt: new Date(),
+                });
+                return true;
+            });
 
             await service.rotateReadyBufferClients();
 
@@ -886,90 +959,6 @@ describe('BufferClientService coverage', () => {
             await service.create(makeBufferClientData({ mobile: '15552000006', status: 'inactive' }));
             const res = await service.markAsActive('15552000006');
             expect(res.status).toBe('active');
-        });
-    });
-
-    // ─── updateAllClientSessions ─────────────────────────────────────────────
-
-    describe('updateAllClientSessions()', () => {
-        it('dry run returns candidate snapshot without rotating', async () => {
-            await service.create(makeBufferClientData({ mobile: '15552100001', status: 'active', warmupPhase: 'ready' }));
-            const result = await service.updateAllClientSessions({ dryRun: true });
-            expect(result.dryRun).toBe(true);
-            expect(result.candidateCount).toBe(1);
-            expect(result.candidates).toHaveLength(1);
-        });
-
-        it('uses the default options object when called with no arguments (line 1723)', async () => {
-            const result = await service.updateAllClientSessions();
-            expect(result.dryRun).toBe(false);
-            expect(result.candidateCount).toBe(0);
-        });
-
-        it('rotates a ready buffer client session', async () => {
-            await service.create(makeBufferClientData({ mobile: '15552100002', status: 'active', warmupPhase: 'ready', session: 'old-session' }));
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-                hasPassword: jest.fn(async () => true),
-            } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            jest.spyOn(service as any, 'ensureDistinctUsersBackupSession').mockResolvedValue(true);
-            telegramService.createNewSession.mockResolvedValue('brand-new-session');
-
-            const result = await service.updateAllClientSessions({ mobile: '15552100002' });
-            expect(result.rotated).toBe(1);
-            const after = await service.findOne('15552100002');
-            expect(after!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
-        });
-
-        it('recovers a missing session then rotates', async () => {
-            await service.create(makeBufferClientData({ mobile: '15552100004', status: 'active', warmupPhase: 'session_rotated', session: 'has-session' }));
-            // Force empty session at rotation time by stubbing the find to return a session-less doc
-            const realFind = BufferClientModel.find.bind(BufferClientModel);
-            jest.spyOn(BufferClientModel, 'find').mockImplementationOnce((...args: any[]) => {
-                const q = realFind(...(args as [any]));
-                const origExec = q.exec.bind(q);
-                (q as any).exec = async () => {
-                    const docs = await origExec();
-                    return docs.map((d: any) => { const o = d.toObject ? d : d; (d as any).session = ''; return d; });
-                };
-                return q as any;
-            });
-            jest.spyOn(service as any, 'resolveActiveSessionForRotation').mockResolvedValue({ activeSession: 'recovered-session', activeClient: { destroy: jest.fn() } });
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ hasPassword: jest.fn(async () => false), set2fa: jest.fn(async () => undefined) } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            jest.spyOn(service as any, 'ensureDistinctUsersBackupSession').mockResolvedValue(true);
-            telegramService.createNewSession.mockResolvedValue('rotated-session-x');
-
-            const result = await service.updateAllClientSessions({ mobile: '15552100004' });
-            expect(result.recoveredMissingSessions).toBe(1);
-            expect(result.rotated).toBe(1);
-        });
-
-        it('deactivates on permanent rotation failure', async () => {
-            await service.create(makeBufferClientData({ mobile: '15552100005', status: 'active', warmupPhase: 'ready', session: 'sess' }));
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-                hasPassword: jest.fn(async () => { throw new Error('USER_DEACTIVATED'); }),
-            } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            isPermanentError.mockReturnValue(true);
-            const result = await service.updateAllClientSessions({ mobile: '15552100005' });
-            expect(result.deactivated).toBe(1);
-            // Real deactivateClient ran — assert the doc was persisted as inactive.
-            const after = await service.findOne('15552100005');
-            expect(after!.status).toBe('inactive');
-            expect(after!.inUse).toBe(false);
-            expect(usersService.expireAccount).toHaveBeenCalledWith('15552100005', expect.any(String));
-        });
-
-        it('counts failed when new session is not distinct', async () => {
-            await service.create(makeBufferClientData({ mobile: '15552100003', status: 'active', warmupPhase: 'ready', session: 'same' }));
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-                hasPassword: jest.fn(async () => true),
-            } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            telegramService.createNewSession.mockResolvedValue('same');
-            const result = await service.updateAllClientSessions({ mobile: '15552100003' });
-            expect(result.failed).toBe(1);
         });
     });
 
@@ -1308,7 +1297,7 @@ describe('BufferClientService coverage', () => {
             for (let i = 0; i < 20; i++) {
                 await service.create(makeBufferClientData({
                     mobile: `1555330${String(i).padStart(4, '0')}`, status: 'active',
-                    clientId: 'test-client-1', warmupPhase: 'ready',
+                    clientId: 'test-client-1', warmupPhase: 'ready', channels: 200,
                 }));
             }
             // Deficit reported but capacity exhausted → blockedReason path (lines 934-936).
@@ -1330,7 +1319,7 @@ describe('BufferClientService coverage', () => {
             for (let i = 0; i < 18; i++) {
                 await service.create(makeBufferClientData({
                     mobile: `1555340${String(i).padStart(4, '0')}`, status: 'active',
-                    clientId: 'test-client-1', warmupPhase: 'ready',
+                    clientId: 'test-client-1', warmupPhase: 'ready', channels: 200,
                 }));
             }
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
@@ -1358,6 +1347,10 @@ describe('BufferClientService coverage', () => {
                     clientId: 'test-client-1', warmupPhase: 'settling', enrolledAt: now,
                 }));
             }
+            await BufferClientModel.updateMany(
+                { mobile: { $regex: '^1555350' } },
+                { $set: { warmupPhase: WarmupPhase.SETTLING } },
+            );
             // Put a subset on cooldown by stamping a very recent lastUpdateAttempt.
             // Give them the higher-priority 'set_2fa' action (privacy done 3d ago, 2FA not)
             // so they sort to the front and are evaluated before the slot limit fills up.
@@ -1389,6 +1382,10 @@ describe('BufferClientService coverage', () => {
                 profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past,
                 profilePicsUpdatedAt: past, channels: 250, lastChecked: past,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15553600001' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
             const healthSpy = jest.spyOn(service as any, 'performHealthCheck')
                 .mockResolvedValue({ passed: false, performed: true });
             await service.checkBufferClients();
@@ -1403,7 +1400,7 @@ describe('BufferClientService coverage', () => {
             for (let i = 0; i < 20; i++) {
                 await service.create(makeBufferClientData({
                     mobile: `1555370${String(i).padStart(4, '0')}`, status: 'active',
-                    clientId: 'test-client-1', warmupPhase: 'session_rotated', inUse: false, lastUsed: null,
+                    clientId: 'test-client-1', warmupPhase: 'session_rotated', inUse: false, lastUsed: null, channels: 200,
                 }));
             }
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
@@ -1422,7 +1419,7 @@ describe('BufferClientService coverage', () => {
             for (let i = 0; i < 18; i++) {
                 await service.create(makeBufferClientData({
                     mobile: `1555380${String(i).padStart(4, '0')}`, status: 'active',
-                    clientId: 'test-client-1', warmupPhase: 'session_rotated', inUse: false, lastUsed: null,
+                    clientId: 'test-client-1', warmupPhase: 'session_rotated', inUse: false, lastUsed: null, channels: 200,
                 }));
             }
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
@@ -1454,18 +1451,18 @@ describe('BufferClientService coverage', () => {
         });
     });
 
-    describe('checkBufferClients() null-phase fallback', () => {
-        it('treats a doc with no warmupPhase as ENROLLED (lines 1235 & 1289)', async () => {
+    describe('checkBufferClients() missing-phase guard', () => {
+        it('skips a doc with no warmupPhase without inferring lifecycle state', async () => {
             await service.create(makeBufferClientData({
                 mobile: '15555200001', status: 'active', clientId: 'test-client-1',
                 enrolledAt: new Date(), inUse: false, lastUsed: null,
             }));
-            // Schema default leaves warmupPhase null.
+            // Missing lifecycle state is intentionally migration-only; maintenance
+            // must never infer it from unrelated fields.
             await BufferClientModel.collection.updateOne({ mobile: '15555200001' }, { $set: { warmupPhase: null } });
             await service.checkBufferClients();
             const after = await service.findOne('15555200001');
-            // 'wait' fast-path stamps lastUpdateAttempt → the loops visited it via the null fallback.
-            expect(after!.lastUpdateAttempt).toBeInstanceOf(Date);
+            expect(after!.lastUpdateAttempt ?? null).toBeNull();
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });
     });
@@ -1482,27 +1479,20 @@ describe('BufferClientService coverage', () => {
                 warmupPhase: 'settling', enrolledAt: enrolledLongAgo, lastUpdateAttempt: threeHoursAgo,
                 inUse: false, lastUsed: null,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15555000001' },
+                { $set: { warmupPhase: WarmupPhase.SETTLING } },
+            );
             jest.spyOn(organicModule, 'performOrganicActivity').mockResolvedValue(undefined as any);
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
                 updatePrivacyforDeletedAccount: jest.fn(async () => undefined),
             } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
 
-            // A doc with NO warmupPhase (schema default null) exercises the
-            // `warmupPhase || ENROLLED` fallbacks (lines 1235 & 1289). Recent enrolledAt
-            // → computed action 'wait' → DB-only fast path, no TG needed.
-            await service.create(makeBufferClientData({
-                mobile: '15555000002', status: 'active', clientId: 'test-client-1',
-                enrolledAt: new Date(), inUse: false, lastUsed: null,
-            }));
-
             await service.checkBufferClients();
 
             const after = await service.findOne('15555000001');
             expect(after!.privacyUpdatedAt).toBeInstanceOf(Date);
-            // The null-phase doc was visited by the processing loop (lastUpdateAttempt stamped by 'wait').
-            const nullPhaseDoc = await service.findOne('15555000002');
-            expect(nullPhaseDoc!.lastUpdateAttempt).toBeInstanceOf(Date);
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });
     });
@@ -1530,82 +1520,6 @@ describe('BufferClientService coverage', () => {
             const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
             await service.updateInfo();
             expect(healthSpy).not.toHaveBeenCalled();
-        });
-    });
-
-    // ─── updateAllClientSessions: skip-primary + recovery-failure + backup ────
-
-    describe('updateAllClientSessions() additional branches', () => {
-        it('skips a candidate that is the primary client mobile', async () => {
-            await service.create(makeBufferClientData({
-                mobile: '15553900001', status: 'active', warmupPhase: 'ready', session: 'sess',
-            }));
-            clientService.findAll.mockResolvedValue([{ clientId: 'test-client-1', mobile: '15553900001' }]);
-            const result = await service.updateAllClientSessions({ mobile: '15553900001' });
-            expect(result.skippedPrimary).toBe(1);
-            expect(result.rotated).toBe(0);
-        });
-
-        it('counts a failure when no verified backup session can be recovered', async () => {
-            await service.create(makeBufferClientData({
-                mobile: '15553900002', status: 'active', warmupPhase: 'session_rotated', session: 'placeholder',
-            }));
-            // Force the session-less path then make recovery yield nothing.
-            await BufferClientModel.updateOne({ mobile: '15553900002' }, { $set: { session: '' } });
-            jest.spyOn(service as any, 'resolveActiveSessionForRotation').mockResolvedValue({ activeSession: null, activeClient: null });
-            const result = await service.updateAllClientSessions({ mobile: '15553900002' });
-            expect(result.recoveredMissingSessions).toBe(0);
-            expect(result.failed).toBe(1);
-        });
-
-        it('counts a failure when the new session lacks a distinct backup', async () => {
-            await service.create(makeBufferClientData({
-                mobile: '15553900003', status: 'active', warmupPhase: 'ready', session: 'old',
-            }));
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-                hasPassword: jest.fn(async () => true),
-            } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            jest.spyOn(service as any, 'ensureDistinctUsersBackupSession').mockResolvedValue(false);
-            telegramService.createNewSession.mockResolvedValue('brand-new-distinct');
-            const result = await service.updateAllClientSessions({ mobile: '15553900003' });
-            expect(result.failed).toBe(1);
-            expect(result.rotated).toBe(0);
-        });
-
-        it('counts a failure (outer catch) when session recovery throws, with an inter-candidate delay', async () => {
-            // Two session-less candidates so the outer catch path also runs its
-            // i < length-1 inter-candidate sleep (line 1838).
-            await service.create(makeBufferClientData({
-                mobile: '15553900005', status: 'active', warmupPhase: 'session_rotated', session: 'p1',
-            }));
-            await service.create(makeBufferClientData({
-                mobile: '15553900006', status: 'active', warmupPhase: 'session_rotated', session: 'p2',
-            }));
-            await BufferClientModel.updateMany(
-                { mobile: { $in: ['15553900005', '15553900006'] } }, { $set: { session: '' } },
-            );
-            // resolveActiveSessionForRotation throws → escapes to the outer catch (line 1835-1838).
-            jest.spyOn(service as any, 'resolveActiveSessionForRotation').mockRejectedValue(new Error('recovery exploded'));
-            const result = await service.updateAllClientSessions({});
-            expect(result.failed).toBe(2);
-            expect(result.rotated).toBe(0);
-        });
-
-        it('sets 2FA first when the recovered account has no password', async () => {
-            await service.create(makeBufferClientData({
-                mobile: '15553900004', status: 'active', warmupPhase: 'ready', session: 'old',
-            }));
-            const set2fa = jest.fn(async () => undefined);
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-                hasPassword: jest.fn(async () => false), set2fa,
-            } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            jest.spyOn(service as any, 'ensureDistinctUsersBackupSession').mockResolvedValue(true);
-            telegramService.createNewSession.mockResolvedValue('distinct-new');
-            const result = await service.updateAllClientSessions({ mobile: '15553900004' });
-            expect(set2fa).toHaveBeenCalled();
-            expect(result.rotated).toBe(1);
         });
     });
 
@@ -1865,18 +1779,22 @@ describe('BufferClientService coverage', () => {
     // ─── checkBufferClients: rich internal branches (1198, 1226-1241) ─────────
 
     describe('checkBufferClients() rich internal branches', () => {
-        it('skips primary-mobile + backfills a session_rotated+used doc, with promote mobiles in goodIds', async () => {
+        it('skips primary-mobile and terminal docs during normal maintenance, with promote mobiles in goodIds', async () => {
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             // (a) buffer doc whose mobile equals the client's primary mobile → skip (1225-1227)
             await service.create(makeBufferClientData({
                 mobile: '15554300001', status: 'active', clientId: 'test-client-1', warmupPhase: 'enrolled',
             }));
             clientService.findAll.mockResolvedValue([{ clientId: 'test-client-1', mobile: '15554300001' }]);
-            // (b) session_rotated + lastUsed → backfillTimestamps + continue (1239-1241)
+            // (b) terminal accounts are not altered by normal maintenance.
             await service.create(makeBufferClientData({
                 mobile: '15554300002', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'session_rotated', inUse: false, lastUsed: past,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15554300002' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
             // (c) a stuck + failed-cap doc exercises isHealthyBufferClientForCap false branches (158-171)
             const longAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
             await service.create(makeBufferClientData({
@@ -1892,11 +1810,9 @@ describe('BufferClientService coverage', () => {
             }));
             // promote clients with mobiles flow into goodIds (line 1198)
             promoteClientService.findAll.mockResolvedValue([{ mobile: '15554399999' }]);
-            const backfillSpy = jest.spyOn(service as any, 'backfillTimestamps');
-
             await service.checkBufferClients();
 
-            expect(backfillSpy).toHaveBeenCalledWith('15554300002', expect.anything(), expect.any(Number));
+            expect((await service.findOne('15554300002'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
             // Primary-mobile doc untouched.
             const primary = await service.findOne('15554300001');
             expect(primary!.warmupPhase).toBe(WarmupPhase.ENROLLED);
@@ -1917,8 +1833,12 @@ describe('BufferClientService coverage', () => {
         it('getLeastRecentlyUsed / getNextAvailable / getUnused honor defaults', async () => {
             await service.create(makeBufferClientData({
                 mobile: '15554500004', status: 'active', clientId: 'lru-client', lastUsed: null,
-                warmupPhase: 'session_rotated', availableDate: '2026-04-01',
+                warmupPhase: 'session_rotated', availableDate: '2026-04-01', channels: 200,
             }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15554500004' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
             const lru = await service.getLeastRecentlyUsedBufferClients('lru-client');
             expect(lru.length).toBeGreaterThanOrEqual(1);
             const next = await service.getNextAvailableBufferClient('lru-client');
@@ -1974,18 +1894,4 @@ describe('BufferClientService coverage', () => {
         });
     });
 
-    // ─── updateAllClientSessions multi-candidate sleep (line 1832) ────────────
-
-    describe('updateAllClientSessions() multi-candidate', () => {
-        it('processes multiple candidates with an inter-candidate delay', async () => {
-            await service.create(makeBufferClientData({ mobile: '15554400001', status: 'active', warmupPhase: 'ready', session: 'a' }));
-            await service.create(makeBufferClientData({ mobile: '15554400002', status: 'active', warmupPhase: 'ready', session: 'b' }));
-            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ hasPassword: jest.fn(async () => true) } as any);
-            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            jest.spyOn(service as any, 'ensureDistinctUsersBackupSession').mockResolvedValue(true);
-            telegramService.createNewSession.mockImplementation(async (m: string) => `distinct-${m}`);
-            const result = await service.updateAllClientSessions({});
-            expect(result.rotated).toBe(2);
-        });
-    });
 });

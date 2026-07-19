@@ -271,10 +271,14 @@ describe('PromoteClientService coverage', () => {
             expect(added).toBe(1);
         });
 
-        it('excludes READY and SESSION_ROTATED accounts while retaining legacy phase-less accounts', async () => {
-            await service.create(makePromoteClientData({ mobile: '15551500004', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.READY }));
+        it('recovers below-floor terminal accounts while retaining operational terminal supply', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551500004', channels: 230, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.READY }));
             await service.create(makePromoteClientData({ mobile: '15551500005', channels: 10, status: 'active', clientId: 'test-client-1', warmupPhase: WarmupPhase.SESSION_ROTATED }));
             await service.create(makePromoteClientData({ mobile: '15551500006', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            // Public enrollment always starts at ENROLLED. Terminal phases are
+            // written by lifecycle workers, so stamp those states directly.
+            await PromoteClientModel.collection.updateOne({ mobile: '15551500004' }, { $set: { warmupPhase: WarmupPhase.READY } });
+            await PromoteClientModel.collection.updateOne({ mobile: '15551500005' }, { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } });
             await PromoteClientModel.collection.updateOne({ mobile: '15551500006' }, { $unset: { warmupPhase: '' } });
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -283,8 +287,8 @@ describe('PromoteClientService coverage', () => {
 
             expect(await service.refillJoinQueue('test-client-1')).toBe(1);
             expect((service as any).joinChannelMap.has('15551500004')).toBe(false);
-            expect((service as any).joinChannelMap.has('15551500005')).toBe(false);
-            expect((service as any).joinChannelMap.has('15551500006')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551500005')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551500006')).toBe(false);
         });
 
         it('queues a leave when too many unsendable channels', async () => {
@@ -416,6 +420,21 @@ describe('PromoteClientService coverage', () => {
                 profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past,
                 profilePicsUpdatedAt: past, channels: 250,
             }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15551800001' },
+                { $set: {
+                    warmupPhase: WarmupPhase.READY,
+                    enrolledAt: past,
+                    lastUsed: past,
+                    privacyUpdatedAt: past,
+                    twoFASetAt: past,
+                    otherAuthsRemovedAt: past,
+                    profilePicsDeletedAt: past,
+                    nameBioUpdatedAt: past,
+                    usernameUpdatedAt: past,
+                    profilePicsUpdatedAt: past,
+                } },
+            );
             usersService.search.mockResolvedValue([]);
 
             await service.checkPromoteClients();
@@ -523,6 +542,10 @@ describe('PromoteClientService coverage', () => {
 
         it('getPromoteClientsByStatus + WithMessages + LRU getters', async () => {
             await service.create(makePromoteClientData({ mobile: '15552000003', status: 'active', clientId: 'cid-z', warmupPhase: 'session_rotated', availableDate: '2020-01-01' }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15552000003' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 230 } },
+            );
             expect(await service.getPromoteClientsByStatus('active')).toHaveLength(1);
             expect((await service.getPromoteClientsWithMessages())[0]).toHaveProperty('message');
             const lru = await service.getNextAvailablePromoteClient('cid-z');
@@ -654,8 +677,9 @@ describe('PromoteClientService coverage', () => {
     // ─── isHealthyPromoteClientForCap branches (127-140) ─────────────────────
     describe('isHealthyPromoteClientForCap()', () => {
         const now = Date.now();
-        it('counts READY phase as healthy', () => {
-            expect((service as any).isHealthyPromoteClientForCap({ warmupPhase: WarmupPhase.READY }, now)).toBe(true);
+        it('counts READY phase as healthy only at the promotion runtime channel floor', () => {
+            expect((service as any).isHealthyPromoteClientForCap({ warmupPhase: WarmupPhase.READY, channels: 230 }, now)).toBe(true);
+            expect((service as any).isHealthyPromoteClientForCap({ warmupPhase: WarmupPhase.READY, channels: 229 }, now)).toBe(false);
         });
 
         it('rejects accounts that exceeded MAX_FAILED_ATTEMPTS', () => {
@@ -675,8 +699,8 @@ describe('PromoteClientService coverage', () => {
                 { warmupPhase: WarmupPhase.GROWING, enrolledAt }, now)).toBe(true);
         });
 
-        it('infers phase when warmupPhase missing (no enrolledAt → healthy)', () => {
-            expect((service as any).isHealthyPromoteClientForCap({ channels: 0 }, now)).toBe(true);
+        it('rejects legacy documents with no explicit warmup phase', () => {
+            expect((service as any).isHealthyPromoteClientForCap({ channels: 0 }, now)).toBe(false);
         });
     });
 
@@ -1162,28 +1186,37 @@ describe('PromoteClientService coverage', () => {
 
     // ─── checkPromoteClients deeper branches (947-948, 990-992, 1021-1026, 1058-1060) ─
     describe('checkPromoteClients() deeper branches', () => {
-        it('backfills timestamps for a used SESSION_ROTATED account then continues (947-948)', async () => {
+        it('leaves a used SESSION_ROTATED account untouched during normal maintenance', async () => {
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             await service.create(makePromoteClientData({
                 mobile: '15553900001', status: 'active', clientId: 'test-client-1', inUse: false,
                 warmupPhase: 'session_rotated', lastUsed: past, enrolledAt: past,
             }));
-            const backfillSpy = jest.spyOn(service as any, 'backfillTimestamps');
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15553900001' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED, lastUsed: past, enrolledAt: past } },
+            );
+            const processSpy = jest.spyOn(service as any, 'processClient');
             usersService.search.mockResolvedValue([]);
             await service.checkPromoteClients();
-            expect(backfillSpy).toHaveBeenCalledWith('15553900001', expect.anything(), expect.any(Number));
+            expect(processSpy).not.toHaveBeenCalled();
+            expect((await service.findOne('15553900001'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
         });
 
-        it('skips a SESSION_ROTATED account that fails its health check (990-992)', async () => {
+        it('does not health-check a SESSION_ROTATED account in normal maintenance', async () => {
             await service.create(makePromoteClientData({
                 mobile: '15553900002', status: 'active', clientId: 'test-client-1', inUse: false,
                 warmupPhase: 'session_rotated', lastUsed: null, lastChecked: new Date('2020-01-01'),
             }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15553900002' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
             const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: false, performed: true });
             const processSpy = jest.spyOn(service as any, 'processClient');
             usersService.search.mockResolvedValue([]);
             await service.checkPromoteClients();
-            expect(healthSpy).toHaveBeenCalledWith('15553900002', expect.any(Number), expect.any(Number));
+            expect(healthSpy).not.toHaveBeenCalled();
             expect(processSpy).not.toHaveBeenCalled();
         });
 
@@ -1193,9 +1226,13 @@ describe('PromoteClientService coverage', () => {
             for (let i = 0; i < 30; i++) {
                 await service.create(makePromoteClientData({
                     mobile: `1555391${String(i).padStart(4, '0')}`, status: 'active',
-                    clientId: 'cap-client', warmupPhase: 'ready', inUse: true,
+                    clientId: 'cap-client', warmupPhase: 'ready', inUse: true, channels: 230,
                 }));
             }
+            await PromoteClientModel.collection.updateMany(
+                { clientId: 'cap-client' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
                 totalNeeded: 5, windowNeeds: [], totalActive: 0, totalNeededForCount: 5, calculationReason: 'need', priority: 0,
             });
@@ -1225,13 +1262,24 @@ describe('PromoteClientService coverage', () => {
             clientService.findAll.mockResolvedValue([{ clientId: 'cap2-client', mobile: '15559995555' }]);
             // 29 healthy ready accounts + a couple of unhealthy (stuck) ones that the cap tally must skip
             for (let i = 0; i < 29; i++) {
-                await service.create(makePromoteClientData({ mobile: `1555395${String(i).padStart(4, '0')}`, status: 'active', clientId: 'cap2-client', warmupPhase: 'ready', inUse: true }));
+                await service.create(makePromoteClientData({ mobile: `1555395${String(i).padStart(4, '0')}`, status: 'active', clientId: 'cap2-client', warmupPhase: 'ready', inUse: true, channels: 230 }));
             }
+            await PromoteClientModel.collection.updateMany(
+                { clientId: 'cap2-client' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
             // stuck account: growing phase, enrolled 60 days ago → not healthy for cap (919 true path)
             await service.create(makePromoteClientData({
                 mobile: '15553959999', status: 'active', clientId: 'cap2-client', inUse: true,
                 warmupPhase: 'growing', enrolledAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
             }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15553959999' },
+                { $set: {
+                    warmupPhase: WarmupPhase.GROWING,
+                    enrolledAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+                } },
+            );
             // need 5, remaining capacity = 30-29 = 1 → cappedNeeded(1) < totalNeeded(5) → capping reason (1035)
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
                 totalNeeded: 5, windowNeeds: [], totalActive: 0, totalNeededForCount: 5, calculationReason: 'need', priority: 0,

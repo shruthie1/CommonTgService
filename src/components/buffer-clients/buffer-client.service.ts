@@ -12,7 +12,7 @@ import {
     forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import {
     BufferClient,
@@ -161,10 +161,56 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return !!mobile && primaryClientMobiles.has(mobile);
     }
 
+    /**
+     * Recovery accounts are already terminal but cannot be selected by the
+     * runtime until they reach the buffer floor. Put them ahead of new warmup
+     * accounts without changing which accounts are eligible or increasing any
+     * Telegram activity limits.
+     */
+    private async findPrioritizedJoinCandidates(query: BufferClientQuery): Promise<BufferClientDocument[]> {
+        const limit = this.config.maxMapSize;
+        const operationalFloor = this.config.operationalChannelThreshold ?? 200;
+        const recoveryQuery: BufferClientQuery = {
+            ...query,
+            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            channels: { $lt: operationalFloor },
+        };
+
+        const recoveryQueryResult = this.bufferClientModel
+            .find(recoveryQuery)
+            .sort({ channels: -1 })
+            .limit(limit);
+        const recoveryCandidates = await this.resolveJoinCandidateQuery(recoveryQueryResult);
+        if (recoveryCandidates.length >= limit) return recoveryCandidates;
+
+        const recoveryMobiles = new Set(recoveryCandidates.map((candidate) => candidate.mobile));
+        const standardQueryResult = this.bufferClientModel
+            .find(query)
+            .sort({ channels: -1 })
+            .limit(limit);
+        const standardCandidates = await this.resolveJoinCandidateQuery(standardQueryResult);
+
+        return [
+            ...recoveryCandidates,
+            ...standardCandidates.filter((candidate) => !recoveryMobiles.has(candidate.mobile)),
+        ].slice(0, limit);
+    }
+
+    private async resolveJoinCandidateQuery(query: unknown): Promise<BufferClientDocument[]> {
+        const executable = query as { exec?: () => Promise<BufferClientDocument[]> };
+        return typeof executable.exec === 'function'
+            ? executable.exec()
+            : Promise.resolve(query as BufferClientDocument[]);
+    }
+
     private isHealthyBufferClientForCap(doc: Partial<BufferClientDocument>, now: number): boolean {
-        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as BufferClientDocument);
+        const phase = doc.warmupPhase;
+        if (!phase) return false;
         if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
-            return true;
+            // A terminal document below the swap floor is not usable supply. Counting it
+            // against the pool cap prevents replacement/replenishment while setupClient()
+            // correctly rejects it.
+            return (doc.channels || 0) >= (this.config.operationalChannelThreshold ?? 200);
         }
 
         const failedAttempts = doc.failedUpdateAttempts || 0;
@@ -208,6 +254,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             clientProcessingDelay: 10000,               // 10s between clients
             maxChannelJoinsPerDay: 25,
             joinsPerMobilePerRound: 4,
+            operationalChannelThreshold: 200,
         };
     }
 
@@ -500,11 +547,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     `Mobile ${canonicalMobile} is already enrolled in ${enrolledIn}; refusing to create a cross-pool BufferClient`
                 );
             }
-            const createData: CreateBufferClientDto = {
+            const createData = {
                 ...bufferClient,
                 mobile: canonicalMobile,
                 ...(session ? { session } : {}),
                 status,
+                warmupPhase: WarmupPhase.ENROLLED,
+                warmupJitter: ClientHelperUtils.generateWarmupJitter(),
+                enrolledAt: new Date(),
+                sessionRotatedAt: null,
             };
             return this.bufferClientModel.create({ ...createData });
         });
@@ -665,14 +716,16 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
     }
 
-    async setPrimaryInUse(clientId: string, mobile: string): Promise<BufferClientDocument> {
+    async setPrimaryInUse(clientId: string, mobile: string, session?: ClientSession): Promise<BufferClientDocument> {
         const now = new Date();
         // Verify the replacement exists BEFORE revoking the current primary. The partial
         // unique index on { clientId, inUse:true } forces an assign-after-revoke order, so
         // if we revoked first and the target turned out to be missing (e.g. recycled between
         // selection and cutover) we would throw NotFound after stranding the clientId with
         // ZERO in-use primaries. Guarding here keeps the old primary intact on failure.
-        const exists = await this.bufferClientModel.exists({ mobile, clientId });
+        const existsQuery = this.bufferClientModel.exists({ mobile, clientId });
+        if (session) existsQuery.session(session);
+        const exists = await existsQuery;
         if (!exists) {
             throw new NotFoundException(`Primary buffer client ${mobile} for ${clientId} not found`);
         }
@@ -688,6 +741,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     lastUsed: now,
                 },
             },
+            session ? { session } : undefined,
         ).exec();
 
         if ((revoked.modifiedCount || 0) > 0) {
@@ -695,7 +749,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 keepMobile: mobile,
                 revokedCount: revoked.modifiedCount,
             });
-            await this.botsService.sendMessageByCategory(
+            // Do not perform an external bot call inside a Mongo transaction. The
+            // transaction callback may retry, which would duplicate the notification.
+            if (!session) await this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 [
                     '<b>Buffer Primary Reassigned</b>',
@@ -704,7 +760,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     `<b>Primary Mobile:</b> ${mobile}`,
                     `<b>Revoked In-Use:</b> ${revoked.modifiedCount}`,
                 ].join('\n'),
-                { parseMode: 'HTML' }
+                { parseMode: 'HTML' },
             );
         }
 
@@ -718,7 +774,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         lastUsed: now,
                     },
                 },
-                { new: true, returnDocument: 'after' },
+                { new: true, returnDocument: 'after', ...(session ? { session } : {}) },
             )
             .exec();
 
@@ -747,9 +803,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             status: 'active',
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(excludedMobiles) },
-            // Terminal warmup accounts must never re-enter channel joining.
-            // `$nin` keeps documents with a missing legacy phase eligible.
-            warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            ...this.getJoinCapacityEligibilityFilter(),
         };
         if (clientId) query.clientId = clientId;
         this.logger.debug('Refill join queue query prepared', {
@@ -760,11 +814,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Sort descending: accounts closest to target (200) go first.
         // Finishing a near-complete account produces a ready account faster
         // than spreading joins across many low-channel accounts.
-        const eligible = await this.bufferClientModel
-            .find(query)
-            .sort({ channels: -1 })
-            .limit(this.config.maxMapSize)
-            .exec();
+        const eligible = await this.findPrioritizedJoinCandidates(query);
 
         let added = 0;
         let leaveAdded = 0;
@@ -1238,9 +1288,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const readyClients = await this.bufferClientModel
                 .find({
                     clientId: { $exists: true, $ne: null },
-                    status: 'active',
-                    inUse: { $ne: true },
-                    warmupPhase: WarmupPhase.READY,
+                status: 'active',
+                inUse: { $ne: true },
+                warmupPhase: WarmupPhase.READY,
+                ...this.getOperationalChannelEligibilityFilter(),
                 })
                 .sort({ lastUpdateAttempt: 1, mobile: 1 })
                 .exec();
@@ -1272,8 +1323,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const promoteClients = await this.promoteClientService.findAll();
         const clientMap = new Map(clients.map((client) => [client.clientId, client]));
         const now = Date.now();
-
-        await this.selfHealLegacyOperationalState();
 
         const clientMainMobiles = clients.map((c) => c.mobile);
         const assignedBufferClients = await this.bufferClientModel
@@ -1320,17 +1369,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const lastUpdateAttempt = bufferClient.lastUpdateAttempt ? new Date(bufferClient.lastUpdateAttempt).getTime() : 0;
             if (this.isOnCooldown(bufferClient.mobile, bufferClient.lastUpdateAttempt, now)) continue;
 
-            const lastUsed = ClientHelperUtils.getTimestamp(bufferClient.lastUsed);
-            const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
+            const warmupPhase = bufferClient.warmupPhase;
+            if (!warmupPhase) {
+                this.logger.warn(`Skipping buffer client ${bufferClient.mobile}: incomplete lifecycle metadata`);
+                continue;
+            }
             // READY -> SESSION_ROTATED is deliberately handled only by the paced
             // ready-rotation scheduler. A normal maintenance run must never turn
             // a catch-up batch into a burst of sensitive session work.
             if (warmupPhase === WarmupPhase.READY) continue;
-            // Only skip for backfill if the account is already fully operational.
-            if (lastUsed > 0 && warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                await this.backfillTimestamps(bufferClient.mobile, bufferClient, now);
-                continue;
-            }
             const failedAttempts = bufferClient.failedUpdateAttempts || 0;
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
@@ -1510,7 +1557,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
             status: 'active',
-            warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            ...this.getJoinCapacityEligibilityFilter(),
         };
         if (clientId) query.clientId = clientId;
         this.logger.info('Prepared buffer join-channel sweep', {
@@ -1519,7 +1566,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             primaryClientCount: primaryClientMobiles.size,
         });
 
-        const clients = await this.bufferClientModel.find(query).sort({ channels: -1 }).limit(this.config.maxMapSize);
+        const clients = await this.findPrioritizedJoinCandidates(query);
 
         const joinSet = new Set<string>();
         const leaveSet = new Set<string>();
@@ -1824,129 +1871,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
         return { createdCount, attemptedCount, createdEntries };
-    }
-
-    // ---- Buffer-specific: Bulk session update ----
-
-    async updateAllClientSessions(options: { dryRun?: boolean; mobile?: string } = {}) {
-        const primaryClientMobiles = await this.getPrimaryClientMobiles();
-        const filter: BufferClientQuery = {
-            status: 'active',
-            warmupPhase: { $in: ['ready', 'session_rotated'] },
-        };
-        if (options.mobile) {
-            filter.mobile = this.canonicalMobile(options.mobile);
-        }
-
-        // Only update sessions for READY/SESSION_ROTATED accounts — never touch warming accounts
-        const bufferClients = await this.bufferClientModel.find(filter).exec();
-        const result = {
-            dryRun: options.dryRun === true,
-            candidateCount: bufferClients.length,
-            protectedPrimaryClientCount: primaryClientMobiles.size,
-            skippedPrimary: 0,
-            recoveredMissingSessions: 0,
-            rotated: 0,
-            deactivated: 0,
-            failed: 0,
-            candidates: options.dryRun === true
-                ? bufferClients.map((client) => ({
-                    mobile: client.mobile,
-                    warmupPhase: client.warmupPhase,
-                    hasSession: Boolean(client.session?.trim()),
-                    protectedPrimary: this.isPrimaryClientMobile(client.mobile, primaryClientMobiles),
-                }))
-                : undefined,
-        };
-
-        this.logger.info('Starting bulk buffer session rotation', {
-            candidateCount: bufferClients.length,
-            protectedPrimaryClientCount: primaryClientMobiles.size,
-            dryRun: result.dryRun,
-            mobile: options.mobile || null,
-        });
-
-        if (result.dryRun) {
-            return result;
-        }
-
-        for (let i = 0; i < bufferClients.length; i++) {
-            const bufferClient = bufferClients[i];
-            if (this.isPrimaryClientMobile(bufferClient.mobile, primaryClientMobiles)) {
-                this.logger.debug(`Skipping session rotation for ${bufferClient.mobile}: currently attached as primary client mobile`);
-                result.skippedPrimary++;
-                continue;
-            }
-            try {
-                this.logger.log(`Creating new session for mobile: ${bufferClient.mobile} (${i + 1}/${bufferClients.length})`);
-                let activeSession = bufferClient.session?.trim() || '';
-                if (!activeSession) {
-                    let recoveredActiveClient: TelegramClient | null = null;
-                    try {
-                        const recovered = await this.resolveActiveSessionForRotation(bufferClient.mobile);
-                        recoveredActiveClient = recovered?.activeClient || null;
-                        if (!recovered?.activeSession) {
-                            throw new Error(`No verified users session available for ${bufferClient.mobile}`);
-                        }
-                        activeSession = recovered.activeSession;
-                        result.recoveredMissingSessions++;
-                    } finally {
-                        if (recoveredActiveClient) {
-                            try {
-                                await recoveredActiveClient.destroy();
-                            } catch {
-                                // Best-effort cleanup only.
-                            }
-                        }
-                    }
-                }
-                const client = await connectionManager.getClient(bufferClient.mobile, { autoDisconnect: false, handler: true });
-                try {
-                    const hasPassword = await client.hasPassword();
-                    if (!hasPassword) {
-                        // No removeOtherAuths — just set 2FA if needed
-                        await client.set2fa();
-                        await sleep(60000 + Math.random() * 30000);
-                    }
-                    await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
-                    const newSession = await this.telegramService.createNewSession(bufferClient.mobile);
-                    if (!newSession || newSession === activeSession) {
-                        throw new Error(`Failed to create distinct active session for ${bufferClient.mobile}`);
-                    }
-                    const hasDistinctBackup = await this.ensureDistinctUsersBackupSession(bufferClient.mobile, newSession);
-                    if (!hasDistinctBackup) {
-                        throw new Error(`Failed to ensure distinct backup session for ${bufferClient.mobile}`);
-                    }
-                    await this.update(bufferClient.mobile, {
-                        session: newSession,
-                        lastUsed: null,
-                        message: 'Session updated successfully',
-                        warmupPhase: WarmupPhase.SESSION_ROTATED,
-                        sessionRotatedAt: new Date(),
-                    });
-                    result.rotated++;
-                } catch (error: unknown) {
-                    const errorDetails = this.handleError(error, 'Failed to create new session', bufferClient.mobile);
-                    if (isPermanentError(errorDetails)) {
-                        // Permanent session-rotation failure — retire everywhere (user + pools), not just this pool record.
-                        await this.deactivateClient(bufferClient.mobile, `Session update failed: ${errorDetails.message}`, { permanent: true });
-                        result.deactivated++;
-                    } else {
-                        result.failed++;
-                    }
-                } finally {
-                    await this.safeUnregisterClient(bufferClient.mobile);
-                    if (i < bufferClients.length - 1) {
-                        await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
-                    }
-                }
-            } catch (error: unknown) {
-                this.logger.error(`Error creating client connection for ${bufferClient.mobile}`);
-                result.failed++;
-                if (i < bufferClients.length - 1) await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
-            }
-        }
-        return result;
     }
 
     // ---- Buffer-specific: Distribution stats ----

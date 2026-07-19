@@ -7,6 +7,7 @@ import { Channel, ChannelDocument } from './schemas/channel.schema';
 import { PipelineStage } from 'mongoose';
 import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
+import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
 
 @Injectable()
 export class ChannelsService {
@@ -39,31 +40,25 @@ export class ChannelsService {
         'megagroup',
         'broadcast',
         'canSendMsgs',
-        'restricted',
-        'sendMessages',
-        'sendPlain',
-        'private',
-        'forbidden',
-        'banned',
-        'bannedAt',
         'reactRestricted',
-        'wordRestriction',
-        'dMRestriction',
         'starred',
         'score',
       ]);
+      // `private` is a live Telegram fact and is refreshed both ways.
+      if (typeof dto.private === 'boolean') setFields.private = dto.private;
+      // `forbidden` remains a durable safety stop until explicitly cleared.
+      if (dto.forbidden === true) setFields.forbidden = true;
+      if (dto.banned === true) {
+        setFields.banned = true;
+        setFields.bannedAt = dto.bannedAt ?? Date.now();
+      }
 
       const defaults: Record<string, unknown> = {
         channelId: dto.channelId,
         broadcast: false,
-        canSendMsgs: true,
+        canSendMsgs: false,
         participantsCount: 0,
-        restricted: false,
-        sendMessages: false,
-        sendPlain: false,
         reactRestricted: false,
-        wordRestriction: 0,
-        dMRestriction: 0,
         availableMsgs: [],
         banned: false,
         bannedAt: null,
@@ -71,18 +66,10 @@ export class ChannelsService {
         private: false,
       };
 
-      // Remove keys already in $set to avoid MongoDB path conflict
-      for (const key of Object.keys(setFields)) {
-        delete defaults[key];
-      }
-
       return {
         updateOne: {
           filter: { channelId: dto.channelId },
-          update: {
-            $set: setFields,
-            $setOnInsert: defaults,
-          },
+          update: buildDurableChannelUpsertPipeline(setFields, defaults, dto),
           upsert: true,
         },
       };
@@ -101,9 +88,22 @@ export class ChannelsService {
   }
 
   async update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel> {
+    const existing = await this.ChannelModel.findOne({ channelId }).lean().exec();
+    const update = { ...updateChannelDto } as Record<string, unknown>;
+    if (
+      (existing?.banned === true || existing?.forbidden === true)
+      && update.canSendMsgs === true
+    ) {
+      update.canSendMsgs = false;
+    }
+    if (existing?.banned === true && update.banned === false) delete update.banned;
+    if (existing?.forbidden === true && update.forbidden === false) delete update.forbidden;
+    if (update.private === true || update.forbidden === true || update.banned === true) {
+      update.canSendMsgs = false;
+    }
     const updatedChannel = await this.ChannelModel.findOneAndUpdate(
       { channelId },
-      { $set: updateChannelDto },
+      { $set: update },
       { new: true, upsert: true },
     ).exec();
     return updatedChannel;
@@ -155,7 +155,9 @@ export class ChannelsService {
         {
           canSendMsgs: true,
           broadcast: { $ne: true },
-          restricted: { $ne: true }
+          banned: { $ne: true },
+          forbidden: { $ne: true },
+          private: { $ne: true }
         }
       ]
     };
@@ -226,9 +228,9 @@ export class ChannelsService {
             username: { $ne: null },
             canSendMsgs: true,
             banned: { $ne: true },
-            restricted: { $ne: true },
             forbidden: { $ne: true },
-            private: { $ne: true }
+            private: { $ne: true },
+            broadcast: { $ne: true }
           }
         ]
     }

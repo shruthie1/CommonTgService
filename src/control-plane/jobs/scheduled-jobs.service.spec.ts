@@ -48,7 +48,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
         processEligibleUsers: jest.fn(),
       } as any,
       { refreshMap: jest.fn() } as any,
-      { resetWordRestrictions: jest.fn() } as any,
+      { resetMessageDeletionCounters: jest.fn() } as any,
       { deleteAll: jest.fn() } as any,
       connection as any,
     );
@@ -58,7 +58,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     return scheduleJob.mock.calls.map(([name]) => name);
   }
 
-  it('registers buffer work, including one daily ready rotation, only for CMS', () => {
+  it('registers buffer work, including one ready rotation per hour, only for CMS', () => {
     const service = createService(['CMS_SCHEDULER']);
     service.onModuleInit();
 
@@ -77,7 +77,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     service.onModuleDestroy();
   });
 
-  it('registers all promote lifecycle work, including one daily ready rotation, only for UMS', () => {
+  it('registers all promote lifecycle work, including an hourly ready rotation, only for UMS', async () => {
     const service = createService(['UMS_SCHEDULER']);
     service.onModuleInit();
 
@@ -95,6 +95,13 @@ describe('ScheduledJobsService scheduler ownership', () => {
       'Asia/Kolkata',
       expect.any(Function),
     );
+    const rotationCallback = scheduleJob.mock.calls.find(
+      ([name]) => name === 'maintenance-promote-ready-rotation',
+    )?.[3] as (() => Promise<void>) | undefined;
+    expect(rotationCallback).toBeDefined();
+    await rotationCallback!();
+    await rotationCallback!();
+    expect((service as any).maintenance.rotateReadyPromoteClients).toHaveBeenCalledTimes(2);
     expect(jobNames()).not.toContain('cms-buffer-ready-rotation');
     expect(jobNames()).not.toContain('maintenance-process-users');
     expect(jobNames()).not.toContain('maintenance-refresh-map-and-stat1');
@@ -108,7 +115,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     expect(jobNames()).toEqual(expect.arrayContaining([
       'maintenance-process-users',
       'maintenance-refresh-map-and-stat1',
-      'maintenance-active-channel-word-restrictions',
+      'maintenance-active-channel-message-deletion-counters',
     ]));
     expect(jobNames()).not.toContain('maintenance-promote-client-check');
     expect(jobNames()).not.toContain('maintenance-promote-client-join');

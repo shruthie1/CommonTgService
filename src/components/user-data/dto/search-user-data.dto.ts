@@ -53,7 +53,6 @@ export class SearchDto {
   @ApiPropertyOptional({ description: 'Chat ID' })
   chatId?: string;
 
-  @ApiPropertyOptional({ description: 'Pics Sent status' })
-  @Transform(({ value }: TransformFnParams) => value === undefined ? undefined : (value === 'true' || value === true))
-  picsSent?: boolean | string;
+  @ApiPropertyOptional({ description: 'Number of demo pictures sent', type: Number })
+  picsSent?: number;
 }

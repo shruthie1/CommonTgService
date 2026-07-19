@@ -29,8 +29,6 @@ export class ChannelsController {
   @ApiQuery({ name: 'broadcast', required: false, type: Boolean })
   @ApiQuery({ name: 'canSendMsgs', required: false, type: Boolean })
   @ApiQuery({ name: 'participantsCount', required: false, type: Number })
-  @ApiQuery({ name: 'restricted', required: false, type: Boolean })
-  @ApiQuery({ name: 'sendMessages', required: false, type: Boolean })
   @ApiQuery({ name: 'title', required: false, type: String })
   @ApiQuery({ name: 'username', required: false, type: String })
   search(@Query() query: SearchChannelDto): Promise<Channel[]> {

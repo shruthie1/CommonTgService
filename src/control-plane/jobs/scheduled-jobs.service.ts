@@ -85,13 +85,11 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     this.register('cms-buffer-check', '25 2 * * *', () =>
       this.appService.checkBufferClients(),
     );
-    // Retry eligibility hourly, but persist one actual READY outcome per IST
-    // day. This makes a busy join/check window a safe deferral, never a burst.
-    this.register('cms-buffer-ready-rotation', '45 * * * *', () =>
-      this.runOncePerIstDay('cms-buffer-ready-rotation', () =>
-        this.appService.rotateReadyBufferClients(),
-      ),
-    );
+    // CMS owns buffer READY rotation. Run at most one candidate each hour;
+    // the service-level maintenance lock safely defers while check/join work is active.
+    this.register('cms-buffer-ready-rotation', '45 * * * *', async () => {
+      await this.appService.rotateReadyBufferClients();
+    });
     this.register('cms-buffer-join', '0 */3 * * *', () =>
       this.appService.joinBufferClients(),
     );
@@ -137,13 +135,12 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         await this.maintenance.refreshPromoteClientInfo();
       }
     });
-    // Retry eligibility hourly, but persist one actual READY outcome per IST
-    // day. This makes a busy join/check window a safe deferral, never a burst.
-    this.register('maintenance-promote-ready-rotation', '55 * * * *', () =>
-      this.runOncePerIstDay('maintenance-promote-ready-rotation', () =>
-        this.maintenance.rotateReadyPromoteClients(),
-      ),
-    );
+    // UMS owns promote-client rotation. Run one paced rotation attempt each
+    // hour; the maintenance service itself serializes this against joins/checks
+    // and selects at most one eligible account per invocation.
+    this.register('maintenance-promote-ready-rotation', '55 * * * *', async () => {
+      await this.maintenance.rotateReadyPromoteClients();
+    });
     this.afterStartup('ums-promote-initial-join', 4 * 60_000, () =>
       this.maintenance.preparePromoteClientJoin(),
     );
@@ -178,7 +175,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       await this.stat1Service.deleteAll();
     });
     this.register(
-      'maintenance-active-channel-word-restrictions',
+      'maintenance-active-channel-message-deletion-counters',
       '25 0 * * *',
       async () => {
         // Original UMS-test evaluated UTC day, despite using an IST schedule.
@@ -193,9 +190,9 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
           }, 30_000);
         }
         if (utcDay % 9 !== 0) return;
-        this.logger.log('UMS-test maintenance branch=day-mod-9-word-restrictions');
+        this.logger.log('UMS-test maintenance branch=day-mod-9-message-deletion-counters');
         await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
-        await this.activeChannelsService.resetWordRestrictions();
+        await this.activeChannelsService.resetMessageDeletionCounters();
       },
     );
     this.afterStartup('ums-test-initial-user-processing', 120_000, () =>
@@ -319,62 +316,6 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         'Daily promoteStats reset completed, but its notification failed',
         error instanceof Error ? error.stack : String(error),
       );
-    }
-  }
-
-  /**
-   * Persist the daily rotation budget in Mongo so restarts or accidentally
-   * duplicated scheduler processes cannot create more than one pool-level
-   * rotation attempt on the same IST day. A failed attempt is completed too:
-   * it must not fan out into another account later that day.
-   */
-  private async runOncePerIstDay(
-    name: string,
-    task: () => Promise<boolean>,
-  ): Promise<void> {
-    const db = this.requireDatabase(name);
-
-    const collection = db.collection<any>('controlPlaneJobRuns');
-    const jobId = `${name}:${this.istDateKey()}`;
-    if (!(await this.claimJob(collection, jobId))) {
-      this.logger.warn(`Daily job already claimed or completed: ${jobId}`);
-      return;
-    }
-
-    try {
-      const attempted = await task();
-      if (!attempted) {
-        // No Telegram session action occurred (for example a join round owned
-        // the lock). Leave today's budget available for the next hourly check.
-        await collection.updateOne(
-          { _id: jobId },
-          {
-            $set: { deferredAt: new Date(), leaseExpiresAt: new Date(0) },
-            $unset: { leaseOwner: '' },
-          },
-        );
-        return;
-      }
-      await collection.updateOne(
-        { _id: jobId },
-        {
-          $set: { completedAt: new Date() },
-          $unset: { leaseOwner: '', leaseExpiresAt: '' },
-        },
-      );
-    } catch (error) {
-      await collection.updateOne(
-        { _id: jobId },
-        {
-          $set: {
-            completedAt: new Date(),
-            failedAt: new Date(),
-            error: error instanceof Error ? error.message : String(error),
-          },
-          $unset: { leaseOwner: '', leaseExpiresAt: '' },
-        },
-      );
-      throw error;
     }
   }
 

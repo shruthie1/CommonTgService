@@ -87,9 +87,11 @@ describe('Buffer Client API', () => {
             expect(result.message).toBe('Account is functioning properly');
             expect(result.inUse).toBe(false);
             expect(result.failedUpdateAttempts).toBe(0);
-            expect(result.warmupJitter).toBe(0);
-            expect(result.warmupPhase).toBeNull();
-            expect(result.enrolledAt).toBeNull();
+            expect(result.warmupJitter).toEqual(expect.any(Number));
+            expect(result.warmupJitter).toBeGreaterThanOrEqual(0);
+            expect(result.warmupJitter).toBeLessThanOrEqual(7);
+            expect(result.warmupPhase).toBe('enrolled');
+            expect(result.enrolledAt).toBeInstanceOf(Date);
             expect(result.username).toBeNull();
             expect(result.lastUsed).toBeNull();
             expect(result.lastChecked).toBeNull();
@@ -235,7 +237,7 @@ describe('Buffer Client API', () => {
             expect(updated.channels).toBe(250);
             // These must remain unchanged
             expect(updated.mobile).toBe('15550400001');
-            expect(updated.warmupPhase).toBeNull();
+            expect(updated.warmupPhase).toBe('enrolled');
             expect(updated.username).toBeNull();
             expect(updated.status).toBe('active');
             expect(updated.inUse).toBe(false);

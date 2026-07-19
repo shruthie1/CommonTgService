@@ -79,7 +79,20 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
     public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => ({ mobile: _mobile, status: _status }));
-    public readonly findOneMock = jest.fn(async (_mobile: string) => null as any);
+    public readonly findOneMock = jest.fn(async (mobile: string) => ({
+        mobile,
+        status: 'active',
+        inUse: false,
+        warmupPhase: WarmupPhase.READY,
+        channels: 300,
+        privacyUpdatedAt: new Date('2026-01-01'),
+        twoFASetAt: new Date('2026-01-02'),
+        otherAuthsRemovedAt: new Date('2026-01-03'),
+        profilePicsDeletedAt: new Date('2026-01-04'),
+        nameBioUpdatedAt: new Date('2026-01-05'),
+        usernameUpdatedAt: new Date('2026-01-06'),
+        profilePicsUpdatedAt: new Date('2026-01-07'),
+    }) as any);
     public readonly updateNameAndBioMock = jest.fn(async () => 1);
     public readonly updateUsernameMock = jest.fn(async () => 1);
     public readonly refillJoinQueueMock = jest.fn(async () => 0);
@@ -159,7 +172,6 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         set2fa: (d: any, f: number) => (this as any).set2fa(d, f),
         removeOtherAuths: (d: any, f: number) => (this as any).removeOtherAuths(d, f),
         performHealthCheck: (m: string, l: number, n: number) => (this as any).performHealthCheck(m, l, n),
-        backfillTimestamps: (m: string, d: any, n: number) => (this as any).backfillTimestamps(m, d, n),
         retireIfStuck: (d: any, n: number) => (this as any).retireIfStuck(d, n),
         deactivateClient: (m: string, r: string, o?: any) => (this as any).deactivateClient(m, r, o),
         processJoinChannelSequentially: () => (this as any).processJoinChannelSequentially(),
@@ -1388,11 +1400,11 @@ describe('date & availability helpers', () => {
         expect(service.pub.getProjectedReadyDateString({ warmupPhase: WarmupPhase.GROWING })).toBeNull();
     });
 
-    test('getOperationalAvailabilityDateString for legacy used account', () => {
+    test('getOperationalAvailabilityDateString rejects phase-less records', () => {
         const service = new TestBaseService();
         const now = Date.now();
         const d = service.pub.getOperationalAvailabilityDateString({ lastUsed: new Date(now - 1000) } as any, now);
-        expect(d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(d).toBeNull();
     });
 
     test('getOperationalAvailabilityDateString for ready account uses now/availableDate', () => {
@@ -1641,6 +1653,24 @@ describe('error & config helpers', () => {
 // rotateSession orchestration (end-to-end through real helpers)
 // ════════════════════════════════════════════════════════════════════════════
 describe('rotateSession orchestration', () => {
+    test('refuses terminal, underfilled, in-use, and incomplete records before any Telegram work', async () => {
+        const service = new TestBaseService();
+        const resolveActive = jest.spyOn(service as any, 'resolveActiveSessionForRotation');
+
+        service.findOneMock.mockResolvedValueOnce({ mobile: 'm1', status: 'active', warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 300 });
+        expect(await service.rotateSession('m1')).toBe(false);
+
+        service.findOneMock.mockResolvedValueOnce({ mobile: 'm2', status: 'active', warmupPhase: WarmupPhase.READY, channels: 199 });
+        expect(await service.rotateSession('m2')).toBe(false);
+
+        service.findOneMock.mockResolvedValueOnce({ mobile: 'm3', status: 'active', inUse: true, warmupPhase: WarmupPhase.READY, channels: 300 });
+        expect(await service.rotateSession('m3')).toBe(false);
+
+        service.findOneMock.mockResolvedValueOnce({ mobile: 'm4', status: 'active', warmupPhase: WarmupPhase.READY, channels: 300 });
+        expect(await service.rotateSession('m4')).toBe(false);
+        expect(resolveActive).not.toHaveBeenCalled();
+    });
+
     test('returns false when no active session resolvable', async () => {
         const service = new TestBaseService();
         jest.spyOn(service as any, 'resolveActiveSessionForRotation').mockResolvedValue(null);
@@ -1747,15 +1777,14 @@ describe('availability needs calculation', () => {
         const service = new TestBaseService(makeAvailabilityModel(docs), { minTotalClients: 10 });
         const r = await (service as any).calculateAvailabilityBasedNeedsForCurrentState('client-1');
         expect(r.readyActive).toBe(0);          // not swap-eligible -> not counted as ready
+        expect(r.warmingPipeline).toBe(0);      // capacity-recovery joins have no promised availability date
         expect(r.totalNeeded).toBeGreaterThan(0); // deficit surfaced
     });
 
-    test('calculateAvailabilityBasedNeeds self-heals then delegates', async () => {
+    test('calculateAvailabilityBasedNeeds delegates without mutating legacy documents', async () => {
         const service = new TestBaseService(makeAvailabilityModel([]), { minTotalClients: 10 });
-        const healSpy = jest.spyOn(service as any, 'selfHealLegacyOperationalState').mockResolvedValue(undefined);
         const calcSpy = jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 0 });
         await (service as any).calculateAvailabilityBasedNeeds('client-1');
-        expect(healSpy).toHaveBeenCalledWith('client-1');
         expect(calcSpy).toHaveBeenCalledWith('client-1');
     });
 
@@ -1795,68 +1824,6 @@ describe('availability needs calculation', () => {
         expect(r.totalNeeded).toBeGreaterThan(0);
         expect(r.totalNeededForCount).toBe(0);
         expect(r.calculationReason).toContain('to meet minimum of');
-    });
-});
-
-// ════════════════════════════════════════════════════════════════════════════
-// Warmup metadata repair: prerequisite-phase demotion (IDENTITY / MATURING)
-// ════════════════════════════════════════════════════════════════════════════
-describe('warmup prerequisite-phase repair', () => {
-    test('getMissingPrerequisitePhase demotes a GROWING account missing identity steps to IDENTITY', () => {
-        const service = new TestBaseService();
-        // currentRank = GROWING (3) >= IDENTITY rank, security all done, but identity timestamps missing.
-        const doc: any = {
-            warmupPhase: WarmupPhase.GROWING,
-            privacyUpdatedAt: new Date(),
-            twoFASetAt: new Date(),
-            otherAuthsRemovedAt: new Date(),
-            profilePicsDeletedAt: null,
-            nameBioUpdatedAt: null,
-            usernameUpdatedAt: null,
-        };
-        const result = (service as any).getMissingPrerequisitePhase(doc);
-        expect(result.phase).toBe(WarmupPhase.IDENTITY);
-        expect(result.missing).toEqual(expect.arrayContaining(['profilePicsDeletedAt', 'nameBioUpdatedAt', 'usernameUpdatedAt']));
-    });
-
-    test('getMissingPrerequisitePhase demotes a READY account missing the maturing photo to MATURING', () => {
-        const service = new TestBaseService();
-        // currentRank = READY (5), security + identity done, but the maturing profile photo never uploaded.
-        const doc: any = {
-            warmupPhase: WarmupPhase.READY,
-            privacyUpdatedAt: new Date(),
-            twoFASetAt: new Date(),
-            otherAuthsRemovedAt: new Date(),
-            profilePicsDeletedAt: new Date(),
-            nameBioUpdatedAt: new Date(),
-            usernameUpdatedAt: new Date(),
-            profilePicsUpdatedAt: null,
-        };
-        const result = (service as any).getMissingPrerequisitePhase(doc);
-        expect(result.phase).toBe(WarmupPhase.MATURING);
-        expect(result.missing).toEqual(['profilePicsUpdatedAt']);
-    });
-
-    test('repairWarmupMetadata corrects a GROWING doc with missing identity steps back to IDENTITY', async () => {
-        const service = new TestBaseService();
-        const now = Date.now();
-        const doc: any = {
-            mobile: '919990000200',
-            warmupPhase: WarmupPhase.GROWING,
-            createdAt: new Date(now - 10 * 24 * 60 * 60 * 1000),
-            enrolledAt: new Date(now - 10 * 24 * 60 * 60 * 1000),
-            warmupJitter: 0,
-            privacyUpdatedAt: new Date(),
-            twoFASetAt: new Date(),
-            otherAuthsRemovedAt: new Date(),
-            profilePicsDeletedAt: null,
-            nameBioUpdatedAt: null,
-            usernameUpdatedAt: null,
-            channels: 0,
-        };
-        const repaired = await (service as any).repairWarmupMetadata(doc, now);
-        expect(service.updateMock).toHaveBeenCalledWith('919990000200', expect.objectContaining({ warmupPhase: WarmupPhase.IDENTITY }));
-        expect(repaired.warmupPhase).toBe(WarmupPhase.IDENTITY);
     });
 });
 
@@ -1972,17 +1939,6 @@ describe('processClient orchestration branches', () => {
             inUse: false,
         };
     }
-
-    test('repairWarmupMetadata failure is swallowed and processing continues', async () => {
-        const service = new TestBaseService();
-        jest.spyOn(service as any, 'repairWarmupMetadata').mockRejectedValueOnce(new Error('repair boom'));
-        jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
-        const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
-        const doc = fullyWarmedReadyDoc('919990000220');
-        const res = await service.processClient(doc, { clientId: 'client-1' } as Client);
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('repairWarmupMetadata failed'), expect.anything());
-        expect(res.updateSummary).toBe('rotate_session');
-    });
 
     test('persists the resolved warmup phase when it differs from the stored phase (line 1266)', async () => {
         const service = new TestBaseService();
@@ -2339,25 +2295,6 @@ describe('healDeadSessions deactivation-failed bookkeeping', () => {
 // Micro-branch coverage: ||/??/ternary fallbacks across helpers
 // ════════════════════════════════════════════════════════════════════════════
 describe('helper fallback branches', () => {
-    test('inferWarmupPhaseFromProgress covers each progress tier', () => {
-        const service = new TestBaseService();
-        const infer = (doc: any, useStored?: boolean) => (service as any).inferWarmupPhaseFromProgress(doc, useStored);
-        // stored-phase honored when useStoredPhase true
-        expect(infer({ warmupPhase: WarmupPhase.MATURING }, true)).toBe(WarmupPhase.MATURING);
-        // useStoredPhase false ignores stored phase and infers from progress
-        expect(infer({ warmupPhase: WarmupPhase.MATURING, sessionRotatedAt: new Date() }, false)).toBe(WarmupPhase.SESSION_ROTATED);
-        expect(infer({ profilePicsUpdatedAt: new Date() }, false)).toBe(WarmupPhase.MATURING);
-        expect(infer({ channels: 200 }, false)).toBe(WarmupPhase.GROWING);
-        expect(infer({ usernameUpdatedAt: new Date() }, false)).toBe(WarmupPhase.GROWING);
-        expect(infer({ nameBioUpdatedAt: new Date() }, false)).toBe(WarmupPhase.IDENTITY);
-        expect(infer({ profilePicsDeletedAt: new Date() }, false)).toBe(WarmupPhase.IDENTITY);
-        expect(infer({ twoFASetAt: new Date() }, false)).toBe(WarmupPhase.SETTLING);
-        expect(infer({ privacyUpdatedAt: new Date() }, false)).toBe(WarmupPhase.SETTLING);
-        // nothing done -> enrolled
-        expect(infer({}, false)).toBe(WarmupPhase.ENROLLED);
-        // default useStoredPhase (true) with no stored phase falls through to inference
-        expect(infer({ twoFASetAt: new Date() })).toBe(WarmupPhase.SETTLING);
-    });
 
     test('getEffectiveCooldownMs returns base cooldown when no prior attempt', () => {
         const service = new TestBaseService({}, { cooldownHours: 2 });
@@ -2372,10 +2309,10 @@ describe('helper fallback branches', () => {
         expect(can(null)).toBe(false);
         expect(can({ ...base, channelId: '' })).toBe(false);
         expect(can({ ...base, canSendMsgs: false })).toBe(false);
-        expect(can({ ...base, restricted: true })).toBe(false);
         expect(can({ ...base, banned: true })).toBe(false);
         expect(can({ ...base, forbidden: true })).toBe(false);
         expect(can({ ...base, private: true })).toBe(false);
+        expect(can({ ...base, broadcast: true })).toBe(false);
         // tempBan gate removed (dead flag, never set true) — no longer excludes.
         expect(can(base)).toBe(true);
     });
@@ -2388,15 +2325,14 @@ describe('helper fallback branches', () => {
         expect(service.pub.normalizeDateString('not-a-date' as any)).toBeNull();
     });
 
-    test('getProjectedReadyDateString infers phase when warmupPhase is absent', () => {
+    test('getProjectedReadyDateString rejects incomplete lifecycle metadata', () => {
         const service = new TestBaseService();
-        // No warmupPhase: inferWarmupPhaseFromProgress decides; security-only progress => SETTLING (warming).
         const d = service.pub.getProjectedReadyDateString({
             twoFASetAt: new Date('2026-06-01T00:00:00Z'),
             enrolledAt: new Date('2026-06-01T00:00:00Z'),
             warmupJitter: 0,
         });
-        expect(d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(d).toBeNull();
     });
 
     test('getOperationalAvailabilityDateString returns null for a non-warming, non-ready phase', () => {
@@ -2443,76 +2379,6 @@ describe('helper fallback branches', () => {
         ] }));
         const reason = await (service as any).buildPermanentAccountReason('FROZEN_METHOD_INVALID', { client: { invoke } } as any);
         expect(reason).toBe('FROZEN_METHOD_INVALID');
-    });
-
-    test('selfHealLegacyUsedAccounts backfills each legacy used doc and logs with clientId', async () => {
-        const docs = [{ mobile: 'leg-1', lastUsed: new Date(), session: 'sess-1' }];
-        const model = {
-            find: jest.fn(() => ({ sort: () => ({ limit: () => ({ exec: jest.fn(async () => docs) }) }) })),
-        };
-        const service = new TestBaseService(model);
-        jest.spyOn(service as any, 'backfillTimestamps').mockResolvedValue(undefined);
-        const healed = await (service as any).selfHealLegacyUsedAccounts('client-7');
-        expect(healed).toBe(1);
-    });
-
-    test('selfHealLegacyUsedAccounts returns 0 with no matching docs (no clientId scope)', async () => {
-        const model = { find: jest.fn(() => ({ sort: () => ({ limit: () => ({ exec: jest.fn(async () => []) }) }) })) };
-        const service = new TestBaseService(model);
-        expect(await (service as any).selfHealLegacyUsedAccounts()).toBe(0);
-    });
-
-    test('selfHealLegacyWarmupAccounts repairs each legacy warming doc and logs without clientId', async () => {
-        const docs = [{ mobile: 'warm-1', createdAt: new Date() }];
-        const model = { find: jest.fn(() => ({ sort: () => ({ limit: () => ({ exec: jest.fn(async () => docs) }) }) })) };
-        const service = new TestBaseService(model);
-        jest.spyOn(service as any, 'repairWarmupMetadata').mockResolvedValue(docs[0]);
-        expect(await (service as any).selfHealLegacyWarmupAccounts()).toBe(1);
-    });
-
-    test('selfHealLegacyWarmupAccounts returns 0 when nothing to heal', async () => {
-        const model = { find: jest.fn(() => ({ sort: () => ({ limit: () => ({ exec: jest.fn(async () => []) }) }) })) };
-        const service = new TestBaseService(model);
-        expect(await (service as any).selfHealLegacyWarmupAccounts('client-9')).toBe(0);
-    });
-
-    test('backfillTimestamps skips unverified security timestamps and infers session-rotated when distinct backup exists', async () => {
-        const service = new TestBaseService();
-        const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
-        jest.spyOn(service as any, 'hasDistinctUsersBackupSession').mockResolvedValue(true);
-        const now = Date.now();
-        // doc missing twoFASetAt + warmupPhase: hits the unverified-security warn (line 1482) and
-        // the SESSION_ROTATED inference (line 1489 truthy path) plus sessionRotatedAt backfill.
-        await service.pub.backfillTimestamps('919990000310', {
-            mobile: '919990000310', session: 'live', twoFASetAt: null, otherAuthsRemovedAt: null,
-        } as any, now);
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining('unverified security'), expect.anything());
-        expect(service.updateMock).toHaveBeenCalledWith('919990000310', expect.objectContaining({
-            warmupPhase: WarmupPhase.SESSION_ROTATED,
-            sessionRotatedAt: expect.any(Date),
-        }));
-    });
-
-    test('backfillTimestamps infers READY when no distinct backup session exists', async () => {
-        const service = new TestBaseService();
-        jest.spyOn(service as any, 'hasDistinctUsersBackupSession').mockResolvedValue(false);
-        await service.pub.backfillTimestamps('919990000311', {
-            mobile: '919990000311', session: 'live', twoFASetAt: new Date(), otherAuthsRemovedAt: new Date(),
-        } as any, Date.now());
-        expect(service.updateMock).toHaveBeenCalledWith('919990000311', expect.objectContaining({ warmupPhase: WarmupPhase.READY }));
-    });
-
-    test('backfillTimestamps no-ops when nothing is missing', async () => {
-        const service = new TestBaseService();
-        const now = Date.now();
-        const complete: any = {
-            mobile: '919990000312', session: 'live',
-            warmupPhase: WarmupPhase.READY, enrolledAt: new Date(now), privacyUpdatedAt: new Date(now),
-            profilePicsDeletedAt: new Date(now), nameBioUpdatedAt: new Date(now), usernameUpdatedAt: new Date(now),
-            profilePicsUpdatedAt: new Date(now), twoFASetAt: new Date(now), otherAuthsRemovedAt: new Date(now),
-        };
-        await service.pub.backfillTimestamps('919990000312', complete, now);
-        expect(service.updateMock).not.toHaveBeenCalled();
     });
 
     test('foreign 2FA notification reports inactive-update-failure when deactivation fails', async () => {

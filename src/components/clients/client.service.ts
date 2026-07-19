@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -9,7 +10,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { ClientSession, Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
 import { CreateClientDto } from './dto/create-client.dto';
 import { SetupClientQueryDto } from './dto/setup-client.dto';
@@ -68,6 +69,25 @@ interface SafeSetupBufferCandidate {
   backupUser: User;
 }
 
+export type SetupClientStatus =
+  | 'swapped'
+  | 'disabled'
+  | 'cooldown'
+  | 'client_not_found'
+  | 'no_candidate'
+  | 'failed';
+
+export interface SetupClientResult {
+  status: SetupClientStatus;
+  swapped: boolean;
+  clientId: string;
+  message: string;
+  existingMobile?: string;
+  newMobile?: string;
+  cooldownRemainingMs?: number;
+  existingRetired?: boolean;
+}
+
 export interface PersonaAssignmentRecord {
   mobile: string;
   assignedFirstName: string | null;
@@ -102,6 +122,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(ClientService.name);
   private lastUpdateMap: Map<string, number> = new Map();
   private setupCooldownMap: Map<string, number> = new Map();
+  /**
+   * Coalesce concurrent setup requests for the same logical client. A swap can
+   * open a Telegram session before the database cutover, so allowing two local
+   * requests through the cooldown check would race on a non-renewable session.
+   */
+  private setupInFlightMap: Map<string, Promise<SetupClientResult>> = new Map();
   private clientsMap: Map<string, Client> = new Map();
   private cacheMetadata: CacheMetadata = { lastUpdated: 0, isStale: true };
   private checkInterval: NodeJS.Timeout | null = null;
@@ -142,6 +168,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.clientsMap.clear();
       this.lastUpdateMap.clear();
       this.setupCooldownMap.clear();
+      this.setupInFlightMap.clear();
     } catch (e) {
       parseError(e, 'Error during Client Service shutdown');
     }
@@ -481,20 +508,51 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
+  async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<SetupClientResult> {
     this.logger.log(`Received New Client Request for - ${clientId}`);
     if (!toBoolean(process.env.AUTO_CLIENT_SETUP)) {
       this.logger.log('Auto client setup disabled');
-      return;
+      return {
+        status: 'disabled',
+        swapped: false,
+        clientId,
+        message: 'Auto client setup is disabled',
+      };
     }
     if (!this.canSetupClient(clientId)) {
+      const cooldownRemainingMs = Math.max(
+        0,
+        (this.setupCooldownMap.get(clientId) || 0) + CONFIG.COOLDOWN_PERIOD - Date.now(),
+      );
       this.logger.log(
         `Profile Setup Recently tried for ${clientId}, wait ::`,
         getReadableTimeDifference(this.setupCooldownMap.get(clientId)!),
       );
-      return;
+      return {
+        status: 'cooldown',
+        swapped: false,
+        clientId,
+        message: 'Client setup is on cooldown',
+        cooldownRemainingMs,
+      };
     }
-    await this.handleSetupClient(clientId, setupClientQueryDto);
+    const inFlight = this.setupInFlightMap.get(clientId);
+    if (inFlight) {
+      this.logger.warn(`[${clientId}] Setup already in progress; joining the existing request`);
+      return inFlight;
+    }
+
+    let setupPromise!: Promise<SetupClientResult>;
+    setupPromise = this.handleSetupClient(clientId, setupClientQueryDto)
+      .finally(() => {
+        // Do not let an older promise remove a newer request should this method
+        // ever be extended to replace entries rather than coalesce them.
+        if (this.setupInFlightMap.get(clientId) === setupPromise) {
+          this.setupInFlightMap.delete(clientId);
+        }
+      });
+    this.setupInFlightMap.set(clientId, setupPromise);
+    return setupPromise;
   }
 
   private canSetupClient(clientId: string): boolean {
@@ -502,23 +560,28 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return Date.now() > lastSetup + CONFIG.COOLDOWN_PERIOD;
   }
 
-  private async handleSetupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto) {
+  private async handleSetupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<SetupClientResult> {
     // NOTE: the cooldown is intentionally NOT set here. It is set only once a real swap actually
     // proceeds (a safe buffer candidate was found) — see below. Setting it up-front meant a
     // "no buffer available" run (e.g. all of a client's buffers are temporarily cooling down on
     // availableDate) still burned the full 4-min cooldown, blocking every retry for 4 minutes even
     // though nothing happened. That made a frozen client un-swappable long after buffers freed up.
-    const existingClient = await this.findOne(clientId);
+    const existingClient = await this.findOne(clientId, false);
     if (!existingClient) {
       this.logger.error(`Client not found: ${clientId}`);
-      return;
+      return {
+        status: 'client_not_found',
+        swapped: false,
+        clientId,
+        message: `Client not found: ${clientId}`,
+      };
     }
     const existingClientMobile = existingClient.mobile;
     this.logger.log('setupClientQueryDto:', setupClientQueryDto);
     const today = ClientHelperUtils.getTodayDateString();
     const query: ClientMongoQuery = {
       clientId,
-      mobile: { $ne: existingClientMobile },
+      mobile: setupClientQueryDto.mobile || { $ne: existingClientMobile },
       createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
       availableDate: { $lte: today },
       // Match the warmup graduation threshold (>= MIN_CHANNELS_FOR_MATURING). Using $gt: 200
@@ -536,16 +599,25 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     );
     const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
     if (!newBufferClient) {
-      if (this.isPermanentArchivalReason(setupClientQueryDto.reason)) {
+      let existingRetired = false;
+      if (this.isPermanentReplacementReason(setupClientQueryDto.reason)) {
         this.logger.warn(`[${clientId}] No replacement buffer available, but setup reason is permanent; marking existing mobile inactive`, {
           existingMobile: existingClientMobile,
           reason: setupClientQueryDto.reason,
         });
-        await this.markBufferInactiveForArchival(existingClientMobile, setupClientQueryDto.reason);
+        await this.retireReplacedMobile(existingClientMobile, setupClientQueryDto.reason);
+        existingRetired = true;
       }
       await this.notify(`Buffer not available ${clientId}: no safe buffer clients for swap`);
       this.logger.log('Buffer Clients not safely available');
-      return;
+      return {
+        status: 'no_candidate',
+        swapped: false,
+        clientId,
+        existingMobile: existingClientMobile,
+        existingRetired,
+        message: 'No safe buffer client is currently available',
+      };
     }
     // A real swap is proceeding — start the cooldown now so a genuine in-progress setup is not
     // retried concurrently, while a prior no-buffer run does not lock this path out.
@@ -567,11 +639,19 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       this.logger.debug(`[${clientId}] Active client setup registered`, {
         existingMobile: existingClientMobile,
         newMobile: newBufferClient.mobile,
-        archiveOld: setupClientQueryDto.archiveOld,
+        returnOldToPool: setupClientQueryDto.archiveOld,
         formalities: setupClientQueryDto.formalities,
       });
       await connectionManager.getClient(newBufferClient.mobile);
       await this.updateClientSession(newBufferClient.session, newBufferClient.mobile);
+      return {
+        status: 'swapped',
+        swapped: true,
+        clientId,
+        existingMobile: existingClientMobile,
+        newMobile: newBufferClient.mobile,
+        message: 'Client swap completed',
+      };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorDetails = parseError(error, `setupClient failed for ${newBufferClient.mobile}`);
@@ -588,6 +668,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
       }
       this.telegramService.clearActiveClientSetup(newBufferClient.mobile);
+      return {
+        status: 'failed',
+        swapped: false,
+        clientId,
+        existingMobile: existingClientMobile,
+        newMobile: newBufferClient.mobile,
+        message: errorMessage.substring(0, 200),
+      };
     } finally {
       await connectionManager.unregisterClient(newBufferClient.mobile);
     }
@@ -599,12 +687,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const scope = setupMobile ? ` for ${setupMobile}` : '';
       throw new BadRequestException(`No active client setup found${scope}`);
     }
-    const { archiveOld, clientId, existingMobile, formalities, newMobile, reason } = setup;
+    const { archiveOld: returnOldToPool, clientId, existingMobile, formalities, newMobile, reason } = setup;
     const days = setup.days ?? 0;
     this.logger.info(`[${clientId}] Starting client session cutover`, {
       existingMobile,
       newMobile,
-      archiveOld,
+      returnOldToPool,
       formalities,
       days,
       setupMobile: setupMobile || newMobile,
@@ -645,7 +733,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
       const mirroredActiveName = this.buildMirroredActiveName(bufferDoc, existingClient.name);
-      await this.update(clientId, {
+      await this.commitClientCutover(clientId, existingMobile, {
         mobile: newMobile,
         username: updatedUsername,
         session: newSession,
@@ -658,17 +746,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         updatedUsername,
         mirroredActiveName,
       });
-      try {
-        await this.bufferClientService.setPrimaryInUse(clientId, newMobile);
-        this.logger.debug(`[${clientId}] Marked replacement buffer doc as the sole active/in-use primary`, { newMobile });
-      } catch (bufferUpdateError) {
-        parseError(bufferUpdateError, `[${clientId}] Failed to mark ${newMobile} as in-use after cutover`);
-        this.logger.error(
-          `[${clientId}] Failed to stamp replacement buffer usage after cutover`,
-          { newMobile },
-          bufferUpdateError instanceof Error ? bufferUpdateError.stack : undefined,
-        );
-      }
+      this.logger.debug(`[${clientId}] Marked replacement buffer doc as the sole active/in-use primary`, { newMobile });
       // Profile refresh (name/bio, privacy, photos) is handled by tg-aut on startup
       // via persona verifier + CMS photo refresh endpoint. No delayed update needed —
       // avoids a second connection racing with tg-aut's own startup.
@@ -684,13 +762,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         parseError(deployError, `[${clientId}] deployKey restart failed after cutover`);
         await this.notify(`Deploy restart FAILED ${clientId}: ${newMobile} (cutover done)\n${deployMessage?.substring(0, 120)}`);
       }
-      this.logger.info(`[${clientId}] Starting old-client archival handling`, {
+      this.logger.info(`[${clientId}] Starting replaced-client pool-return handling`, {
         existingMobile,
-        archiveOld,
+        returnOldToPool,
         formalities,
         days,
       });
-      await this.handleClientArchival(existingClient, existingMobile, formalities, archiveOld, days, reason);
+      await this.handleReplacedClient(existingClient, existingMobile, formalities, returnOldToPool, days, reason);
       this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
       await this.notify(`Swap complete ${clientId}: ${existingMobile} → ${newMobile}`);
     } catch (error) {
@@ -713,26 +791,80 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private async handleClientArchival(
+  /**
+   * Commit the active-client assignment and buffer ownership in one MongoDB
+   * transaction. A process crash or buffer write failure must never leave
+   * `clients.mobile` pointing at one account while `bufferClients.inUse` still
+   * identifies another account as the primary.
+   */
+  private async commitClientCutover(
+    clientId: string,
+    expectedExistingMobile: string,
+    updateClientDto: Pick<UpdateClientDto, 'mobile' | 'username' | 'session' | 'name'>,
+  ): Promise<Client> {
+    if (!updateClientDto.session?.trim()) {
+      throw new BadRequestException('Cannot update client with a blank session');
+    }
+
+    const cleanUpdateDto: Mutable<UpdateClientDto> = this.cleanUpdateObject(updateClientDto);
+    cleanUpdateDto.mobile = this.canonicalMobile(cleanUpdateDto.mobile!);
+    await this.notifyClientUpdate(clientId);
+
+    const session: ClientSession = await this.clientModel.db.startSession();
+    let updatedClient: Client | null = null;
+    try {
+      await session.withTransaction(async () => {
+        updatedClient = await this.clientModel
+          .findOneAndUpdate(
+            { clientId, mobile: this.canonicalMobile(expectedExistingMobile) },
+            { $set: cleanUpdateDto },
+            { new: true, runValidators: true, session },
+          )
+          .lean()
+          .exec();
+        if (!updatedClient) {
+          throw new ConflictException(
+            `Client "${clientId}" changed before cutover; expected mobile ${expectedExistingMobile}`,
+          );
+        }
+        await this.bufferClientService.setPrimaryInUse(
+          clientId,
+          cleanUpdateDto.mobile!,
+          session,
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    if (!updatedClient) {
+      throw new InternalServerErrorException(`Client cutover transaction did not return ${clientId}`);
+    }
+    this.clientsMap.set(clientId, updatedClient);
+    this.performPostUpdateTasks(updatedClient);
+    return updatedClient;
+  }
+
+  private async handleReplacedClient(
     existingClient: Client,
     existingMobile: string,
     formalities: boolean,
-    archiveOld: boolean,
+    returnOldToPool: boolean,
     days: number,
     reason?: string,
   ) {
     try {
-      if (this.isPermanentArchivalReason(reason)) {
-        await this.markBufferInactiveForArchival(existingMobile, reason);
+      if (this.isPermanentReplacementReason(reason)) {
+        await this.retireReplacedMobile(existingMobile, reason);
         return;
       }
 
       const existingClientUser = (await this.usersService.search({ mobile: existingMobile }))[0];
       if (!existingClientUser) {
-        const reasonMessage = `Archival failed: user document missing for old mobile ${existingMobile}`;
+        const reasonMessage = `Pool return failed: user document missing for replaced mobile ${existingMobile}`;
         this.logger.warn(reasonMessage);
-        await this.markBufferInactiveForArchival(existingMobile, reasonMessage);
-        await this.notify(`Archival ${existingMobile}: user doc missing — buffer inactivated`);
+        await this.retireReplacedMobile(existingMobile, reasonMessage);
+        await this.notify(`Pool return ${existingMobile}: user doc missing — buffer inactivated`);
         return;
       }
       if (formalities) {
@@ -740,49 +872,49 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       } else {
         this.logger.log('Formalities skipped');
       }
-      if (archiveOld) {
-        await this.archiveOldClient(existingClient, existingClientUser, existingMobile, days);
+      if (returnOldToPool) {
+        await this.returnOldClientToBufferPool(existingClient, existingClientUser, existingMobile, days);
       } else {
         await this.bufferClientService.update(existingMobile, {
           inUse: false,
           lastUsed: new Date(),
           status: 'inactive',
-          message: reason || 'Deactivated during client swap (archival skipped)',
+          message: reason || 'Deactivated during client swap (pool return skipped)',
         });
-        this.logger.log('Client Archive Skipped');
-        await this.notify(`Archival skipped ${existingMobile}: inactivated without archival`);
+        this.logger.log('Replaced-client pool return skipped');
+        await this.notify(`Pool return skipped ${existingMobile}: inactivated`);
       }
     } catch (e) {
-      const errorDetails = parseError(e, `Error in Archiving Old Client: ${existingMobile}`, false);
+      const errorDetails = parseError(e, `Error returning replaced client to buffer pool: ${existingMobile}`, false);
       const errorMessage = e instanceof Error ? e.message : String(e);
       if (isPermanentError(errorDetails)) {
-        await this.markBufferInactiveForArchival(existingMobile, errorMessage);
+        await this.retireReplacedMobile(existingMobile, errorMessage);
       }
-      await this.notify(`Archival FAILED ${existingMobile}\n${errorMessage?.substring(0, 120)}`);
+      await this.notify(`Pool return FAILED ${existingMobile}\n${errorMessage?.substring(0, 120)}`);
     }
   }
 
-  private isPermanentArchivalReason(reason?: string): reason is string {
+  private isPermanentReplacementReason(reason?: string): reason is string {
     return !!reason && isPermanentError({ message: reason });
   }
 
   /**
-   * Retire an old-main mobile that is being archived for a PERMANENT reason
+   * Retire a replaced main mobile for a PERMANENT reason
    * (session revoked / banned / deactivated). This is only ever called on
-   * permanent archival reasons / permanent errors, so it cascades through
+   * permanent replacement reasons / permanent errors, so it cascades through
    * usersService.expireAccount — marking the user expired AND deactivating any
    * matching buffer/promote pool record — so the dead mobile can never be
    * re-selected. expireAccount is idempotent and safe even if no pool record
    * exists for this mobile.
    */
-  private async markBufferInactiveForArchival(mobile: string, reason: string): Promise<void> {
+  private async retireReplacedMobile(mobile: string, reason: string): Promise<void> {
     try {
       await this.usersService.expireAccount(mobile, reason);
-      this.logger.warn(`Archived account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
+      this.logger.warn(`Replaced account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
       await this.notify(`Buffer inactivated ${mobile}: ${reason.substring(0, 120)}`);
     } catch (error) {
-      const errorDetails = parseError(error, `Failed to retire archived account: ${mobile}`, false);
-      this.logger.error(`Failed to retire archived account ${mobile}: ${errorDetails.message}`);
+      const errorDetails = parseError(error, `Failed to retire replaced account: ${mobile}`, false);
+      this.logger.error(`Failed to retire replaced account ${mobile}: ${errorDetails.message}`);
       await this.notify(`Buffer inactivate FAILED ${mobile}: ${reason.substring(0, 100)}\n${errorDetails.message.substring(0, 120)}`);
     }
   }
@@ -797,7 +929,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private async archiveOldClient(
+  private async returnOldClientToBufferPool(
     existingClient: Client,
     existingClientUser: User,
     existingMobile: string,
@@ -805,47 +937,58 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   ) {
     try {
       await this.assertDistinctUserBackupSession(existingMobile, existingClient.session);
-      const availableDate = ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
+      const existingBufferClient = await this.bufferClientService.findOne(existingMobile, false);
+      const availableDate = ClientHelperUtils.toDateString(Date.now() + days * 24 * 60 * 60 * 1000);
       const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
         clientId: existingClient.clientId,
         mobile: existingMobile,
         availableDate,
         session: existingClient.session,
         tgId: existingClientUser.tgId,
-        channels: 170,
+        // A previously active service account returns as established buffer supply.
+        // Preserve a higher known count, but never reset it below the 250-channel
+        // return floor. The join/check sweeps can still reconcile it from Telegram.
+        channels: Math.max(250, existingBufferClient?.channels ?? 0),
         status: days > 35 ? 'inactive' : 'active',
         inUse: false,
+        // This primary has just completed live use. Keep that fact so the
+        // READY scheduler restores terminal state without creating another backup session.
+        lastUsed: new Date(),
+        // The account already has a verified, distinct backup session. It returns as
+        // terminal supply; a below-floor verified count is eligible only for capacity
+        // recovery, never for a warmup rewind or a new-session flow.
         warmupPhase: WarmupPhase.SESSION_ROTATED,
-        sessionRotatedAt: new Date(),
+        sessionRotatedAt: null,
+        message: 'Returned to buffer pool; channel capacity will be verified',
       };
       const updatedBufferClient = await this.bufferClientService.createOrUpdate(
         existingMobile,
         bufferClientDto,
       );
-      this.logger.log('client Archived:', updatedBufferClient);
-      await this.notify(`Archived ${existingMobile} → buffer pool, available ${availableDate}`);
+      this.logger.log('Client returned to buffer pool:', updatedBufferClient);
+      await this.notify(`Returned ${existingMobile} → buffer pool, available ${availableDate}`);
     } catch (error) {
-      const errorDetails = parseError(error, `Error in Archiving Old Client: ${existingMobile}`, true);
-      await this.notify(`Archival error ${existingMobile}\n${errorDetails.message?.substring(0, 120)}`);
+      const errorDetails = parseError(error, `Error returning old client to buffer pool: ${existingMobile}`, true);
+      await this.notify(`Pool return error ${existingMobile}\n${errorDetails.message?.substring(0, 120)}`);
       if (isPermanentError(errorDetails)) {
-        this.logger.log('Marking archived buffer inactive:', existingMobile);
-        await this.markBufferInactiveForArchival(existingMobile, errorDetails.message);
+        this.logger.log('Marking replaced buffer inactive:', existingMobile);
+        await this.retireReplacedMobile(existingMobile, errorDetails.message);
         // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
       } else {
         // Transient failure: the cutover already happened, so the old primary is no longer
         // the live account — but it is still inUse=true/status=active. Release the
         // reservation and push availability forward so it returns to the buffer pool for a
         // later retry instead of being stranded inUse=true (excluded from every selection).
-        const retryAvailableDate = ClientHelperUtils.toDateString(Date.now() + (days + 1) * 24 * 60 * 60 * 1000);
+        const retryAvailableDate = ClientHelperUtils.toDateString(Date.now() + days * 24 * 60 * 60 * 1000);
         await this.bufferClientService.update(existingMobile, {
           inUse: false,
           status: 'active',
           availableDate: retryAvailableDate,
-          message: `Archival retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
+          message: `Pool return retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
         }).catch((updateError) => {
-          this.logger.error(`Failed to release stranded archival reservation for ${existingMobile}: ${parseError(updateError, '', false).message}`);
+          this.logger.error(`Failed to release stranded pool-return reservation for ${existingMobile}: ${parseError(updateError, '', false).message}`);
         });
-        this.logger.log(`Released archival reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
+        this.logger.log(`Released pool-return reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
       }
     }
   }

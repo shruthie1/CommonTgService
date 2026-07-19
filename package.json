@@ -94,6 +94,8 @@
   },
   "jest": {
     "rootDir": "src",
+    "maxWorkers": 2,
+    "workerIdleMemoryLimit": "512MB",
     "moduleFileExtensions": [
       "ts",
       "js",

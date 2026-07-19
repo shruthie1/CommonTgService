@@ -88,9 +88,9 @@ describe('Promote Client API', () => {
             expect(result.message).toBe('Account is functioning properly');
             expect(result.inUse).toBe(false);
             expect(result.failedUpdateAttempts).toBe(0);
-            expect(result.warmupJitter).toBe(0);
-            expect(result.warmupPhase).toBeNull();
-            expect(result.enrolledAt).toBeNull();
+            expect(result.warmupJitter).toBeGreaterThanOrEqual(0);
+            expect(result.warmupPhase).toBe('enrolled');
+            expect(result.enrolledAt).toBeInstanceOf(Date);
             expect(result.lastUsed).toBeNull();
             expect(result.lastChecked).toBeNull();
             expect(result.lastUpdateAttempt).toBeNull();
@@ -155,23 +155,11 @@ describe('Promote Client API', () => {
     });
 
     describe('rotateReadyPromoteClients()', () => {
-        it('rotates READY, idle accounts through the existing lastUsed recovery path', async () => {
+        it('does not create a session for a READY account below the promotion runtime floor', async () => {
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-            await service.create(makePromoteClientData({
-                mobile: '15550100901', status: 'active', clientId: 'test-client-1',
-                warmupPhase: 'ready', inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
-                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
-                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
-            }));
-            await service.create(makePromoteClientData({
-                mobile: '15550100902', status: 'active', clientId: 'test-client-1',
-                warmupPhase: 'ready', inUse: true, enrolledAt: past, lastUsed: past, channels: 250,
-                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
-                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
-            }));
-            await service.create(makePromoteClientData({
-                mobile: '15550100903', status: 'active', clientId: 'test-client-1',
-                warmupPhase: 'ready', inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+            await PromoteClientModel.create(makePromoteClientData({
+                mobile: '15550100900', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: false, enrolledAt: past, channels: 229,
                 privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
                 profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
             }));
@@ -179,17 +167,51 @@ describe('Promote Client API', () => {
 
             await service.rotateReadyPromoteClients();
 
+            expect((await service.findOne('15550100900'))!.warmupPhase).toBe('ready');
+            expect(rotateSpy).not.toHaveBeenCalled();
+        });
+
+        it('rotates one complete READY account and leaves other candidates untouched', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            await PromoteClientModel.create(makePromoteClientData({
+                mobile: '15550100901', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            await PromoteClientModel.create(makePromoteClientData({
+                mobile: '15550100902', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: true, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            await PromoteClientModel.create(makePromoteClientData({
+                mobile: '15550100903', status: 'active', clientId: 'test-client-1',
+                warmupPhase: 'ready', inUse: false, enrolledAt: past, lastUsed: past, channels: 250,
+                privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past, nameBioUpdatedAt: past, usernameUpdatedAt: past, profilePicsUpdatedAt: past,
+            }));
+            const rotateSpy = jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
+                await service.update(mobile, {
+                    warmupPhase: 'session_rotated' as any,
+                    sessionRotatedAt: new Date(),
+                });
+                return true;
+            });
+
+            await service.rotateReadyPromoteClients();
+
             expect((await service.findOne('15550100901'))!.warmupPhase).toBe('session_rotated');
             expect((await service.findOne('15550100902'))!.warmupPhase).toBe('ready');
             expect((await service.findOne('15550100903'))!.warmupPhase).toBe('ready');
-            expect(rotateSpy).not.toHaveBeenCalled();
+            expect(rotateSpy).toHaveBeenCalledWith('15550100901');
             expect((service as any).checkingPromoteClientsSince).toBe(0);
         });
 
         it('attempts only one actual session rotation when the first attempt fails', async () => {
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             for (const mobile of ['15550100911', '15550100912']) {
-                await service.create(makePromoteClientData({
+                await PromoteClientModel.create(makePromoteClientData({
                     mobile, status: 'active', clientId: 'test-client-1',
                     warmupPhase: 'ready', inUse: false, enrolledAt: past, channels: 250,
                     privacyUpdatedAt: past, twoFASetAt: past, otherAuthsRemovedAt: past,
@@ -206,7 +228,7 @@ describe('Promote Client API', () => {
             expect((await service.findOne('15550100912'))!.warmupPhase).toBe('ready');
         });
 
-        it('repairs stale READY metadata without running its missing warmup action', async () => {
+        it('defers incomplete READY metadata and rotates the next complete candidate', async () => {
             const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
             const readyFields = {
                 status: 'active' as const, clientId: 'test-client-1', warmupPhase: 'ready' as const, inUse: false,
@@ -214,10 +236,10 @@ describe('Promote Client API', () => {
                 otherAuthsRemovedAt: past, profilePicsDeletedAt: past, nameBioUpdatedAt: past,
                 usernameUpdatedAt: past,
             };
-            await service.create(makePromoteClientData({
+            await PromoteClientModel.create(makePromoteClientData({
                 mobile: '15550100921', ...readyFields, profilePicsUpdatedAt: null,
             }));
-            await service.create(makePromoteClientData({
+            await PromoteClientModel.create(makePromoteClientData({
                 mobile: '15550100922', ...readyFields, profilePicsUpdatedAt: past,
             }));
             const rotateSpy = jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
@@ -230,7 +252,7 @@ describe('Promote Client API', () => {
 
             await service.rotateReadyPromoteClients();
 
-            expect((await service.findOne('15550100921'))!.warmupPhase).toBe('maturing');
+            expect((await service.findOne('15550100921'))!.warmupPhase).toBe('ready');
             expect(rotateSpy).toHaveBeenCalledTimes(1);
             expect(rotateSpy).toHaveBeenCalledWith('15550100922');
         });
@@ -317,7 +339,7 @@ describe('Promote Client API', () => {
             expect(updated.channels).toBe(250);
             // These must remain unchanged
             expect(updated.mobile).toBe('15550400001');
-            expect(updated.warmupPhase).toBeNull();
+            expect(updated.warmupPhase).toBe('enrolled');
             expect(updated.status).toBe('active');
             expect(updated.inUse).toBe(false);
         });
@@ -705,8 +727,8 @@ describe('Promote Client API', () => {
             expect(found?.inUse).toBe(false);
             expect(found?.failedUpdateAttempts).toBe(0);
             expect(found?.warmupJitter).toBe(0);
-            expect(found?.warmupPhase).toBeNull();
-            expect(found?.enrolledAt).toBeNull();
+            expect(found?.warmupPhase).toBe('enrolled');
+            expect(found?.enrolledAt).toBeInstanceOf(Date);
             expect(found?.lastUsed).toBeNull();
             expect(found?.assignedFirstName).toBeNull();
             expect(found?.assignedLastName).toBeNull();

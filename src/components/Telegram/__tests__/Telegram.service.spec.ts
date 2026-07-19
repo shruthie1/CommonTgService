@@ -626,6 +626,12 @@ describe('TelegramService — forwardMedia & forwardMediaToBot', () => {
         expect(services.channelsService.createMultiple).toHaveBeenCalledWith([
             expect.objectContaining({ channelId: '900', canSendMsgs: true, participantsCount: 100 }),
         ]);
+        const persistedChannel = services.channelsService.createMultiple.mock.calls[0][0][0];
+        expect(persistedChannel).not.toHaveProperty('restricted');
+        expect(persistedChannel).not.toHaveProperty('sendMessages');
+        expect(persistedChannel).not.toHaveProperty('sendPlain');
+        expect(persistedChannel).toHaveProperty('private', false);
+        expect(persistedChannel).not.toHaveProperty('forbidden');
         expect(mockConnectionManager.unregisterClient).toHaveBeenCalledWith('m');
     });
 

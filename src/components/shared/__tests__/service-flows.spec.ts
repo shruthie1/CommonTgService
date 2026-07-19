@@ -85,7 +85,22 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
 
     async updateNameAndBio(): Promise<number> { return 0; }
     async updateUsername(): Promise<number> { return 0; }
-    async findOne(): Promise<any> { return null; }
+    async findOne(mobile: string): Promise<any> {
+        return {
+            mobile,
+            status: 'active',
+            inUse: false,
+            warmupPhase: WarmupPhase.READY,
+            channels: 300,
+            privacyUpdatedAt: new Date('2026-01-01'),
+            twoFASetAt: new Date('2026-01-02'),
+            otherAuthsRemovedAt: new Date('2026-01-03'),
+            profilePicsDeletedAt: new Date('2026-01-04'),
+            nameBioUpdatedAt: new Date('2026-01-05'),
+            usernameUpdatedAt: new Date('2026-01-06'),
+            profilePicsUpdatedAt: new Date('2026-01-07'),
+        };
+    }
     async update(mobile: string, updateDto: any): Promise<any> { return this.updateMock(mobile, updateDto); }
     async markAsInactive(): Promise<any> { return null; }
     async updateStatus(mobile: string, status: string, message?: string): Promise<any> { return this.updateStatusMock(mobile, status, message); }
@@ -95,20 +110,12 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         return this.getEffectiveCooldownMs(mobile, lastUpdateAttempt);
     }
 
-    public async repair(doc: BaseClientDocument, now: number): Promise<BaseClientDocument> {
-        return this.repairWarmupMetadata(doc, now);
-    }
-
     public async permanentReason(baseReason: string, telegramClient?: any): Promise<string> {
         return this.buildPermanentAccountReason(baseReason, telegramClient);
     }
 
     public async availabilityNeeds(clientId: string) {
         return this.calculateAvailabilityBasedNeeds(clientId);
-    }
-
-    public async reactivateStuck(clientId?: string, limit?: number): Promise<number> {
-        return this.reactivateOwnStuckAccounts(clientId, limit);
     }
 
     public async stuckRetire(doc: BaseClientDocument, now: number): Promise<boolean> {
@@ -175,66 +182,6 @@ describe('Service flow reliability', () => {
         expect(first).toBe(second);
         expect(first).toBeGreaterThanOrEqual(90 * 60 * 1000);
         expect(first).toBeLessThanOrEqual(180 * 60 * 1000);
-    });
-
-    test('corrupted warmup metadata is auto-repaired instead of leaving the account stuck', async () => {
-        const service = new TestBaseService();
-        const now = new Date('2026-04-03T12:00:00.000Z').getTime();
-        const doc = {
-            mobile: '919990002222',
-            warmupPhase: null,
-            warmupJitter: 0,
-            createdAt: null,
-            enrolledAt: null,
-            privacyUpdatedAt: new Date('2026-03-28T12:00:00.000Z'),
-            twoFASetAt: null,
-            otherAuthsRemovedAt: null,
-            profilePicsDeletedAt: null,
-            nameBioUpdatedAt: null,
-            usernameUpdatedAt: null,
-            profilePicsUpdatedAt: null,
-            channels: 0,
-        } as any;
-
-        const repaired = await service.repair(doc, now);
-
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '919990002222',
-            expect.objectContaining({
-                warmupPhase: WarmupPhase.SETTLING,
-                enrolledAt: expect.any(Date),
-            }),
-        );
-        expect(repaired.warmupPhase).toBe(WarmupPhase.SETTLING);
-        expect(repaired.enrolledAt).toBeInstanceOf(Date);
-    });
-
-    test('stale warmupPhase is advanced to match completed progress fields', async () => {
-        const service = new TestBaseService();
-        const now = new Date('2026-04-03T12:00:00.000Z').getTime();
-        const doc = {
-            mobile: '919990003333',
-            warmupPhase: WarmupPhase.ENROLLED,
-            warmupJitter: 0,
-            createdAt: new Date('2026-03-01T12:00:00.000Z'),
-            enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
-            privacyUpdatedAt: new Date('2026-03-02T12:00:00.000Z'),
-            twoFASetAt: new Date('2026-03-05T12:00:00.000Z'),
-            otherAuthsRemovedAt: new Date('2026-03-07T12:00:00.000Z'),
-            profilePicsDeletedAt: new Date('2026-03-10T12:00:00.000Z'),
-            nameBioUpdatedAt: new Date('2026-03-13T12:00:00.000Z'),
-            usernameUpdatedAt: new Date('2026-03-16T12:00:00.000Z'),
-            profilePicsUpdatedAt: null,
-            channels: 50,
-        } as any;
-
-        const repaired = await service.repair(doc, now);
-
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '919990003333',
-            expect.objectContaining({ warmupPhase: WarmupPhase.GROWING }),
-        );
-        expect(repaired.warmupPhase).toBe(WarmupPhase.GROWING);
     });
 
     test('processClient resets max failures when lastUpdateFailure is missing instead of skipping forever', async () => {
@@ -709,6 +656,7 @@ describe('Service flow reliability', () => {
             lastUsed: null,
             failedUpdateAttempts: 0,
             inUse: false,
+            channels: 230,
             enrolledAt: new Date('2026-04-01T00:00:00.000Z'),
         })) as any[];
 
@@ -978,6 +926,7 @@ describe('Service flow reliability', () => {
             lastUsed: null,
             failedUpdateAttempts: 0,
             inUse: false,
+            channels: 200,
             enrolledAt: new Date('2026-04-01T00:00:00.000Z'),
         })) as any[];
 
@@ -1112,7 +1061,7 @@ describe('Service flow reliability', () => {
         });
     });
 
-    test('buffer join query does not filter by warmup phase', async () => {
+    test('buffer join query permits only below-floor terminal capacity recovery', async () => {
         let capturedQuery: Record<string, any> | undefined;
         const bufferModel: any = {
             find: jest.fn((query: Record<string, any>) => {
@@ -1134,7 +1083,10 @@ describe('Service flow reliability', () => {
 
         await service.joinchannelForBufferClients(true);
 
-        expect(capturedQuery?.warmupPhase).toBeUndefined();
+        expect(capturedQuery?.$or).toEqual([
+            { warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] } },
+            { channels: { $lt: 200 } },
+        ]);
         expect(capturedQuery?.status).toEqual('active');
     });
 
@@ -1243,8 +1195,7 @@ describe('Service flow reliability', () => {
         expect((service as any).leaveChannelMap.has('919990013333')).toBe(false);
     });
 
-    test('operational selection self-heals legacy used accounts before querying session-rotated pool', async () => {
-        let normalized = false;
+    test('operational selection leaves legacy used accounts untouched until the explicit migration runs', async () => {
         const legacyDoc = {
             mobile: '919990005555',
             clientId: 'client-1',
@@ -1253,60 +1204,27 @@ describe('Service flow reliability', () => {
             lastUsed: new Date('2026-03-20T12:00:00.000Z'),
             createdAt: new Date('2025-01-01T12:00:00.000Z'),
         };
-        const rotatedDoc = {
-            mobile: '919990005555',
-            clientId: 'client-1',
-            status: 'active',
-            warmupPhase: WarmupPhase.SESSION_ROTATED,
-            lastUsed: new Date('2026-03-20T12:00:00.000Z'),
-        };
-
         const mockModel = {
             find: jest.fn((query: Record<string, any>) => {
-                const isMissingWarmupRepairQuery =
-                    query?.status === 'active' &&
-                    query?.clientId === 'client-1' &&
-                    query?.lastUsed?.$exists === true;
                 const isReadySelectionQuery =
                     query?.warmupPhase === WarmupPhase.SESSION_ROTATED &&
                     query?.clientId === 'client-1';
-
-                if (isMissingWarmupRepairQuery) {
-                    return createQueryChain(() => (normalized ? [] : [legacyDoc]));
-                }
                 if (isReadySelectionQuery) {
-                    return createQueryChain(() => (normalized ? [rotatedDoc] : []));
+                    return createQueryChain(() => []);
                 }
                 return createQueryChain(() => []);
             }),
         };
 
         const service = new TestBaseService(mockModel);
-        service.updateMock.mockImplementation(async (_mobile: string, updateDto: any) => {
-            if (updateDto?.warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                normalized = true;
-            }
-            return updateDto;
-        });
 
         const selected = await service.getNextAvailableClient('client-1');
 
-        expect(selected).toEqual(rotatedDoc);
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '919990005555',
-            expect.objectContaining({
-                warmupPhase: WarmupPhase.SESSION_ROTATED,
-                sessionRotatedAt: expect.any(Date),
-                enrolledAt: expect.any(Date),
-            }),
-        );
-        const backfillPayload = service.updateMock.mock.calls.find((call: any[]) => call[0] === '919990005555')?.[1];
-        expect(backfillPayload).not.toHaveProperty('twoFASetAt');
-        expect(backfillPayload).not.toHaveProperty('otherAuthsRemovedAt');
+        expect(selected).toBeNull();
+        expect(service.updateMock).not.toHaveBeenCalled();
     });
 
-    test('availability calculation self-heals legacy used accounts before counting ready pool', async () => {
-        let normalized = false;
+    test('availability calculation does not count or mutate legacy used accounts', async () => {
         const legacyDoc = {
             mobile: '919990006666',
             clientId: 'client-2',
@@ -1318,42 +1236,23 @@ describe('Service flow reliability', () => {
 
         const mockModel = {
             find: jest.fn((query: Record<string, any>) => {
-                const isMissingWarmupRepairQuery =
-                    query?.status === 'active' &&
-                    query?.clientId === 'client-2' &&
-                    query?.lastUsed?.$exists === true;
-                if (isMissingWarmupRepairQuery) {
-                    return createQueryChain(() => (normalized ? [] : [legacyDoc]));
-                }
                 const isActiveClientQuery =
                     query?.status === 'active' &&
                     query?.clientId === 'client-2' &&
                     query?.lastUsed === undefined;
                 if (isActiveClientQuery) {
-                    return createQueryChain(() => (normalized ? [{
-                        ...legacyDoc,
-                        warmupPhase: WarmupPhase.SESSION_ROTATED,
-                    }] : []));
+                    return createQueryChain(() => [legacyDoc]);
                 }
                 return createQueryChain(() => []);
             }),
         };
 
         const service = new TestBaseService(mockModel);
-        service.updateMock.mockImplementation(async (_mobile: string, updateDto: any) => {
-            if (updateDto?.warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                normalized = true;
-            }
-            return updateDto;
-        });
 
         const result = await service.availabilityNeeds('client-2');
 
-        expect(result.totalActive).toBe(1);
-        expect(service.updateMock).toHaveBeenCalledWith(
-            '919990006666',
-            expect.objectContaining({ warmupPhase: WarmupPhase.SESSION_ROTATED }),
-        );
+        expect(result.totalActive).toBe(0);
+        expect(service.updateMock).not.toHaveBeenCalled();
     });
 
     test('availability calculation credits warming pipeline without over-enrolling for short windows', async () => {
@@ -1614,7 +1513,7 @@ describe('Service flow reliability', () => {
         });
 
         const queued = (service as any).safeSetJoinChannelMap('mobile-safe-filter', [
-            { channelId: 'ok-1', username: 'ok_1', canSendMsgs: true, banned: false, restricted: false, forbidden: false, private: false },
+            { channelId: 'ok-1', username: 'ok_1', canSendMsgs: true, banned: false, forbidden: false, private: false },
             { channelId: 'banned-1', username: 'banned_1', canSendMsgs: true, banned: true },
             { channelId: 'private-1', username: 'private_1', canSendMsgs: true, private: true },
             { channelId: 'nosend-1', username: 'nosend_1', canSendMsgs: false },
@@ -1624,7 +1523,7 @@ describe('Service flow reliability', () => {
 
         expect(queued).toBe(true);
         expect((service as any).joinChannelMap.get('mobile-safe-filter')).toEqual([
-            { channelId: 'ok-1', username: 'ok_1', canSendMsgs: true, banned: false, restricted: false, forbidden: false, private: false },
+            { channelId: 'ok-1', username: 'ok_1', canSendMsgs: true, banned: false, forbidden: false, private: false },
         ]);
     });
 
@@ -1772,105 +1671,6 @@ describe('Service flow reliability', () => {
         });
     });
 
-    // ======= SELF-HEAL: auto-reactivate accounts this service itself stuck =======
-    describe('Self-heal: reactivateOwnStuckAccounts', () => {
-        const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
-
-        // Returns a query-chain-backed model whose find() yields the given docs.
-        const modelWith = (docs: any[]) => ({ find: jest.fn(() => createQueryChain(() => docs)) });
-
-        test('reactivates a step-stuck account (own "Stuck:" reason) that has session + clientId', async () => {
-            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const stuck = {
-                mobile: '919990010001', clientId: 'client-1', status: 'inactive',
-                message: 'Stuck: 71d in settling', session: 'live-session-1',
-                warmupPhase: WarmupPhase.SETTLING,
-                enrolledAt: new Date('2026-01-15T00:00:00.000Z'), // ~86d ago
-                privacyUpdatedAt: new Date('2026-01-20T00:00:00.000Z'),
-                twoFASetAt: new Date('2026-01-25T00:00:00.000Z'),
-                failedUpdateAttempts: 3, channels: 80,
-            };
-            const service = new TestBaseService(modelWith([stuck]));
-            const updateSpy = jest.spyOn(service, 'update');
-
-            const healed = await service.reactivateStuck('client-1');
-
-            expect(healed).toBe(1);
-            const [mobile, set] = updateSpy.mock.calls[0];
-            expect(mobile).toBe('919990010001');
-            expect(set.status).toBe('active');
-            expect(set.failedUpdateAttempts).toBe(0);
-            expect(set.lastUpdateFailure).toBeNull();
-            // enrolledAt MUST be reset so it isn't > STUCK_WARMUP_DAYS — prevents retire ping-pong.
-            expect(set.enrolledAt).toBeInstanceOf(Date);
-            const ageDays = (mockNow - (set.enrolledAt as Date).getTime()) / (24 * 60 * 60 * 1000);
-            expect(ageDays).toBeLessThanOrEqual(45);
-        });
-
-        test('does NOT reactivate a DEAD account (SESSION_REVOKED)', async () => {
-            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const dead = {
-                mobile: '919990010002', clientId: 'client-1', status: 'inactive',
-                message: '401: SESSION_REVOKED (caused by users.GetUsers)', session: 'dead-session',
-                warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date('2026-01-15T00:00:00.000Z'),
-            };
-            const service = new TestBaseService(modelWith([dead]));
-            const updateSpy = jest.spyOn(service, 'update');
-            const healed = await service.reactivateStuck('client-1');
-            expect(healed).toBe(0);
-            expect(updateSpy).not.toHaveBeenCalled();
-        });
-
-        test('does NOT reactivate a step-stuck account that has NO session', async () => {
-            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const noSession = {
-                mobile: '919990010003', clientId: 'client-1', status: 'inactive',
-                message: 'Stuck: 60d in identity', session: '',
-                warmupPhase: WarmupPhase.IDENTITY, enrolledAt: new Date('2026-01-15T00:00:00.000Z'),
-            };
-            const service = new TestBaseService(modelWith([noSession]));
-            const updateSpy = jest.spyOn(service, 'update');
-            const healed = await service.reactivateStuck('client-1');
-            expect(healed).toBe(0);
-            expect(updateSpy).not.toHaveBeenCalled();
-        });
-
-        test('does NOT reactivate a step-stuck account with no clientId', async () => {
-            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const noClient = {
-                mobile: '919990010004', clientId: null, status: 'inactive',
-                message: 'Stuck: 55d in settling', session: 'has-session',
-                warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date('2026-01-15T00:00:00.000Z'),
-            };
-            const service = new TestBaseService(modelWith([noClient]));
-            const updateSpy = jest.spyOn(service, 'update');
-            const healed = await service.reactivateStuck();
-            expect(healed).toBe(0);
-            expect(updateSpy).not.toHaveBeenCalled();
-        });
-
-        test('PING-PONG GUARD: a reactivated account is NOT immediately re-stuck by retireIfStuck', async () => {
-            jest.spyOn(Date, 'now').mockReturnValue(mockNow);
-            const stuck = {
-                mobile: '919990010005', clientId: 'client-1', status: 'inactive',
-                message: 'Stuck: 90d in settling', session: 'live-session-5',
-                warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date('2026-01-01T00:00:00.000Z'),
-                privacyUpdatedAt: new Date('2026-01-05T00:00:00.000Z'),
-                twoFASetAt: new Date('2026-01-10T00:00:00.000Z'),
-                failedUpdateAttempts: 3,
-            };
-            const service = new TestBaseService(modelWith([stuck]));
-            const updateSpy = jest.spyOn(service, 'update');
-            await service.reactivateStuck('client-1');
-            const [, set] = updateSpy.mock.calls[0];
-
-            // Feed the post-reactivation doc back into retireIfStuck — must NOT re-deactivate.
-            const reactivatedDoc = { ...stuck, ...set } as any;
-            const retired = await service.stuckRetire(reactivatedDoc, mockNow);
-            expect(retired).toBe(false);
-        });
-    });
-
     describe('Stuck scenario: lastUsed on non-terminal account', () => {
         test('settling account with lastUsed set → still processes (not skipped)', async () => {
             const service = new TestBaseService();
@@ -1900,7 +1700,7 @@ describe('Service flow reliability', () => {
             expect((service as any).set2fa).toHaveBeenCalled();
         });
 
-        test('session_rotated account with lastUsed → backfill and skip (correct)', async () => {
+        test('session_rotated account with lastUsed waits without lifecycle mutation', async () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
@@ -1914,8 +1714,6 @@ describe('Service flow reliability', () => {
                 failedUpdateAttempts: 0,
                 lastUpdateAttempt: null,
                 inUse: false,
-                // Genuine terminal account: all security + identity steps proven, so
-                // repairWarmupMetadata (runs first) won't demote it for missing prereqs.
                 privacyUpdatedAt: new Date('2026-01-05T12:00:00.000Z'),
                 twoFASetAt: new Date('2026-01-06T12:00:00.000Z'),
                 otherAuthsRemovedAt: new Date('2026-01-06T12:00:00.000Z'),
@@ -1927,10 +1725,10 @@ describe('Service flow reliability', () => {
 
             const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
 
-            expect(result.updateSummary).toBe('backfill_timestamps');
+            expect(result.updateSummary).toBeUndefined();
         });
 
-        test('ready account with lastUsed → marks session_rotated and skips rotation', async () => {
+        test('ready account with lastUsed still performs the explicit session rotation', async () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
@@ -1957,38 +1755,8 @@ describe('Service flow reliability', () => {
 
             const result = await service.processClient(doc, { clientId: 'client-1' } as Client);
 
-            expect(result.updateSummary).toBe('mark_session_rotated_from_last_used');
-            expect(rotateSpy).not.toHaveBeenCalled();
-            expect(service.updateMock).toHaveBeenCalledWith(
-                '919990007778',
-                expect.objectContaining({
-                    warmupPhase: WarmupPhase.SESSION_ROTATED,
-                    sessionRotatedAt: expect.any(Date),
-                }),
-            );
-        });
-    });
-
-    describe('Stuck scenario: enrolledAt backfill', () => {
-        test('repairWarmupMetadata backfills enrolledAt from createdAt when enrolledAt missing', async () => {
-            const service = new TestBaseService();
-            const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
-            const createdDate = new Date('2026-03-01T12:00:00.000Z');
-
-            const doc = {
-                mobile: '919990007775',
-                warmupPhase: WarmupPhase.SETTLING,
-                enrolledAt: undefined,
-                createdAt: createdDate,
-                privacyUpdatedAt: new Date('2026-03-05T12:00:00.000Z'),
-            } as any;
-
-            await service.repair(doc, mockNow);
-
-            expect(service.updateMock).toHaveBeenCalledWith(
-                '919990007775',
-                expect.objectContaining({ enrolledAt: createdDate }),
-            );
+            expect(result.updateSummary).toBe('rotate_session');
+            expect(rotateSpy).toHaveBeenCalledWith('919990007778');
         });
     });
 

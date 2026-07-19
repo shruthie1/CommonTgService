@@ -127,13 +127,18 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             clientProcessingDelay: 8000,                 // 8s between clients
             maxChannelJoinsPerDay: 25,
             joinsPerMobilePerRound: 4,
+            // promote-clients selects runtime mobiles at >=230 channels.
+            operationalChannelThreshold: 230,
         };
     }
 
     private isHealthyPromoteClientForCap(doc: Partial<PromoteClientDocument>, now: number): boolean {
-        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc as PromoteClientDocument);
+        const phase = doc.warmupPhase;
+        if (!phase) return false;
         if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
-            return true;
+            // Promotion runtime only selects accounts at this floor. Do not let a
+            // terminal-but-underfilled document suppress replenishment.
+            return (doc.channels || 0) >= (this.config.operationalChannelThreshold ?? 230);
         }
 
         const failedAttempts = doc.failedUpdateAttempts || 0;
@@ -433,6 +438,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 ...(session ? { session } : {}),
                 status,
                 message: promoteClient.message || 'Account is functioning properly',
+                warmupPhase: WarmupPhase.ENROLLED,
+                warmupJitter: ClientHelperUtils.generateWarmupJitter(),
+                enrolledAt: new Date(),
+                sessionRotatedAt: null,
             };
             const newUser = new this.promoteClientModel(promoteClientData);
             return newUser.save();
@@ -536,9 +545,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             status: 'active',
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(this.joinChannelMap.keys()) },
-            // Terminal warmup accounts must never re-enter channel joining.
-            // `$nin` keeps documents with a missing legacy phase eligible.
-            warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            ...this.getJoinCapacityEligibilityFilter(),
         };
         if (clientId) query.clientId = clientId;
 
@@ -815,7 +822,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     channels: { $lt: this.config.channelTarget },
                     mobile: { $nin: Array.from(preservedMobiles) },
                     status: 'active',
-                    warmupPhase: { $nin: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+                    ...this.getJoinCapacityEligibilityFilter(),
                 })
                 .sort({ channels: -1 })
                 .limit(this.config.maxMapSize);
@@ -944,6 +951,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     status: 'active',
                     inUse: { $ne: true },
                     warmupPhase: WarmupPhase.READY,
+                    ...this.getOperationalChannelEligibilityFilter(),
                 })
                 .sort({ lastUpdateAttempt: 1, mobile: 1 })
                 .exec();
@@ -975,8 +983,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const bufferClients = await this.bufferClientService.findAll();
         const clientMap = new Map(clients.map((client) => [client.clientId, client]));
         const now = Date.now();
-
-        await this.selfHealLegacyOperationalState();
 
         const clientMainMobiles = clients.map((c) => c.mobile);
         const bufferClientIds = bufferClients.map((c) => c.mobile);
@@ -1013,17 +1019,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
             if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now)) continue;
 
-            const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
-            // READY -> SESSION_ROTATED is deliberately handled only by the paced
-            // ready-rotation scheduler. A normal maintenance run must never turn
-            // a catch-up batch into a burst of sensitive session work.
-            if (warmupPhase === WarmupPhase.READY) continue;
-            // Only skip for backfill if the account is already fully operational.
-            const hasBeenUsed = promoteClient.lastUsed && new Date(promoteClient.lastUsed).getTime() > 0;
-            if (hasBeenUsed && warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                await this.backfillTimestamps(promoteClient.mobile, promoteClient as PromoteClientDocument, now);
+            const warmupPhase = promoteClient.warmupPhase;
+            if (!warmupPhase) {
+                this.logger.warn(`Skipping promote client ${promoteClient.mobile}: incomplete lifecycle metadata`);
                 continue;
             }
+            // Terminal phases are owned by selection/rotation paths. Normal
+            // maintenance must never re-enter them or perform extra Telegram
+            // health/session work on already-consumable accounts.
+            if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) continue;
             const failedAttempts = promoteClient.failedUpdateAttempts || 0;
             const lastAttemptAgeHours = lastUpdateAttempt > 0
                 ? (now - lastUpdateAttempt) / (60 * 60 * 1000)

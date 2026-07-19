@@ -287,11 +287,7 @@ export class TelegramService implements OnModuleDestroy {
                             title: liveFacts.title || "",
                             broadcast: liveFacts.broadcast === true,
                             megagroup: liveFacts.megagroup === true,
-                            restricted: liveFacts.restricted === true,
-                            sendMessages: liveFacts.sendMessages === true,
-                            sendPlain: liveFacts.sendPlain === true,
                             username: liveFacts.username || "",
-                            forbidden: false
                         });
                     }
             }

@@ -11,7 +11,7 @@ const toDto = (q: Record<string, any>) =>
     plainToInstance(SearchDto, q, { enableImplicitConversion: true });
 
 describe('user-data SearchDto query boolean coercion (ValidationPipe parity)', () => {
-    for (const field of ['paidReply', 'demoGiven', 'secondShow', 'picsSent']) {
+    for (const field of ['paidReply', 'demoGiven', 'secondShow']) {
         it(`${field}="false" stays false (not inverted)`, () => {
             expect((toDto({ [field]: 'false' }) as any)[field]).toBe(false);
         });
@@ -21,5 +21,9 @@ describe('user-data SearchDto query boolean coercion (ValidationPipe parity)', (
     }
     it('absent boolean stays undefined', () => {
         expect((toDto({}) as any).paidReply).toBeUndefined();
+    });
+
+    it('coerces picsSent to the canonical numeric counter', () => {
+        expect(toDto({ picsSent: '2' }).picsSent).toBe(2);
     });
 });

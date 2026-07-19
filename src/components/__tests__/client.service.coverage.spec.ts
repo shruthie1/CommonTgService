@@ -57,7 +57,7 @@ describe('ClientService coverage', () => {
 
     beforeAll(async () => {
         jest.setTimeout(60_000);
-        ctx = await startMongo('client-coverage-test');
+        ctx = await startMongo('client-coverage-test', true);
         connection = ctx.connection;
         ClientModel = connection.model<ClientDocument>('ClientCoverage', ClientSchema);
         BufferModel = connection.model<BufferClient>('BufferForClientCoverage', BufferClientSchema);
@@ -250,6 +250,26 @@ describe('ClientService coverage', () => {
             expect(handleSpy).not.toHaveBeenCalled();
         });
 
+        it('coalesces concurrent setup requests for the same client', async () => {
+            process.env.AUTO_CLIENT_SETUP = 'true';
+            let release!: (result: any) => void;
+            const deferred = new Promise<any>((resolve) => { release = resolve; });
+            const result = {
+                status: 'no_candidate', swapped: false, clientId: 'single-flight',
+                message: 'No safe buffer client is currently available',
+            };
+            const handleSpy = jest.spyOn(service as any, 'handleSetupClient').mockReturnValue(deferred);
+
+            const first = service.setupClient('single-flight', { reason: 'first' } as any);
+            const second = service.setupClient('single-flight', { reason: 'second' } as any);
+
+            expect(handleSpy).toHaveBeenCalledTimes(1);
+            release(result);
+            await expect(first).resolves.toBe(result);
+            await expect(second).resolves.toBe(result);
+            expect((service as any).setupInFlightMap.has('single-flight')).toBe(false);
+        });
+
         it('selects a buffer candidate, registers setup and runs the real cutover into the DB', async () => {
             process.env.AUTO_CLIENT_SETUP = 'true';
             await service.onModuleInit();
@@ -270,7 +290,7 @@ describe('ClientService coverage', () => {
             telegramService.clearActiveClientSetup.mockImplementation(() => { registeredSetup = null; });
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ getMe: jest.fn(async () => ({ username: 'tg2' })) } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            // archiveOld path → archiveOldClient → assertDistinctUserBackupSession + createOrUpdate (sibling mock)
+            // archiveOld path → returnOldClientToBufferPool → assertDistinctUserBackupSession + createOrUpdate (sibling mock)
             usersService.search.mockResolvedValue([{ tgId: 'tg-old', mobile: '15558880001', session: 'user-old-backup' }]);
 
             await service.setupClient('swap-1', { reason: 'swap', archiveOld: true, formalities: false } as any);
@@ -283,10 +303,15 @@ describe('ClientService coverage', () => {
             expect(after!.mobile).toBe('15558880002');
             expect(after!.session).toBe('buffer-session');
             expect(after!.username).toBe('buf2user');
-            expect(bufferClientService.setPrimaryInUse).toHaveBeenCalledWith('swap-1', '15558880002');
-            // Old mobile archived back to buffer pool.
+            expect(bufferClientService.setPrimaryInUse).toHaveBeenCalledWith(
+                'swap-1',
+                '15558880002',
+                expect.anything(),
+            );
+            // Old mobile returns to the buffer pool as terminal supply.
             expect(bufferClientService.createOrUpdate).toHaveBeenCalledWith('15558880001', expect.objectContaining({
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: null,
             }));
         });
 
@@ -308,6 +333,23 @@ describe('ClientService coverage', () => {
             expect(accepts(199)).toBe(false);  // below threshold still excluded
         });
 
+        it('honors an explicitly requested replacement mobile', async () => {
+            process.env.AUTO_CLIENT_SETUP = 'true';
+            await service.onModuleInit();
+            await service.create(makeClientData({ clientId: 'swap-specific', mobile: '15558881100', session: 's' }));
+            bufferClientService.executeQuery.mockResolvedValue([]);
+
+            await service.setupClient('swap-specific', {
+                mobile: '15558881101',
+                reason: 'manual targeted swap',
+            } as any);
+
+            expect(bufferClientService.executeQuery.mock.calls[0][0]).toEqual(expect.objectContaining({
+                clientId: 'swap-specific',
+                mobile: '15558881101',
+            }));
+        });
+
         it('marks existing buffer inactive when no candidate and reason is permanent', async () => {
             process.env.AUTO_CLIENT_SETUP = 'true';
             await service.onModuleInit();
@@ -315,7 +357,7 @@ describe('ClientService coverage', () => {
             bufferClientService.executeQuery.mockResolvedValue([]);
             isPermanentError.mockReturnValue(true);
             await service.setupClient('swap-2', { reason: 'SESSION_REVOKED' } as any);
-            // Real markBufferInactiveForArchival ran → cascades to usersService.expireAccount (external).
+            // Real retireReplacedMobile ran → cascades to usersService.expireAccount (external).
             expect(usersService.expireAccount).toHaveBeenCalledWith('15558880010', 'SESSION_REVOKED');
             // A no-buffer run must NOT burn the cooldown — otherwise a client whose buffers are only
             // temporarily cooling down stays un-swappable for 4 min after every failed attempt.
@@ -400,6 +442,24 @@ describe('ClientService coverage', () => {
             await expect(service.updateClientSession('s', 'm')).rejects.toThrow('No active client setup');
         });
 
+        it('rejects a stale cutover without changing pool ownership', async () => {
+            await service.onModuleInit();
+            await service.create(makeClientData({
+                clientId: 'cut-stale', mobile: '15557779991', session: 'current-session',
+            }));
+
+            await expect((service as any).commitClientCutover(
+                'cut-stale',
+                '15557779990',
+                { mobile: '15557779992', username: 'replacement', session: 'replacement-session', name: 'Replacement' },
+            )).rejects.toThrow('changed before cutover');
+
+            const after = await ClientModel.findOne({ clientId: 'cut-stale' }).lean();
+            expect(after!.mobile).toBe('15557779991');
+            expect(after!.session).toBe('current-session');
+            expect(bufferClientService.setPrimaryInUse).not.toHaveBeenCalled();
+        });
+
         it('commits the cutover, marks buffer in-use and triggers deploy', async () => {
             await service.onModuleInit();
             await service.create(makeClientData({ clientId: 'cut-1', mobile: '15557770001', session: 'old', username: 'oldu', deployKey: 'https://deploy.test/x' }));
@@ -412,7 +472,7 @@ describe('ClientService coverage', () => {
             } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             bufferClientService.findOne.mockResolvedValue({ mobile: '15557770002', username: 'bufuser', assignedFirstName: 'Z', assignedProfilePics: [] });
-            const archivalSpy = jest.spyOn(service as any, 'handleClientArchival').mockResolvedValue(undefined);
+            const archivalSpy = jest.spyOn(service as any, 'handleReplacedClient').mockResolvedValue(undefined);
 
             await service.updateClientSession('new-session', '15557770002');
 
@@ -420,7 +480,11 @@ describe('ClientService coverage', () => {
             expect(after!.mobile).toBe('15557770002');
             expect(after!.session).toBe('new-session');
             expect(after!.username).toBe('bufuser');
-            expect(bufferClientService.setPrimaryInUse).toHaveBeenCalledWith('cut-1', '15557770002');
+            expect(bufferClientService.setPrimaryInUse).toHaveBeenCalledWith(
+                'cut-1',
+                '15557770002',
+                expect.anything(),
+            );
             expect(archivalSpy).toHaveBeenCalled();
         });
 
@@ -665,50 +729,52 @@ describe('ClientService coverage', () => {
         });
     });
 
-    // ─── archival via handleClientArchival (Path coverage) ───────────────────
+    // ─── pool return via handleReplacedClient (Path coverage) ───────────────────
 
-    describe('handleClientArchival()', () => {
-        it('returns old mobile to buffer pool when archiveOld=true (full archival DTO)', async () => {
+    describe('handleReplacedClient()', () => {
+        it('returns old mobile to buffer pool when archiveOld=true (full pool-return DTO)', async () => {
             await service.onModuleInit();
             await service.create(makeClientData({ clientId: 'arc-1', mobile: '15554440001', session: 'sess' }));
             usersService.search.mockResolvedValue([{ tgId: 'tg-old', mobile: '15554440001', session: 'user-backup-session' }]);
             bufferClientService.getOrEnsureDistinctUsersBackupSession.mockResolvedValue({ tgId: 'tg-old', mobile: '15554440001', session: 'distinct-backup' });
             const client = await service.findOne('arc-1');
             const days = 0;
-            await (service as any).handleClientArchival(client, '15554440001', false, true, days, undefined);
-            // Real archiveOldClient ran and persisted the full archival contract back to the buffer pool.
+            await (service as any).handleReplacedClient(client, '15554440001', false, true, days, undefined);
+            // Real returnOldClientToBufferPool ran and persisted the full archival contract back to the buffer pool.
             const expectedAvailable = new Date();
-            expectedAvailable.setDate(expectedAvailable.getDate() + days + 1);
+            expectedAvailable.setDate(expectedAvailable.getDate() + days);
             const expectedDateStr = expectedAvailable.toISOString().split('T')[0];
             expect(bufferClientService.createOrUpdate).toHaveBeenCalledWith('15554440001', expect.objectContaining({
                 clientId: 'arc-1',
                 mobile: '15554440001',
                 session: 'sess',
                 tgId: 'tg-old',
-                channels: 170,
+                channels: 250,
                 status: 'active',
                 inUse: false,
+                lastUsed: expect.any(Date),
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: null,
                 availableDate: expectedDateStr,
             }));
-            // markBufferInactiveForArchival must NOT fire on a clean archival.
+            // retireReplacedMobile must NOT fire on a clean pool return.
             expect(usersService.expireAccount).not.toHaveBeenCalled();
         });
 
         it('marks buffer inactive for a permanent reason (real cascade)', async () => {
             await service.onModuleInit();
             isPermanentError.mockReturnValue(true);
-            await (service as any).handleClientArchival({ clientId: 'arc-2', session: 's' } as any, '15554440010', false, true, 0, 'SESSION_REVOKED');
-            // Real markBufferInactiveForArchival ran → cascades to usersService.expireAccount (external).
+            await (service as any).handleReplacedClient({ clientId: 'arc-2', session: 's' } as any, '15554440010', false, true, 0, 'SESSION_REVOKED');
+            // Real retireReplacedMobile ran → cascades to usersService.expireAccount (external).
             expect(usersService.expireAccount).toHaveBeenCalledWith('15554440010', 'SESSION_REVOKED');
             // It short-circuited before any archival write.
             expect(bufferClientService.createOrUpdate).not.toHaveBeenCalled();
         });
 
-        it('marks buffer inactive when archiveOld=false (no archival)', async () => {
+        it('marks buffer inactive when archiveOld=false (no pool return)', async () => {
             await service.onModuleInit();
             usersService.search.mockResolvedValue([{ tgId: 'tg-old', mobile: '15554440020', session: 'backup' }]);
-            await (service as any).handleClientArchival({ clientId: 'arc-3', session: 's' } as any, '15554440020', false, false, 0, 'transient');
+            await (service as any).handleReplacedClient({ clientId: 'arc-3', session: 's' } as any, '15554440020', false, false, 0, 'transient');
             expect(bufferClientService.update).toHaveBeenCalledWith('15554440020', expect.objectContaining({ status: 'inactive' }));
         });
 
@@ -717,23 +783,25 @@ describe('ClientService coverage', () => {
             usersService.search.mockResolvedValue([{ tgId: 'tg-old', mobile: '15554440030', session: 'backup' }]);
             bufferClientService.getOrEnsureDistinctUsersBackupSession.mockResolvedValue({ tgId: 'tg-old', mobile: '15554440030', session: 'distinct-backup' });
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-            await (service as any).handleClientArchival({ clientId: 'arc-4', session: 's' } as any, '15554440030', true, true, 0, undefined);
+            await (service as any).handleReplacedClient({ clientId: 'arc-4', session: 's' } as any, '15554440030', true, true, 0, undefined);
             // Real handleFormalities ran.
             expect(telegramService.updatePrivacyforDeletedAccount).toHaveBeenCalledWith('15554440030');
-            // Real archiveOldClient ran and persisted the archival DTO to the buffer pool.
+            // Real returnOldClientToBufferPool ran and persisted the pool-return DTO to the buffer pool.
             expect(bufferClientService.createOrUpdate).toHaveBeenCalledWith('15554440030', expect.objectContaining({
                 clientId: 'arc-4',
                 session: 's',
-                channels: 170,
+                channels: 250,
+                lastUsed: expect.any(Date),
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
+                sessionRotatedAt: null,
             }));
         });
 
         it('marks buffer inactive when the old user document is missing (real cascade)', async () => {
             await service.onModuleInit();
             usersService.search.mockResolvedValue([]);
-            await (service as any).handleClientArchival({ clientId: 'arc-5', session: 's' } as any, '15554440040', false, true, 0, undefined);
-            // No user doc → real markBufferInactiveForArchival cascades to expireAccount with a descriptive reason.
+            await (service as any).handleReplacedClient({ clientId: 'arc-5', session: 's' } as any, '15554440040', false, true, 0, undefined);
+            // No user doc → real retireReplacedMobile cascades to expireAccount with a descriptive reason.
             expect(usersService.expireAccount).toHaveBeenCalledWith(
                 '15554440040',
                 expect.stringContaining('user document missing'),
@@ -973,7 +1041,7 @@ describe('ClientService coverage', () => {
     // ─── updateClientSession setPrimaryInUse + deploy catch (647-648,665-667) ─
 
     describe('updateClientSession secondary failures', () => {
-        it('continues the cutover when setPrimaryInUse and deploy both fail', async () => {
+        it('rolls back the active client assignment when primary ownership cannot be stamped', async () => {
             await service.onModuleInit();
             await service.create(makeClientData({ clientId: 'cut-sec', mobile: '15557771001', session: 'old', username: 'oldu', deployKey: 'https://deploy.test/sec' }));
             telegramService.getActiveClientSetup.mockReturnValue({
@@ -994,24 +1062,53 @@ describe('ClientService coverage', () => {
             // archiveOld=false path → mark inactive (no archive write needed)
             usersService.search.mockResolvedValue([{ tgId: 'tg', mobile: '15557771001', session: 'backup' }]);
 
-            await service.updateClientSession('new-session', '15557771002');
+            await expect(service.updateClientSession('new-session', '15557771002'))
+                .rejects.toThrow('primary stamp failed');
 
             const after = await ClientModel.findOne({ clientId: 'cut-sec' }).lean();
-            expect(after!.mobile).toBe('15557771002');
+            expect(after!.mobile).toBe('15557771001');
+            expect(after!.session).toBe('old');
+            expect(fetchWithTimeout).not.toHaveBeenCalledWith('https://deploy.test/sec', expect.anything(), expect.anything());
+            (fetchWithTimeout as jest.Mock).mockResolvedValue({ ok: true });
+        });
+
+        it('keeps a committed cutover when only the post-commit deploy restart fails', async () => {
+            await service.onModuleInit();
+            await service.create(makeClientData({ clientId: 'cut-deploy', mobile: '15557771011', session: 'old', username: 'oldu', deployKey: 'https://deploy.test/fail' }));
+            telegramService.getActiveClientSetup.mockReturnValue({
+                clientId: 'cut-deploy', existingMobile: '15557771011', newMobile: '15557771012',
+                archiveOld: false, formalities: false, days: 0,
+            });
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+                getMe: jest.fn(async () => ({ username: 'newtg' })),
+            } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            bufferClientService.findOne.mockResolvedValue({ mobile: '15557771012', username: 'bufuser', assignedProfilePics: [] });
+            const { fetchWithTimeout } = require('../../utils/fetchWithTimeout');
+            (fetchWithTimeout as jest.Mock).mockImplementation((url: string) => {
+                if (url === 'https://deploy.test/fail') return Promise.reject(new Error('deploy down'));
+                return Promise.resolve({ ok: true });
+            });
+            usersService.search.mockResolvedValue([{ tgId: 'tg', mobile: '15557771011', session: 'backup' }]);
+
+            await service.updateClientSession('new-session', '15557771012');
+
+            const after = await ClientModel.findOne({ clientId: 'cut-deploy' }).lean();
+            expect(after!.mobile).toBe('15557771012');
             expect(after!.session).toBe('new-session');
             (fetchWithTimeout as jest.Mock).mockResolvedValue({ ok: true });
         });
     });
 
-    // ─── handleClientArchival outer catch (738-743) ──────────────────────────
+    // ─── handleReplacedClient outer catch (738-743) ──────────────────────────
 
-    describe('handleClientArchival outer catch', () => {
-        it('handles a permanent error thrown mid-archival by marking buffer inactive', async () => {
+    describe('handleReplacedClient outer catch', () => {
+        it('handles a permanent error thrown mid-pool-return by marking buffer inactive', async () => {
             await service.onModuleInit();
             // usersService.search throws → falls into the outer catch (738-743).
             usersService.search.mockRejectedValue(new Error('SESSION_REVOKED while searching'));
             isPermanentError.mockReturnValue(true);
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 { clientId: 'arc-catch', session: 's' } as any, '15554441001', false, true, 0, undefined,
             );
             expect(usersService.expireAccount).toHaveBeenCalledWith(
@@ -1020,38 +1117,38 @@ describe('ClientService coverage', () => {
             );
         });
 
-        it('swallows a transient error thrown mid-archival without marking inactive', async () => {
+        it('swallows a transient error thrown mid-pool-return without marking inactive', async () => {
             await service.onModuleInit();
             usersService.search.mockRejectedValue(new Error('TIMEOUT while searching'));
             isPermanentError.mockReturnValue(false);
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 { clientId: 'arc-catch2', session: 's' } as any, '15554441002', false, true, 0, undefined,
             );
             expect(usersService.expireAccount).not.toHaveBeenCalled();
         });
     });
 
-    // ─── markBufferInactiveForArchival catch (766-768) ───────────────────────
+    // ─── retireReplacedMobile catch (766-768) ───────────────────────
 
-    describe('markBufferInactiveForArchival failure', () => {
+    describe('retireReplacedMobile failure', () => {
         it('swallows an expireAccount failure', async () => {
             await service.onModuleInit();
             usersService.expireAccount.mockRejectedValueOnce(new Error('expire blew up'));
             await expect(
-                (service as any).markBufferInactiveForArchival('15554442001', 'reason text'),
+                (service as any).retireReplacedMobile('15554442001', 'reason text'),
             ).resolves.toBeUndefined();
         });
     });
 
-    // ─── archiveOldClient catch: permanent + transient (810-830) ─────────────
+    // ─── returnOldClientToBufferPool catch: permanent + transient (810-830) ─────────────
 
-    describe('archiveOldClient catch branches', () => {
+    describe('returnOldClientToBufferPool catch branches', () => {
         it('marks buffer inactive when archival fails permanently', async () => {
             await service.onModuleInit();
             bufferClientService.getOrEnsureDistinctUsersBackupSession.mockResolvedValue({ tgId: 't', mobile: '15554443001', session: 'distinct' });
             bufferClientService.createOrUpdate.mockRejectedValueOnce(new Error('USER_DEACTIVATED'));
             isPermanentError.mockReturnValue(true);
-            await (service as any).archiveOldClient(
+            await (service as any).returnOldClientToBufferPool(
                 { clientId: 'arc-perm', session: 's' } as any,
                 { tgId: 'tg', mobile: '15554443001' } as any,
                 '15554443001',
@@ -1065,7 +1162,7 @@ describe('ClientService coverage', () => {
             bufferClientService.getOrEnsureDistinctUsersBackupSession.mockResolvedValue({ tgId: 't', mobile: '15554443002', session: 'distinct' });
             bufferClientService.createOrUpdate.mockRejectedValueOnce(new Error('TIMEOUT'));
             isPermanentError.mockReturnValue(false);
-            await (service as any).archiveOldClient(
+            await (service as any).returnOldClientToBufferPool(
                 { clientId: 'arc-trans', session: 's' } as any,
                 { tgId: 'tg', mobile: '15554443002' } as any,
                 '15554443002',
@@ -1084,7 +1181,7 @@ describe('ClientService coverage', () => {
             bufferClientService.createOrUpdate.mockRejectedValueOnce(new Error('TIMEOUT'));
             bufferClientService.update.mockRejectedValueOnce(new Error('release failed'));
             isPermanentError.mockReturnValue(false);
-            await expect((service as any).archiveOldClient(
+            await expect((service as any).returnOldClientToBufferPool(
                 { clientId: 'arc-trans2', session: 's' } as any,
                 { tgId: 'tg', mobile: '15554443004' } as any,
                 '15554443004',
@@ -1221,10 +1318,10 @@ describe('ClientService coverage', () => {
             expect(usersService.expireAccount).toHaveBeenCalledWith('15551110001', 'SESSION_REVOKED');
         });
 
-        it('archiveOldClient marks the buffer inactive when days exceeds 35 (798 inactive arm)', async () => {
+        it('returnOldClientToBufferPool marks the buffer inactive when days exceeds 35 (798 inactive arm)', async () => {
             await service.onModuleInit();
             bufferClientService.getOrEnsureDistinctUsersBackupSession.mockResolvedValue({ tgId: 't', mobile: '15551110010', session: 'distinct' });
-            await (service as any).archiveOldClient(
+            await (service as any).returnOldClientToBufferPool(
                 { clientId: 'arc-old', session: 'sess' } as any,
                 { tgId: 'tg', mobile: '15551110010' } as any,
                 '15551110010',
@@ -1412,16 +1509,15 @@ describe('ClientService coverage', () => {
             } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             bufferClientService.findOne.mockResolvedValue({ mobile: '15559997041', username: 'bufuser', assignedProfilePics: [] });
-            bufferClientService.setPrimaryInUse.mockRejectedValueOnce('plain-string-stamp-error'); // 651 false arm
             const { fetchWithTimeout } = require('../../utils/fetchWithTimeout');
             (fetchWithTimeout as jest.Mock).mockImplementation((url: string) => {
                 if (url === 'https://deploy.test/nonerr') return Promise.reject('plain-string-deploy-error'); // 665 false arm
                 return Promise.resolve({ ok: true });
             });
-            // Make handleClientArchival throw a non-Error so the outer catch's 688 false arm runs,
+            // Make handleReplacedClient throw a non-Error so the outer catch's 688 false arm runs,
             // but only AFTER cutover commits (so it rethrows). Use archiveOld=false then force update reject.
-            jest.spyOn(service as any, 'handleClientArchival').mockRejectedValue('plain-string-archival-error');
-            await expect(service.updateClientSession('new-session', '15559997041')).rejects.toBe('plain-string-archival-error');
+            jest.spyOn(service as any, 'handleReplacedClient').mockRejectedValue('plain-string-pool-return-error');
+            await expect(service.updateClientSession('new-session', '15559997041')).rejects.toBe('plain-string-pool-return-error');
             (fetchWithTimeout as jest.Mock).mockResolvedValue({ ok: true });
         });
     });

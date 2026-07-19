@@ -38,7 +38,7 @@ function buildUserData(overrides: Partial<UserData> = {}): any {
         demoGiven: false,
         secondShow: false,
         profile: `profile-${seq}`,
-        picSent: false,
+        picsSent: 0,
         highestPayAmount: 0,
         cheatCount: 0,
         callTime: 0,
@@ -88,6 +88,17 @@ describe('UserDataService', () => {
 
         it('throws InternalServerError when create fails (validation)', async () => {
             await expect(service.create({ chatId: 'only-this' } as any)).rejects.toBeInstanceOf(InternalServerErrorException);
+        });
+
+        it('applies canonical defaults when a valid identity is created through CommonTgService', async () => {
+            const doc = await service.create({ chatId: 'c1', profile: 'p1' } as any);
+            expect(doc).toMatchObject({
+                canReply: 1,
+                paidReply: true,
+                picsSent: 0,
+                videos: [],
+                fullShow: 0,
+            });
         });
     });
 
@@ -153,13 +164,20 @@ describe('UserDataService', () => {
     });
 
     describe('update', () => {
-        it('updates (upserts) and strips _id/profile/chatId from dto', async () => {
+        it('updates an existing record and strips _id/profile/chatId from dto', async () => {
             await model.create(buildUserData({ profile: 'p1', chatId: 'c1', totalCount: 1 }));
             const res = await service.update('p1', 'c1', { totalCount: 99, _id: 'x', profile: 'evil', chatId: 'evil' } as any);
             expect(res.totalCount).toBe(99);
             expect(res.profile).toBe('p1');
             expect(res.chatId).toBe('c1');
         });
+
+        it('does not create a partial document when the target is missing', async () => {
+            await expect(service.update('missing-profile', 'missing-chat', { canReply: 1 } as any))
+                .rejects.toBeInstanceOf(NotFoundException);
+            expect(await model.countDocuments({})).toBe(0);
+        });
+
     });
 
     describe('updateAll', () => {
@@ -282,15 +300,14 @@ describe('UserDataService', () => {
         it('returns the updated doc for an existing user', async () => {
             await model.create(buildUserData({ profile: 'p1', chatId: 'c1' }));
             const res = await service.updateLastActive('p1', 'c1');
-            // lastActiveTime is not in the strict schema, but the doc is still returned.
             expect(res.profile).toBe('p1');
+            expect(res.lastActiveTime).toBeInstanceOf(Date);
         });
     });
 
     describe('findInactiveSince', () => {
         it('finds docs with lastActiveTime before date', async () => {
-            // lastActiveTime not in strict schema -> insert raw so the field persists.
-            await model.collection.insertOne({ ...buildUserData({ profile: 'p1', chatId: 'c1' }), lastActiveTime: new Date('2000-01-01') });
+            await model.create(buildUserData({ profile: 'p1', chatId: 'c1', lastActiveTime: new Date('2000-01-01') }));
             const res = await service.findInactiveSince(new Date('2010-01-01'));
             expect(res.length).toBe(1);
         });

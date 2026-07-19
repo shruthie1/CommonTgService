@@ -30,7 +30,7 @@ describe('ChannelsController', () => {
   test('search', async () => {
     const svc = makeService();
     const c = new ChannelsController(svc as any);
-    await c.search({ restricted: true } as any);
+    await c.search({ canSendMsgs: true } as any);
     expect(svc.search).toHaveBeenCalled();
   });
 

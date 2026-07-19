@@ -20,7 +20,6 @@ function makeStub() {
     updateInfo: jest.fn(),
     joinchannelForBufferClients: jest.fn(),
     checkBufferClients: jest.fn(),
-    updateAllClientSessions: jest.fn(),
     diagnoseWarmupPipeline: jest.fn(),
     diagnoseEnrollmentDecision: jest.fn(),
     addNewUserstoBufferClients: jest.fn(),
@@ -136,47 +135,17 @@ describe('BufferClientController', () => {
   });
 
   describe('refreshBufferSessions', () => {
-    it('apply !== true → dry-run with trimmed mobile', async () => {
-      stub.updateAllClientSessions.mockResolvedValue({ dryRun: true });
-      const res = await controller.refreshBufferSessions({ apply: false, mobile: '  999  ' });
-      expect(stub.updateAllClientSessions).toHaveBeenCalledWith({ dryRun: true, mobile: '999' });
-      expect(res).toEqual({ dryRun: true });
+    it('returns an explicit disabled response without invoking the service', async () => {
+      await expect(controller.refreshBufferSessions()).resolves.toEqual({
+        dryRun: true,
+        disabled: true,
+        reason: 'Bulk session refresh is disabled; session_rotated accounts must never be rotated again.',
+      });
     });
 
-    it('default body {} → dry-run, mobile undefined', async () => {
-      stub.updateAllClientSessions.mockResolvedValue({ dryRun: true });
-      await controller.refreshBufferSessions();
-      expect(stub.updateAllClientSessions).toHaveBeenCalledWith({ dryRun: true, mobile: undefined });
-    });
-
-    it('blank/non-string mobile → undefined', async () => {
-      stub.updateAllClientSessions.mockResolvedValue({});
-      await controller.refreshBufferSessions({ apply: false, mobile: '   ' });
-      expect(stub.updateAllClientSessions).toHaveBeenCalledWith({ dryRun: true, mobile: undefined });
-      await controller.refreshBufferSessions({ apply: false, mobile: 123 as any });
-      expect(stub.updateAllClientSessions).toHaveBeenLastCalledWith({ dryRun: true, mobile: undefined });
-    });
-
-    it('apply === true → returns initiated object', async () => {
-      stub.updateAllClientSessions.mockResolvedValue(undefined);
-      const res = await controller.refreshBufferSessions({ apply: true, mobile: '555' });
-      expect(stub.updateAllClientSessions).toHaveBeenCalledWith({ dryRun: false, mobile: '555' });
-      expect(res).toEqual({ initiated: true, dryRun: false, mobile: '555' });
-    });
-
-    it('apply === true with no mobile → mobile null in response', async () => {
-      stub.updateAllClientSessions.mockResolvedValue(undefined);
-      const res = await controller.refreshBufferSessions({ apply: true });
-      expect(res).toEqual({ initiated: true, dryRun: false, mobile: null });
-    });
-
-    it('apply === true reject → console.error catch fires', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-      stub.updateAllClientSessions.mockRejectedValue(new Error('fail'));
-      const res = await controller.refreshBufferSessions({ apply: true, mobile: '555' });
-      expect(res).toEqual({ initiated: true, dryRun: false, mobile: '555' });
-      await flushMicrotasks();
-      expect(consoleSpy).toHaveBeenCalled();
+    it('rejects apply=true before any session work can start', async () => {
+      await expect(controller.refreshBufferSessions({ apply: true, mobile: '555' }))
+        .rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

@@ -1,18 +1,20 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, TransformFnParams, Type } from 'class-transformer';
-import { IsOptional, IsString, IsBoolean, IsNumber, Matches } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsInt, Matches, Max, Min } from 'class-validator';
 import { CANONICAL_MOBILE_REGEX, normalizeMobileInput } from '../../shared/mobile-utils';
 
 const toBoolean = ({ value }: TransformFnParams): boolean => value === 'true' || value === true;
 
 export class SetupClientQueryDto {
-    @ApiPropertyOptional({ description: 'Days to push availability forward', default: 0 })
+    @ApiPropertyOptional({ description: 'Days to push availability forward (0-35)', default: 0, minimum: 0, maximum: 35 })
     @IsOptional()
     @Type(() => Number)
-    @IsNumber()
+    @IsInt()
+    @Min(0)
+    @Max(35)
     days?: number = 0;
 
-    @ApiPropertyOptional({ description: 'Archive the old client back to buffer pool', default: true })
+    @ApiPropertyOptional({ description: 'Legacy flag: return the replaced client to the buffer pool', default: true })
     @IsOptional()
     @Type(() => String)
     @Transform(toBoolean)

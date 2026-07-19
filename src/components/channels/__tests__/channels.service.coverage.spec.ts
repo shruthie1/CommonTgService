@@ -81,10 +81,27 @@ describe('ChannelsService - CRUD', () => {
   test('createMultiple upserts and returns message', async () => {
     const r = await service.createMultiple([
       { channelId: 'm1', title: 'A', canSendMsgs: true, participantsCount: 100 } as any,
-      { channelId: 'm2', username: 'b', restricted: true } as any,
+      { channelId: 'm2', username: 'b', canSendMsgs: false } as any,
     ]);
     expect(r).toBe('Channels Saved');
     expect(await model.countDocuments({})).toBe(2);
+  });
+
+  test('createMultiple atomically preserves banned and forbidden stops during a live refresh', async () => {
+    await seed({ channelId: 'bulk-banned', banned: true, canSendMsgs: false, title: 'Old banned' });
+    await seed({ channelId: 'bulk-forbidden', forbidden: true, canSendMsgs: false, title: 'Old forbidden' });
+
+    await service.createMultiple([
+      { channelId: 'bulk-banned', title: 'Fresh banned', canSendMsgs: true, private: false, broadcast: false } as any,
+      { channelId: 'bulk-forbidden', title: 'Fresh forbidden', canSendMsgs: true, private: false, broadcast: false } as any,
+    ]);
+
+    await expect(model.findOne({ channelId: 'bulk-banned' }).lean().exec()).resolves.toEqual(
+      expect.objectContaining({ banned: true, canSendMsgs: false, title: 'Fresh banned' }),
+    );
+    await expect(model.findOne({ channelId: 'bulk-forbidden' }).lean().exec()).resolves.toEqual(
+      expect.objectContaining({ forbidden: true, canSendMsgs: false, title: 'Fresh forbidden' }),
+    );
   });
 
   test('createMultiple throws on empty array', async () => {
@@ -114,13 +131,13 @@ describe('ChannelsService - remove', () => {
 
 describe('ChannelsService - search / getChannels / executeQuery / getActiveChannels', () => {
   test('search returns matching channels', async () => {
-    await seed({ channelId: 's1', restricted: true });
-    const r = await service.search({ restricted: true });
+    await seed({ channelId: 's1', canSendMsgs: false });
+    const r = await service.search({ canSendMsgs: false });
     expect(r.length).toBe(1);
   });
 
   test('getChannels filters and sorts', async () => {
-    await seed({ channelId: 'g1', title: 'nice group', username: 'nicegroup', participantsCount: 5000, canSendMsgs: true, broadcast: false, restricted: false });
+    await seed({ channelId: 'g1', title: 'nice group', username: 'nicegroup', participantsCount: 5000, canSendMsgs: true, broadcast: false });
     const r = await service.getChannels(10, 0, ['nice'], ['someid']);
     expect(Array.isArray(r)).toBe(true);
   });
@@ -175,9 +192,9 @@ describe('ChannelsService - executeQuery branch matrix', () => {
   });
 
   test('executeQuery with neither sort nor limit returns every match', async () => {
-    await seed({ channelId: 'en1', restricted: true });
-    await seed({ channelId: 'en2', restricted: true });
-    const r = await service.executeQuery({ restricted: true });
+    await seed({ channelId: 'en1', canSendMsgs: false });
+    await seed({ channelId: 'en2', canSendMsgs: false });
+    const r = await service.executeQuery({ canSendMsgs: false });
     expect(r.length).toBe(2);
   });
 
@@ -191,11 +208,11 @@ describe('ChannelsService - executeQuery branch matrix', () => {
 describe('ChannelsService - getChannels real filtering', () => {
   test('matches keyword, excludes blacklist words, and honors notIds', async () => {
     // Should match: title contains the keyword, no blacklisted word, sendable.
-    await seed({ channelId: 'gc-match', title: 'lovely chat', username: 'lovelychat', participantsCount: 5000, canSendMsgs: true, broadcast: false, restricted: false });
+    await seed({ channelId: 'gc-match', title: 'lovely chat', username: 'lovelychat', participantsCount: 5000, canSendMsgs: true, broadcast: false });
     // Should be excluded: title contains a blacklisted word ('crypto').
-    await seed({ channelId: 'gc-black', title: 'lovely crypto', username: 'lovelycrypto', participantsCount: 9000, canSendMsgs: true, broadcast: false, restricted: false });
+    await seed({ channelId: 'gc-black', title: 'lovely crypto', username: 'lovelycrypto', participantsCount: 9000, canSendMsgs: true, broadcast: false });
     // Should be excluded: broadcast channel (can't post).
-    await seed({ channelId: 'gc-broad', title: 'lovely news', username: 'lovelynews', participantsCount: 9000, canSendMsgs: true, broadcast: true, restricted: false });
+    await seed({ channelId: 'gc-broad', title: 'lovely news', username: 'lovelynews', participantsCount: 9000, canSendMsgs: true, broadcast: true });
 
     const r = await service.getChannels(50, 0, ['lovely'], ['someExcludedName']);
     const ids = r.map((c: any) => c.channelId);
@@ -206,7 +223,7 @@ describe('ChannelsService - getChannels real filtering', () => {
 
   test('uses default args (limit=50, skip=0, keywords=[], notIds=[]) when called bare', async () => {
     // A caller relying on the method defaults — exercises the default-parameter branches.
-    await seed({ channelId: 'def-1', title: 'plain group', username: 'plaingroup', participantsCount: 4000, canSendMsgs: true, broadcast: false, restricted: false });
+    await seed({ channelId: 'def-1', title: 'plain group', username: 'plaingroup', participantsCount: 4000, canSendMsgs: true, broadcast: false });
     const r = await service.getChannels();
     expect(Array.isArray(r)).toBe(true);
   });
@@ -218,9 +235,9 @@ describe('ChannelsService - getChannels real filtering', () => {
   });
 
   test('skip/limit paginate the sorted result', async () => {
-    await seed({ channelId: 'pg1', title: 'lovely a', username: 'lovelya', participantsCount: 100, canSendMsgs: true, broadcast: false, restricted: false });
-    await seed({ channelId: 'pg2', title: 'lovely b', username: 'lovelyb', participantsCount: 300, canSendMsgs: true, broadcast: false, restricted: false });
-    await seed({ channelId: 'pg3', title: 'lovely c', username: 'lovelyc', participantsCount: 200, canSendMsgs: true, broadcast: false, restricted: false });
+    await seed({ channelId: 'pg1', title: 'lovely a', username: 'lovelya', participantsCount: 100, canSendMsgs: true, broadcast: false });
+    await seed({ channelId: 'pg2', title: 'lovely b', username: 'lovelyb', participantsCount: 300, canSendMsgs: true, broadcast: false });
+    await seed({ channelId: 'pg3', title: 'lovely c', username: 'lovelyc', participantsCount: 200, canSendMsgs: true, broadcast: false });
     const page = await service.getChannels(1, 1, ['lovely'], []);
     // sorted by participantsCount desc → [300, 200, 100]; skip 1, limit 1 → the 200 one
     expect(page.length).toBe(1);

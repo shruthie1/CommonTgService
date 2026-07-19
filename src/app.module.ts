@@ -63,7 +63,6 @@ import { AccountMaintenanceService } from './control-plane/maintenance/account-m
     TransactionModule,
     TimestampModule,
     DynamicDataModule,
-    EventManagerModule,
     CollectionInsightsModule,
     FileModule.register(),
   ],

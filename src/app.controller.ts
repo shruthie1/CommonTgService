@@ -8,6 +8,7 @@ import * as https from 'https';
 import { URL } from 'url';
 import { parseError , Logger} from './utils';
 import { ClientService } from './components/clients/client.service';
+import { SetupClientQueryDto } from './components/clients/dto/setup-client.dto';
 import { AppService, VideoDetails } from './app.service';
 import { CloudflareCacheInterceptor } from './interceptors/cloudflare-cache.interceptor';
 import { NoCache } from './decorators/no-cache.decorator';
@@ -41,7 +42,7 @@ export class AppController {
   }
 
   @Get('setupClient/:clientId')
-  async setupClient(@Param('clientId') clientId: string, @Query() query: any) {
+  async setupClient(@Param('clientId') clientId: string, @Query() query: SetupClientQueryDto) {
     return this.appService.setupClient(clientId, query);
   }
 

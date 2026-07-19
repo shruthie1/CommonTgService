@@ -10,6 +10,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
+import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
 
 @Injectable()
 export class ActiveChannelsService {
@@ -17,6 +18,16 @@ export class ActiveChannelsService {
   private readonly DEFAULT_SKIP = 0;
   private readonly MIN_PARTICIPANTS_COUNT = 600;
   private readonly logger = new Logger(ActiveChannelsService.name);
+  private readonly writableFields = new Set([
+    'title', 'username', 'participantsCount', 'accessHash', 'broadcast',
+    'canSendMsgs', 'megagroup', 'availableMsgs', 'banned', 'bannedAt',
+    'forbidden', 'private', 'reactRestricted', 'reactRestrictedAt',
+    'clientsJoined', 'lastHydrationReason', 'lastHydrationStatus',
+    'lastHydratedAt', 'lastLiveCheckedAt', 'lastMessageTime', 'messageIndex',
+    'messageId', 'deletedCount', 'successMsgCount', 'failureMsgCount',
+    'followupMsgSuccessCount', 'followupMsgFailureCount',
+    'freeformDeletedCount', 'followUpDeletedCount', 'message',
+  ]);
 
   constructor(
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
@@ -89,52 +100,44 @@ export class ActiveChannelsService {
           'title',
           'username',
           'participantsCount',
+          'accessHash',
           'megagroup',
           'broadcast',
           'canSendMsgs',
-          'restricted',
-          'sendMessages',
-          'sendPlain',
-          'private',
-          'forbidden',
-          'banned',
-          'bannedAt',
           'reactRestricted',
-          'wordRestriction',
-          'dMRestriction',
+          'lastHydrationReason',
+          'lastHydrationStatus',
+          'lastHydratedAt',
+          'lastLiveCheckedAt',
         ]);
+        // `private` is a live Telegram fact and is refreshed both ways.
+        if (typeof dto.private === 'boolean') setFields.private = dto.private;
+        // `forbidden` remains a durable safety stop until explicitly cleared.
+        if (dto.forbidden === true) setFields.forbidden = true;
 
         const defaults: Record<string, unknown> = {
           channelId: dto.channelId,
+          title: '',
+          username: '',
           broadcast: false,
           canSendMsgs: false,
           participantsCount: 0,
-          restricted: false,
-          sendMessages: false,
-          sendPlain: false,
           reactRestricted: false,
-          wordRestriction: 0,
-          dMRestriction: 0,
+          freeformDeletedCount: 0,
+          followUpDeletedCount: 0,
           availableMsgs: [],
-          banned: false,
-          bannedAt: null,
+          banned: dto.banned === true,
+          bannedAt: dto.banned === true ? (dto.bannedAt ?? Date.now()) : null,
           megagroup: true,
           private: false,
+          forbidden: false,
           createdAt: new Date(),
         };
-
-        // Remove keys already in $set to avoid MongoDB path conflict
-        for (const key of Object.keys(setFields)) {
-          delete defaults[key];
-        }
 
         return {
           updateOne: {
             filter: { channelId: dto.channelId },
-            update: {
-              $set: setFields,
-              $setOnInsert: defaults,
-            },
+            update: buildDurableChannelUpsertPipeline(setFields, defaults, dto),
             upsert: true,
           },
         };
@@ -184,18 +187,49 @@ export class ActiveChannelsService {
         throw new BadRequestException('Channel ID is required');
       }
 
-      const cleanDto = Object.fromEntries(
-        Object.entries(updateActiveChannelDto).filter(([_, value]) => value !== undefined)
+      const cleanDto: Record<string, any> = Object.fromEntries(
+        Object.entries(updateActiveChannelDto).filter(
+          ([key, value]) => value !== undefined && this.writableFields.has(key),
+        )
       );
 
       if (Object.keys(cleanDto).length === 0) {
         throw new BadRequestException('At least one field to update is required');
       }
 
+      const existing = await this.activeChannelModel.findOne({ channelId }).lean().exec();
+      if (cleanDto.banned === true) {
+        cleanDto.bannedAt = cleanDto.bannedAt ?? Date.now();
+        cleanDto.canSendMsgs = false;
+      } else if (cleanDto.banned === false) {
+        // This explicit API update is the only supported unban path.
+        cleanDto.bannedAt = null;
+        // A fresh Telegram observation must restore sendability. The unban itself
+        // never makes a channel selectable.
+        cleanDto.canSendMsgs = false;
+        cleanDto.lastHydrationStatus = 'needs_hydration';
+        cleanDto.lastHydrationReason = 'operator_unbanned';
+      } else if (
+        (existing?.banned === true || existing?.forbidden === true)
+        && cleanDto.canSendMsgs === true
+      ) {
+        cleanDto.canSendMsgs = false;
+      }
+
+      if (cleanDto.private === true || cleanDto.forbidden === true || cleanDto.broadcast === true) {
+        cleanDto.canSendMsgs = false;
+      }
+
+      // A private channel is a live Telegram state and may be cleared on a
+      // later verified refresh. `forbidden` remains durable.
+      if (existing?.forbidden === true && cleanDto.forbidden === false) delete cleanDto.forbidden;
+
       const updatedChannel = await this.activeChannelModel
         .findOneAndUpdate(
           { channelId },
-          { $set: { ...cleanDto, updatedAt: new Date() } },
+          {
+            $set: { ...cleanDto, updatedAt: new Date() },
+          },
           { new: true, upsert: true, lean: true }
         )
         .exec();
@@ -268,11 +302,13 @@ export class ActiveChannelsService {
         throw new BadRequestException('Search filter is required');
       }
 
+      const normalizedFilter: Record<string, unknown> = { ...filter };
+
       // Guard against NoSQL operator injection: this endpoint takes a raw query object, so
       // an attacker could pass ?title[$ne]= or {$where:...} to bypass the filter / dump the
       // collection. Only allow flat scalar equality — reject $-prefixed keys and object/array
       // values (which is where operators like $ne/$gt/$regex/$where live).
-      for (const [key, value] of Object.entries(filter)) {
+      for (const [key, value] of Object.entries(normalizedFilter)) {
         if (key.startsWith('$')) {
           throw new BadRequestException(`Invalid search field: ${key}`);
         }
@@ -281,7 +317,7 @@ export class ActiveChannelsService {
         }
       }
 
-      return await this.activeChannelModel.find(filter).lean().exec();
+      return await this.activeChannelModel.find(normalizedFilter).lean().exec();
     } catch (error) {
       throw this.handleError(error, 'Failed to search channels');
     }
@@ -341,10 +377,10 @@ export class ActiveChannelsService {
             participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
             username: { $ne: null },
             canSendMsgs: true,
-            restricted: { $ne: true },
             banned: { $ne: true },
             forbidden: { $ne: true },
             private: { $ne: true },
+            broadcast: { $ne: true },
           },
         ],
       };
@@ -370,7 +406,7 @@ export class ActiveChannelsService {
             sortScore: {
               $multiply: [
                 { $rand: {} },
-                // React weight: non-restricted channels get 3x priority
+                // Reaction-enabled channels get full priority.
                 { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
                 // Diversity weight: fewer clients joined = higher priority
                 { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
@@ -413,7 +449,17 @@ export class ActiveChannelsService {
                 _id: null,
                 total: { $sum: 1 },
                 canSend: { $sum: { $cond: [{ $eq: ['$canSendMsgs', true] }, 1, 0] } },
-                restricted: { $sum: { $cond: [{ $eq: ['$restricted', true] }, 1, 0] } },
+                unsendable: { $sum: { $cond: [
+                  { $and: [
+                    { $ne: ['$canSendMsgs', true] },
+                    { $ne: ['$banned', true] },
+                    { $ne: ['$forbidden', true] },
+                    { $ne: ['$private', true] },
+                    { $ne: ['$broadcast', true] },
+                  ] },
+                  1,
+                  0,
+                ] } },
                 banned: { $sum: { $cond: [{ $eq: ['$banned', true] }, 1, 0] } },
                 forbidden: { $sum: { $cond: [{ $eq: ['$forbidden', true] }, 1, 0] } },
                 reactRestricted: { $sum: { $cond: [{ $eq: ['$reactRestricted', true] }, 1, 0] } },
@@ -461,10 +507,10 @@ export class ActiveChannelsService {
             {
               $group: {
                 _id: null,
-                wordRestricted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$wordRestriction', 0] }, 0] }, 1, 0] } },
-                dmRestricted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$dMRestriction', 0] }, 0] }, 1, 0] } },
-                totalWordRestrictions: { $sum: { $ifNull: ['$wordRestriction', 0] } },
-                totalDmRestrictions: { $sum: { $ifNull: ['$dMRestriction', 0] } },
+                freeformDeletionChannels: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$freeformDeletedCount', 0] }, 0] }, 1, 0] } },
+                followUpDeletionChannels: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$followUpDeletedCount', 0] }, 0] }, 1, 0] } },
+                totalFreeformDeletions: { $sum: { $ifNull: ['$freeformDeletedCount', 0] } },
+                totalFollowUpDeletions: { $sum: { $ifNull: ['$followUpDeletedCount', 0] } },
               },
             },
           ],
@@ -479,13 +525,6 @@ export class ActiveChannelsService {
                 totalPromos: { $sum: { $size: { $ifNull: ['$availableMsgs', []] } } },
               },
             },
-          ],
-          // ── Error breakdown ──
-          errorBreakdown: [
-            { $match: { lastErrorType: { $ne: null, $exists: true } } },
-            { $group: { _id: '$lastErrorType', count: { $sum: 1 } } },
-            { $sort: { count: -1 } },
-            { $limit: 15 },
           ],
           // ── Success rate distribution ──
           successRateDist: [
@@ -527,7 +566,7 @@ export class ActiveChannelsService {
             { $match: { failureMsgCount: { $gt: 0 } } },
             { $sort: { failureMsgCount: -1 } },
             { $limit: 10 },
-            { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, failureMsgCount: 1, lastErrorType: 1 } },
+            { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, failureMsgCount: 1 } },
           ],
           // ── Top by deleted ──
           topByDeleted: [
@@ -557,7 +596,7 @@ export class ActiveChannelsService {
       overview: {
         total: overview.total || 0,
         canSend: overview.canSend || 0,
-        restricted: overview.restricted || 0,
+        unsendable: overview.unsendable || 0,
         banned: overview.banned || 0,
         forbidden: overview.forbidden || 0,
         reactRestricted: overview.reactRestricted || 0,
@@ -588,10 +627,10 @@ export class ActiveChannelsService {
         below600: partStats.below600 || 0,
       },
       restrictions: {
-        wordRestricted: restrictStats.wordRestricted || 0,
-        dmRestricted: restrictStats.dmRestricted || 0,
-        totalWordRestrictions: restrictStats.totalWordRestrictions || 0,
-        totalDmRestrictions: restrictStats.totalDmRestrictions || 0,
+        freeformDeletionChannels: restrictStats.freeformDeletionChannels || 0,
+        followUpDeletionChannels: restrictStats.followUpDeletionChannels || 0,
+        totalFreeformDeletions: restrictStats.totalFreeformDeletions || 0,
+        totalFollowUpDeletions: restrictStats.totalFollowUpDeletions || 0,
       },
       promos: {
         withPromos: promoCov.withPromos || 0,
@@ -599,10 +638,6 @@ export class ActiveChannelsService {
         avgPromoCount: Math.round((promoCov.avgPromoCount || 0) * 10) / 10,
         totalPromos: promoCov.totalPromos || 0,
       },
-      errorBreakdown: (result.errorBreakdown || []).map((e: any) => ({
-        error: e._id,
-        count: e.count,
-      })),
       successRateDistribution: (result.successRateDist || []).map((b: any) => ({
         range: b._id === 'other' ? 'other' : `${b._id}-${b._id + 20}%`,
         count: b.count,
@@ -643,10 +678,15 @@ export class ActiveChannelsService {
 
     const query: any = {};
 
-    if (filter === 'can_send') { query.canSendMsgs = true; query.restricted = { $ne: true }; query.banned = { $ne: true }; query.forbidden = { $ne: true }; }
-    else if (filter === 'restricted') query.restricted = true;
+    if (filter === 'can_send') { query.canSendMsgs = true; query.banned = { $ne: true }; query.forbidden = { $ne: true }; query.private = { $ne: true }; query.broadcast = { $ne: true }; }
     else if (filter === 'banned') { query.$or = [{ banned: true }, { forbidden: true }]; }
-    else if (filter === 'with_errors') { query.lastErrorType = { $ne: null, $exists: true }; }
+    else if (filter === 'unsendable') {
+      query.canSendMsgs = { $ne: true };
+      query.banned = { $ne: true };
+      query.forbidden = { $ne: true };
+      query.private = { $ne: true };
+      query.broadcast = { $ne: true };
+    }
     else if (filter === 'exhausted') { query.$expr = { $eq: [{ $size: { $ifNull: ['$availableMsgs', []] } }, 0] }; }
     else if (filter === 'high_deleted') { query.deletedCount = { $gt: 30 }; }
 
@@ -715,15 +755,15 @@ export class ActiveChannelsService {
     }
   }
 
-  async resetWordRestrictions(): Promise<void> {
+  async resetMessageDeletionCounters(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: reset word restrictions`)}`);
+      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: reset message deletion counters`)}`);
       await this.activeChannelModel.updateMany(
         { banned: false },
-        { $set: { wordRestriction: 0, dMRestriction: 0, updatedAt: new Date() } }
+        { $set: { freeformDeletedCount: 0, followUpDeletedCount: 0, updatedAt: new Date() } }
       );
     } catch (error) {
-      throw this.handleError(error, 'Failed to reset word restrictions');
+      throw this.handleError(error, 'Failed to reset message deletion counters');
     }
   }
 
@@ -740,8 +780,8 @@ export class ActiveChannelsService {
         },
         {
           $set: {
-            wordRestriction: 0,
-            dMRestriction: 0,
+            freeformDeletedCount: 0,
+            followUpDeletedCount: 0,
             availableMsgs,
             updatedAt: new Date(),
           },
@@ -759,8 +799,8 @@ export class ActiveChannelsService {
         { $or: [{ banned: true }, { private: true }] },
         {
           $set: {
-            wordRestriction: 0,
-            dMRestriction: 0,
+            freeformDeletedCount: 0,
+            followUpDeletedCount: 0,
             updatedAt: new Date(),
           },
         }

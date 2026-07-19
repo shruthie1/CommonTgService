@@ -11,27 +11,14 @@ export class CreateChannelDto {
   broadcast?: boolean;
 
   @ApiProperty({
-    description: 'Indicates if the channel can send messages' })
-  canSendMsgs: boolean;
+    description: 'Indicates if the channel can send messages',
+    default: false,
+    required: false })
+  canSendMsgs?: boolean;
 
   @ApiProperty({
     description: 'Number of participants in the channel' })
   participantsCount: number;
-
-  @ApiProperty({
-    description: 'Whether the channel is restricted',
-    required: false })
-  restricted?: boolean;
-
-  @ApiProperty({
-    description: 'Whether the channel can send messages',
-    required: false })
-  sendMessages?: boolean;
-
-  @ApiProperty({
-    description: 'Whether plain text messages are banned by default rights',
-    required: false })
-  sendPlain?: boolean;
 
   @ApiProperty({
     description: 'Title of the channel' })
@@ -63,12 +50,6 @@ export class CreateChannelDto {
     default: false,
     required: false })
   reactRestricted?: boolean = false;
-
-  @ApiProperty({ description: 'Word restriction count', default: 0, required: false })
-  wordRestriction?: number = 0;
-
-  @ApiProperty({ description: 'DM restriction count', default: 0, required: false })
-  dMRestriction?: number = 0;
 
   @ApiProperty({ description: 'Available messages', type: [String], required: false })
   availableMsgs?: string[];

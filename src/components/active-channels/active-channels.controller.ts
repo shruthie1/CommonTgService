@@ -42,7 +42,7 @@ export class ActiveChannelsController {
   @ApiQuery({ name: 'sortBy', required: false, type: String })
   @ApiQuery({ name: 'sortOrder', required: false, type: String })
   @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({ name: 'filter', required: false, type: String, description: 'all | can_send | restricted | banned | with_errors | exhausted | high_deleted' })
+  @ApiQuery({ name: 'filter', required: false, type: String, description: 'all | can_send | unsendable | banned | exhausted | high_deleted' })
   async paginated(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -67,12 +67,8 @@ export class ActiveChannelsController {
   @ApiQuery({ name: 'broadcast', required: false, type: Boolean })
   @ApiQuery({ name: 'canSendMsgs', required: false, type: Boolean })
   @ApiQuery({ name: 'participantsCount', required: false, type: Number })
-  @ApiQuery({ name: 'restricted', required: false, type: Boolean })
-  @ApiQuery({ name: 'sendMessages', required: false, type: Boolean })
   @ApiQuery({ name: 'title', required: false, type: String })
   @ApiQuery({ name: 'username', required: false, type: String })
-  @ApiQuery({ name: 'wordRestriction', required: false, type: Number })
-  @ApiQuery({ name: 'dMRestriction', required: false, type: Number })
   @ApiQuery({ name: 'availableMsgs', required: false, type: [String] })
   @ApiQuery({ name: 'banned', required: false, type: Boolean })
   @ApiQuery({ name: 'reactRestricted', required: false, type: Boolean })

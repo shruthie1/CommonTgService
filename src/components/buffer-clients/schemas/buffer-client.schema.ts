@@ -123,22 +123,22 @@ export class BufferClient {
   otherAuthsRemovedAt: Date;
 
   // Warmup tracking
-  @ApiPropertyOptional({
-    description: 'Current warmup lifecycle phase.',
+  @ApiProperty({
+    description: 'Current warmup lifecycle phase. Every pool document starts enrolled and advances only through lifecycle actions.',
     enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'] })
   @Prop({
-    required: false,
+    required: true,
     type: String,
     enum: ['enrolled', 'settling', 'identity', 'growing', 'maturing', 'ready', 'session_rotated'],
-    default: null })
+    default: 'enrolled' })
   warmupPhase: WarmupPhaseType;
 
   @ApiProperty({ description: 'Per-account warmup jitter in days.', default: 0 })
   @Prop({ required: false, type: Number, default: 0 })
   warmupJitter: number;
 
-  @ApiPropertyOptional({ description: 'Timestamp when the account entered warmup enrollment.'})
-  @Prop({ required: false, type: Date, default: null })
+  @ApiProperty({ description: 'Timestamp when the account entered warmup enrollment.'})
+  @Prop({ required: true, type: Date, default: Date.now })
   enrolledAt: Date;
 
   @ApiPropertyOptional({ description: 'Timestamp of the latest organic activity execution.'})

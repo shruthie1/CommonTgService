@@ -14,6 +14,7 @@ export interface TgContext {
 
 export interface ActiveClientSetup {
     days?: number;
+    /** Legacy API field name; true returns the replaced primary to the buffer pool. */
     archiveOld: boolean;
     formalities: boolean;
     newMobile: string;

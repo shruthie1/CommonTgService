@@ -1,7 +1,7 @@
 /**
- * Client archival & swap integration tests.
+ * Client pool-return & swap integration tests.
  *
- * Tests the handleClientArchival flow:
+ * Tests the handleReplacedClient flow:
  *   Path A (archiveOld=true): old mobile returned to buffer pool with cooldown
  *   Path B (archiveOld=false): old mobile deactivated with reason from tg-aut
  *
@@ -41,7 +41,7 @@ function makeBufferClientService(overrides: any = {}) {
         updateStatus: jest.fn().mockResolvedValue({ status: 'inactive', message: 'inactive' }),
         createOrUpdate: jest.fn().mockResolvedValue({}),
         markAsInactive: jest.fn().mockResolvedValue({}),
-        findOne: jest.fn().mockResolvedValue({ mobile: '90001', session: 'buf-session', username: 'buf_user' }),
+        findOne: jest.fn().mockResolvedValue({ mobile: '90001', session: 'buf-session', username: 'buf_user', channels: 284 }),
         setPrimaryInUse: jest.fn().mockResolvedValue({}),
         ensureDistinctUsersBackupSession: jest.fn().mockResolvedValue(true),
         getOrEnsureDistinctUsersBackupSession: jest.fn().mockResolvedValue({
@@ -96,7 +96,7 @@ function makeService(opts: {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-describe('Client Archival', () => {
+describe('Client Pool Return', () => {
 
     const existingClient = {
         clientId: 'test-client-1',
@@ -123,7 +123,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient,
                 '80001',
                 false,   // formalities
@@ -145,7 +145,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0,
                 'USER_DEACTIVATED_BAN',
             );
@@ -163,7 +163,7 @@ describe('Client Archival', () => {
             const service = makeService({ bufferClientService: bufferService, usersService });
 
             const reason = 'Promotion health check failed: failStreak=150, totalFailed=300';
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, reason,
             );
 
@@ -178,7 +178,7 @@ describe('Client Archival', () => {
             const service = makeService({ bufferClientService: bufferService, usersService });
 
             const reason = 'Account limited until 2026-06-15 (45 days)';
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, reason,
             );
 
@@ -192,13 +192,13 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0,
                 undefined,  // no reason
             );
 
             expect(bufferService.update).toHaveBeenCalledWith('80001', expect.objectContaining({
-                message: 'Deactivated during client swap (archival skipped)',
+                message: 'Deactivated during client swap (pool return skipped)',
             }));
         });
 
@@ -207,12 +207,12 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, '',
             );
 
             expect(bufferService.update).toHaveBeenCalledWith('80001', expect.objectContaining({
-                message: 'Deactivated during client swap (archival skipped)',
+                message: 'Deactivated during client swap (pool return skipped)',
             }));
         });
 
@@ -222,7 +222,7 @@ describe('Client Archival', () => {
             const service = makeService({ bufferClientService: bufferService, usersService });
 
             const beforeCall = new Date();
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, 'some error',
             );
 
@@ -240,7 +240,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([]); // no users
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, 'AUTH_KEY_DUPLICATED',
             );
 
@@ -259,7 +259,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, telegramService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', true, true, 10, 'FROZEN_METHOD_INVALID',
             );
 
@@ -274,17 +274,17 @@ describe('Client Archival', () => {
     });
 
     // ═══════════════════════════════════════════════════════════════════════
-    // PATH A: Archive to buffer pool
+    // PATH A: Return to buffer pool
     // ═══════════════════════════════════════════════════════════════════════
 
-    describe('Path A: Archive (archiveOld=true)', () => {
+    describe('Path A: Pool return (archiveOld=true)', () => {
 
         it('returns old mobile to buffer pool with correct fields', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, true, 10,
             );
 
@@ -293,11 +293,12 @@ describe('Client Archival', () => {
                 mobile: '80001',
                 tgId: 'tg-old-1',
                 session: 'old-session',
-                channels: 170,
+                channels: 284,
                 status: 'active',
                 inUse: false,
+                lastUsed: expect.any(Date),
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
-                sessionRotatedAt: expect.any(Date),
+                sessionRotatedAt: null,
             }));
         });
 
@@ -306,7 +307,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, true, 40,
             );
 
@@ -320,7 +321,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, true, 20,
             );
 
@@ -329,25 +330,25 @@ describe('Client Archival', () => {
             }));
         });
 
-        it('calculates availableDate as days+1 from now', async () => {
+        it('calculates availableDate as the requested number of days from now', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, true, 10,
             );
 
             const callArgs = bufferService.createOrUpdate.mock.calls[0][1];
             const availDate = new Date(callArgs.availableDate);
             const now = new Date();
-            // days+1 = 11 days. toDateString truncates time, so check it's between 10 and 12 days from now
+            // toDateString truncates time, so a requested 10-day delay is approximately 9-10 days away.
             const diffDays = (availDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000);
-            expect(diffDays).toBeGreaterThanOrEqual(10);
-            expect(diffDays).toBeLessThanOrEqual(12);
+            expect(diffDays).toBeGreaterThanOrEqual(9);
+            expect(diffDays).toBeLessThanOrEqual(10);
         });
 
-        it('marks inactive on permanent error during archival', async () => {
+        it('marks inactive on permanent error during pool return', async () => {
             const bufferService = makeBufferClientService({
                 getOrEnsureDistinctUsersBackupSession: jest.fn().mockRejectedValue(
                     Object.assign(new Error('USER_DEACTIVATED_BAN'), { code: 403 }),
@@ -356,7 +357,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, true, 10,
             );
 
@@ -364,7 +365,7 @@ describe('Client Archival', () => {
             expect(usersService.expireAccount).toHaveBeenCalledWith('80001', expect.any(String));
         });
 
-        it('releases the reservation (not stranded inUse=true) on a TRANSIENT error during archival (BUG-6)', async () => {
+        it('releases the reservation (not stranded inUse=true) on a TRANSIENT error during pool return (BUG-6)', async () => {
             const bufferService = makeBufferClientService({
                 // Transient failure while creating the distinct backup session — must NOT expire,
                 // must NOT leave the old primary stranded inUse=true/status=active.
@@ -375,7 +376,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, true, 10,
             );
 
@@ -402,7 +403,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ telegramService, bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', true, false, 0, 'some reason',
             );
 
@@ -415,7 +416,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ telegramService, bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, 'some reason',
             );
 
@@ -431,7 +432,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ telegramService, bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', true, true, 0,
             );
 
@@ -449,7 +450,7 @@ describe('Client Archival', () => {
 
     describe('Reason propagation through updateClientSession', () => {
 
-        it('extracts reason from active setup and passes to archival', async () => {
+        it('extracts reason from active setup and passes to pool return', async () => {
             const activeSetup = {
                 clientId: 'test-client-1',
                 existingMobile: '80001',
@@ -482,13 +483,13 @@ describe('Client Archival', () => {
                 clientModel,
             });
 
-            // Spy on handleClientArchival to verify reason is passed through
-            const archivalSpy = jest.spyOn(service as any, 'handleClientArchival');
+            // Spy on handleReplacedClient to verify reason is passed through
+            const archivalSpy = jest.spyOn(service as any, 'handleReplacedClient');
 
             try {
                 await service.updateClientSession('new-session-123', '90001');
             } catch {
-                // May throw due to incomplete mocking — that's fine, we just need to verify the archival call
+                // May throw due to incomplete mocking — that's fine, we just need to verify the pool return call
             }
 
             // If archival was called, verify reason was passed
@@ -532,12 +533,12 @@ describe('Client Archival', () => {
                 clientModel,
             });
 
-            const archivalSpy = jest.spyOn(service as any, 'handleClientArchival');
+            const archivalSpy = jest.spyOn(service as any, 'handleReplacedClient');
 
             try {
                 await service.updateClientSession('new-session-123', '90001');
             } catch {
-                // May throw — just verifying the archival call
+                // May throw — just verifying the pool return call
             }
 
             if (archivalSpy.mock.calls.length > 0) {
@@ -558,7 +559,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0, 'AUTH_KEY_DUPLICATED',
             );
 
@@ -574,7 +575,7 @@ describe('Client Archival', () => {
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', false, false, 0,
                 'FLOOD_WAIT: A wait of 86400 seconds is required',
             );
@@ -584,31 +585,31 @@ describe('Client Archival', () => {
             }));
         });
 
-        it('promotion rotation → buffer archived with promotion failure reason', async () => {
+        it('promotion rotation → buffer returned with promotion failure reason', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
             // Promotion rotation uses archiveOld=true
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', true, true, 10,
                 'Promotion health check failed: failStreak=150, totalFailed=300',
             );
 
             // Path A doesn't use reason for the message — it creates a new buffer doc
-            // But the archival still succeeds
+            // But the pool return still succeeds
             expect(bufferService.createOrUpdate).toHaveBeenCalledWith('80001', expect.objectContaining({
                 status: 'active',
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
             }));
         });
 
-        it('account limited → buffer archived with limit reason', async () => {
+        it('account limited → buffer returned with limit reason', async () => {
             const bufferService = makeBufferClientService();
             const usersService = makeUsersService([existingUser]);
             const service = makeService({ bufferClientService: bufferService, usersService });
 
-            await (service as any).handleClientArchival(
+            await (service as any).handleReplacedClient(
                 existingClient, '80001', true, true, 45,
                 'Account limited until 2026-06-15 (45 days)',
             );

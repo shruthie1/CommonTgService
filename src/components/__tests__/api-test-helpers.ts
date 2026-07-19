@@ -6,7 +6,7 @@
  * This means our service logic + MongoDB interactions are tested for real.
  */
 import mongoose, { Connection, Model } from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet, MongoMemoryServer } from 'mongodb-memory-server';
 import { BufferClient, BufferClientSchema } from '../buffer-clients/schemas/buffer-client.schema';
 import { PromoteClient, PromoteClientSchema } from '../promote-clients/schemas/promote-client.schema';
 import { Client, ClientSchema } from '../clients/schemas/client.schema';
@@ -15,12 +15,16 @@ import { User, UserDocument, UserSchema } from '../users/schemas/user.schema';
 // ─── MongoDB memory server lifecycle ────────────────────────────────────────
 
 export interface MongoTestContext {
-    mongod: MongoMemoryServer;
+    mongod: MongoMemoryServer | MongoMemoryReplSet;
     connection: Connection;
 }
 
-export async function startMongo(dbName: string): Promise<MongoTestContext> {
-    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+export async function startMongo(dbName: string, replicaSet = false): Promise<MongoTestContext> {
+    const mongod = replicaSet
+        ? await MongoMemoryReplSet.create({
+            replSet: { count: 1, storageEngine: 'wiredTiger' },
+        })
+        : await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
     const connection = await mongoose.createConnection(mongod.getUri(), { dbName }).asPromise();
     return { mongod, connection };
 }

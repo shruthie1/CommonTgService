@@ -71,12 +71,13 @@ export class UserDataService {
     }
 
     async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserDataDocument> {
-        delete (updateUserDataDto as any)._id;
-        delete (updateUserDataDto as any).profile;
-        delete (updateUserDataDto as any).chatId;
+        const sanitizedDto = { ...updateUserDataDto } as Record<string, unknown>;
+        delete (sanitizedDto as any)._id;
+        delete (sanitizedDto as any).profile;
+        delete (sanitizedDto as any).chatId;
         
         const updatedUser = await this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $set: updateUserDataDto }, { new: true, upsert: true })
+            .findOneAndUpdate({ profile, chatId }, { $set: sanitizedDto }, { new: true, upsert: false })
             .lean()
             .exec();
 
@@ -88,10 +89,11 @@ export class UserDataService {
     }
 
     async updateAll(chatId: string, updateUserDataDto: UpdateUserDataDto) {
-        delete (updateUserDataDto as any)._id;
+        const sanitizedDto = { ...updateUserDataDto } as Record<string, unknown>;
+        delete (sanitizedDto as any)._id;
 
         return this.userDataModel
-            .updateMany({ chatId }, { $set: updateUserDataDto })
+            .updateMany({ chatId }, { $set: sanitizedDto })
             .exec();
     }
 
@@ -111,10 +113,11 @@ export class UserDataService {
     }
 
     async search(filter: any): Promise<UserDataDocument[]> {
-        if (filter.firstName) {
-            filter.firstName = { $regex: new RegExp(filter.firstName, 'i') };
+        const searchFilter = { ...filter };
+        if (searchFilter.firstName) {
+            searchFilter.firstName = { $regex: new RegExp(String(searchFilter.firstName), 'i') };
         }
-        return this.userDataModel.find(filter).lean().exec();
+        return this.userDataModel.find(searchFilter).lean().exec();
     }
 
     async executeQuery(
@@ -201,7 +204,7 @@ export class UserDataService {
 
     async bulkUpdateUsers(filter: any, update: UpdateQuery<UserDataDocument>) {
         try {
-            return await this.userDataModel.updateMany(filter, update, { upsert: true }).exec();
+            return await this.userDataModel.updateMany(filter, update, { upsert: false }).exec();
         } catch (error) {
             throw new InternalServerErrorException(parseError(error));
         }

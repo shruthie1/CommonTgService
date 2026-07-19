@@ -59,6 +59,12 @@ export interface ClientConfig {
     clientProcessingDelay: number;
     maxChannelJoinsPerDay: number;
     joinsPerMobilePerRound: number;
+    /**
+     * Minimum joined channels required by the consuming runtime before this pool is
+     * operational. Optional for backwards-compatible custom/test implementations;
+     * production pool services set it explicitly.
+     */
+    operationalChannelThreshold?: number;
 }
 
 export const ClientStatus = {
@@ -101,7 +107,7 @@ export interface BaseClientDocument extends Document {
     warmupJitter?: number;
     enrolledAt?: Date;
     organicActivityAt?: Date;
-    sessionRotatedAt?: Date;
+    sessionRotatedAt?: Date | null;
     // Persona assignment fields
     assignedFirstName?: string;
     assignedLastName?: string;
@@ -304,117 +310,56 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return now - lastAttemptTs < this.getEffectiveCooldownMs(mobile, lastAttemptTs);
     }
 
-    protected inferWarmupPhaseFromProgress(doc: Partial<BaseClientDocument>, useStoredPhase: boolean = true): WarmupPhaseType {
-        if (useStoredPhase && doc.warmupPhase) return doc.warmupPhase;
-        if (doc.sessionRotatedAt) return WarmupPhase.SESSION_ROTATED;
-        if (doc.profilePicsUpdatedAt) return WarmupPhase.MATURING;
-        if ((doc.channels || 0) >= MIN_CHANNELS_FOR_MATURING || doc.usernameUpdatedAt) return WarmupPhase.GROWING;
-        if (doc.nameBioUpdatedAt || doc.profilePicsDeletedAt) return WarmupPhase.IDENTITY;
-        if (doc.otherAuthsRemovedAt || doc.twoFASetAt || doc.privacyUpdatedAt) return WarmupPhase.SETTLING;
-        return WarmupPhase.ENROLLED;
-    }
-
-    protected getWarmupPhaseRank(phase: WarmupPhaseType | null | undefined): number {
-        const order: Record<string, number> = {
-            [WarmupPhase.ENROLLED]: 0,
-            [WarmupPhase.SETTLING]: 1,
-            [WarmupPhase.IDENTITY]: 2,
-            [WarmupPhase.GROWING]: 3,
-            [WarmupPhase.MATURING]: 4,
-            [WarmupPhase.READY]: 5,
-            [WarmupPhase.SESSION_ROTATED]: 6,
+    /**
+     * Terminal accounts are normally excluded from channel joins. A verified
+     * count below the role's operational floor is the sole exception: restore
+     * capacity without rewinding warmup or touching the session lifecycle.
+     */
+    protected getJoinCapacityEligibilityFilter(): MongoQuery {
+        return {
+            $or: [
+                {
+                    warmupPhase: {
+                        $in: [
+                            WarmupPhase.ENROLLED,
+                            WarmupPhase.SETTLING,
+                            WarmupPhase.IDENTITY,
+                            WarmupPhase.GROWING,
+                            WarmupPhase.MATURING,
+                        ],
+                    },
+                },
+                {
+                    warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+                    channels: { $lt: this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING },
+                },
+            ],
         };
-        if (!phase) return -1;
-        return order[phase] ?? -1;
     }
 
-    protected getMissingPrerequisitePhase(doc: TDoc): { phase: WarmupPhaseType; missing: string[] } | null {
-        const currentRank = this.getWarmupPhaseRank(doc.warmupPhase);
-        if (currentRank < this.getWarmupPhaseRank(WarmupPhase.IDENTITY)) {
-            return null;
-        }
-
-        const privacyDone = ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
-        const twoFADone = ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
-        const authsRemoved = ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt) > 0;
-        const missingSecurity: string[] = [];
-
-        if (!privacyDone) missingSecurity.push('privacyUpdatedAt');
-        if (!twoFADone) missingSecurity.push('twoFASetAt');
-        if (!authsRemoved) missingSecurity.push('otherAuthsRemovedAt');
-        if (missingSecurity.length > 0) {
-            return { phase: WarmupPhase.SETTLING, missing: missingSecurity };
-        }
-
-        if (currentRank >= this.getWarmupPhaseRank(WarmupPhase.GROWING)) {
-            const identityMissing: string[] = [];
-            if (ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt) <= 0) identityMissing.push('profilePicsDeletedAt');
-            if (ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt) <= 0) identityMissing.push('nameBioUpdatedAt');
-            if (ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt) <= 0) identityMissing.push('usernameUpdatedAt');
-            if (identityMissing.length > 0) {
-                return { phase: WarmupPhase.IDENTITY, missing: identityMissing };
-            }
-        }
-
-        if (
-            currentRank >= this.getWarmupPhaseRank(WarmupPhase.READY) &&
-            ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt) <= 0
-        ) {
-            return { phase: WarmupPhase.MATURING, missing: ['profilePicsUpdatedAt'] };
-        }
-
-        return null;
-    }
-
-    protected getRecoveryEnrolledAt(phase: WarmupPhaseType, jitter: number, now: number): Date {
-        const recoveryDaysByPhase: Record<WarmupPhaseType, number> = {
-            [WarmupPhase.ENROLLED]: Math.max(1, WARMUP_PHASE_THRESHOLDS.settling + jitter),
-            [WarmupPhase.SETTLING]: WARMUP_PHASE_THRESHOLDS.identity + jitter,
-            [WarmupPhase.IDENTITY]: WARMUP_PHASE_THRESHOLDS.growing + jitter,
-            [WarmupPhase.GROWING]: WARMUP_PHASE_THRESHOLDS.maturing + jitter,
-            [WarmupPhase.MATURING]: WARMUP_PHASE_THRESHOLDS.ready + jitter,
-            [WarmupPhase.READY]: WARMUP_PHASE_THRESHOLDS.ready + jitter + 1,
-            [WarmupPhase.SESSION_ROTATED]: WARMUP_PHASE_THRESHOLDS.ready + jitter + 2,
+    /**
+     * A terminal account is eligible for selection or session work only after it
+     * meets the consuming pool's runtime channel floor.
+     */
+    protected getOperationalChannelEligibilityFilter(): MongoQuery {
+        return {
+            channels: { $gte: this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING },
         };
-
-        const recoveryDays = recoveryDaysByPhase[phase] ?? (WARMUP_PHASE_THRESHOLDS.ready + jitter + 1);
-        return new Date(now - recoveryDays * this.ONE_DAY_MS);
     }
 
-    protected async repairWarmupMetadata(doc: TDoc, now: number): Promise<TDoc> {
-        const updateData: BaseClientUpdate = {};
-        const inferredPhase = this.inferWarmupPhaseFromProgress(doc, false);
-        const currentPhaseRank = this.getWarmupPhaseRank(doc.warmupPhase);
-        const inferredPhaseRank = this.getWarmupPhaseRank(inferredPhase);
-        const missingPrerequisite = this.getMissingPrerequisitePhase(doc);
-
-        // Recover missing or stale phase metadata, but never move backwards automatically.
-        if (!doc.warmupPhase || inferredPhaseRank > currentPhaseRank) {
-            updateData.warmupPhase = inferredPhase;
-        }
-
-        if (missingPrerequisite && this.getWarmupPhaseRank(missingPrerequisite.phase) < currentPhaseRank) {
-            updateData.warmupPhase = missingPrerequisite.phase;
-            this.logger.warn(
-                `Correcting warmup phase for ${doc.mobile}: ${doc.warmupPhase} → ${missingPrerequisite.phase}; missing prerequisites: ${missingPrerequisite.missing.join(', ')}`,
-            );
-        }
-
-        if (!doc.enrolledAt) {
-            updateData.enrolledAt = doc.createdAt
-                ? new Date(doc.createdAt)
-                : this.getRecoveryEnrolledAt(inferredPhase, doc.warmupJitter || 0, now);
-        }
-
-        if (Object.keys(updateData).length === 0) {
-            return doc;
-        }
-
-        const repairedDoc = await this.update(doc.mobile, updateData);
-        this.logger.warn(`Recovered warmup metadata for ${doc.mobile}`, updateData);
-        // Return the freshly-updated Mongoose doc to preserve getter-based schema properties.
-        // Fall back to original doc with fields applied if update returned partial/nothing.
-        return (repairedDoc?.mobile ? repairedDoc as TDoc : Object.assign(doc, updateData));
+    protected getMissingReadyRotationPrerequisites(doc: TDoc): string[] {
+        const requiredTimestamps: Array<keyof BaseClientDocument> = [
+            'privacyUpdatedAt',
+            'twoFASetAt',
+            'otherAuthsRemovedAt',
+            'profilePicsDeletedAt',
+            'nameBioUpdatedAt',
+            'usernameUpdatedAt',
+            'profilePicsUpdatedAt',
+        ];
+        return requiredTimestamps.filter((field) =>
+            ClientHelperUtils.getTimestamp(doc[field] as Date | string | null | undefined) <= 0,
+        ) as string[];
     }
 
     /**
@@ -446,97 +391,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             { parseMode: 'HTML' }
         );
         return true;
-    }
-
-    /** Reason signature written by retireIfStuck — the ONLY inactive reason this service self-heals. */
-    private static readonly OWN_STUCK_REASON = /^Stuck:\s*\d+d in (enrolled|settling|identity|growing|maturing)/i;
-
-    /**
-     * Self-heal: reactivate accounts THIS service itself stuck.
-     *
-     * retireIfStuck() deactivates step-stuck accounts with reason "Stuck: Nd in <phase>".
-     * Those are not proven-dead sessions — they just stalled on a warmup step. Bring them
-     * back into warmup automatically, but ONLY when it is safe and won't ping-pong:
-     *   - reason matches our own retireIfStuck signature (never an account Telegram killed),
-     *   - a session is resolvable — from the pool doc OR backfilled from the users record
-     *     (no session anywhere = cannot resume; leave for manual review),
-     *   - a clientId is present (no parent client = cannot be processed).
-     *
-     * The reactivation resets warmupPhase from completed-timestamp progress, clears failure
-     * state, and back-dates enrolledAt to the phase recovery floor — critically, this puts
-     * age back under STUCK_WARMUP_DAYS so retireIfStuck does NOT immediately re-stick it.
-     */
-    protected async reactivateOwnStuckAccounts(clientId?: string, limit: number = 100): Promise<number> {
-        // NOTE: we deliberately do NOT require `session` on the pool doc here. Some stuck
-        // accounts carry no session on the pool record because their live session lives on
-        // the `users` doc (e.g. promote accounts whose session was only ever persisted to
-        // users). Those were silently skipped before, so they never self-healed. We now
-        // backfill the session from `users` when the pool doc lacks one.
-        const query: MongoQuery = {
-            status: ClientStatus.INACTIVE,
-            message: { $regex: '^Stuck: \\d+d in ', $options: 'i' },
-            clientId: { $exists: true, $nin: [null, ''] },
-        };
-        if (clientId) query.clientId = clientId;
-
-        const docs = await this.model.find(query).limit(limit).exec();
-        if (!docs.length) return 0;
-
-        const now = Date.now();
-        let healed = 0;
-        for (const doc of docs) {
-            const message = (doc.message as string) || '';
-            // Defence-in-depth: re-validate the reason signature and required fields in code,
-            // not just via the Mongo regex.
-            if (!BaseClientService.OWN_STUCK_REASON.test(message)) continue;
-            if (!doc.clientId || !String(doc.clientId).trim()) continue;
-
-            // Resolve a session: prefer the pool doc, else backfill from the users record.
-            // No session anywhere = cannot resume; leave for manual review (as before).
-            let session = doc.session && String(doc.session).trim() ? String(doc.session).trim() : '';
-            let backfilledSession = false;
-            if (!session) {
-                try {
-                    // Look regardless of expired status (search() hides expired docs) and prefer
-                    // a session-bearing doc — a stuck-but-alive account may have an expired user row.
-                    const users = await this.usersService.findByMobileAnyStatus(doc.mobile);
-                    const userSession = users?.[0]?.session && String(users[0].session).trim() ? String(users[0].session).trim() : '';
-                    if (userSession) {
-                        session = userSession;
-                        backfilledSession = true;
-                    }
-                } catch (err) {
-                    this.logger.warn(`Session backfill lookup failed for stuck account ${doc.mobile}:`, err);
-                }
-            }
-            if (!session) continue;
-
-            const targetPhase = this.inferWarmupPhaseFromProgress(doc, false);
-            const enrolledAt = this.getRecoveryEnrolledAt(targetPhase, doc.warmupJitter || 0, now);
-            try {
-                const update: BaseClientUpdate = {
-                    status: ClientStatus.ACTIVE,
-                    warmupPhase: targetPhase,
-                    failedUpdateAttempts: 0,
-                    lastUpdateFailure: null,
-                    lastUpdateAttempt: null,
-                    enrolledAt,
-                    message: `Self-healed: reactivated into warmup at ${targetPhase} (was "${message.slice(0, 80)}")`,
-                };
-                // Persist the backfilled session onto the pool doc so the client is usable and
-                // future self-heal passes don't need to look it up again.
-                if (backfilledSession) update.session = session;
-                await this.update(doc.mobile, update);
-                healed++;
-            } catch (err) {
-                this.logger.warn(`Failed to self-heal stuck account ${doc.mobile}:`, err);
-            }
-        }
-
-        if (healed > 0) {
-            this.logger.log(`Self-healed ${healed} step-stuck ${this.clientType} accounts back into warmup${clientId ? ` for ${clientId}` : ''}`);
-        }
-        return healed;
     }
 
     constructor(
@@ -835,10 +689,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (!channel) return false;
         if (!channel.channelId || !channel.username) return false;
         if (channel.canSendMsgs !== true) return false;
-        if (channel.restricted === true) return false;
         if (channel.banned === true) return false;
         if (channel.forbidden === true) return false;
         if (channel.private === true) return false;
+        if (channel.broadcast === true) return false;
         // (removed a dead `tempBan === true` guard — tempBan was never set true and is now off the schema.)
         return true;
     }
@@ -1363,28 +1217,28 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return { attempted, rotated, deferred, skipped };
     }
 
-    /**
-     * Strict READY-only path. It may repair stale DB metadata, but it performs a
-     * Telegram operation only when the repaired document still resolves to
-     * `rotate_session`.
-     */
+    /** Strict READY-only path; lifecycle metadata is never inferred or repaired here. */
     private async processReadyRotation(doc: TDoc, client: Client): Promise<ProcessClientResult> {
         if (doc.inUse === true || !client) {
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
 
         const now = Date.now();
-        try {
-            doc = await this.repairWarmupMetadata(doc, now);
-        } catch (error) {
-            this.logger.warn(`READY rotation metadata repair failed for ${doc.mobile}:`, error);
-            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
-        }
-
         if (doc.warmupPhase !== WarmupPhase.READY) {
             this.logger.warn(
                 `READY rotation deferred for ${doc.mobile}: metadata now resolves to ${doc.warmupPhase || 'unset'}`,
             );
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        const missingPrerequisites = this.getMissingReadyRotationPrerequisites(doc);
+        if (missingPrerequisites.length > 0) {
+            this.logger.warn(
+                `READY rotation deferred for ${doc.mobile}: missing prerequisites ${missingPrerequisites.join(', ')}`,
+            );
+            return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
+        }
+        if (ClientHelperUtils.getTimestamp(doc.sessionRotatedAt) > 0) {
+            this.logger.warn(`READY rotation deferred for ${doc.mobile}: sessionRotatedAt is already recorded`);
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
         if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
@@ -1397,19 +1251,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 `READY rotation deferred for ${doc.mobile}: resolved action is ${warmupAction.action}`,
             );
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
-        }
-
-        // Legacy records that are already being used must not create another
-        // session. Retain the existing recovery behavior, but only after the
-        // strict READY validation above.
-        if (ClientHelperUtils.getTimestamp(doc.lastUsed) > 0) {
-            await this.backfillTimestamps(doc.mobile, doc, now);
-            await this.update(doc.mobile, {
-                warmupPhase: WarmupPhase.SESSION_ROTATED,
-                ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
-            });
-            this.logger.log(`Recovered already-used READY ${this.clientType} client ${doc.mobile} without a Telegram session rotation`);
-            return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
         }
 
         // Record the attempt before connecting to Telegram. A crash or a false
@@ -1524,14 +1365,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         let updateCount = 0;
 
         // ── Phase 1: DB-only checks & action resolution (no TG connection, no sleep) ──
-        // repairWarmupMetadata runs FIRST so that the lastUsed-in-READY shortcut
-        // below operates on a repaired doc — an account missing a security
-        // prerequisite (2FA / auth removal) gets demoted here and won't be
-        // auto-promoted to session_rotated just because it has a lastUsed.
-        try {
-            doc = await this.repairWarmupMetadata(doc, now);
-        } catch (err) {
-            this.logger.warn(`repairWarmupMetadata failed for ${doc.mobile}:`, err);
+        // Lifecycle fields are mandatory and are written only by their owning action.
+        if (!doc.warmupPhase || !doc.enrolledAt) {
+            this.logger.warn(`Skipping ${this.clientType} client ${doc.mobile}: incomplete lifecycle metadata`);
+            return { updateCount: 0, updateSummary: 'incomplete_lifecycle_metadata' };
         }
 
         const failedAttempts = doc.failedUpdateAttempts || 0;
@@ -1566,23 +1403,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
             this.logger.debug(`Client ${doc.mobile} on cooldown`);
             return { updateCount: 0 };
-        }
-
-        const lastUsed = ClientHelperUtils.getTimestamp(doc.lastUsed);
-        const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
-        if (lastUsed > 0 && (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED)) {
-            await this.backfillTimestamps(doc.mobile, doc, now);
-            if (warmupPhase === WarmupPhase.READY) {
-                const updateData: BaseClientUpdate = {
-                    warmupPhase: WarmupPhase.SESSION_ROTATED,
-                    ...(!doc.sessionRotatedAt ? { sessionRotatedAt: new Date(now) } : {}),
-                };
-                await this.update(doc.mobile, updateData);
-                this.logger.log(`Client ${doc.mobile} has lastUsed in ${warmupPhase}; marking warmup as ${WarmupPhase.SESSION_ROTATED}`);
-                return { updateCount: 1, updateSummary: 'mark_session_rotated_from_last_used' };
-            }
-            this.logger.debug(`Client ${doc.mobile} has been used and is ${warmupPhase}, assuming configured`);
-            return { updateCount: 0, updateSummary: 'backfill_timestamps' };
         }
 
         const warmupAction = getWarmupPhaseAction(doc, now);
@@ -1740,44 +1560,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return { updateCount: 0 };
         } finally {
             await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
-        }
-    }
-
-    // ---- Backfill Timestamps ----
-
-    protected async backfillTimestamps(mobile: string, doc: TDoc, now: number): Promise<void> {
-        const needsProfileBackfill = !doc.privacyUpdatedAt || !doc.profilePicsDeletedAt ||
-            !doc.nameBioUpdatedAt || !doc.usernameUpdatedAt || !doc.profilePicsUpdatedAt;
-        const needsWarmupBackfill = !doc.warmupPhase || !doc.enrolledAt;
-
-        if (!needsProfileBackfill && !needsWarmupBackfill) return;
-
-        this.logger.log(`Backfilling fields for ${mobile}`);
-        const allTimestamps = ClientHelperUtils.createBackfillTimestamps(now, this.ONE_DAY_MS);
-        const backfillData: BaseClientUpdate = {};
-
-        // Profile timestamps
-        if (!doc.privacyUpdatedAt) backfillData.privacyUpdatedAt = allTimestamps.privacyUpdatedAt;
-        if (!doc.profilePicsDeletedAt) backfillData.profilePicsDeletedAt = allTimestamps.profilePicsDeletedAt;
-        if (!doc.nameBioUpdatedAt) backfillData.nameBioUpdatedAt = allTimestamps.nameBioUpdatedAt;
-        if (!doc.usernameUpdatedAt) backfillData.usernameUpdatedAt = allTimestamps.usernameUpdatedAt;
-        if (!doc.profilePicsUpdatedAt) backfillData.profilePicsUpdatedAt = allTimestamps.profilePicsUpdatedAt;
-
-        // Warmup fields — do not backfill security timestamps without live Telegram proof.
-        if (!doc.twoFASetAt || !doc.otherAuthsRemovedAt) {
-            this.logger.warn(`Skipping unverified security timestamp backfill for ${mobile}`, {
-                twoFASetAt: doc.twoFASetAt || null,
-                otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
-            });
-        }
-        const hasDistinctBackupSession = await this.hasDistinctUsersBackupSession(mobile, doc.session || null);
-        if (!doc.warmupPhase) backfillData.warmupPhase = hasDistinctBackupSession ? WarmupPhase.SESSION_ROTATED : WarmupPhase.READY;
-        if (!doc.enrolledAt) backfillData.enrolledAt = doc.createdAt || new Date(now - 30 * this.ONE_DAY_MS);
-        if (hasDistinctBackupSession && !doc.sessionRotatedAt) backfillData.sessionRotatedAt = new Date(now - 26 * this.ONE_DAY_MS);
-
-        if (Object.keys(backfillData).length > 0) {
-            await this.update(mobile, backfillData);
-            this.logger.log(`Backfilled ${Object.keys(backfillData).length} fields for ${mobile}`);
         }
     }
 
@@ -2226,79 +2008,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         this.isLeaveChannelProcessing = false;
     }
 
-    protected getMissingWarmupPhaseQuery(clientId?: string): MongoQuery {
-        const filter: MongoQuery = {
-            status: 'active',
-            $or: [{ warmupPhase: { $exists: false } }, { warmupPhase: null }],
-        };
-        if (clientId) filter.clientId = clientId;
-        return filter;
-    }
-
-    protected async selfHealLegacyUsedAccounts(clientId?: string, limit: number = 100): Promise<number> {
-        const docs = await this.model
-            .find({
-                ...this.getMissingWarmupPhaseQuery(clientId),
-                lastUsed: { $exists: true, $ne: null },
-            })
-            .sort({ lastUsed: -1, _id: 1 })
-            .limit(limit)
-            .exec();
-
-        if (!docs.length) return 0;
-
-        const now = Date.now();
-        let healed = 0;
-        for (const doc of docs) {
-            await this.backfillTimestamps(doc.mobile, doc as TDoc, now);
-            healed++;
-        }
-
-        if (healed > 0) {
-            this.logger.log(`Self-healed ${healed} legacy used ${this.clientType} accounts${clientId ? ` for ${clientId}` : ''}`);
-        }
-        return healed;
-    }
-
-    protected async selfHealLegacyWarmupAccounts(clientId?: string, limit: number = 50): Promise<number> {
-        const docs = await this.model
-            .find({
-                $and: [
-                    this.getMissingWarmupPhaseQuery(clientId),
-                    { $or: [{ lastUsed: { $exists: false } }, { lastUsed: null }] },
-                ],
-            })
-            .sort({ createdAt: 1, _id: 1 })
-            .limit(limit)
-            .exec();
-
-        if (!docs.length) return 0;
-
-        const now = Date.now();
-        let healed = 0;
-        for (const doc of docs) {
-            await this.repairWarmupMetadata(doc as TDoc, now);
-            healed++;
-        }
-
-        if (healed > 0) {
-            this.logger.log(`Self-healed ${healed} legacy warming ${this.clientType} accounts${clientId ? ` for ${clientId}` : ''}`);
-        }
-        return healed;
-    }
-
-    protected async selfHealLegacyOperationalState(clientId?: string): Promise<void> {
-        await this.selfHealLegacyUsedAccounts(clientId);
-        await this.selfHealLegacyWarmupAccounts(clientId);
-        // Non-fatal: reactivation is a best-effort heal — a failure here must never
-        // crash the surrounding warmup cycle (checkBufferClients / checkPromoteClients).
-        try {
-            await this.reactivateOwnStuckAccounts(clientId);
-        } catch (err) {
-            this.logger.warn(`reactivateOwnStuckAccounts failed${clientId ? ` for ${clientId}` : ''}:`, err);
-        }
-    }
-
     // ---- Availability Calculations ----
 
     protected async getStoredActiveSession(mobile: string): Promise<string | null> {
@@ -2452,7 +2161,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     protected getProjectedReadyDateString(doc: Partial<BaseClientDocument>): string | null {
-        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        const phase = doc.warmupPhase;
+        if (!phase) return null;
         if (!isAccountWarmingUp(phase)) return null;
 
         const enrolledTimestamp = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
@@ -2465,15 +2175,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     protected getOperationalAvailabilityDateString(doc: Partial<BaseClientDocument>, now: number): string | null {
         const availableDate = this.normalizeDateString(doc.availableDate);
-        const lastUsedTimestamp = ClientHelperUtils.getTimestamp(doc.lastUsed);
-
-        // Legacy active accounts that were already used are operational now, even if warmup metadata
-        // has not been backfilled yet. Credit them in planning so replenishment does not over-enroll.
-        if (!doc.warmupPhase && lastUsedTimestamp > 0) {
-            return availableDate || ClientHelperUtils.toDateString(now);
-        }
-
-        const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
+        const phase = doc.warmupPhase;
+        if (!phase) return null;
         if (isAccountReady(phase)) {
             return availableDate || ClientHelperUtils.toDateString(now);
         }
@@ -2542,21 +2245,28 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         const readyOperationalDates: string[] = [];
         const pipelineOperationalDates: string[] = [];
+        const operationalChannelThreshold = this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING;
 
         for (const doc of activeDocs) {
             const operationalDate = this.getOperationalAvailabilityDateString(doc, today.getTime());
             if (!operationalDate) continue;
 
-            const phase = doc.warmupPhase || this.inferWarmupPhaseFromProgress(doc);
-            const isLegacyOperational = !doc.warmupPhase && ClientHelperUtils.getTimestamp(doc.lastUsed) > 0;
+            const phase = doc.warmupPhase;
+            if (!phase) continue;
 
-            // An account only counts as READY SUPPLY if it can actually be swapped in. The
-            // buffer-swap query also requires the channel threshold, and warmup can graduate a
-            // STALLED account to SESSION_ROTATED with as few as ~half the target channels. Counting
-            // such an account as ready creates phantom supply: planning thinks the pool is healthy
-            // and stops replenishing, while no account actually qualifies for a swap.
-            const meetsSwapChannelThreshold = (doc.channels || 0) >= MIN_CHANNELS_FOR_MATURING;
-            if ((isLegacyOperational || isAccountReady(phase)) && meetsSwapChannelThreshold) {
+            // A terminal account is supply only when the consuming runtime can actually use it.
+            // Buffer swaps and promotion selection intentionally have different channel floors;
+            // use the owning pool's explicit contract instead of treating every terminal record
+            // as capacity.
+            const meetsOperationalChannelThreshold = (doc.channels || 0) >= operationalChannelThreshold;
+            const isTerminal = isAccountReady(phase);
+            if (isTerminal && !meetsOperationalChannelThreshold) {
+                // Capacity-recovery joins are not scheduled availability. Do not
+                // credit an underfilled terminal account until it reaches the
+                // role's operational floor and is genuinely selectable.
+                continue;
+            }
+            if (isTerminal) {
                 readyOperationalDates.push(operationalDate);
             } else {
                 pipelineOperationalDates.push(operationalDate);
@@ -2622,6 +2332,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         const oneMonthWindow = replenishmentWindowNeeds.find((window) => window.window === 'oneMonth');
         const totalNeededForCount = oneMonthWindow?.needed || 0;
+        // Enrollment takes the full warmup period. A deficit in a shorter window is reported,
+        // but cannot be repaired by a newly-enrolled account; treating it as immediate demand
+        // would over-enroll every maintenance run until the per-client cap is reached.
         const totalNeeded = maxEnrollableWindowNeeded;
 
         let priority = 100;
@@ -2638,7 +2351,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         } else if (totalNeededForCount > 0) {
             calculationReason = `One-month pipeline needs ${totalNeededForCount} to reach minimum of ${this.config.minTotalClients} (ready=${readyActive}, warming=${warmingPipeline})`;
         } else if (hasShortWindowDeficit) {
-            calculationReason = `Short-term windows are below target, but current replenishment focuses on the 3-4 week horizon (ready=${readyActive}, warming=${warmingPipeline})`;
+            calculationReason = `Short-term windows are below target, but the warmup pipeline is sufficient for the 3-4 week horizon (ready=${readyActive}, warming=${warmingPipeline})`;
         } else {
             calculationReason = `Short-term and replenishment horizons satisfied (ready=${readyActive}, warming=${warmingPipeline})`;
         }
@@ -2658,7 +2371,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     protected async calculateAvailabilityBasedNeeds(clientId: string): Promise<AvailabilityNeeds> {
-        await this.selfHealLegacyOperationalState(clientId);
         return this.calculateAvailabilityBasedNeedsForCurrentState(clientId);
     }
 
@@ -2683,7 +2395,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     async getLeastRecentlyUsedClients(clientId: string, limit: number = 1): Promise<TDoc[]> {
-        await this.selfHealLegacyOperationalState(clientId);
         // Inclusive upper bound: '￿' sorts after any same-day ISO datetime, so a
         // legacy stored value like '2026-06-12T18:30:00Z' still matches today.
         const todayInclusive = ClientHelperUtils.getTodayDateString() + '￿';
@@ -2711,8 +2422,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     async getUnusedClients(hoursAgo: number = 24, clientId?: string): Promise<TDoc[]> {
-        await this.selfHealLegacyOperationalState(clientId);
-
         const cutoffDate = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
         // Inclusive upper bound: '￿' sorts after any same-day ISO datetime (see note
         // in getLeastRecentlyUsedClients) so legacy datetime values still match.
@@ -2934,6 +2643,41 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     async rotateSession(mobile: string): Promise<boolean> {
         let activeClient: TelegramClient | null = null;
         try {
+            // Session creation is irreversible operational work. Keep the safety
+            // boundary here as well as in the READY scheduler so no alternate
+            // caller can rotate an underfilled, in-use, or already-terminal
+            // account.
+            const lifecycleDoc = await this.findOne(mobile);
+            if (!lifecycleDoc) {
+                this.logger.warn(`Session rotation refused for ${mobile}: pool record not found`);
+                return false;
+            }
+            if (lifecycleDoc.status !== 'active' || lifecycleDoc.inUse === true) {
+                this.logger.warn(`Session rotation refused for ${mobile}: account is inactive or in use`);
+                return false;
+            }
+            if (lifecycleDoc.warmupPhase !== WarmupPhase.READY) {
+                this.logger.warn(
+                    `Session rotation refused for ${mobile}: expected READY, found ${lifecycleDoc.warmupPhase || 'unset'}`,
+                );
+                return false;
+            }
+            if ((lifecycleDoc.channels || 0) < (this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING)) {
+                this.logger.warn(
+                    `Session rotation refused for ${mobile}: ${lifecycleDoc.channels || 0} channels is below the ${this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING} floor`,
+                );
+                return false;
+            }
+            const missingPrerequisites = this.getMissingReadyRotationPrerequisites(lifecycleDoc);
+            if (missingPrerequisites.length > 0 || ClientHelperUtils.getTimestamp(lifecycleDoc.sessionRotatedAt) > 0) {
+                this.logger.warn(
+                    `Session rotation refused for ${mobile}: ${missingPrerequisites.length > 0
+                        ? `missing prerequisites ${missingPrerequisites.join(', ')}`
+                        : 'session rotation already recorded'}`,
+                );
+                return false;
+            }
+
             this.logger.log(`Starting session rotation for ${mobile}`);
 
             const resolvedActive = await this.resolveActiveSessionForRotation(mobile);

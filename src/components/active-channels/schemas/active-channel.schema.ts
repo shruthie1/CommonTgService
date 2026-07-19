@@ -34,19 +34,7 @@ export class ActiveChannel {
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
-  restricted: boolean;
-
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
   broadcast: boolean;
-
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  sendMessages: boolean;
-
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  sendPlain: boolean;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })
@@ -56,13 +44,9 @@ export class ActiveChannel {
   @Prop({ default: false })
   megagroup?: boolean;
 
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  wordRestriction?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  dMRestriction?: number;
+  @ApiProperty({ required: false, default: null })
+  @Prop({ type: String, default: null })
+  accessHash?: string | null;
 
   // REMOVED recentUniqueUsers / lastUniqueUserCheckAt — dead activity-probe seeds. Only ever written as
   // 0; no reader in CommonTgService or the promotion apps. Removed from the canonical shared schema.
@@ -99,13 +83,32 @@ export class ActiveChannel {
   @Prop({ default: false })
   private?: boolean;
 
+  // Telegram permission details such as restricted/sendMessages/sendPlain are
+  // transient live facts. They are deliberately not persisted; canSendMsgs and
+  // the hydration reason are the canonical stored result.
+  @ApiProperty({ required: false, default: null })
+  @Prop({ default: null })
+  lastHydrationReason?: string | null;
+
+  @ApiProperty({ required: false, default: null })
+  @Prop({ default: null })
+  lastHydrationStatus?: string | null;
+
+  @ApiProperty({ required: false, type: Number, default: null })
+  @Prop({ type: Number, default: null })
+  lastHydratedAt?: number | null;
+
+  @ApiProperty({ required: false, type: Number, default: null })
+  @Prop({ type: Number, default: null })
+  lastLiveCheckedAt?: number | null;
+
   @ApiProperty({ type: Number, default: null })
   @Prop({ type: Number, default: null })
   lastMessageTime?: number;
 
-  @ApiProperty({ type: Number, default: null })
-  @Prop({ type: Number, default: null })
-  messageIndex?: number;
+  @ApiProperty({ type: String, default: null })
+  @Prop({ type: String, default: null })
+  messageIndex?: string;
 
   @ApiProperty({ type: Number, default: null })
   @Prop({ type: Number, default: null })
@@ -114,6 +117,34 @@ export class ActiveChannel {
   @ApiProperty({ type: Number, default: 0 })
   @Prop({ type: Number, default: 0 })
   deletedCount?: number;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  successMsgCount?: number;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  failureMsgCount?: number;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  followupMsgSuccessCount?: number;
+
+  @ApiProperty({ type: Number, default: 0 })
+  @Prop({ type: Number, default: 0 })
+  followupMsgFailureCount?: number;
+
+  @ApiProperty({ type: Number, required: false })
+  @Prop({ type: Number })
+  freeformDeletedCount?: number;
+
+  @ApiProperty({ type: Number, required: false })
+  @Prop({ type: Number })
+  followUpDeletedCount?: number;
+
+  @ApiProperty({ type: String, required: false })
+  @Prop({ type: String })
+  message?: string;
 
   // REMOVED tempBan — never set true by any code, no send-gate read it (dead half-wired flag).
   // REMOVED starred (channel) — never set true; only reader was an unrendered analytics count.

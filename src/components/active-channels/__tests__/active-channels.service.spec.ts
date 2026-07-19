@@ -25,7 +25,7 @@ function execQuery<T>(result: T) {
 }
 
 describe('ActiveChannelsService channel-state persistence', () => {
-  test('createMultiple carries fresh Telegram sendability fields into existing active channel documents', async () => {
+  test('createMultiple updates canonical identity/live state and preserves bans', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
     const service = new ActiveChannelsService({ bulkWrite } as any, {} as any);
 
@@ -38,9 +38,6 @@ describe('ActiveChannelsService channel-state persistence', () => {
         megagroup: true,
         broadcast: false,
         canSendMsgs: true,
-        restricted: false,
-        sendMessages: false,
-        sendPlain: false,
         private: false,
         forbidden: false,
         banned: false,
@@ -48,26 +45,16 @@ describe('ActiveChannelsService channel-state persistence', () => {
       },
     ]);
 
-    expect(bulkWrite).toHaveBeenCalledWith([
-      expect.objectContaining({
-        updateOne: expect.objectContaining({
-          filter: { channelId: '123' },
-          update: expect.objectContaining({
-            $set: expect.objectContaining({
-              canSendMsgs: true,
-              sendMessages: false,
-              sendPlain: false,
-              broadcast: false,
-              restricted: false,
-              private: false,
-              forbidden: false,
-              banned: false,
-              bannedAt: null,
-            }),
-          }),
-        }),
-      }),
-    ], { ordered: false });
+    expect(bulkWrite).toHaveBeenCalledWith(expect.any(Array), { ordered: false });
+    const operation = (bulkWrite.mock.calls as any)[0][0][0].updateOne.update[0].$set;
+    expect(operation.title).toEqual({ $literal: 'adult chat' });
+    expect(operation.username).toEqual({ $literal: 'adult_chat' });
+    expect(operation.participantsCount).toEqual({ $literal: 1200 });
+    expect(operation.private).toEqual({ $literal: false });
+    expect(operation.broadcast).toEqual({ $literal: false });
+    expect(operation.banned).toEqual(expect.any(Object));
+    expect(operation.forbidden).toEqual(expect.any(Object));
+    expect(operation.canSendMsgs).toEqual(expect.objectContaining({ $cond: expect.any(Array) }));
   });
 
   test('getActiveChannels does not run a legacy data migration before selecting candidates', async () => {
@@ -103,7 +90,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
   }
 
   // Insert a raw document bypassing schema strictness (the promote engine writes
-  // fields like successMsgCount / failureMsgCount / lastErrorType that aren't in
+  // fields like successMsgCount / failureMsgCount that aren't in
   // the Mongoose schema; .create() would strip them).
   async function seedRaw(doc: Record<string, any>) {
     return model.collection.insertOne({
@@ -170,6 +157,39 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(r.participantsCount).toBe(50);
     });
 
+    test('runtime-style updates cannot override a durable ban without explicit unban', async () => {
+      await seed({ channelId: 'up-ban', banned: true, bannedAt: 123, canSendMsgs: false });
+      const stillBanned = await service.update('up-ban', { canSendMsgs: true } as any);
+      expect(stillBanned.banned).toBe(true);
+      expect(stillBanned.canSendMsgs).toBe(false);
+
+      const unbanned = await service.update('up-ban', { banned: false, canSendMsgs: true } as any);
+      expect(unbanned.banned).toBe(false);
+      expect(unbanned.bannedAt).toBeNull();
+      expect(unbanned.canSendMsgs).toBe(false);
+      expect(unbanned.lastHydrationStatus).toBe('needs_hydration');
+      expect(unbanned.lastHydrationReason).toBe('operator_unbanned');
+    });
+
+    test('live refresh can clear private, but cannot clear forbidden', async () => {
+      await seed({
+        channelId: 'up-durable-block',
+        private: true,
+        forbidden: true,
+        canSendMsgs: false,
+      });
+
+      const stillBlocked = await service.update('up-durable-block', {
+        private: false,
+        forbidden: false,
+        canSendMsgs: true,
+      } as any);
+
+      expect(stillBlocked.private).toBe(false);
+      expect(stillBlocked.forbidden).toBe(true);
+      expect(stillBlocked.canSendMsgs).toBe(false);
+    });
+
     test('update throws BadRequest with empty channelId', async () => {
       await expect(service.update('', { participantsCount: 1 } as any)).rejects.toBeInstanceOf(BadRequestException);
     });
@@ -223,8 +243,8 @@ describe('ActiveChannelsService (real Mongo)', () => {
 
   describe('search / createMultiple / executeQuery', () => {
     test('search returns matches', async () => {
-      await seed({ channelId: 'se-1', restricted: true });
-      expect((await service.search({ restricted: true })).length).toBe(1);
+      await seed({ channelId: 'se-1', canSendMsgs: false });
+      expect((await service.search({ canSendMsgs: false })).length).toBe(1);
     });
 
     test('search throws BadRequest on empty filter', async () => {
@@ -249,9 +269,58 @@ describe('ActiveChannelsService (real Mongo)', () => {
     test('createMultiple upserts', async () => {
       const r = await service.createMultiple([
         { channelId: 'cm-1', title: 'A' } as any,
-        { channelId: 'cm-2', restricted: true } as any,
+        { channelId: 'cm-2', canSendMsgs: false } as any,
       ]);
       expect(r).toContain('2 channels');
+    });
+
+    test('createMultiple refreshes identity without clearing an existing ban', async () => {
+      await seedRaw({
+        channelId: 'cm-banned',
+        banned: true,
+        bannedAt: 1234,
+        title: 'Old title',
+        username: 'old_user',
+        participantsCount: 100,
+      });
+
+      await service.createMultiple([{
+        channelId: 'cm-banned',
+        title: 'Fresh title',
+        username: 'fresh_user',
+        participantsCount: 1500,
+        canSendMsgs: true,
+      }]);
+
+      const refreshed = await model.collection.findOne({ channelId: 'cm-banned' });
+      expect(refreshed.banned).toBe(true);
+      expect(refreshed.bannedAt).toBe(1234);
+      expect(refreshed.canSendMsgs).toBe(false);
+      expect(refreshed.title).toBe('Fresh title');
+      expect(refreshed.username).toBe('fresh_user');
+      expect(refreshed.participantsCount).toBe(1500);
+    });
+
+    test('createMultiple keeps forbidden channels unsendable while refreshing live identity', async () => {
+      await seedRaw({
+        channelId: 'cm-forbidden',
+        forbidden: true,
+        canSendMsgs: false,
+        title: 'Old title',
+      });
+
+      await service.createMultiple([{
+        channelId: 'cm-forbidden',
+        title: 'Fresh title',
+        canSendMsgs: true,
+        private: false,
+        broadcast: false,
+      }]);
+
+      const refreshed = await model.collection.findOne({ channelId: 'cm-forbidden' });
+      expect(refreshed.forbidden).toBe(true);
+      expect(refreshed.canSendMsgs).toBe(false);
+      expect(refreshed.title).toBe('Fresh title');
     });
 
     test('createMultiple throws on empty', async () => {
@@ -275,13 +344,13 @@ describe('ActiveChannelsService (real Mongo)', () => {
   });
 
   describe('analytics', () => {
-    test('aggregates analytics with full facets', async () => {
-      await seedRaw({ channelId: 'an-1', successMsgCount: 10, failureMsgCount: 2, deletedCount: 1, participantsCount: 12000, lastErrorType: 'FLOOD', wordRestriction: 1, dMRestriction: 1, restricted: true });
+    test('aggregates analytics with canonical facets', async () => {
+      await seedRaw({ channelId: 'an-1', successMsgCount: 10, failureMsgCount: 2, deletedCount: 1, participantsCount: 12000, freeformDeletedCount: 1, followUpDeletedCount: 1, canSendMsgs: false, lastHydrationReason: 'write_forbidden' });
       await seedRaw({ channelId: 'an-2', successMsgCount: 5, failureMsgCount: 5, participantsCount: 1500, banned: true, availableMsgs: [] });
       const a = await service.analytics();
       expect(a.overview.total).toBe(2);
       expect(a.messages.totalSent).toBe(15);
-      expect(a.errorBreakdown.length).toBeGreaterThanOrEqual(1);
+      expect(a.restrictions.totalFreeformDeletions).toBe(1);
       expect(Array.isArray(a.successRateDistribution)).toBe(true);
       expect(Array.isArray(a.topBySuccess)).toBe(true);
     });
@@ -309,12 +378,6 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(r.totalPages).toBe(2);
     });
 
-    test('filter restricted', async () => {
-      await seed({ channelId: 'p3', restricted: true });
-      const r = await service.paginated({ filter: 'restricted' });
-      expect(r.total).toBe(1);
-    });
-
     test('filter banned (banned or forbidden)', async () => {
       await seed({ channelId: 'p4', banned: true });
       await seed({ channelId: 'p5', forbidden: true });
@@ -324,9 +387,11 @@ describe('ActiveChannelsService (real Mongo)', () => {
 
     // 'temp_banned' filter removed — tempBan was a dead flag never set true.
 
-    test('filter with_errors', async () => {
-      await seedRaw({ channelId: 'p7', lastErrorType: 'X' });
-      const r = await service.paginated({ filter: 'with_errors' });
+    test('filter unsendable excludes terminal channel states', async () => {
+      await seed({ channelId: 'p7', canSendMsgs: false });
+      await seed({ channelId: 'p7-banned', canSendMsgs: false, banned: true });
+      await seed({ channelId: 'p7-private', canSendMsgs: false, private: true });
+      const r = await service.paginated({ filter: 'unsendable' });
       expect(r.total).toBe(1);
     });
 
@@ -366,18 +431,18 @@ describe('ActiveChannelsService (real Mongo)', () => {
   });
 
   describe('maintenance ops (fetchWithTimeout mocked)', () => {
-    test('resetWordRestrictions', async () => {
+    test('resetMessageDeletionCounters', async () => {
       mockFetchWithTimeout.mockResolvedValue(undefined);
-      await seed({ channelId: 'w1', banned: false, wordRestriction: 5 } as any);
-      await service.resetWordRestrictions();
+      await seed({ channelId: 'w1', banned: false, freeformDeletedCount: 5 } as any);
+      await service.resetMessageDeletionCounters();
       const c = await model.findOne({ channelId: 'w1' });
-      expect(c.wordRestriction).toBe(0);
+      expect(c.freeformDeletedCount).toBe(0);
       expect(mockFetchWithTimeout).toHaveBeenCalled();
     });
 
-    test('resetWordRestrictions error wrapped', async () => {
+    test('resetMessageDeletionCounters error wrapped', async () => {
       mockFetchWithTimeout.mockRejectedValue(new Error('net'));
-      await expect(service.resetWordRestrictions()).rejects.toBeInstanceOf(InternalServerErrorException);
+      await expect(service.resetMessageDeletionCounters()).rejects.toBeInstanceOf(InternalServerErrorException);
     });
 
     test('resetAvailableMsgs refills sparse channels', async () => {
@@ -390,10 +455,10 @@ describe('ActiveChannelsService (real Mongo)', () => {
 
     test('updateBannedChannels', async () => {
       mockFetchWithTimeout.mockResolvedValue(undefined);
-      await seed({ channelId: 'b-1', banned: true, wordRestriction: 3 } as any);
+      await seed({ channelId: 'b-1', banned: true, freeformDeletedCount: 3 } as any);
       await service.updateBannedChannels();
       const c = await model.findOne({ channelId: 'b-1' });
-      expect(c.wordRestriction).toBe(0);
+      expect(c.freeformDeletedCount).toBe(0);
     });
 
     test('updateBannedChannels error wrapped', async () => {

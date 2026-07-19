@@ -52,12 +52,15 @@ export class CreateUserDataDto {
     @ApiProperty({ description: 'Second show status' })
     secondShow: boolean;
 
+    @ApiProperty({ description: 'Full-show progression count', default: 0 })
+    fullShow: number;
+
     @ApiProperty({ description: 'Profile name' })
     profile: string;
 
-    @ApiProperty({ description: 'Pics Sent status' })
-    picsSent: boolean;
+    @ApiProperty({ description: 'Number of demo pictures sent', default: 0 })
+    picsSent: number;
 
     @ApiProperty({ description: 'videos' })
-    videos: number[];
+    videos: string[];
 }
