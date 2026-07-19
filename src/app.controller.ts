@@ -513,6 +513,22 @@ export class AppController {
     return '2';
   }
 
+  @Get('exitPromotePrimary')
+  @ApiOperation({ summary: 'Exit primary promote clients' })
+  @ApiResponse({ description: 'Returns confirmation of exiting primary promote clients' })
+  async exitPromotePrimary() {
+    this.appService.exitPromotePrimary();
+    return '1';
+  }
+
+  @Get('exitPromoteSecondary')
+  @ApiOperation({ summary: 'Exit secondary promote clients' })
+  @ApiResponse({ description: 'Returns confirmation of exiting secondary promote clients' })
+  async exitPromoteSecondary() {
+    this.appService.exitPromoteSecondary();
+    return '2';
+  }
+
   @Get('/getviddata')
   @ApiOperation({ summary: 'Get video data' })
   @ApiQuery({ name: 'profile', description: 'Profile', type: String, required: false })

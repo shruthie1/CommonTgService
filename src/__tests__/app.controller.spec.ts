@@ -39,6 +39,8 @@ describe('AppController', () => {
     setupClient: jest.fn(),
     forwardGetRequest: jest.fn(),
     processEligibleUsers: jest.fn(),
+    exitPromotePrimary: jest.fn(),
+    exitPromoteSecondary: jest.fn(),
   };
 
   beforeEach(() => {
@@ -49,6 +51,16 @@ describe('AppController', () => {
 
   it('getHello returns greeting', () => {
     expect(controller.getHello()).toBe('Hello World!');
+  });
+
+  it('starts primary promote-client exits and preserves the primary response contract', async () => {
+    await expect(controller.exitPromotePrimary()).resolves.toBe('1');
+    expect(appService.exitPromotePrimary).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts secondary promote-client exits and preserves the secondary response contract', async () => {
+    await expect(controller.exitPromoteSecondary()).resolves.toBe('2');
+    expect(appService.exitPromoteSecondary).toHaveBeenCalledTimes(1);
   });
 
   describe('executeRequest - validation', () => {

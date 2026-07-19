@@ -297,6 +297,32 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async exitPromoteClients(clientIdMarker: '1' | '2'): Promise<void> {
+    const clients = await this.clientService.findAll();
+    for (const client of clients) {
+      if (!client.clientId?.toLowerCase().includes(clientIdMarker)) continue;
+
+      const promoteRepl = client.promoteRepl?.trim();
+      if (!promoteRepl) {
+        this.logger.warn(
+          `Skipping promote exit for ${client.clientId}: promoteRepl is missing`,
+        );
+        continue;
+      }
+
+      await fetchWithTimeout(`${promoteRepl.replace(/\/+$/, '')}/exit`);
+      await sleep(40000);
+    }
+  }
+
+  public async exitPromotePrimary(): Promise<void> {
+    await this.exitPromoteClients('1');
+  }
+
+  public async exitPromoteSecondary(): Promise<void> {
+    await this.exitPromoteClients('2');
+  }
+
   public async refreshPrimary() {
     const clients = await this.clientService.findAll();
     for (const client of clients) {
