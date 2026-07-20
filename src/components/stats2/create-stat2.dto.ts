@@ -37,4 +37,7 @@ export class CreateStatDto {
 
   @ApiProperty({ description: 'Profile' })
   profile: string;
+
+  @ApiProperty({ description: 'Paid channel-attribution credit timestamp', required: false })
+  paymentAttributionCreditedAt?: number;
 }

@@ -53,6 +53,10 @@ export class Stat2 {
   @ApiProperty({ description: 'Profile' })
   @Prop({ required: true })
   profile: string;
+
+  @ApiProperty({ description: 'Paid channel-attribution credit timestamp', required: false })
+  @Prop({ type: Number, required: false })
+  paymentAttributionCreditedAt?: number;
 }
 
 export const StatSchema = SchemaFactory.createForClass(Stat2);
