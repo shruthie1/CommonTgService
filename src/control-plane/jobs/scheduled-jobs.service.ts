@@ -195,6 +195,22 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         await this.activeChannelsService.resetMessageDeletionCounters();
       },
     );
+    // Legacy UMS-test owned the daily user-reporting window. Keep it separate
+    // from UMS's promoteStats reset: stats2 powers tg-aut /getuserstats2,
+    // while promoteStats belongs to the promote lifecycle owner.
+    this.register('maintenance-daily-user-stats-reset', '25 0 * * *', () =>
+      this.runDailyUserStatsReset(),
+    );
+    this.register(
+      'maintenance-daily-user-stats-reset-recovery',
+      '30,45 0 * * *',
+      () => this.runDailyUserStatsReset(),
+    );
+    if (this.isDailyResetRecoveryWindow()) {
+      this.afterStartup('ums-test-daily-user-stats-reset-recovery', 15_000, () =>
+        this.runDailyUserStatsReset(),
+      );
+    }
     this.afterStartup('ums-test-initial-user-processing', 120_000, () =>
       this.maintenance.processEligibleUsers(400, 0),
     );
@@ -319,6 +335,55 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Restores the legacy UMS-test reporting-window reset without reviving the
+   * old mixed maintenance job. `stats2` is deliberately cleared globally:
+   * tg-aut's /getuserstats2 reads this collection as its daily report window.
+   * The paid-user adjustment is the other legacy operation from that window.
+   */
+  private async runDailyUserStatsReset(): Promise<void> {
+    const db = this.requireDatabase('daily user stats reset');
+    const jobId = `daily-user-stats-reset:${this.istDateKey()}`;
+    if (!(await this.claimJob(db.collection<any>('controlPlaneJobRuns'), jobId))) {
+      this.logger.warn(
+        `Daily user stats reset already claimed or completed: ${jobId}`,
+      );
+      return;
+    }
+
+    try {
+      const result = await this.resetUserStatsWithRetries(
+        db.collection<any>('stats2'),
+        db.collection<any>('userData'),
+      );
+      await db.collection<any>('controlPlaneJobRuns').updateOne(
+        { _id: jobId },
+        {
+          $set: {
+            completedAt: new Date(),
+            stats2DeletedCount: result.stats2DeletedCount,
+            paidUsersMatchedCount: result.paidUsersMatchedCount,
+            paidUsersModifiedCount: result.paidUsersModifiedCount,
+          },
+          $unset: { leaseOwner: '', leaseExpiresAt: '' },
+        },
+      );
+    } catch (error) {
+      await db.collection<any>('controlPlaneJobRuns').updateOne(
+        { _id: jobId },
+        {
+          $set: {
+            failedAt: new Date(),
+            error: error instanceof Error ? error.message : String(error),
+            leaseExpiresAt: new Date(0),
+          },
+          $unset: { leaseOwner: '' },
+        },
+      );
+      throw error;
+    }
+  }
+
   private async resetPromoteStatsWithRetries(
     promoteStats: any,
   ): Promise<{ matchedCount: number; modifiedCount: number }> {
@@ -343,6 +408,46 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `Daily promoteStats reset attempt ${attempt}/3 failed`,
         );
+        if (attempt < 3)
+          await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private async resetUserStatsWithRetries(
+    stats2: any,
+    userData: any,
+  ): Promise<{
+    stats2DeletedCount: number;
+    paidUsersMatchedCount: number;
+    paidUsersModifiedCount: number;
+  }> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const now = Date.now();
+        const [stats2Result, paidUsersResult] = await Promise.all([
+          stats2.deleteMany({}),
+          userData.updateMany(
+            { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
+            {
+              $set: {
+                totalCount: 10,
+                limitTime: now,
+                paidReply: true,
+              },
+            },
+          ),
+        ]);
+        return {
+          stats2DeletedCount: stats2Result.deletedCount ?? 0,
+          paidUsersMatchedCount: paidUsersResult.matchedCount ?? 0,
+          paidUsersModifiedCount: paidUsersResult.modifiedCount ?? 0,
+        };
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(`Daily user stats reset attempt ${attempt}/3 failed`);
         if (attempt < 3)
           await new Promise<void>((resolve) => setTimeout(resolve, 30_000));
       }

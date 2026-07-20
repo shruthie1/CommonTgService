@@ -116,6 +116,8 @@ describe('ScheduledJobsService scheduler ownership', () => {
       'maintenance-process-users',
       'maintenance-refresh-map-and-stat1',
       'maintenance-active-channel-message-deletion-counters',
+      'maintenance-daily-user-stats-reset',
+      'maintenance-daily-user-stats-reset-recovery',
     ]));
     expect(jobNames()).not.toContain('maintenance-promote-client-check');
     expect(jobNames()).not.toContain('maintenance-promote-client-join');
@@ -124,6 +126,46 @@ describe('ScheduledJobsService scheduler ownership', () => {
     expect(jobNames()).not.toContain('maintenance-daily-promote-stats-reset');
     expect(jobNames()).not.toContain('cms-buffer-ready-rotation');
     service.onModuleDestroy();
+  });
+
+  it('uses the injected Nest connection for the legacy daily stats2 and paid-user reset', async () => {
+    const stats2 = {
+      deleteMany: jest.fn().mockResolvedValue({ deletedCount: 12 }),
+    };
+    const userData = {
+      updateMany: jest.fn().mockResolvedValue({ matchedCount: 3, modifiedCount: 3 }),
+    };
+    const controlPlaneJobRuns = {
+      updateOne: jest
+        .fn()
+        .mockResolvedValueOnce({ modifiedCount: 0 })
+        .mockResolvedValueOnce({ modifiedCount: 1 }),
+      insertOne: jest.fn().mockResolvedValue({ acknowledged: true }),
+    };
+    const db = {
+      collection: jest.fn((name: string) => {
+        if (name === 'stats2') return stats2;
+        if (name === 'userData') return userData;
+        if (name === 'controlPlaneJobRuns') return controlPlaneJobRuns;
+        throw new Error(`Unexpected collection: ${name}`);
+      }),
+    };
+    const service = createService(['UMS_TEST_SCHEDULER'], { db });
+
+    await (service as any).runDailyUserStatsReset();
+
+    expect(stats2.deleteMany).toHaveBeenCalledWith({});
+    expect(userData.updateMany).toHaveBeenCalledWith(
+      { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
+      {
+        $set: expect.objectContaining({ totalCount: 10, paidReply: true }),
+      },
+    );
+    expect(controlPlaneJobRuns.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _id: expect.stringMatching(/^daily-user-stats-reset:/),
+      }),
+    );
   });
 
   it('uses the injected Nest connection for the complete legacy promoteStats reset', async () => {
@@ -204,6 +246,46 @@ describe('ScheduledJobsService scheduler ownership', () => {
       );
       expect(runs).toHaveLength(1);
       expect(runs[0]).toEqual(expect.objectContaining({ completedAt: expect.any(Date) }));
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it('clears stats2 and applies the paid-user reset through a real Mongoose Connection.db', async () => {
+    jest.setTimeout(60_000);
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-user-stats-test' })
+      .asPromise();
+
+    try {
+      await connection.db.collection('stats2').insertMany([
+        { client: 'a', chatId: '1' },
+        { client: 'b', chatId: '2' },
+      ]);
+      await connection.db.collection('userData').insertMany([
+        { profile: 'p1', chatId: '1', payAmount: 11, totalCount: 31, paidReply: false },
+        { profile: 'p2', chatId: '2', payAmount: 10, totalCount: 99, paidReply: false },
+      ]);
+      const service = createService(['UMS_TEST_SCHEDULER'], connection);
+
+      await (service as any).runDailyUserStatsReset();
+
+      expect(await connection.db.collection('stats2').countDocuments()).toBe(0);
+      expect(await connection.db.collection('userData').findOne({ profile: 'p1' }))
+        .toEqual(expect.objectContaining({ totalCount: 10, paidReply: true }));
+      expect(await connection.db.collection('userData').findOne({ profile: 'p2' }))
+        .toEqual(expect.objectContaining({ totalCount: 99, paidReply: false }));
+      const runs = (await connection.db.collection('controlPlaneJobRuns').find({}).toArray())
+        .filter((run) => String(run._id).startsWith('daily-user-stats-reset:'));
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toEqual(expect.objectContaining({
+        completedAt: expect.any(Date),
+        stats2DeletedCount: 2,
+        paidUsersModifiedCount: 1,
+      }));
     } finally {
       await connection.dropDatabase();
       await connection.close();
