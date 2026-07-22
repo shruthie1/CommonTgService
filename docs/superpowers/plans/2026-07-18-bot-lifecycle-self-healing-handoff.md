@@ -23,12 +23,10 @@ must stop the run rather than try another account.
 
 - CMS runs on VM2 as one PM2 process and has been stable; its historical restart count is not a
   current crash loop.
-- `BOT_HEALTH_JOB_ENABLED` is unset on the live CMS process. The daily automatic validation and
-  replacement scheduler is therefore disabled.
+- CMS is the sole bot-health owner. Its daily validation and replacement scheduler runs only when
+  `ENABLE_CMS_SCHEDULER=true` is set on CMS; UMS and UMS-test do not own this work.
 - The `bots` collection has 55 records: 53 active, one revoked/inactive record, and one inactive
   record with `deadReason: "awaiting channel-admin add"`.
-- Keep `BOT_HEALTH_JOB_ENABLED` disabled until the controlled dry-run and one bounded real run in
-  the rollout plan are clean.
 
 ## Implemented Lifecycle Contract (2026-07-18)
 
@@ -57,15 +55,13 @@ backward compatible:
   its separate best-effort behavior.
 - `POST /bots/validate-and-replace?dryRun=true` validates tokens and reports proposed actions
   without bot-state writes, BotFather creation, channel promotion, cache mutation, or summary
-  notification. It still acquires the short-lived run lease so it cannot overlap a real repair.
-  `async=true` can be combined with `dryRun=true`.
+  notification. `async=true` can be combined with `dryRun=true`.
 
 ## Pre-Lifecycle Implementation (superseded)
 
 Main implementation: `src/components/bots/bots.service.ts`.
 
-- Scheduler is daily at 03:30 Asia/Kolkata, guarded by `BOT_HEALTH_JOB_ENABLED`:
-  lines 151-190.
+- CMS schedules the daily run at 03:30 Asia/Kolkata when `ENABLE_CMS_SCHEDULER=true`.
 - Token health check uses Telegram `getMe`; only HTTP 401, 403, and 404 are treated as permanent:
   lines 857-874.
 - Dead bot replacement was capped independently from category top-up, allowing up to three new
@@ -204,7 +200,7 @@ The focused suite now covers the following implemented safety behavior:
 4. `401`, `403`, and `404` transition to `dead_token` with the actual status recorded.
 5. Timeouts, `429`, `5xx`, and network errors leave lifecycle unchanged and schedule backoff.
 6. Global creation budget applies across replacement plus top-up.
-7. Concurrent manual and scheduled runs contend on the distributed lease; only one performs work.
+7. A single CMS process serializes concurrent manual and scheduled runs with its in-process guard.
 8. A newly dead bot is removed from a warm send cache before its health scan completes.
 9. Legacy records migrate without removing the old fields.
 10. Dry-run does not resolve Telegram user-account services for pending-admin reconciliation.
@@ -214,17 +210,15 @@ The remaining follow-up coverage should exercise failed post-add verification.
 
 ## Rollout Plan
 
-1. Implement lifecycle fields, migration, selection invariant, distributed lease, and tests.
-2. Deploy CMS with the scheduler still disabled.
+1. Implement lifecycle fields, migration, selection invariant, and tests.
+2. Deploy CMS with `ENABLE_CMS_SCHEDULER=true`; it is the sole scheduler owner.
 3. Run `POST /bots/validate-and-replace?async=true&dryRun=true` in dry-run mode. It should report proposed
    transitions and creation actions but make no Telegram mutations.
 4. Review dry-run output and correct current `pending_admin` data manually or through the new
    reconciler.
-5. Enable one real run with a global creation budget of one and monitor the summary, Mongo states,
+5. Run one real repair with a global creation budget of one and monitor the summary, Mongo states,
    and manager-account Telegram errors.
-6. Enable `BOT_HEALTH_JOB_ENABLED=true` only on the single CMS PM2 process after the controlled run
-   is clean.
-7. Keep a kill switch: unset the flag and restart only CMS if automation needs immediate stop.
+6. Keep `ENABLE_CMS_SCHEDULER` enabled only on CMS.
 
 ## Operational Rules
 
@@ -245,9 +239,10 @@ npm test -- --runInBand src/components/bots/__tests__/bots.service.spec.ts
 # Build CommonTgService
 npm run build
 
-# On CMS VM, confirm scheduler configuration without exposing secrets
+# On CMS VM, confirm the scheduler configuration and registration
 cms_id="$(pm2 jlist | jq -r '.[] | select(.name == "cms") | .pm_id')"
-pm2 env "$cms_id" | grep '^BOT_HEALTH_JOB_ENABLED='
+pm2 env "$cms_id" | grep '^ENABLE_CMS_SCHEDULER='
+pm2 logs cms --lines 100 --nostream | grep 'daily bot health-check scheduled'
 ```
 
 ## Existing Local Changes

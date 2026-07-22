@@ -67,14 +67,24 @@ function axiosOk(data: any = { ok: true, result: { username: 'fetched_bot' } }) 
 }
 
 describe('BotsService - lifecycle / cache init', () => {
-  test('derives a lifecycle for legacy records without writing a migration', () => {
-    expect((service as any).lifecycleOf({
-      status: 'inactive',
-      deadReason: 'awaiting channel-admin add',
-    })).toBe('pending_admin');
+  test('migrates legacy status/deadReason records without removing legacy fields', async () => {
+    const legacyId = new mongoose.Types.ObjectId();
+    await model.collection.insertOne({
+      _id: legacyId,
+      token: 'legacy_token', username: 'legacy_bot', category: ChannelCategory.UNVDS,
+      channelId: '-100legacy', status: 'inactive', deadReason: 'awaiting channel-admin add',
+      lastUsed: new Date(), stats: { ...baseStats },
+    });
+
+    await (service as any).migrateLegacyLifecycle();
+
+    const migrated = await model.findById(legacyId).lean();
+    expect(migrated.lifecycle).toBe('pending_admin');
+    expect(migrated.status).toBe('inactive');
+    expect(migrated.deadReason).toBe('awaiting channel-admin add');
   });
 
-  test('onModuleInit initializes cache and starts periodic flush', async () => {
+  test('onModuleInit initializes cache, periodic flush, and the CMS health schedule', async () => {
     // Capture the interval handle so we can clear it (avoid open handle / leaks).
     let captured: any;
     const realSetInterval = global.setInterval;
@@ -82,15 +92,31 @@ describe('BotsService - lifecycle / cache init', () => {
       captured = realSetInterval(fn, ms);
       return captured;
     }) as any);
-    await seedBot({ category: ChannelCategory.PROM_LOGS1 });
-    await seedBot({ category: ChannelCategory.PROM_LOGS1 });
+    const previous = process.env.ENABLE_CMS_SCHEDULER;
+    process.env.ENABLE_CMS_SCHEDULER = 'true';
+    try {
+      await seedBot({ category: ChannelCategory.PROM_LOGS1 });
+      await seedBot({ category: ChannelCategory.PROM_LOGS1 });
+      await service.onModuleInit();
+      expect(setIntervalSpy).toHaveBeenCalled();
+      expect((service as any).healthCheckJob).toBeTruthy();
+      service.onModuleDestroy();
+      if (captured) clearInterval(captured);
+      // category cache should be warm now → getBots returns from cache
+      const bots = await service.getBots(ChannelCategory.PROM_LOGS1);
+      expect(bots.length).toBe(2);
+    } finally {
+      if (previous === undefined) delete process.env.ENABLE_CMS_SCHEDULER;
+      else process.env.ENABLE_CMS_SCHEDULER = previous;
+      setIntervalSpy.mockRestore();
+    }
+  });
+
+  test('onModuleInit does not schedule bot health without the CMS scheduler flag', async () => {
+    delete process.env.ENABLE_CMS_SCHEDULER;
     await service.onModuleInit();
-    expect(setIntervalSpy).toHaveBeenCalled();
-    if (captured) clearInterval(captured);
-    // category cache should be warm now → getBots returns from cache
-    const bots = await service.getBots(ChannelCategory.PROM_LOGS1);
-    expect(bots.length).toBe(2);
-    setIntervalSpy.mockRestore();
+    expect((service as any).healthCheckJob).toBeNull();
+    service.onModuleDestroy();
   });
 
   test('periodic flush interval fires the flush callback which persists pending stats', async () => {
@@ -887,10 +913,4 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     delete process.env.channelManagerPrimary;
   });
 
-  test('distributed lease lets only one CMS service enter a health run', async () => {
-    const other = new BotsService(model, mockModuleRef as any);
-    expect(await (service as any).acquireHealthLease()).toBe(true);
-    expect(await (other as any).acquireHealthLease()).toBe(false);
-    await (service as any).releaseHealthLease();
-  });
 });

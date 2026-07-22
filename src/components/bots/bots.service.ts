@@ -45,13 +45,6 @@ export interface BotHealthRunResult {
     proposedActions: string[];
 }
 
-interface BotHealthLease {
-    _id: string;
-    holderId: string;
-    acquiredAt: Date;
-    expiresAt: Date;
-}
-
 export interface SendMessageOptions {
     parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';
     disableWebPagePreview?: boolean;
@@ -153,8 +146,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private readonly maxBotCreationsPerRun = 1;
     private readonly maxPendingAdminRepairsPerRun = 1;
     private readonly maxPendingAdminRepairAttempts = 3;
-    private readonly healthLeaseMs = 30 * 60 * 1000;
-    private readonly healthLeaseId = `${process.pid}:${Math.random().toString(36).slice(2)}`;
     private healthCheckJob: schedule.Job | null = null;
     private flushTimer: ReturnType<typeof setInterval> | null = null;
     private destroyed = false;
@@ -180,30 +171,28 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     async onModuleInit(): Promise<void> {
+        try {
+            await this.migrateLegacyLifecycle();
+        } catch (err: any) {
+            // Preserve CMS availability if Mongo is briefly unavailable at boot. Legacy records
+            // are still classified safely in-memory by lifecycleOf until the next health run.
+            console.error('[BotHealth] lifecycle migration deferred; Mongo unavailable at startup', err?.message || err);
+        }
         await this.initializeCache();
         // Start periodic flush of pending stat updates (safe to run on every pod — it only
         // writes each pod's own accumulated counters).
         this.startPeriodicFlush();
-        // The daily bot health-check + auto-replace loop is DANGEROUS to run on more than one
-        // pod at once: N pods = N concurrent BotFather bot-creations + admin-promotion bursts,
-        // which is exactly what gets the manager account flood-banned. The Mongo lease protects
-        // every scheduler/manual invocation; the env gate still keeps scheduled ownership clear.
-        if (this.isBotHealthJobEnabled()) {
-            console.log('[BotHealth] BOT_HEALTH_JOB_ENABLED is set on this pod — scheduling daily job');
+        if (this.isCmsSchedulerEnabled()) {
+            console.log('[BotHealth] ENABLE_CMS_SCHEDULER is set on CMS — scheduling daily job');
             this.scheduleBotHealthCheck();
         } else {
-            console.log('[BotHealth] daily job disabled on this pod (set BOT_HEALTH_JOB_ENABLED=true on ONE pod to enable)');
+            console.log('[BotHealth] daily job disabled on CMS (set ENABLE_CMS_SCHEDULER=true to enable)');
         }
     }
 
-    /**
-     * Whether THIS pod should run the daily bot-health scheduler. Must be enabled on exactly
-     * ONE pod to make scheduler ownership explicit. The Mongo-backed lease additionally protects
-     * the manual endpoint and a misconfigured second scheduler from concurrent repair work.
-     */
-    private isBotHealthJobEnabled(): boolean {
-        const v = (process.env.BOT_HEALTH_JOB_ENABLED || '').trim().toLowerCase();
-        return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+    private isCmsSchedulerEnabled(): boolean {
+        const value = (process.env.ENABLE_CMS_SCHEDULER || '').trim().toLowerCase();
+        return value === 'true' || value === '1' || value === 'yes' || value === 'on';
     }
 
     private scheduleBotHealthCheck(): void {
@@ -231,6 +220,20 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         try { this.healthCheckJob?.cancel?.(); } catch { /* noop */ }
         this.healthCheckJob = null;
         if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = null; }
+    }
+
+    /** Map pre-lifecycle documents once, retaining their legacy fields for old callers. */
+    private async migrateLegacyLifecycle(): Promise<void> {
+        const legacyBots = await this.botModel.find({ lifecycle: { $exists: false } }).lean().exec();
+        if (legacyBots.length === 0) return;
+        const now = new Date();
+        await this.botModel.bulkWrite(legacyBots.map(bot => ({
+            updateOne: {
+                filter: { _id: bot._id, lifecycle: { $exists: false } },
+                update: { $set: this.legacyLifecycleUpdate(bot, now) },
+            },
+        })));
+        console.log(`[BotHealth] migrated lifecycle metadata for ${legacyBots.length} legacy bot record(s)`);
     }
 
     private legacyLifecycleUpdate(bot: Partial<Bot>, now = new Date()): Pick<Bot, 'lifecycle' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'repairAttempts'> {
@@ -276,32 +279,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const cached = this.cache.get<BotDocument[]>(categoryKey);
         if (cached) this.cache.set(categoryKey, cached.filter(item => item._id.toString() !== id));
         this.cache.del('all-bots');
-    }
-
-    /** A Mongo lease protects scheduler/manual calls across CMS processes and crash restarts. */
-    private async acquireHealthLease(): Promise<boolean> {
-        const now = new Date();
-        try {
-            const res = await this.botModel.db.collection<BotHealthLease>('botHealthLeases').findOneAndUpdate(
-                { _id: 'bot-health', $or: [{ expiresAt: { $lte: now } }, { holderId: this.healthLeaseId }] },
-                { $set: { holderId: this.healthLeaseId, acquiredAt: now, expiresAt: new Date(now.getTime() + this.healthLeaseMs) } },
-                { upsert: true, returnDocument: 'after' },
-            );
-            return res?.holderId === this.healthLeaseId;
-        } catch (err: any) {
-            // A duplicate-key race means another runner won an initially-empty lease. Fail closed.
-            if (err?.code === 11000) return false;
-            console.error('[BotHealth] unable to acquire distributed lease; skipping run', err?.message || err);
-            return false;
-        }
-    }
-
-    private async releaseHealthLease(): Promise<void> {
-        try {
-            await this.botModel.db.collection<BotHealthLease>('botHealthLeases').deleteOne({ _id: 'bot-health', holderId: this.healthLeaseId });
-        } catch (err: any) {
-            console.warn('[BotHealth] unable to release distributed lease; it will expire', err?.message || err);
-        }
     }
 
     private async initializeCache(): Promise<void> {
@@ -1048,10 +1025,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
             return empty('already running (this pod)');
         }
-        if (!(await this.acquireHealthLease())) {
-            console.warn('[BotHealth] validateAndReplaceBots lease held by another CMS process — skipping');
-            return empty('already running (distributed lease)');
-        }
         this.replaceInProgress = true;
         const failures: string[] = [];
         const proposedActions: string[] = [];
@@ -1060,6 +1033,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         let creationBudget = this.maxBotCreationsPerRun;
         let stopPrivilegedWork = false;
         try {
+            if (!options.dryRun) await this.migrateLegacyLifecycle();
             const bots = await this.botModel.find().lean().exec();
             for (const bot of bots) {
                 const check = await this.checkBotToken(bot.token);
@@ -1158,7 +1132,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions };
         } finally {
             this.replaceInProgress = false;
-            await this.releaseHealthLease();
         }
     }
 
