@@ -60,9 +60,6 @@ export class CreateChannelDto {
   @ApiProperty({ description: 'Timestamp when the channel was marked banned', type: Number, required: false, nullable: true, default: null })
   bannedAt?: number | null = null;
 
-  @ApiProperty({ description: 'Starred status', default: false, required: false })
-  starred?: boolean = false;
-
-  @ApiProperty({ description: 'Channel score', default: 0, required: false })
-  score?: number = 0;
+  // REMOVED starred / score — dead channel-schema defaults. Channel
+  // intelligence owns performance scoring; this collection stores live state.
 }

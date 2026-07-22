@@ -86,6 +86,7 @@ export interface SetupClientResult {
   newMobile?: string;
   cooldownRemainingMs?: number;
   existingRetired?: boolean;
+  usedFutureAvailableFallback?: boolean;
 }
 
 export interface PersonaAssignmentRecord {
@@ -579,11 +580,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     const existingClientMobile = existingClient.mobile;
     this.logger.log('setupClientQueryDto:', setupClientQueryDto);
     const today = ClientHelperUtils.getTodayDateString();
-    const query: ClientMongoQuery = {
+    const permanentReplacement = this.isPermanentReplacementReason(setupClientQueryDto.reason);
+    const baseCandidateQuery: Omit<ClientMongoQuery, 'availableDate'> = {
       clientId,
       mobile: setupClientQueryDto.mobile || { $ne: existingClientMobile },
       createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
-      availableDate: { $lte: today },
       // Match the warmup graduation threshold (>= MIN_CHANNELS_FOR_MATURING). Using $gt: 200
       // excluded accounts sitting at exactly the graduation count, making them count as ready
       // supply yet never swap-eligible.
@@ -592,15 +593,46 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       inUse: { $ne: true },
       warmupPhase: WarmupPhase.SESSION_ROTATED,
     };
-    const candidateBufferClients = await this.bufferClientService.executeQuery(query, { availableDate: 1, createdAt: 1 }, 10);
+    const dueCandidateQuery: ClientMongoQuery = {
+      ...baseCandidateQuery,
+      availableDate: { $lte: today },
+    };
+    const candidateBufferClients = await this.bufferClientService.executeQuery(dueCandidateQuery, { availableDate: 1, createdAt: 1 }, 10);
     this.logger.info(
       `[${clientId}] Setup candidate scan completed`,
-      { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query },
+      { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query: dueCandidateQuery },
     );
-    const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
+    let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
+    let usedFutureAvailableFallback = false;
+
+    // A permanent Telegram failure means the current main account cannot safely serve users.
+    // Preserve the normal availability gate for every ordinary replacement, but when no due
+    // candidate passes the session-safety checks, take the earliest otherwise-safe future buffer.
+    // This remains deliberately server-authorized from the canonical reason classifier; callers
+    // cannot opt in with a query flag, and the candidate keeps every other readiness invariant.
+    if (!newBufferClient && permanentReplacement) {
+      const futureCandidateQuery: ClientMongoQuery = {
+        ...baseCandidateQuery,
+        availableDate: { $gt: today },
+      };
+      const futureCandidateBufferClients = await this.bufferClientService.executeQuery(
+        futureCandidateQuery,
+        { availableDate: 1, createdAt: 1 },
+        10,
+      );
+      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session);
+      usedFutureAvailableFallback = !!newBufferClient;
+      this.logger.warn(`[${clientId}] Permanent replacement fallback scan completed`, {
+        existingMobile: existingClientMobile,
+        reason: setupClientQueryDto.reason,
+        candidateCount: futureCandidateBufferClients.length,
+        selected: newBufferClient?.mobile,
+        query: futureCandidateQuery,
+      });
+    }
     if (!newBufferClient) {
       let existingRetired = false;
-      if (this.isPermanentReplacementReason(setupClientQueryDto.reason)) {
+      if (permanentReplacement) {
         this.logger.warn(`[${clientId}] No replacement buffer available, but setup reason is permanent; marking existing mobile inactive`, {
           existingMobile: existingClientMobile,
           reason: setupClientQueryDto.reason,
@@ -625,7 +657,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     try {
       this.logger.info(
         `[${clientId}] Selected replacement buffer client`,
-        { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile },
+        {
+          existingMobile: existingClientMobile,
+          newMobile: newBufferClient.mobile,
+          usedFutureAvailableFallback,
+        },
       );
       await this.notify(
         `Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}`,
@@ -650,6 +686,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         clientId,
         existingMobile: existingClientMobile,
         newMobile: newBufferClient.mobile,
+        usedFutureAvailableFallback,
         message: 'Client swap completed',
       };
     } catch (error: unknown) {

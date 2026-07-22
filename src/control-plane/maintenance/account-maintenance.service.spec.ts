@@ -18,8 +18,14 @@ describe('AccountMaintenanceService lifecycle ownership', () => {
       joinchannelForPromoteClients: jest.fn(),
       updateInfo: jest.fn(),
     };
-    const channelsService = { createMultiple: jest.fn().mockResolvedValue('ok') };
-    const activeChannelsService = { createMultiple: jest.fn().mockResolvedValue('ok') };
+    const channelsService = {
+      createMultiple: jest.fn().mockResolvedValue('ok'),
+      findExistingChannelIds: jest.fn().mockResolvedValue([]),
+    };
+    const activeChannelsService = {
+      createMultiple: jest.fn().mockResolvedValue('ok'),
+      findExistingChannelIds: jest.fn().mockResolvedValue([]),
+    };
     const service = new AccountMaintenanceService(
       usersService as any,
       channelsService as any,
@@ -53,8 +59,10 @@ describe('AccountMaintenanceService lifecycle ownership', () => {
     expect(promoteClientService.joinchannelForPromoteClients).not.toHaveBeenCalled();
   });
 
-  it('persists only fully sendable discovered channels', async () => {
+  it('persists new sendable channels and reconciles known unsendable channels only in their existing collection', async () => {
     const { service, channelsService, activeChannelsService } = createService();
+    channelsService.findExistingChannelIds.mockResolvedValue(['2']);
+    activeChannelsService.findExistingChannelIds.mockResolvedValue(['3']);
     const dialog = (id: string, overrides: Record<string, unknown> = {}) => ({
       isChannel: true,
       isGroup: false,
@@ -80,12 +88,14 @@ describe('AccountMaintenanceService lifecycle ownership', () => {
 
     expect(channelsService.createMultiple).toHaveBeenCalledWith([
       expect.objectContaining({ channelId: '1', canSendMsgs: true, private: false }),
+      expect.objectContaining({ channelId: '2', canSendMsgs: false }),
     ]);
     expect(activeChannelsService.createMultiple).toHaveBeenCalledWith([
       expect.objectContaining({ channelId: '1', canSendMsgs: true }),
+      expect.objectContaining({ channelId: '3', canSendMsgs: false }),
     ]);
     const persisted = activeChannelsService.createMultiple.mock.calls[0][0][0];
     expect(persisted).toHaveProperty('private', false);
-    expect(persisted).not.toHaveProperty('forbidden');
+    expect(persisted).toHaveProperty('forbidden', false);
   });
 });

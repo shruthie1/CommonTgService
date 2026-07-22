@@ -41,8 +41,6 @@ export class ChannelsService {
         'broadcast',
         'canSendMsgs',
         'reactRestricted',
-        'starred',
-        'score',
       ]);
       // `private` is a live Telegram fact and is refreshed both ways.
       if (typeof dto.private === 'boolean') setFields.private = dto.private;
@@ -85,6 +83,17 @@ export class ChannelsService {
   async findOne(channelId: string): Promise<Channel> {
     const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
     return channel;
+  }
+
+  /** See ActiveChannelsService.findExistingChannelIds. */
+  async findExistingChannelIds(channelIds: string[]): Promise<string[]> {
+    const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+    if (!ids.length) return [];
+    const rows = await this.ChannelModel
+      .find({ channelId: { $in: ids } }, { channelId: 1, _id: 0 })
+      .lean()
+      .exec();
+    return rows.map((row) => row.channelId).filter((channelId): channelId is string => Boolean(channelId));
   }
 
   async update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel> {

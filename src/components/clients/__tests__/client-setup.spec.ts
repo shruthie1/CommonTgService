@@ -7,6 +7,12 @@ jest.mock('../../../utils/fetchWithTimeout', () => ({
 jest.mock('../../../utils/logbots', () => ({
     notifbot: jest.fn(() => 'https://example.test/mock-bot'),
 }));
+jest.mock('../../Telegram/utils/connection-manager', () => ({
+    connectionManager: {
+        getClient: jest.fn(),
+        unregisterClient: jest.fn(),
+    },
+}));
 
 describe('ClientService session separation safeguards', () => {
     function makeService(overrides?: {
@@ -193,5 +199,96 @@ describe('ClientService session separation safeguards', () => {
             'FROZEN_METHOD_INVALID',
         );
         expect(bufferClientService.createOrUpdate).not.toHaveBeenCalled();
+    });
+
+    test('handleSetupClient uses the earliest future-ready buffer only for a permanent Telegram failure', async () => {
+        const existingClient = {
+            clientId: 'shruthi2',
+            mobile: '919121068060',
+            session: 'current-session',
+            username: 'shruthi2',
+        };
+        const clientModel = {
+            findOne: jest.fn().mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                    exec: jest.fn().mockResolvedValue(existingClient),
+                }),
+            }),
+        };
+        const bufferClientService = {
+            executeQuery: jest.fn()
+                .mockResolvedValueOnce([])
+                .mockResolvedValueOnce([{
+                    mobile: '919121000001',
+                    session: 'future-buffer-session',
+                    availableDate: '2099-01-01',
+                }]),
+            getOrEnsureDistinctUsersBackupSession: jest.fn().mockResolvedValue({
+                tgId: 'tg-future-buffer',
+                mobile: '919121000001',
+                session: 'future-buffer-backup-session',
+            }),
+        };
+        const telegramService = {
+            setActiveClientSetup: jest.fn(),
+            clearActiveClientSetup: jest.fn(),
+        };
+        const service = makeService({ clientModel, bufferClientService, telegramService });
+        (service as any).isInitialized = true;
+        jest.spyOn(service as any, 'updateClientSession').mockResolvedValue(undefined);
+
+        const result = await (service as any).handleSetupClient('shruthi2', {
+            days: 0,
+            archiveOld: false,
+            formalities: false,
+            reason: 'FROZEN_METHOD_INVALID',
+        });
+
+        expect(result).toMatchObject({
+            status: 'swapped',
+            swapped: true,
+            newMobile: '919121000001',
+            usedFutureAvailableFallback: true,
+        });
+        expect(bufferClientService.executeQuery).toHaveBeenCalledTimes(2);
+        expect(bufferClientService.executeQuery.mock.calls[0][0].availableDate).toEqual({ $lte: expect.any(String) });
+        expect(bufferClientService.executeQuery.mock.calls[1][0].availableDate).toEqual({ $gt: expect.any(String) });
+        expect(telegramService.setActiveClientSetup).toHaveBeenCalledWith(expect.objectContaining({
+            clientId: 'shruthi2',
+            newMobile: '919121000001',
+        }));
+    });
+
+    test('handleSetupClient never bypasses availableDate for non-permanent reasons', async () => {
+        const existingClient = {
+            clientId: 'shruthi3',
+            mobile: '919121068061',
+            session: 'current-session',
+            username: 'shruthi3',
+        };
+        const clientModel = {
+            findOne: jest.fn().mockReturnValue({
+                lean: jest.fn().mockReturnValue({
+                    exec: jest.fn().mockResolvedValue(existingClient),
+                }),
+            }),
+        };
+        const bufferClientService = {
+            executeQuery: jest.fn().mockResolvedValue([]),
+            getOrEnsureDistinctUsersBackupSession: jest.fn(),
+        };
+        const service = makeService({ clientModel, bufferClientService });
+        (service as any).isInitialized = true;
+
+        const result = await (service as any).handleSetupClient('shruthi3', {
+            days: 0,
+            archiveOld: false,
+            formalities: false,
+            reason: 'temporary network failure',
+        });
+
+        expect(result).toMatchObject({ status: 'no_candidate', swapped: false });
+        expect(bufferClientService.executeQuery).toHaveBeenCalledTimes(1);
+        expect(bufferClientService.executeQuery.mock.calls[0][0].availableDate).toEqual({ $lte: expect.any(String) });
     });
 });

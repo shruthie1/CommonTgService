@@ -181,6 +181,13 @@ primary is returned to the buffer pool rather than archived.
 
 `ClientService.setupClient()` is the bridge from warmed `bufferClients` into the live `clients` account used by `tg-aut-local`.
 
+For ordinary swaps, the selected buffer must be due (`availableDate <= today`). When tg-aut
+reports a server-classified permanent Telegram failure such as `FROZEN_METHOD_INVALID`, CommonTgService
+first tries those due candidates, then may use the earliest future-due candidate only if no due candidate
+passes the same session-safety checks. This exception is decided by the server-side permanent-error
+classifier, never by a caller-supplied override; it still requires an active, unused, 15-day-old,
+`session_rotated` buffer with at least the graduation channel count and a distinct backup session.
+
 ### Candidate selection
 
 Current query requires:
@@ -188,7 +195,9 @@ Current query requires:
 - same `clientId`
 - requested `mobile`, when supplied; otherwise any mobile different from the existing client mobile
 - `createdAt <= now - 15 days`
-- `availableDate <= today`
+- normal swaps: `availableDate <= today`
+- permanent Telegram failures only: after the normal scan has no session-safe candidate,
+  `availableDate > today` is allowed and is ordered earliest-first
 - `channels >= 200`
 - `status = 'active'`
 - `inUse != true`

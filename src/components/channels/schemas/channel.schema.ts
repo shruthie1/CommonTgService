@@ -68,13 +68,9 @@ export class Channel {
   @Prop({ type: Number, default: null })
   bannedAt?: number | null;
 
-  @ApiProperty({ default: false })
-  @Prop({ default: false })
-  starred: boolean;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  score: number;
+  // REMOVED starred / score — neither has a writer or reader in the channel
+  // lifecycle. Keeping Mongoose defaults here recreated obsolete fields on
+  // every new document after cleanup.
 }
 
 export const ChannelSchema = SchemaFactory.createForClass(Channel);

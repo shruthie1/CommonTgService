@@ -226,16 +226,17 @@ export class AccountMaintenanceService {
             { getEntity: async () => channel },
             { channelId: channel.id, entity: channel },
           );
-          if (!facts || !facts.canSendMsgs || (facts.participantsCount ?? 0) <= 50) {
+          if (!facts) {
             return null;
           }
 
           return {
             channelId: facts.channelId,
-            canSendMsgs: true,
-            private: false,
+            canSendMsgs: facts.canSendMsgs,
+            private: facts.private,
+            forbidden: facts.forbidden,
             lastHydrationStatus: 'success',
-            lastHydrationReason: 'live_sendable',
+            lastHydrationReason: facts.canSendMsgs ? 'live_sendable' : 'live_unsendable',
             lastHydratedAt: now,
             lastLiveCheckedAt: now,
             participantsCount: facts.participantsCount,
@@ -247,10 +248,34 @@ export class AccountMaintenanceService {
           };
         }),
     );
-    const channels = discovered.filter((channel): channel is NonNullable<typeof channel> => channel !== null);
+    const observedChannels = discovered.filter((channel): channel is NonNullable<typeof channel> => channel !== null);
 
-    if (!channels.length) return;
-    await this.channelsService.createMultiple(channels);
-    await this.activeChannelsService.createMultiple(channels);
+    if (!observedChannels.length) return;
+
+    // Preserve the discovery policy for new records: only sufficiently large,
+    // live-sendable channels enter the pool. Existing records are also refreshed
+    // when they are currently unsendable so canSendMsgs converges in both
+    // directions without inflating the inventory with new rejected dialogs.
+    const observedIds = observedChannels.map((channel) => channel.channelId);
+    const [knownActiveIds, knownChannelIds] = await Promise.all([
+      this.activeChannelsService.findExistingChannelIds(observedIds),
+      this.channelsService.findExistingChannelIds(observedIds),
+    ]);
+    const knownActiveIdSet = new Set(knownActiveIds);
+    const knownChannelIdSet = new Set(knownChannelIds);
+    const isNewSendableChannel = (channel: (typeof observedChannels)[number]) =>
+      channel.canSendMsgs && (channel.participantsCount ?? 0) > 50;
+    const activeChannelUpdates = observedChannels.filter((channel) =>
+      isNewSendableChannel(channel) || knownActiveIdSet.has(channel.channelId),
+    );
+    const channelUpdates = observedChannels.filter((channel) =>
+      isNewSendableChannel(channel) || knownChannelIdSet.has(channel.channelId),
+    );
+
+    if (!activeChannelUpdates.length && !channelUpdates.length) return;
+    await Promise.all([
+      channelUpdates.length ? this.channelsService.createMultiple(channelUpdates) : Promise.resolve(),
+      activeChannelUpdates.length ? this.activeChannelsService.createMultiple(activeChannelUpdates) : Promise.resolve(),
+    ]);
   }
 }

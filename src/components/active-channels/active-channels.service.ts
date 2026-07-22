@@ -180,6 +180,21 @@ export class ActiveChannelsService {
     }
   }
 
+  /**
+   * Returns the known subset of supplied IDs without loading the full shared
+   * channel inventory. Discovery uses this to refresh a channel that became
+   * unsendable, while avoiding creation of brand-new unsendable records.
+   */
+  async findExistingChannelIds(channelIds: string[]): Promise<string[]> {
+    const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+    if (!ids.length) return [];
+    const rows = await this.activeChannelModel
+      .find({ channelId: { $in: ids } }, { channelId: 1, _id: 0 })
+      .lean()
+      .exec();
+    return rows.map((row) => row.channelId).filter((channelId): channelId is string => Boolean(channelId));
+  }
+
   async update(channelId: string, updateActiveChannelDto: UpdateActiveChannelDto): Promise<ActiveChannel> {
     try {
       delete updateActiveChannelDto["_id"]
