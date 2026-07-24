@@ -13,7 +13,7 @@ function execQuery<T>(result: T) {
 describe('ChannelsService channel-state persistence', () => {
   test('createMultiple updates canonical identity/live state and preserves bans', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
-    const service = new ChannelsService({ bulkWrite } as any);
+    const service = new ChannelsService({ bulkWrite } as any, {} as any);
 
     await service.createMultiple([
       {
@@ -45,7 +45,7 @@ describe('ChannelsService channel-state persistence', () => {
 
   test('new catalog rows fail closed when no live sendability fact is supplied', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
-    const service = new ChannelsService({ bulkWrite } as any);
+    const service = new ChannelsService({ bulkWrite } as any, {} as any);
 
     await service.createMultiple([{ channelId: 'unverified', title: 'Unverified' }]);
 
@@ -57,7 +57,7 @@ describe('ChannelsService channel-state persistence', () => {
 
   test('createMultiple rejects malformed batches before creating bad upserts', async () => {
     const bulkWrite = jest.fn();
-    const service = new ChannelsService({ bulkWrite } as any);
+    const service = new ChannelsService({ bulkWrite } as any, {} as any);
 
     await expect(service.createMultiple([{}])).rejects.toBeInstanceOf(BadRequestException);
     expect(bulkWrite).not.toHaveBeenCalled();

@@ -8,11 +8,13 @@ import { PipelineStage } from 'mongoose';
 import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
 import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
+import { ChannelIntelligenceReadService } from '../active-channels/channel-intelligence-read.service';
 
 @Injectable()
 export class ChannelsService {
   constructor(
     @InjectModel(Channel.name) private ChannelModel: Model<ChannelDocument>,
+    private readonly channelIntelligenceReadService: ChannelIntelligenceReadService,
   ) {
   }
 
@@ -265,6 +267,17 @@ export class ChannelsService {
         { $project: { sortScore: 0 } }
       ];
       const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline, { allowDiskUse: true }).exec();
+
+      if (process.env.SCHEMA_CLEANUP === 'true' && result.length) {
+        const candidateIds = result
+          .map((channel: any) => channel.channelId)
+          .filter((channelId: any): channelId is string => Boolean(channelId));
+        const excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+        if (excludedIds.size) {
+          return result.filter((channel: any) => !excludedIds.has(String(channel.channelId)));
+        }
+      }
+
       return result;
     } catch (error) {
       console.error('🔴 Aggregation Error:', error);

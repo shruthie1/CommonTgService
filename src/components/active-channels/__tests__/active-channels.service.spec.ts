@@ -27,7 +27,7 @@ function execQuery<T>(result: T) {
 describe('ActiveChannelsService channel-state persistence', () => {
   test('createMultiple updates canonical identity/live state and preserves bans', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
-    const service = new ActiveChannelsService({ bulkWrite } as any, {} as any);
+    const service = new ActiveChannelsService({ bulkWrite } as any, {} as any, {} as any);
 
     await service.createMultiple([
       {
@@ -60,7 +60,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
   test('getActiveChannels does not run a legacy data migration before selecting candidates', async () => {
     const updateMany = jest.fn(() => execQuery({ modifiedCount: 2 }));
     const aggregate = jest.fn(() => execQuery([]));
-    const service = new ActiveChannelsService({ updateMany, aggregate } as any, {} as any);
+    const service = new ActiveChannelsService({ updateMany, aggregate } as any, {} as any, {} as any);
 
     await service.getActiveChannels(25, 0, []);
 
@@ -120,7 +120,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
     mockBotsInstance = { sendMessageByCategory: mockSendMessageByCategory };
     await model.deleteMany({});
     promoteStub = { findOne: jest.fn().mockResolvedValue({ promo1: 'a', promo2: 'b' }) };
-    service = new ActiveChannelsService(model, promoteStub);
+    service = new ActiveChannelsService(model, promoteStub, {} as any);
   });
 
   describe('create', () => {

@@ -11,6 +11,7 @@ import { notifbot } from '../../utils/logbots';
 import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
 import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
+import { ChannelIntelligenceReadService } from './channel-intelligence-read.service';
 
 @Injectable()
 export class ActiveChannelsService {
@@ -33,6 +34,7 @@ export class ActiveChannelsService {
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
     @Inject(forwardRef(() => PromoteMsgsService))
     private promoteMsgsService: PromoteMsgsService,
+    private readonly channelIntelligenceReadService: ChannelIntelligenceReadService,
   ) { }
 
   // Auto-heal windows: a channel-level restriction is a transient signal, not a
@@ -435,7 +437,19 @@ export class ActiveChannelsService {
         { $project: { sortScore: 0 } },
       ];
 
-      return await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();
+      const results = await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();
+
+      if (process.env.SCHEMA_CLEANUP === 'true' && results.length) {
+        const candidateIds = results
+          .map((channel) => channel.channelId)
+          .filter((channelId): channelId is string => Boolean(channelId));
+        const excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+        if (excludedIds.size) {
+          return results.filter((channel) => !excludedIds.has(String(channel.channelId)));
+        }
+      }
+
+      return results;
     } catch (error) {
       throw this.handleError(error, 'Failed to fetch active channels');
     }

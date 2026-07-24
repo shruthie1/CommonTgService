@@ -46,7 +46,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   mockBotsInstance = { sendMessageByCategory: mockSendMessageByCategory };
   await model.deleteMany({});
-  service = new ChannelsService(model);
+  service = new ChannelsService(model, {} as any);
 });
 
 describe('ChannelsService - CRUD', () => {
