@@ -272,7 +272,14 @@ export class ChannelsService {
         const candidateIds = result
           .map((channel: any) => channel.channelId)
           .filter((channelId: any): channelId is string => Boolean(channelId));
-        const excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+        let excludedIds: Set<string> = new Set();
+        try {
+          excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+        } catch (excludeError) {
+          console.warn(
+            `getExcludedChannelIds failed, skipping exclusion (fail-open): ${excludeError instanceof Error ? excludeError.message : excludeError}`,
+          );
+        }
         if (excludedIds.size) {
           return result.filter((channel: any) => !excludedIds.has(String(channel.channelId)));
         }

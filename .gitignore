@@ -80,5 +80,5 @@ sync.log
 sync-git.log
 *.bak-centralize
 
-# lockfile untracked: VMs run npm install and regenerate it
-package-lock.json
+# agent scratch/progress reports (not durable docs)
+.superpowers/
