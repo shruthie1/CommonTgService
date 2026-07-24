@@ -443,7 +443,14 @@ export class ActiveChannelsService {
         const candidateIds = results
           .map((channel) => channel.channelId)
           .filter((channelId): channelId is string => Boolean(channelId));
-        const excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+        let excludedIds: Set<string> = new Set();
+        try {
+          excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+        } catch (excludeError) {
+          this.logger.warn(
+            `getExcludedChannelIds failed, skipping exclusion (fail-open): ${excludeError instanceof Error ? excludeError.message : excludeError}`,
+          );
+        }
         if (excludedIds.size) {
           return results.filter((channel) => !excludedIds.has(String(channel.channelId)));
         }
