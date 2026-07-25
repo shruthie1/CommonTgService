@@ -59,38 +59,9 @@ export class CreateActiveChannelDto {
   @ApiProperty({ required: false, type: Number, default: null })
   lastLiveCheckedAt?: number | null;
 
-  @ApiProperty({ required: false, type: Number, default: 0 })
-  successMsgCount?: number;
-
-  @ApiProperty({ required: false, type: Number, default: 0 })
-  failureMsgCount?: number;
-
-  @ApiProperty({ required: false, type: Number, default: 0 })
-  followupMsgSuccessCount?: number;
-
-  @ApiProperty({ required: false, type: Number, default: 0 })
-  followupMsgFailureCount?: number;
-
-  @ApiProperty({ required: false, type: Number, default: 0 })
-  deletedCount?: number;
-
-  @ApiProperty({ required: false, type: Number })
-  freeformDeletedCount?: number;
-
-  @ApiProperty({ required: false, type: Number })
-  followUpDeletedCount?: number;
-
-  @ApiProperty({ required: false, type: Number, default: null })
-  lastMessageTime?: number | null;
-
-  @ApiProperty({ required: false, type: String, default: null })
-  messageIndex?: string | null;
-
-  @ApiProperty({ required: false, type: Number, default: null })
-  messageId?: number | null;
-
-  @ApiProperty({ required: false, type: String })
-  message?: string;
+  // REMOVED successMsgCount / failureMsgCount / followupMsgSuccessCount / followupMsgFailureCount /
+  // deletedCount / freeformDeletedCount / followUpDeletedCount / lastMessageTime / messageIndex /
+  // messageId / message — outcome-tracking fields migrated to channelIntelligence (see schema).
 
   // REMOVED starred / score — dead fields (see schema). channel starred was never set true and score
   // had no writer/reader; both were Mongoose default artifacts polluting the shared collection.

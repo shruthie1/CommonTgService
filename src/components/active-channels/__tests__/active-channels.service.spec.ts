@@ -344,21 +344,29 @@ describe('ActiveChannelsService (real Mongo)', () => {
   });
 
   describe('analytics', () => {
+    // successMsgCount/failureMsgCount/deletedCount/freeformDeletedCount/followUpDeletedCount were
+    // dropped from activeChannels (moved to channelIntelligence) — the messageStats/restrictionStats/
+    // successRateDist/topBySuccess/topByFailure/topByDeleted facets were removed along with them.
+    // `analytics()` now returns overview/participants/promos/topByParticipants only.
     test('aggregates analytics with canonical facets', async () => {
-      await seedRaw({ channelId: 'an-1', successMsgCount: 10, failureMsgCount: 2, deletedCount: 1, participantsCount: 12000, freeformDeletedCount: 1, followUpDeletedCount: 1, canSendMsgs: false, lastHydrationReason: 'write_forbidden' });
-      await seedRaw({ channelId: 'an-2', successMsgCount: 5, failureMsgCount: 5, participantsCount: 1500, banned: true, availableMsgs: [] });
+      await seedRaw({ channelId: 'an-1', participantsCount: 12000, canSendMsgs: false, lastHydrationReason: 'write_forbidden' });
+      await seedRaw({ channelId: 'an-2', participantsCount: 1500, banned: true, availableMsgs: [] });
       const a = await service.analytics();
       expect(a.overview.total).toBe(2);
-      expect(a.messages.totalSent).toBe(15);
-      expect(a.restrictions.totalFreeformDeletions).toBe(1);
-      expect(Array.isArray(a.successRateDistribution)).toBe(true);
-      expect(Array.isArray(a.topBySuccess)).toBe(true);
+      expect(a.participants.total).toBe(13500);
+      expect(a.messages).toBeUndefined();
+      expect(a.restrictions).toBeUndefined();
+      expect(a.successRateDistribution).toBeUndefined();
+      expect(a.topBySuccess).toBeUndefined();
+      expect(a.topByFailure).toBeUndefined();
+      expect(a.topByDeleted).toBeUndefined();
+      expect(Array.isArray(a.topByParticipants)).toBe(true);
     });
 
     test('analytics handles empty collection (default fallbacks)', async () => {
       const a = await service.analytics();
       expect(a.overview.total).toBe(0);
-      expect(a.messages.successRate).toBe(0);
+      expect(a.participants.total).toBe(0);
     });
   });
 
@@ -370,9 +378,9 @@ describe('ActiveChannelsService (real Mongo)', () => {
     });
 
     test('filter can_send + pagination + asc sort', async () => {
-      await seed({ channelId: 'p1', canSendMsgs: true, successMsgCount: 1 } as any);
-      await seed({ channelId: 'p2', canSendMsgs: true, successMsgCount: 2 } as any);
-      const r = await service.paginated({ filter: 'can_send', page: 1, limit: 1, sortOrder: 'asc', sortBy: 'successMsgCount' });
+      await seed({ channelId: 'p1', canSendMsgs: true, participantsCount: 1000 } as any);
+      await seed({ channelId: 'p2', canSendMsgs: true, participantsCount: 2000 } as any);
+      const r = await service.paginated({ filter: 'can_send', page: 1, limit: 1, sortOrder: 'asc', sortBy: 'participantsCount' });
       expect(r.total).toBe(2);
       expect(r.channels.length).toBe(1);
       expect(r.totalPages).toBe(2);
@@ -401,9 +409,11 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(r.total).toBe(1);
     });
 
-    test('filter high_deleted', async () => {
-      await seed({ channelId: 'p9', deletedCount: 40 } as any);
-      const r = await service.paginated({ filter: 'high_deleted' });
+    // 'high_deleted' filter removed — deletedCount was dropped from activeChannels (moved to
+    // channelIntelligence). An unrecognized filter falls through to 'all' (no query constraint).
+    test('unrecognized filter value falls through to all (no constraint)', async () => {
+      await seed({ channelId: 'p9' });
+      const r = await service.paginated({ filter: 'high_deleted' as any });
       expect(r.total).toBe(1);
     });
 
@@ -431,12 +441,14 @@ describe('ActiveChannelsService (real Mongo)', () => {
   });
 
   describe('maintenance ops (fetchWithTimeout mocked)', () => {
+    // freeformDeletedCount/followUpDeletedCount were dropped from the schema (moved to
+    // channelIntelligence) — the job is now a no-op ping (notification + updatedAt touch only).
     test('resetMessageDeletionCounters', async () => {
       mockFetchWithTimeout.mockResolvedValue(undefined);
-      await seed({ channelId: 'w1', banned: false, freeformDeletedCount: 5 } as any);
+      const before = await seed({ channelId: 'w1', banned: false });
       await service.resetMessageDeletionCounters();
       const c = await model.findOne({ channelId: 'w1' });
-      expect(c.freeformDeletedCount).toBe(0);
+      expect(c.updatedAt.getTime()).toBeGreaterThanOrEqual(before.updatedAt.getTime());
       expect(mockFetchWithTimeout).toHaveBeenCalled();
     });
 
@@ -455,10 +467,10 @@ describe('ActiveChannelsService (real Mongo)', () => {
 
     test('updateBannedChannels', async () => {
       mockFetchWithTimeout.mockResolvedValue(undefined);
-      await seed({ channelId: 'b-1', banned: true, freeformDeletedCount: 3 } as any);
+      const before = await seed({ channelId: 'b-1', banned: true });
       await service.updateBannedChannels();
       const c = await model.findOne({ channelId: 'b-1' });
-      expect(c.freeformDeletedCount).toBe(0);
+      expect(c.updatedAt.getTime()).toBeGreaterThanOrEqual(before.updatedAt.getTime());
     });
 
     test('updateBannedChannels error wrapped', async () => {
@@ -520,7 +532,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
 
   describe('getActiveChannels (real)', () => {
     test('returns candidates via aggregation', async () => {
-      await seed({ channelId: 'ga-1', title: 'cool one', username: 'coolone', participantsCount: 5000, canSendMsgs: true, successMsgCount: 1, deletedCount: 0 } as any);
+      await seed({ channelId: 'ga-1', title: 'cool one', username: 'coolone', participantsCount: 5000, canSendMsgs: true } as any);
       const r = await service.getActiveChannels(10, 0, []);
       expect(Array.isArray(r)).toBe(true);
     });

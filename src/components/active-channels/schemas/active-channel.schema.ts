@@ -102,49 +102,11 @@ export class ActiveChannel {
   @Prop({ type: Number, default: null })
   lastLiveCheckedAt?: number | null;
 
-  @ApiProperty({ type: Number, default: null })
-  @Prop({ type: Number, default: null })
-  lastMessageTime?: number;
-
-  @ApiProperty({ type: String, default: null })
-  @Prop({ type: String, default: null })
-  messageIndex?: string;
-
-  @ApiProperty({ type: Number, default: null })
-  @Prop({ type: Number, default: null })
-  messageId?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  deletedCount?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  successMsgCount?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  failureMsgCount?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  followupMsgSuccessCount?: number;
-
-  @ApiProperty({ type: Number, default: 0 })
-  @Prop({ type: Number, default: 0 })
-  followupMsgFailureCount?: number;
-
-  @ApiProperty({ type: Number, required: false })
-  @Prop({ type: Number })
-  freeformDeletedCount?: number;
-
-  @ApiProperty({ type: Number, required: false })
-  @Prop({ type: Number })
-  followUpDeletedCount?: number;
-
-  @ApiProperty({ type: String, required: false })
-  @Prop({ type: String })
-  message?: string;
+  // REMOVED successMsgCount / failureMsgCount / followupMsgSuccessCount / followupMsgFailureCount /
+  // deletedCount / freeformDeletedCount / followUpDeletedCount / messageIndex / messageId / message /
+  // lastMessageTime — outcome-tracking fields migrated to the channelIntelligence collection
+  // (single source of truth). CMS is the field-regeneration source for activeChannels, so these
+  // must not be re-stamped via @Prop defaults. See tg-platform outcomes-extension work (Tasks 1-5).
 
   // REMOVED tempBan — never set true by any code, no send-gate read it (dead half-wired flag).
   // REMOVED starred (channel) — never set true; only reader was an unrendered analytics count.
