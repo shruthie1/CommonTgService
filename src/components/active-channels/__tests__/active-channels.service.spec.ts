@@ -75,7 +75,26 @@ describe('ActiveChannelsService (real Mongo)', () => {
   let connection: Connection;
   let model: any;
   let promoteStub: any;
+  let channelIntelligenceStub: any;
   let service: ActiveChannelsService;
+
+  function emptyOutcomeAnalytics() {
+    return {
+      messageStats: {
+        totalSent: 0, totalFailed: 0, totalDeleted: 0, successRate: 0,
+        channelsWithSends: 0, channelsWithFailures: 0, channelsWithDeleted: 0,
+        avgSent: 0, avgFailed: 0,
+      },
+      restrictionStats: {
+        freeformDeletionChannels: 0, followUpDeletionChannels: 0,
+        totalFreeformDeletions: 0, totalFollowUpDeletions: 0,
+      },
+      successRateDistribution: [],
+      topBySuccess: [],
+      topByFailure: [],
+      topByDeleted: [],
+    };
+  }
 
   async function seed(overrides: Partial<ActiveChannel> = {}) {
     return model.create({
@@ -120,7 +139,8 @@ describe('ActiveChannelsService (real Mongo)', () => {
     mockBotsInstance = { sendMessageByCategory: mockSendMessageByCategory };
     await model.deleteMany({});
     promoteStub = { findOne: jest.fn().mockResolvedValue({ promo1: 'a', promo2: 'b' }) };
-    service = new ActiveChannelsService(model, promoteStub, {} as any);
+    channelIntelligenceStub = { getOutcomeAnalytics: jest.fn().mockResolvedValue(emptyOutcomeAnalytics()) };
+    service = new ActiveChannelsService(model, promoteStub, channelIntelligenceStub);
   });
 
   describe('create', () => {
@@ -345,21 +365,51 @@ describe('ActiveChannelsService (real Mongo)', () => {
 
   describe('analytics', () => {
     // successMsgCount/failureMsgCount/deletedCount/freeformDeletedCount/followUpDeletedCount were
-    // dropped from activeChannels (moved to channelIntelligence) — the messageStats/restrictionStats/
-    // successRateDist/topBySuccess/topByFailure/topByDeleted facets were removed along with them.
-    // `analytics()` now returns overview/participants/promos/topByParticipants only.
-    test('aggregates analytics with canonical facets', async () => {
+    // dropped from activeChannels (moved to channelIntelligence). Task 6.5 restores the
+    // messageStats/restrictionStats/successRateDist/topBySuccess/topByFailure/topByDeleted facets
+    // by sourcing them (read-only) from channelIntelligence via ChannelIntelligenceReadService,
+    // injected as the 3rd constructor arg here.
+    test('aggregates analytics with canonical facets, sourcing outcome stats from channelIntelligence', async () => {
       await seedRaw({ channelId: 'an-1', participantsCount: 12000, canSendMsgs: false, lastHydrationReason: 'write_forbidden' });
       await seedRaw({ channelId: 'an-2', participantsCount: 1500, banned: true, availableMsgs: [] });
+
+      channelIntelligenceStub.getOutcomeAnalytics.mockResolvedValue({
+        messageStats: {
+          totalSent: 10, totalFailed: 2, totalDeleted: 1, successRate: 83,
+          channelsWithSends: 2, channelsWithFailures: 1, channelsWithDeleted: 1,
+          avgSent: 5, avgFailed: 1,
+        },
+        restrictionStats: {
+          freeformDeletionChannels: 1, followUpDeletionChannels: 0,
+          totalFreeformDeletions: 1, totalFollowUpDeletions: 0,
+        },
+        successRateDistribution: [{ range: '80-101%', count: 2 }],
+        topBySuccess: [{ channelId: 'an-1', survived: 10 }],
+        topByFailure: [{ channelId: 'an-2', channelSideFailed: 2 }],
+        topByDeleted: [{ channelId: 'an-2', deleted: 1 }],
+      });
+
       const a = await service.analytics();
       expect(a.overview.total).toBe(2);
       expect(a.participants.total).toBe(13500);
-      expect(a.messages).toBeUndefined();
-      expect(a.restrictions).toBeUndefined();
-      expect(a.successRateDistribution).toBeUndefined();
-      expect(a.topBySuccess).toBeUndefined();
-      expect(a.topByFailure).toBeUndefined();
-      expect(a.topByDeleted).toBeUndefined();
+      expect(channelIntelligenceStub.getOutcomeAnalytics).toHaveBeenCalledTimes(1);
+      expect(a.messages).toEqual({
+        totalSent: 10, totalFailed: 2, totalDeleted: 1, successRate: 83,
+        channelsWithSends: 2, channelsWithFailures: 1, channelsWithDeleted: 1,
+        avgSent: 5, avgFailed: 1,
+      });
+      expect(a.restrictions).toEqual({
+        freeformDeletionChannels: 1, followUpDeletionChannels: 0,
+        totalFreeformDeletions: 1, totalFollowUpDeletions: 0,
+      });
+      expect(a.successRateDistribution).toEqual([{ range: '80-101%', count: 2 }]);
+      expect(a.topBySuccess).toEqual([{ channelId: 'an-1', survived: 10 }]);
+      expect(a.topByFailure).toEqual([{ channelId: 'an-2', channelSideFailed: 2 }]);
+      expect(a.topByDeleted).toEqual([{ channelId: 'an-2', deleted: 1 }]);
+      // NOTE: followupSent/followupFailed have no channelIntelligence equivalent and are
+      // intentionally dropped from the response shape (documented in task-6.5).
+      expect(a.messages.followupSent).toBeUndefined();
+      expect(a.messages.followupFailed).toBeUndefined();
       expect(Array.isArray(a.topByParticipants)).toBe(true);
     });
 
@@ -367,6 +417,8 @@ describe('ActiveChannelsService (real Mongo)', () => {
       const a = await service.analytics();
       expect(a.overview.total).toBe(0);
       expect(a.participants.total).toBe(0);
+      expect(a.messages).toBeDefined();
+      expect(a.restrictions).toBeDefined();
     });
   });
 

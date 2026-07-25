@@ -492,9 +492,6 @@ export class ActiveChannelsService {
               },
             },
           ],
-          // REMOVED messageStats facet — solely read successMsgCount/failureMsgCount/deletedCount/
-          // followupMsgSuccessCount/followupMsgFailureCount, all dropped from activeChannels
-          // (moved to channelIntelligence). See ChannelIntelligenceReadService for the replacement.
           // ── Participant stats ──
           participantStats: [
             {
@@ -509,8 +506,6 @@ export class ActiveChannelsService {
               },
             },
           ],
-          // REMOVED restrictionStats facet — solely read freeformDeletedCount/followUpDeletedCount,
-          // both dropped from activeChannels (moved to channelIntelligence).
           // ── Promo coverage ──
           promoCoverage: [
             {
@@ -523,9 +518,6 @@ export class ActiveChannelsService {
               },
             },
           ],
-          // REMOVED successRateDist / topBySuccess / topByFailure / topByDeleted facets — all
-          // solely read successMsgCount/failureMsgCount/deletedCount, dropped from activeChannels
-          // (moved to channelIntelligence).
           // ── Top by participants ──
           topByParticipants: [
             { $sort: { participantsCount: -1 } },
@@ -540,6 +532,13 @@ export class ActiveChannelsService {
     const partStats = result.participantStats[0] || {};
     const promoCov = result.promoCoverage[0] || {};
 
+    // Message-outcome analytics (Message Performance / Restriction Analysis / Success Rate
+    // Distribution / Top by Success|Failure|Deleted) moved to channelIntelligence when the
+    // corresponding activeChannels counters were dropped (CMS commit 206967c1). Sourced
+    // read-only via ChannelIntelligenceReadService; fails open to zeroed stats on error so this
+    // sibling-service read can never break the rest of `analytics()`.
+    const outcomeAnalytics = await this.channelIntelligenceReadService.getOutcomeAnalytics();
+
     return {
       overview: {
         total: overview.total || 0,
@@ -553,6 +552,7 @@ export class ActiveChannelsService {
         megagroup: overview.megagroup || 0,
         withUsername: overview.withUsername || 0,
       },
+      messages: outcomeAnalytics.messageStats,
       participants: {
         total: partStats.totalParticipants || 0,
         average: Math.round(partStats.avgParticipants || 0),
@@ -561,12 +561,17 @@ export class ActiveChannelsService {
         above1k: partStats.above1k || 0,
         below600: partStats.below600 || 0,
       },
+      restrictions: outcomeAnalytics.restrictionStats,
       promos: {
         withPromos: promoCov.withPromos || 0,
         exhausted: promoCov.exhausted || 0,
         avgPromoCount: Math.round((promoCov.avgPromoCount || 0) * 10) / 10,
         totalPromos: promoCov.totalPromos || 0,
       },
+      successRateDistribution: outcomeAnalytics.successRateDistribution,
+      topBySuccess: outcomeAnalytics.topBySuccess,
+      topByFailure: outcomeAnalytics.topByFailure,
+      topByDeleted: outcomeAnalytics.topByDeleted,
       topByParticipants: result.topByParticipants || [],
     };
   }
