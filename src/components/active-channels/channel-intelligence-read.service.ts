@@ -253,6 +253,9 @@ export class ChannelIntelligenceReadService {
           totalSent: msgStats.totalSent || 0,
           totalFailed: msgStats.totalFailed || 0,
           totalDeleted: msgStats.totalDeleted || 0,
+          // Denominator (totalAttempts) includes _channelSideFailed, which is an APPROXIMATION
+          // (see class doc above) — so this successRate is itself approximate, not exact.
+          // The dashboard must label it "(approx.)" wherever it surfaces this value.
           successRate: totalAttempts > 0 ? Math.round(((msgStats.totalSent || 0) / totalAttempts) * 100) : 0,
           channelsWithSends: msgStats.channelsWithSends || 0,
           channelsWithFailures: msgStats.channelsWithFailures || 0,
