@@ -67,6 +67,53 @@ describe('ActiveChannelsService channel-state persistence', () => {
     expect(updateMany).not.toHaveBeenCalled();
     expect(aggregate).toHaveBeenCalled();
   });
+
+  test('getActiveChannels applies the deletion-rate exclusion match when SCHEMA_CLEANUP is OFF', async () => {
+    const originalFlag = process.env.SCHEMA_CLEANUP;
+    delete process.env.SCHEMA_CLEANUP;
+    try {
+      const aggregate = jest.fn(() => execQuery([]));
+      const service = new ActiveChannelsService({ aggregate } as any, {} as any, {} as any);
+
+      await service.getActiveChannels(25, 0, []);
+
+      const pipeline = (aggregate.mock.calls as any)[0][0];
+      const deletionRateMatch = pipeline.find(
+        (stage: any) => stage.$match && stage.$match.$or && JSON.stringify(stage).includes('deletedCount'),
+      );
+      expect(deletionRateMatch).toBeDefined();
+      expect(deletionRateMatch.$match.$or).toHaveLength(2);
+    } finally {
+      if (originalFlag === undefined) {
+        delete process.env.SCHEMA_CLEANUP;
+      } else {
+        process.env.SCHEMA_CLEANUP = originalFlag;
+      }
+    }
+  });
+
+  test('getActiveChannels omits the deletion-rate match when SCHEMA_CLEANUP is ON (superseded by getExcludedChannelIds)', async () => {
+    const originalFlag = process.env.SCHEMA_CLEANUP;
+    process.env.SCHEMA_CLEANUP = 'true';
+    try {
+      const aggregate = jest.fn(() => execQuery([]));
+      const service = new ActiveChannelsService({ aggregate } as any, {} as any, {} as any);
+
+      await service.getActiveChannels(25, 0, []);
+
+      const pipeline = (aggregate.mock.calls as any)[0][0];
+      const deletionRateMatch = pipeline.find(
+        (stage: any) => stage.$match && stage.$match.$or && JSON.stringify(stage).includes('deletedCount'),
+      );
+      expect(deletionRateMatch).toBeUndefined();
+    } finally {
+      if (originalFlag === undefined) {
+        delete process.env.SCHEMA_CLEANUP;
+      } else {
+        process.env.SCHEMA_CLEANUP = originalFlag;
+      }
+    }
+  });
 });
 
 // ─── Real-Mongo backed coverage ──────────────────────────────────────────────

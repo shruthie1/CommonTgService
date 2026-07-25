@@ -397,13 +397,34 @@ export class ActiveChannelsService {
         ],
       };
 
+      const schemaCleanupEnabled = process.env.SCHEMA_CLEANUP === 'true';
+
       const pipeline: PipelineStage[] = [
         { $match: query },
-        // NOTE: the old deletion-rate filter (skip channels with >15% deletion rate) read
-        // successMsgCount/deletedCount, which have moved to channelIntelligence and no longer
-        // live on activeChannels. Removed rather than left as a permanent no-op. Deletion-rate
-        // based exclusion is handled via getExcludedChannelIds()/ChannelIntelligenceReadService
-        // (SCHEMA_CLEANUP-gated below) — do not reintroduce a dead $match here.
+        // Deletion rate filter: skip channels with >15% deletion rate (min 5 total messages)
+        // Byte-identical to pre-session baseline (commit 905a9a6c). Only applied when
+        // SCHEMA_CLEANUP is OFF — when ON, getExcludedChannelIds()/ChannelIntelligenceReadService
+        // (below) supersedes this filter, since successMsgCount/deletedCount are migrated off
+        // activeChannels under that flag. This is a raw aggregation stage against the collection,
+        // not type-checked against the ActiveChannel schema, so it still functions at runtime
+        // even if those fields were dropped from the Mongoose schema/type.
+        ...(!schemaCleanupEnabled
+          ? ([
+              {
+                $match: {
+                  $or: [
+                    // Not enough data — allow
+                    { $expr: { $lt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }] }, 5] } },
+                    // Deletion rate <= 15%
+                    { $expr: { $lte: [
+                      { $divide: [{ $ifNull: ['$deletedCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }, 0.01] }] },
+                      0.15
+                    ] } },
+                  ],
+                },
+              } as PipelineStage,
+            ] as PipelineStage[])
+          : []),
         {
           $addFields: {
             sortScore: {
@@ -425,7 +446,7 @@ export class ActiveChannelsService {
 
       const results = await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();
 
-      if (process.env.SCHEMA_CLEANUP === 'true' && results.length) {
+      if (schemaCleanupEnabled && results.length) {
         const candidateIds = results
           .map((channel) => channel.channelId)
           .filter((channelId): channelId is string => Boolean(channelId));
