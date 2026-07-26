@@ -268,7 +268,7 @@ export class ChannelsService {
       ];
       const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline, { allowDiskUse: true }).exec();
 
-      if (process.env.SCHEMA_CLEANUP === 'true' && result.length) {
+      if (result.length) {
         const candidateIds = result
           .map((channel: any) => channel.channelId)
           .filter((channelId: any): channelId is string => Boolean(channelId));
