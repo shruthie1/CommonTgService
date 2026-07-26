@@ -64,3 +64,65 @@ describe('ChannelsService channel-state persistence', () => {
   });
 
 });
+
+// ─── getActiveChannels: getExcludedChannelIds exclusion path (flag removed) ────
+// Pins the Task-4 collapse in channels.service.getActiveChannels: the
+// channelIntelligence exclusion now runs UNCONDITIONALLY (was SCHEMA_CLEANUP-gated)
+// and is the sole channel-quality filter, with a fail-open catch so an
+// intelligence outage never returns an empty channel list. Previously uncovered.
+describe('ChannelsService.getActiveChannels exclusion path', () => {
+  function aggregateReturning<T>(rows: T) {
+    return jest.fn(() => ({ exec: jest.fn(async () => rows) }));
+  }
+
+  test('always calls getExcludedChannelIds with the candidate ids and filters excluded ones out', async () => {
+    const aggregate = aggregateReturning([
+      { channelId: '111' },
+      { channelId: '222' },
+      { channelId: '333' },
+    ]);
+    const getExcludedChannelIds = jest.fn(async () => new Set(['222']));
+    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+
+    const result = await service.getActiveChannels(50, 0, []);
+
+    expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
+    expect(getExcludedChannelIds).toHaveBeenCalledWith(['111', '222', '333']);
+    expect((result as any[]).map((c) => c.channelId)).toEqual(['111', '333']);
+  });
+
+  test('FAILS OPEN: when getExcludedChannelIds throws, returns ALL results (never [])', async () => {
+    const aggregate = aggregateReturning([{ channelId: '111' }, { channelId: '222' }]);
+    const getExcludedChannelIds = jest.fn(async () => {
+      throw new Error('channelIntelligence unavailable');
+    });
+    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+
+    const result = await service.getActiveChannels(50, 0, []);
+
+    expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
+    expect((result as any[]).map((c) => c.channelId)).toEqual(['111', '222']);
+  });
+
+  test('empty excluded set returns all results unchanged', async () => {
+    const aggregate = aggregateReturning([{ channelId: '111' }, { channelId: '222' }]);
+    const getExcludedChannelIds = jest.fn(async () => new Set<string>());
+    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+
+    const result = await service.getActiveChannels(50, 0, []);
+
+    expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
+    expect((result as any[]).map((c) => c.channelId)).toEqual(['111', '222']);
+  });
+
+  test('does not call getExcludedChannelIds when the aggregate returns no rows', async () => {
+    const aggregate = aggregateReturning([]);
+    const getExcludedChannelIds = jest.fn(async () => new Set<string>());
+    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+
+    const result = await service.getActiveChannels(50, 0, []);
+
+    expect(result).toEqual([]);
+    expect(getExcludedChannelIds).not.toHaveBeenCalled();
+  });
+});
