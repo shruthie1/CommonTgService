@@ -42,11 +42,24 @@ afterAll(async () => {
   if (mongod) await mongod.stop();
 });
 
+// getActiveChannels always calls getFleetPrior()/buildConversionAwareSortStages() now
+// (conversion-aware sort, spec 2026-08-01) — stub them so the aggregation pipeline
+// actually runs instead of hitting the fail-open catch on every call.
+function channelIntelligenceReadServiceStub() {
+  return {
+    getFleetPrior: jest.fn(async () => ({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 })),
+    buildConversionAwareSortStages: jest.fn(() => [
+      { $addFields: { sortScore: { $rand: {} } } },
+    ]),
+    getExcludedChannelIds: jest.fn(async () => new Set<string>()),
+  };
+}
+
 beforeEach(async () => {
   jest.clearAllMocks();
   mockBotsInstance = { sendMessageByCategory: mockSendMessageByCategory };
   await model.deleteMany({});
-  service = new ChannelsService(model, {} as any);
+  service = new ChannelsService(model, channelIntelligenceReadServiceStub() as any);
 });
 
 describe('ChannelsService - CRUD', () => {

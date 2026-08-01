@@ -10,6 +10,22 @@ function execQuery<T>(result: T) {
   };
 }
 
+// Minimal conversion-aware-sort stub: getActiveChannels always calls
+// getFleetPrior()/buildConversionAwareSortStages() now, so any test constructing
+// ChannelsService directly needs these on the read-service mock even when the
+// test itself is only exercising the exclusion behavior.
+function conversionAwareSortStub(extra: Record<string, any> = {}) {
+  return {
+    getFleetPrior: jest.fn(async () => ({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 })),
+    buildConversionAwareSortStages: jest.fn(() => [
+      { $lookup: { from: 'channelIntelligence', localField: 'channelId', foreignField: 'channelId', as: '_ci' } },
+      { $addFields: { sortScore: { $rand: {} } } },
+      { $project: { _ci: 0 } },
+    ]),
+    ...extra,
+  };
+}
+
 describe('ChannelsService channel-state persistence', () => {
   test('createMultiple updates canonical identity/live state and preserves bans', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
@@ -82,7 +98,7 @@ describe('ChannelsService.getActiveChannels exclusion path', () => {
       { channelId: '333' },
     ]);
     const getExcludedChannelIds = jest.fn(async () => new Set(['222']));
-    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+    const service = new ChannelsService({ aggregate } as any, conversionAwareSortStub({ getExcludedChannelIds }) as any);
 
     const result = await service.getActiveChannels(50, 0, []);
 
@@ -96,7 +112,7 @@ describe('ChannelsService.getActiveChannels exclusion path', () => {
     const getExcludedChannelIds = jest.fn(async () => {
       throw new Error('channelIntelligence unavailable');
     });
-    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+    const service = new ChannelsService({ aggregate } as any, conversionAwareSortStub({ getExcludedChannelIds }) as any);
 
     const result = await service.getActiveChannels(50, 0, []);
 
@@ -107,7 +123,7 @@ describe('ChannelsService.getActiveChannels exclusion path', () => {
   test('empty excluded set returns all results unchanged', async () => {
     const aggregate = aggregateReturning([{ channelId: '111' }, { channelId: '222' }]);
     const getExcludedChannelIds = jest.fn(async () => new Set<string>());
-    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+    const service = new ChannelsService({ aggregate } as any, conversionAwareSortStub({ getExcludedChannelIds }) as any);
 
     const result = await service.getActiveChannels(50, 0, []);
 
@@ -118,11 +134,41 @@ describe('ChannelsService.getActiveChannels exclusion path', () => {
   test('does not call getExcludedChannelIds when the aggregate returns no rows', async () => {
     const aggregate = aggregateReturning([]);
     const getExcludedChannelIds = jest.fn(async () => new Set<string>());
-    const service = new ChannelsService({ aggregate } as any, { getExcludedChannelIds } as any);
+    const service = new ChannelsService({ aggregate } as any, conversionAwareSortStub({ getExcludedChannelIds }) as any);
 
     const result = await service.getActiveChannels(50, 0, []);
 
     expect(result).toEqual([]);
     expect(getExcludedChannelIds).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelsService.getActiveChannels uses conversion-aware sort', () => {
+  it('calls getFleetPrior and splices the lookup-based sort stages', async () => {
+    const captured: any[] = [];
+    const ChannelModel: any = {
+      aggregate: (pipeline: any[]) => { captured.push(pipeline); return { exec: async () => [] }; },
+    };
+    const readSvc: any = {
+      getFleetPrior: jest.fn(async () => ({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 })),
+      buildConversionAwareSortStages: jest.fn(() => [
+        { $lookup: { from: 'channelIntelligence', localField: 'channelId', foreignField: 'channelId', as: '_ci' } },
+        { $addFields: { sortScore: { $rand: {} } } },
+        { $project: { _ci: 0 } },
+      ]),
+      getExcludedChannelIds: jest.fn(async () => new Set()),
+    };
+    const svc: any = Object.create(ChannelsService.prototype);
+    svc.ChannelModel = ChannelModel;
+    svc.channelIntelligenceReadService = readSvc;
+
+    await svc.getActiveChannels(50, 0, []);
+
+    expect(readSvc.getFleetPrior).toHaveBeenCalled();
+    expect(readSvc.buildConversionAwareSortStages).toHaveBeenCalledWith({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    const json = JSON.stringify(captured[0]);
+    expect(json).toContain('channelIntelligence');
+    expect(json).not.toContain('reactRestricted');
+    expect(json).not.toContain('clientsJoined');
   });
 });

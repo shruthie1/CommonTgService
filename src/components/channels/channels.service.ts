@@ -248,19 +248,12 @@ export class ChannelsService {
 
     try {
 
+      const prior = await this.channelIntelligenceReadService.getFleetPrior();
+
       const pipeline: PipelineStage[] = [
         { $match: query },
-        {
-          $addFields: {
-            sortScore: {
-              $multiply: [
-                { $rand: {} },
-                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
-                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
-              ],
-            },
-          },
-        },
+        // Conversion-aware, stateless sort (spec 2026-08-01) — same shared helper as ActiveChannelsService.
+        ...this.channelIntelligenceReadService.buildConversionAwareSortStages(prior),
         { $sort: { sortScore: -1 as const } },
         { $skip: skip },
         { $limit: limit },
