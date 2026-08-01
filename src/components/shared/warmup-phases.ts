@@ -47,6 +47,17 @@ export const MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 export const MIN_CHANNELS_FOR_MATURING = 200;
 
 /**
+ * Deep-stall salvage (real prod finding 2026-08-02): some accounts can never accumulate channels
+ * (spam-limited / join-starved) and sit under even the relaxed (½) channel gate for weeks until
+ * the STUCK timeout retires them. Rather than LOSE an otherwise-usable account, a growing account
+ * that has been growing for this many days past its normal window is allowed to advance to maturing
+ * with whatever channels it has (as long as it has a minimal floor — a truly 0-channel account is a
+ * different, genuinely-dead case). This salvages accounts a bigger channel-target would strand.
+ */
+export const DEEP_STALL_GROWING_DAYS = 30;      // days IN growing (past the growing threshold) => salvage
+export const DEEP_STALL_MIN_CHANNELS = 20;      // must have at least this many channels to be worth salvaging
+
+/**
  * Action returned by getWarmupPhaseAction — tells the caller what to do this cycle.
  */
 export interface WarmupAction {
@@ -252,7 +263,12 @@ export function getWarmupPhaseAction(
         const effectiveChannelTarget = isGrowingStalled
             ? Math.floor(MIN_CHANNELS_FOR_MATURING / 2)
             : MIN_CHANNELS_FOR_MATURING;
-        if (channels < effectiveChannelTarget) {
+        // Deep-stall salvage: an account growing far past its window that STILL can't reach the
+        // relaxed target (join-blocked / spam-limited) would otherwise sit until STUCK retires it.
+        // If it has at least a minimal channel floor, let it advance with what it has instead of
+        // being lost. A 0-channel account is NOT salvaged (that is a genuinely-dead case).
+        const isDeepStalled = growingDuration > DEEP_STALL_GROWING_DAYS && channels >= DEEP_STALL_MIN_CHANNELS;
+        if (channels < effectiveChannelTarget && !isDeepStalled) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         // Channels target met — check if ready for maturing

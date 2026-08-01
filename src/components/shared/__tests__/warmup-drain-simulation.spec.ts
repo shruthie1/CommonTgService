@@ -58,6 +58,11 @@ type SimAccount = {
     warmupJitter: number;
     enrolledAt: number;            // ms
     channels: number;
+    // Real-world failure mode surfaced by prod DB review (2026-08-02): ~12% of promote 'growing'
+    // accounts CANNOT accumulate channels (spam-limited / join-starved) and sit under the 100-channel
+    // relaxed gate for 44-60d until STUCK retires them. When true, this account's channels never grow,
+    // so it cannot leave GROWING — a bottleneck INDEPENDENT of the throughput cap this test targets.
+    joinBlocked?: boolean;
     privacyUpdatedAt?: number;
     twoFASetAt?: number;
     otherAuthsRemovedAt?: number;
@@ -80,22 +85,37 @@ const ACTION_STAMP: Record<string, keyof SimAccount> = {
 // Actions that consume a normal mutation slot (mirror the real loop: wait/organic/join/advance don't).
 const SLOT_ACTIONS = new Set(Object.keys(ACTION_STAMP));
 
-/** Build the deterministic population from the prod snapshot profile (counts → individual accounts). */
-function buildPopulation(profiles: any[], nowMs: number): SimAccount[] {
+/**
+ * Build the deterministic population from the prod snapshot profile (counts → individual accounts).
+ * @param joinBlockedRatio fraction of GROWING accounts that can never accumulate channels (real
+ *        prod failure mode). 0 = every account can grow (optimistic); >0 injects the stuck cohort.
+ */
+function buildPopulation(profiles: any[], nowMs: number, joinBlockedRatio = 0): SimAccount[] {
     const pop: SimAccount[] = [];
     let idx = 0;
+    let growingSeen = 0;
     for (const p of profiles) {
         for (let k = 0; k < p.n; k++) {
             // Deterministic per-account age spread so day-gates are exercised realistically but
             // reproducibly: older accounts (further along) enrolled earlier. Range 2..40 days.
             const ageDays = 2 + ((idx * 7) % 39);
             const enrolledAt = nowMs - ageDays * ONE_DAY;
+            // Deterministically flag every Nth growing account as join-blocked to hit the ratio.
+            let joinBlocked = false;
+            if (p.phase === WarmupPhase.GROWING && joinBlockedRatio > 0) {
+                const stride = Math.max(1, Math.round(1 / joinBlockedRatio));
+                joinBlocked = growingSeen % stride === 0;
+                growingSeen++;
+            }
             const a: SimAccount = {
                 id: `sim-${idx}`,
                 warmupPhase: p.phase,
                 warmupJitter: idx % 4,                 // 0..3, deterministic
                 enrolledAt,
-                channels: p.chBucket === '>=200' ? 250 : 40,
+                // A join-blocked account is BY DEFINITION under the channel gate (it can't grow),
+                // so it always starts low regardless of the snapshot bucket.
+                channels: joinBlocked ? 20 : (p.chBucket === '>=200' ? 250 : 40),
+                joinBlocked,
             };
             // Seed completed sub-steps with timestamps safely in the past (so their day-gates are
             // already satisfied at sim start — matches a real account that finished those steps days ago).
@@ -146,9 +166,10 @@ function simulate(pop: SimAccount[], probe: CapProbe, startMs: number, days: num
     let maxSlotsInAnyRun = 0;
 
     for (let run = 0; run < days * runsPerDay; run++) {
-        // grow channels a bit each run for growing-phase accounts so they can reach the 200 gate
+        // grow channels a bit each run for growing-phase accounts so they can reach the gate.
+        // join-blocked accounts (real prod failure mode) never grow — they stay stuck under the gate.
         for (const a of pop) {
-            if (a.warmupPhase === WarmupPhase.GROWING && a.channels < 250) a.channels += 15;
+            if (a.warmupPhase === WarmupPhase.GROWING && !a.joinBlocked && a.channels < 250) a.channels += 15;
         }
 
         // 1. compute eligible set (non-terminal accounts that WANT a slot-consuming action now)
@@ -199,7 +220,15 @@ function simulate(pop: SimAccount[], probe: CapProbe, startMs: number, days: num
         nowMs += runIntervalMs;
     }
 
-    return { backlogByDay, maxSensitiveInAnyRun, maxSlotsInAnyRun, pop };
+    const joinBlocked = pop.filter((a) => a.joinBlocked);
+    const joinBlockedDrained = joinBlocked.filter((a) => isTerminal(a.warmupPhase)).length;
+    const joinableRemaining = pop.filter((a) => !a.joinBlocked && !isTerminal(a.warmupPhase)).length;
+    return {
+        backlogByDay, maxSensitiveInAnyRun, maxSlotsInAnyRun, pop,
+        joinBlockedTotal: joinBlocked.length,
+        joinBlockedDrained,
+        joinableRemaining,
+    };
 }
 
 describe('warmup drain — deterministic simulation over real prod population', () => {
@@ -260,6 +289,29 @@ describe('warmup drain — deterministic simulation over real prod population', 
                 console.log(`[${coll}] initial backlog=${initialBacklog}, drains to 0 in ${daysToDrain} days; first 10 days=`, backlogByDay.slice(0, 10));
                 expect(daysToDrain).toBeGreaterThan(0);
                 expect(daysToDrain).toBeLessThan(probe.STUCK);
+            });
+
+            // ── Real-world failure mode: join-blocked growing accounts (prod DB, 2026-08-02) ──
+            // ~12% of promote 'growing' accounts can't accumulate channels. The DEEP-STALL SALVAGE
+            // fix now advances them (with ch >= DEEP_STALL_MIN_CHANNELS=20) instead of letting them
+            // rot until STUCK retires them. These tests prove: (a) the salvage actually drains the
+            // join-blocked-but-salvageable cohort, and (b) the whole backlog (joinable + salvageable)
+            // clears — so no account is lost to the channel-supply bottleneck.
+            it('DEEP-STALL SALVAGE drains join-blocked accounts (ch>=20) instead of losing them', () => {
+                const pop = buildPopulation(snapshot[coll], START, 0.12); // inject 12% join-blocked growing (ch=20)
+                const res = simulate(pop, probe, START, probe.STUCK - 5);
+                // The join-blocked cohort (ch=20, above the salvage floor) is now SALVAGED, not stuck.
+                expect(res.joinBlockedDrained).toBe(res.joinBlockedTotal);
+                // And the joinable backlog still fully drains — the throughput fix works too.
+                expect(res.joinableRemaining).toBe(0);
+                // eslint-disable-next-line no-console
+                console.log(`[${coll}] 12% join-blocked (ch=20): salvaged ${res.joinBlockedDrained}/${res.joinBlockedTotal}, joinable drained=${res.joinableRemaining === 0}`);
+            });
+
+            it('safety invariants still hold WITH the join-blocked cohort present (no burst)', () => {
+                const res = simulate(buildPopulation(snapshot[coll], START, 0.12), probe, START, probe.STUCK - 5);
+                expect(res.maxSensitiveInAnyRun).toBeLessThanOrEqual(probe.SENS_CAP);
+                expect(res.maxSlotsInAnyRun).toBeLessThanOrEqual(probe.MAX);
             });
         });
     }

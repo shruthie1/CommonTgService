@@ -292,6 +292,45 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('join_channels');
         });
 
+        test('DEEP-STALL SALVAGE: growing 50 days but only 60 channels (join-blocked) → advances to maturing, NOT stuck forever', () => {
+            // Real prod case (2026-08-02): join-blocked account far past its growing window, under the
+            // relaxed 100-channel gate. Must advance with what it has instead of being STUCK-retired.
+            const doc = makeDoc({
+                warmupPhase: WarmupPhase.GROWING,
+                enrolledAt: daysAgo(50, now),   // ~36 days growing (>DEEP_STALL_GROWING_DAYS=30)
+                channels: 60,                   // under relaxed 100, but >= DEEP_STALL_MIN_CHANNELS=20
+                warmupJitter: 0,
+                ...fullySettledIdentity,
+            });
+            const result = getWarmupPhaseAction(doc, now);
+            expect(result.phase).toBe(WarmupPhase.MATURING);
+            expect(result.action).toBe('upload_photo'); // advancing, not join_channels
+        });
+
+        test('DEEP-STALL: growing 50 days but ZERO channels → NOT salvaged (genuinely dead, keeps trying to join)', () => {
+            const doc = makeDoc({
+                warmupPhase: WarmupPhase.GROWING,
+                enrolledAt: daysAgo(50, now),
+                channels: 0,                    // below DEEP_STALL_MIN_CHANNELS floor → not salvaged
+                warmupJitter: 0,
+                ...fullySettledIdentity,
+            });
+            const result = getWarmupPhaseAction(doc, now);
+            expect(result.action).toBe('join_channels'); // still blocked, not advanced
+        });
+
+        test('DEEP-STALL: growing only 20 days, 60 channels → NOT yet salvaged (still within window, keeps joining)', () => {
+            const doc = makeDoc({
+                warmupPhase: WarmupPhase.GROWING,
+                enrolledAt: daysAgo(20, now),   // ~6 days growing (< DEEP_STALL_GROWING_DAYS=30)
+                channels: 60,
+                warmupJitter: 0,
+                ...fullySettledIdentity,
+            });
+            const result = getWarmupPhaseAction(doc, now);
+            expect(result.action).toBe('join_channels'); // not deep-stalled yet
+        });
+
         test('growing, channels=200, enrolled 15 days, jitter=0 → organic_only (needs 20 days for maturing)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
