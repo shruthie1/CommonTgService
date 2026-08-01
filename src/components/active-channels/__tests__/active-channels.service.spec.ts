@@ -24,6 +24,22 @@ function execQuery<T>(result: T) {
   };
 }
 
+// Minimal conversion-aware-sort stub: getActiveChannels always calls
+// getFleetPrior()/buildConversionAwareSortStages() now, so any test constructing
+// ActiveChannelsService directly needs these on the read-service mock even when the
+// test itself is only exercising the exclusion/legacy-migration behavior.
+function conversionAwareSortStub(extra: Record<string, any> = {}) {
+  return {
+    getFleetPrior: jest.fn(async () => ({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 })),
+    buildConversionAwareSortStages: jest.fn(() => [
+      { $lookup: { from: 'channelIntelligence', localField: 'channelId', foreignField: 'channelId', as: '_ci' } },
+      { $addFields: { sortScore: { $rand: {} } } },
+      { $project: { _ci: 0 } },
+    ]),
+    ...extra,
+  };
+}
+
 describe('ActiveChannelsService channel-state persistence', () => {
   test('createMultiple updates canonical identity/live state and preserves bans', async () => {
     const bulkWrite = jest.fn(async () => ({ modifiedCount: 1 }));
@@ -60,7 +76,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
   test('getActiveChannels does not run a legacy data migration before selecting candidates', async () => {
     const updateMany = jest.fn(() => execQuery({ modifiedCount: 2 }));
     const aggregate = jest.fn(() => execQuery([]));
-    const service = new ActiveChannelsService({ updateMany, aggregate } as any, {} as any, {} as any);
+    const service = new ActiveChannelsService({ updateMany, aggregate } as any, {} as any, conversionAwareSortStub() as any);
 
     await service.getActiveChannels(25, 0, []);
 
@@ -70,7 +86,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
 
   test('getActiveChannels never applies the legacy deletion-rate match (exclusion is via getExcludedChannelIds)', async () => {
     const aggregate = jest.fn(() => execQuery([]));
-    const service = new ActiveChannelsService({ aggregate } as any, {} as any, {} as any);
+    const service = new ActiveChannelsService({ aggregate } as any, {} as any, conversionAwareSortStub() as any);
 
     await service.getActiveChannels(25, 0, []);
 
@@ -94,7 +110,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
     const service = new ActiveChannelsService(
       { aggregate } as any,
       {} as any,
-      { getExcludedChannelIds } as any,
+      conversionAwareSortStub({ getExcludedChannelIds }) as any,
     );
 
     const result = await service.getActiveChannels(25, 0, []);
@@ -115,7 +131,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
     const service = new ActiveChannelsService(
       { aggregate } as any,
       {} as any,
-      { getExcludedChannelIds } as any,
+      conversionAwareSortStub({ getExcludedChannelIds }) as any,
     );
 
     const result = await service.getActiveChannels(25, 0, []);
@@ -132,7 +148,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
     const service = new ActiveChannelsService(
       { aggregate } as any,
       {} as any,
-      { getExcludedChannelIds } as any,
+      conversionAwareSortStub({ getExcludedChannelIds }) as any,
     );
 
     const result = await service.getActiveChannels(25, 0, []);
@@ -147,7 +163,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
     const service = new ActiveChannelsService(
       { aggregate } as any,
       {} as any,
-      { getExcludedChannelIds } as any,
+      conversionAwareSortStub({ getExcludedChannelIds }) as any,
     );
 
     const result = await service.getActiveChannels(25, 0, []);
@@ -227,7 +243,9 @@ describe('ActiveChannelsService (real Mongo)', () => {
     mockBotsInstance = { sendMessageByCategory: mockSendMessageByCategory };
     await model.deleteMany({});
     promoteStub = { findOne: jest.fn().mockResolvedValue({ promo1: 'a', promo2: 'b' }) };
-    channelIntelligenceStub = { getOutcomeAnalytics: jest.fn().mockResolvedValue(emptyOutcomeAnalytics()) };
+    channelIntelligenceStub = conversionAwareSortStub({
+      getOutcomeAnalytics: jest.fn().mockResolvedValue(emptyOutcomeAnalytics()),
+    });
     service = new ActiveChannelsService(model, promoteStub, channelIntelligenceStub);
   });
 
@@ -682,5 +700,42 @@ describe('ActiveChannelsService (real Mongo)', () => {
       await expect(service.getActiveChannels(10, 0, [])).rejects.toBeInstanceOf(InternalServerErrorException);
       spy.mockRestore();
     });
+  });
+});
+
+describe('getActiveChannels uses conversion-aware sort (no reaction/diversity)', () => {
+  it('calls getFleetPrior and splices the lookup-based sort stages', async () => {
+    // Arrange a service instance with mocked model + read service.
+    const captured: any[] = [];
+    const activeChannelModel: any = {
+      aggregate: (pipeline: any[]) => { captured.push(pipeline); return { exec: async () => [] }; },
+    };
+    const readSvc: any = {
+      getFleetPrior: jest.fn(async () => ({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 })),
+      buildConversionAwareSortStages: jest.fn(() => [
+        { $lookup: { from: 'channelIntelligence', localField: 'channelId', foreignField: 'channelId', as: '_ci' } },
+        { $addFields: { sortScore: { $rand: {} } } },
+        { $project: { _ci: 0 } },
+      ]),
+      getExcludedChannelIds: jest.fn(async () => new Set()),
+    };
+    // Construct via the class with these deps (match the real constructor param order).
+    const svc: any = Object.create(ActiveChannelsService.prototype);
+    svc.activeChannelModel = activeChannelModel;
+    svc.channelIntelligenceReadService = readSvc;
+    svc.MIN_PARTICIPANTS_COUNT = 600;
+    svc.DEFAULT_LIMIT = 50; svc.DEFAULT_SKIP = 0;
+    svc.logger = { warn: () => {}, error: () => {} };
+    svc.handleError = (e: any) => e;
+
+    await svc.getActiveChannels(50, 0, []);
+
+    expect(readSvc.getFleetPrior).toHaveBeenCalled();
+    expect(readSvc.buildConversionAwareSortStages).toHaveBeenCalledWith({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    const pipeline = captured[0];
+    const json = JSON.stringify(pipeline);
+    expect(json).toContain('channelIntelligence');            // lookup spliced in
+    expect(json).not.toContain('reactRestricted');            // reaction weight gone
+    expect(json).not.toContain('clientsJoined');              // diversity weight gone
   });
 });

@@ -397,25 +397,18 @@ export class ActiveChannelsService {
         ],
       };
 
+      const prior = await this.channelIntelligenceReadService.getFleetPrior();
+
       const pipeline: PipelineStage[] = [
         { $match: query },
         // Channel exclusion is now driven entirely by getExcludedChannelIds()/
         // ChannelIntelligenceReadService (below). The legacy deletion-rate $match on
         // activeChannels.successMsgCount/deletedCount has been removed — those fields are
         // migrated off activeChannels and no longer written.
-        {
-          $addFields: {
-            sortScore: {
-              $multiply: [
-                { $rand: {} },
-                // Reaction-enabled channels get full priority.
-                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
-                // Diversity weight: fewer clients joined = higher priority
-                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
-              ],
-            },
-          },
-        },
+        // Conversion-aware, stateless sort (spec 2026-08-01): random × conversionWeight ×
+        // sendQualityWeight, both shrunk toward the live fleet prior. Replaces the old
+        // reactRestricted/clientsJoined weighting.
+        ...this.channelIntelligenceReadService.buildConversionAwareSortStages(prior),
         { $sort: { sortScore: -1 } },
         { $skip: skip },
         { $limit: limit },
