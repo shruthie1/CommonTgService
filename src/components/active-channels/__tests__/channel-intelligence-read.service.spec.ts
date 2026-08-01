@@ -330,6 +330,36 @@ describe('ChannelIntelligenceReadService.buildConversionAwareSortStages', () => 
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) { expect(r.sortScore).toBeGreaterThanOrEqual(0); expect(r.sortScore).toBeLessThan(1); }
   });
+
+  it('POISON-DOC ROBUSTNESS: a malformed CI field (string/bool/array) does NOT throw — the doc degrades to neutral (spec: no fleet-wide crash)', async () => {
+    // channelIntelligence is written by a sibling service into a strict:false collection, so a
+    // numeric field can arrive wrong-typed. $ifNull would let it through and $add/$divide would
+    // THROW, aborting the whole aggregation. $convert(onError/onNull:0) must neutralize it instead.
+    const poison = 'poison-ch';
+    await chanModel.create({ channelId: poison });
+    await ciModel.create({
+      channelId: poison,
+      outcomes: { attempted: '50', survived: [1, 2], deleted: 5 }, // string + array = hostile types
+      DMs: { credited: true },                                     // bool = hostile type
+    });
+    const stages = service.buildConversionAwareSortStages({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    // The whole channel set (including the poison doc) aggregates WITHOUT throwing.
+    let rows: any[] = [];
+    await expect((async () => {
+      rows = await chanModel.aggregate([...stages, { $project: { channelId: 1, sortScore: 1 } }]).exec();
+    })()).resolves.toBeUndefined();
+    const poisonRow = rows.find((r) => r.channelId === poison);
+    expect(poisonRow).toBeTruthy();
+    // Malformed fields -> all coerce to 0 -> weights shrink to exactly neutral (1.0×1.0) -> sortScore ∈ (0,1].
+    expect(Number.isFinite(poisonRow.sortScore)).toBe(true);
+    expect(poisonRow.sortScore).toBeGreaterThan(0);
+    expect(poisonRow.sortScore).toBeLessThanOrEqual(1);
+    // And the other (well-formed) channels still sorted fine alongside it.
+    expect(rows.length).toBeGreaterThan(1);
+    // cleanup so later tests in this describe aren't affected
+    await chanModel.deleteOne({ channelId: poison });
+    await ciModel.deleteOne({ channelId: poison });
+  });
 });
 
 describe('ChannelIntelligenceReadService.getFleetPrior', () => {
@@ -379,5 +409,36 @@ describe('ChannelIntelligenceReadService.getFleetPrior', () => {
     await svc.getFleetPrior(0);
     await svc.getFleetPrior(0);
     expect(exec).toHaveBeenCalledTimes(2);
+  });
+
+  // Real-Mongo: proves the $group actually runs the $convert coercion (mock models above skip the pipeline).
+  describe('real $group coercion', () => {
+    let mongod: MongoMemoryServer;
+    let connection: Connection;
+    let ciModel: any;
+
+    beforeAll(async () => {
+      mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+      connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'fleetPriorCoerce' }).asPromise();
+      ciModel = connection.model('channelIntelligence', new Schema({}, { strict: false, collection: 'channelIntelligence' }));
+    });
+    afterAll(async () => {
+      if (connection) { await connection.dropDatabase(); await connection.close(); }
+      if (mongod) await mongod.stop();
+    });
+
+    it('computes the prior from real docs AND is not skewed/crashed by a poison doc', async () => {
+      await ciModel.create([
+        { outcomes: { attempted: 100, survived: 80 }, DMs: { credited: 5 } },
+        { outcomes: { attempted: 100, survived: 84 }, DMs: { credited: 1 } },
+        // poison doc: string attempted + array survived + bool credited. $convert(onError:0) must
+        // drop all three to 0 for THIS doc symmetrically, so it neither throws nor skews the ratios.
+        { outcomes: { attempted: 'NaN', survived: [1] }, DMs: { credited: true } },
+      ]);
+      const svc = new ChannelIntelligenceReadService(ciModel);
+      const prior = await svc.getFleetPrior(0); // Σattempted=200, Σcredited=6->0.03, Σsurvived=164->0.82
+      expect(prior.PRIOR_RATE).toBeCloseTo(0.03, 5);   // poison contributed 0/0/0, no upward skew
+      expect(prior.SQ_PRIOR_RATE).toBeCloseTo(0.82, 5);
+    });
   });
 });

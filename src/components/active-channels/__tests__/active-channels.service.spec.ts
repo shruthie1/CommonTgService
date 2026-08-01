@@ -718,6 +718,26 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(spy).toHaveBeenCalledTimes(2); // conversion sort (threw) + random-only fallback
       spy.mockRestore();
     });
+
+    test('SAFETY GATE ON FALLBACK: random-only fallback results STILL pass through getExcludedChannelIds', async () => {
+      // Regression guard: the hard safety exclusion must apply to fallback results too, not just the
+      // conversion-sort path — else a $lookup failure would let blocked/unsafe channels be joined.
+      await seed({ channelId: 'safe-1',   title: 'safe one',   username: 'safeone',   participantsCount: 5000, canSendMsgs: true } as any);
+      await seed({ channelId: 'unsafe-1', title: 'unsafe one', username: 'unsafeone', participantsCount: 5000, canSendMsgs: true } as any);
+      const getExcludedChannelIds = jest.fn(async () => new Set(['unsafe-1']));
+      const svc = new ActiveChannelsService(
+        model,
+        promoteStub,
+        conversionAwareSortStub({ getExcludedChannelIds, getOutcomeAnalytics: jest.fn().mockResolvedValue(emptyOutcomeAnalytics()) }) as any,
+      );
+      // Force the conversion sort to fail so the random-only fallback produces the result set.
+      const spy = jest.spyOn(model, 'aggregate').mockImplementationOnce(() => { throw new Error('lookup blew up'); });
+      const r = await svc.getActiveChannels(10, 0, []);
+      expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);                    // exclusion ran on fallback results
+      expect(r.some((c: any) => c.channelId === 'safe-1')).toBe(true);          // safe channel kept
+      expect(r.some((c: any) => c.channelId === 'unsafe-1')).toBe(false);       // unsafe channel filtered out
+      spy.mockRestore();
+    });
   });
 });
 

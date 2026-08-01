@@ -230,7 +230,11 @@ collections agree.
 avoid the two drifting, extract into a small shared helper (e.g. on `ChannelIntelligenceReadService`,
 which already owns channelIntelligence reads):
 - `getFleetPrior()` — returns `{ PRIOR_RATE, SQ_PRIOR_RATE }`, computed via the `$group` above and
-  cached in-memory for `PRIOR_TTL`. The single owner of the live-prior computation + cache.
+  cached in-memory for `PRIOR_TTL`. The owner of the live-prior computation + cache. (NOTE: the
+  service is registered in each module's own `providers` — deliberately, to avoid a DI cycle — so
+  there are two instances, each with its own cache. This is benign: the two consumers are used in
+  mutually-exclusive branches, each cache is independently valid within TTL, and the only cost is the
+  cheap fleet `$group` running once per instance per `PRIOR_TTL` rather than once globally.)
 - `buildConversionAwareSortStages(prior)` — takes the prior and returns the `$lookup` + `$addFields
   sortScore` stages. Pure function of its input (prior + constants), so it is trivially unit-testable.
 

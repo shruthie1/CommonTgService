@@ -423,8 +423,10 @@ export class ActiveChannelsService {
         // Fail-open (spec 2026-08-01, Error handling): if the conversion-aware aggregation
         // (its cross-collection $lookup) errors, degrade to random-only selection rather than
         // starving the join pipeline. Never let the tilt block joins.
-        this.logger.warn(
-          `Conversion-aware sort failed, falling back to random-only selection: ${sortError instanceof Error ? sortError.message : sortError}`,
+        // error-level (not warn): a PERSISTENT fallback = the whole feature is silently off
+        // fleet-wide (random selection, no conversion tilt) — an operator needs to see this.
+        this.logger.error(
+          `Conversion-aware sort failed — falling back to RANDOM-ONLY selection (conversion tilt disabled this query): ${sortError instanceof Error ? sortError.message : sortError}`,
         );
         const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
         results = await this.activeChannelModel.aggregate<ActiveChannel>(fallbackPipeline, { allowDiskUse: true }).exec();

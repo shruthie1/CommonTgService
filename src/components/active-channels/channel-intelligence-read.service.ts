@@ -102,9 +102,13 @@ export class ChannelIntelligenceReadService {
           {
             $group: {
               _id: null,
-              totalCredited: { $sum: { $ifNull: ['$DMs.credited', 0] } },
-              totalAttempted: { $sum: { $ifNull: ['$outcomes.attempted', 0] } },
-              totalSurvived: { $sum: { $ifNull: ['$outcomes.survived', 0] } },
+              // Coerce with $convert (not just $ifNull) so a wrong-typed field on one sibling-written
+              // doc contributes 0 to BOTH numerator and denominator consistently — avoids a one-sided
+              // skew of the live prior. ($sum ignores non-numerics silently, but $convert makes the
+              // per-field drop symmetric across credited/attempted/survived.)
+              totalCredited: { $sum: this.numFromCi('$DMs.credited') },
+              totalAttempted: { $sum: this.numFromCi('$outcomes.attempted') },
+              totalSurvived: { $sum: this.numFromCi('$outcomes.survived') },
             },
           },
         ])
@@ -116,6 +120,12 @@ export class ChannelIntelligenceReadService {
         SQ_PRIOR_RATE: totalAttempted > 0 ? (row.totalSurvived ?? 0) / totalAttempted : SQ_PRIOR_RATE_FALLBACK,
       };
       this._priorCache = { value, at: now };
+      // Log the freshly-computed prior (recompute happens at most once per TTL) so an operator can
+      // confirm during canary that the live fleet prior is ~0.03/0.82, per the spec's live-validation
+      // step. On the cache-hit path (returned above) nothing is logged, keeping the hot path quiet.
+      this.logger.log(
+        `Live fleet prior computed: PRIOR_RATE=${value.PRIOR_RATE.toFixed(5)} SQ_PRIOR_RATE=${value.SQ_PRIOR_RATE.toFixed(5)} (Σattempted=${totalAttempted})`,
+      );
       return value;
     } catch (error) {
       this.logger.warn(
@@ -347,6 +357,17 @@ export class ChannelIntelligenceReadService {
    * both weights shrunk toward the LIVE fleet prior (passed in). Pure function of (prior + constants);
    * no I/O. Spliced into each getActiveChannels pipeline in place of the old reaction/diversity sort.
    */
+  /**
+   * Aggregation expression that coerces a channelIntelligence field reference to a finite number,
+   * defaulting to 0 for null/missing AND for wrong-typed values (string/bool/array/etc). Guards
+   * against out-of-contract sibling-written docs: `$ifNull` alone lets a non-null wrong type through
+   * and `$add`/`$divide` then throw. `$convert ... onError/onNull: 0` never throws and yields a
+   * finite number, so a malformed doc degrades to the neutral prior instead of breaking the query.
+   */
+  private numFromCi(fieldRef: string): Record<string, unknown> {
+    return { $convert: { input: fieldRef, to: 'double', onError: 0, onNull: 0 } };
+  }
+
   buildConversionAwareSortStages(prior: FleetPrior): PipelineStage[] {
     const priorRate = prior?.PRIOR_RATE > 0 ? prior.PRIOR_RATE : PRIOR_RATE_FALLBACK;
     const sqPriorRate = prior?.SQ_PRIOR_RATE > 0 ? prior.SQ_PRIOR_RATE : SQ_PRIOR_RATE_FALLBACK;
@@ -369,10 +390,17 @@ export class ChannelIntelligenceReadService {
               },
               in: {
                 $let: {
+                  // Coerce every joined field to a number. channelIntelligence is written by a
+                  // SIBLING service into a strict:false collection, so a field can arrive as a
+                  // string ("50"), bool, array, or missing. $ifNull only guards null/missing —
+                  // a wrong-typed value would make $add/$divide THROW and (via the fail-open
+                  // catch) silently disable the conversion tilt fleet-wide. numFromCi() uses
+                  // $convert with onError/onNull->0 so a single malformed doc only neutralizes
+                  // its OWN weight (falls to the neutral prior) instead of poisoning the feature.
                   vars: {
-                    attempted: { $ifNull: ['$$ci.outcomes.attempted', 0] },
-                    credited: { $ifNull: ['$$ci.DMs.credited', 0] },
-                    survived: { $ifNull: ['$$ci.outcomes.survived', 0] },
+                    attempted: this.numFromCi('$$ci.outcomes.attempted'),
+                    credited: this.numFromCi('$$ci.DMs.credited'),
+                    survived: this.numFromCi('$$ci.outcomes.survived'),
                   },
                   in: {
                     $let: {
