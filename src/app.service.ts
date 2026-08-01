@@ -44,6 +44,8 @@ interface UserAccessData {
   videoDetails: VideoDetails;
 }
 
+type JoinableChannel = (Channel | ActiveChannel) & { accessHash?: string | null };
+
 @Injectable()
 export class AppService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AppService.name);
@@ -634,10 +636,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             resp?.data?.canSendTrueCount &&
             resp?.data?.canSendTrueCount < 350
           ) {
+            const excludedIds = this.getJoinedChannelIdsFromInfo(resp.data);
             const result = await this.activeChannelsService.getActiveChannels(
-              150,
+              25,
               0,
-              resp.data?.ids,
+              excludedIds,
             );
             await fetchWithTimeout(
               `${ppplbot()}&text=Started Joining Channels for ${document.clientId}: ${result.length}`,
@@ -670,11 +673,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
                 const channel = channels.shift();
                 console.log(url, ' Pending Channels :', channels.length);
                 this.joinChannelMap.set(url, channels);
+                const joinUrl = this.buildJoinChannelUrl(url, channel as JoinableChannel);
+                if (!joinUrl) {
+                  this.logger.warn(`Skipping channel join without usable target for ${url}`);
+                  return;
+                }
                 try {
-                  await fetchWithTimeout(
-                    `${url}/joinchannel?username=${channel.username}`,
-                  );
-                  console.log(url, ' Trying to join :', channel.username);
+                  await fetchWithTimeout(joinUrl);
+                  console.log(url, ' Trying to join :', this.describeJoinableChannel(channel as JoinableChannel));
                 } catch (error) {
                   parseError(error, 'Outer Err: ');
                 }
@@ -692,6 +698,38 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       },
       3 * 60 * 1000,
     );
+  }
+
+  private getJoinedChannelIdsFromInfo(channels: { ids?: string[]; canSendFalseChats?: string[] } | null | undefined): string[] {
+    return [...new Set([...(channels?.ids ?? []), ...(channels?.canSendFalseChats ?? [])].map(String).filter(Boolean))];
+  }
+
+  private normalizeTelegramUsername(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const username = value.trim().replace(/^@+/, '');
+    if (!username || username === 'undefined' || username === 'null') return null;
+    return /^[A-Za-z0-9_]{5,32}$/.test(username) ? username : null;
+  }
+
+  private normalizeChannelId(value: unknown): string | null {
+    const channelId = String(value ?? '').trim().replace(/^-100/, '');
+    return /^[1-9]\d*$/.test(channelId) ? channelId : null;
+  }
+
+  private buildJoinChannelUrl(baseUrl: string, channel: JoinableChannel | null | undefined): string | null {
+    if (!channel) return null;
+    const username = this.normalizeTelegramUsername(channel.username);
+    if (!username) return null;
+
+    const url = new URL('/joinchannel', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+    url.searchParams.set('username', username);
+    return url.toString();
+  }
+
+  private describeJoinableChannel(channel: JoinableChannel): string {
+    return this.normalizeTelegramUsername(channel.username)
+      ?? this.normalizeChannelId(channel.channelId)
+      ?? '<missing-target>';
   }
 
   clearJoinChannelInterval() {

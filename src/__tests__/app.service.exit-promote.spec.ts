@@ -64,3 +64,75 @@ describe('AppService promote-client exits', () => {
     );
   });
 });
+
+describe('AppService client channel join contract', () => {
+  const fetchSpy = jest.spyOn(utils, 'fetchWithTimeout');
+  const sleepSpy = jest.spyOn(telegramHelpers, 'sleep');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    fetchSpy.mockResolvedValue(undefined as any);
+    sleepSpy.mockResolvedValue(undefined);
+  });
+
+  function makeService(overrides: Record<string, unknown> = {}): AppService {
+    return Object.assign(Object.create(AppService.prototype), {
+      clientService: {
+        findAll: jest.fn().mockResolvedValue([]),
+      },
+      activeChannelsService: {
+        getActiveChannels: jest.fn().mockResolvedValue([]),
+      },
+      joinChannelMap: new Map(),
+      joinChannelQueue: jest.fn(),
+      logger: {
+        warn: jest.fn(),
+      },
+      ...overrides,
+    });
+  }
+
+  it('builds joinchannel URLs only for valid public usernames', () => {
+    const service = makeService() as any;
+
+    expect(service.buildJoinChannelUrl('https://client.example', { username: '@valid_name', channelId: '123' }))
+      .toBe('https://client.example/joinchannel?username=valid_name');
+
+    for (const username of [undefined, null, '', 'undefined', 'null', 'bad space', 'abcd']) {
+      expect(service.buildJoinChannelUrl('https://client.example', { username, channelId: '123', accessHash: '456' }))
+        .toBeNull();
+    }
+  });
+
+  it('uses channelinfo ids plus canSendFalseChats as exclusions and caps old client joins to 25', async () => {
+    const activeChannels = [{ channelId: 'new-1', username: 'joinable_1' }];
+    const service = makeService({
+      clientService: {
+        findAll: jest.fn().mockResolvedValue([{ clientId: 'shruthi1', repl: 'https://shruthi1.paidgirls.site' }]),
+      },
+      activeChannelsService: {
+        getActiveChannels: jest.fn().mockResolvedValue(activeChannels),
+      },
+    });
+
+    fetchSpy
+      .mockResolvedValueOnce({
+        data: {
+          canSendTrueCount: 120,
+          ids: ['already-1', 'already-2'],
+          canSendFalseChats: ['already-2', 'cannot-send-1'],
+        },
+      } as any)
+      .mockResolvedValue(undefined as any);
+
+    await service.joinchannelForClients();
+
+    expect((service as any).activeChannelsService.getActiveChannels).toHaveBeenCalledWith(
+      25,
+      0,
+      ['already-1', 'already-2', 'cannot-send-1'],
+    );
+    expect((service as any).joinChannelMap.get('https://shruthi1.paidgirls.site')).toBe(activeChannels);
+    expect((service as any).joinChannelQueue).toHaveBeenCalled();
+  });
+});

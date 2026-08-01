@@ -378,6 +378,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         };
     }
 
+    protected isTerminalOperationalAfterRefresh(doc: Pick<BaseClientDocument, 'warmupPhase'>, channels: number): boolean {
+        const phase = doc.warmupPhase;
+        return (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED)
+            && channels >= (this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING);
+    }
+
+    protected getJoinedChannelIdsFromInfo(channels: { ids?: string[]; canSendFalseChats?: string[] } | null | undefined): string[] {
+        return [...new Set([...(channels?.ids ?? []), ...(channels?.canSendFalseChats ?? [])].map(String).filter(Boolean))];
+    }
+
     /**
      * A terminal account is eligible for selection or session work only after it
      * meets the consuming pool's runtime channel floor.
@@ -734,8 +744,20 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.warn(`Leave channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
             return false;
         }
-        this.leaveChannelMap.set(mobile, channels);
+        const normalizedChannels = this.normalizeLeaveChannelIds(channels);
+        if (normalizedChannels.length === 0) {
+            this.logger.debug(`${mobile} has no valid channel ids to leave`);
+            this.removeFromLeaveMap(mobile);
+            return false;
+        }
+        this.leaveChannelMap.set(mobile, normalizedChannels);
         return true;
+    }
+
+    protected normalizeLeaveChannelIds(channels: string[] | null | undefined): string[] {
+        return [...new Set((channels ?? [])
+            .map((channel) => String(channel ?? '').trim().replace(/^-100/, ''))
+            .filter((channel) => channel && channel !== 'undefined' && channel !== 'null' && channel !== '0'))];
     }
 
     removeFromJoinMap(key: string) {

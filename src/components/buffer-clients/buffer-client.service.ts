@@ -827,7 +827,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
-                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, channels.ids);
+                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
                     if (channelsToJoin.length === 0) continue;
 
                     if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
@@ -857,12 +857,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         return added;
-    }
-
-    private isTerminalOperationalAfterRefresh(doc: Pick<BufferClientDocument, 'warmupPhase'>, channels: number): boolean {
-        const phase = doc.warmupPhase;
-        return (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED)
-            && channels >= (this.config.operationalChannelThreshold ?? 200);
     }
 
     private async fetchJoinableChannels(currentChannels: number, limit: number, excludedIds: string[]): Promise<(Channel | ActiveChannel)[]> {
@@ -1605,7 +1599,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 }
 
                 if (channels.canSendFalseCount < 10) {
-                    const excludedIds = channels.ids;
+                    const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
                     const result = channels.ids.length < 220
                         ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds) // Reduced from 150 to 25
                         : await this.channelsService.getActiveChannels(25, 0, excludedIds);

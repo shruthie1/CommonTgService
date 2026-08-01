@@ -319,6 +319,42 @@ describe('ChannelIntelligenceReadService.buildConversionAwareSortStages', () => 
     expect(ceilDirty).toBeLessThan(ceilClean);
   });
 
+  it('excludes blocked, repeated-error, and high-delete channels inside the aggregation before the caller limit', async () => {
+    const good = 'ci-good';
+    const blocked = 'ci-blocked';
+    const erroring = 'ci-erroring';
+    const deleteHeavy = 'ci-delete-heavy';
+    await chanModel.create([
+      { channelId: good },
+      { channelId: blocked },
+      { channelId: erroring },
+      { channelId: deleteHeavy },
+    ]);
+    await ciModel.create([
+      { channelId: good, outcomes: { attempted: 20, survived: 18, deleted: 1 }, DMs: { credited: 1 } },
+      { channelId: blocked, safety: { status: 'blocked' }, outcomes: { attempted: 20, survived: 18, deleted: 1 } },
+      { channelId: erroring, safety: { consecutiveErrors: 3 }, outcomes: { attempted: 20, survived: 18, deleted: 1 } },
+      { channelId: deleteHeavy, outcomes: { attempted: 10, survived: 3, deleted: 6 } },
+    ]);
+
+    const stages = service.buildConversionAwareSortStages({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    const rows = await chanModel.aggregate([
+      { $match: { channelId: { $in: [good, blocked, erroring, deleteHeavy] } } },
+      ...stages,
+      { $limit: 4 },
+      { $project: { channelId: 1 } },
+    ]).exec();
+
+    expect(rows.map((row: any) => row.channelId)).toEqual([good]);
+    const exclusionStageIndex = stages.findIndex((stage: any) => stage.$match?._ciExcluded);
+    const projectStageIndex = stages.findIndex((stage: any) => stage.$project?._ciExcluded === 0);
+    expect(exclusionStageIndex).toBeGreaterThan(-1);
+    expect(projectStageIndex).toBeGreaterThan(exclusionStageIndex);
+
+    await chanModel.deleteMany({ channelId: { $in: [good, blocked, erroring, deleteHeavy] } });
+    await ciModel.deleteMany({ channelId: { $in: [good, blocked, erroring, deleteHeavy] } });
+  });
+
   it('buildRandomOnlySortStages: pure $rand sort, NO $lookup (fail-open fallback has no cross-collection failure surface)', async () => {
     const stages = service.buildRandomOnlySortStages();
     const json = JSON.stringify(stages);

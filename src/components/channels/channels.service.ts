@@ -204,6 +204,9 @@ export class ChannelsService {
   }
 
   async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+    if (limit <= 0) return [];
+    const queryLimit = Math.min(Math.max(limit * 3, limit), 100);
+
     const query = {
       '$and':
         [
@@ -220,6 +223,7 @@ export class ChannelsService {
                 title: {
                   $exists: true,
                   $type: "string",
+                  $ne: '',
                   '$not': { '$regex': /online|realestat|propert|freefire|bgmi|promo|agent|board|design|realt|clas|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i }
                 }
               },
@@ -228,6 +232,7 @@ export class ChannelsService {
                 {
                   $exists: true,
                   $type: "string",
+                  $ne: '',
                   '$not': { '$regex': /online|freefire|bgmi|promo|agent|realestat|propert|board|design|realt|clas|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i }
                 }
               },
@@ -236,7 +241,6 @@ export class ChannelsService {
           {
             channelId: { '$nin': notIds },
             participantsCount: { $gt: 1000 },
-            username: { $ne: null },
             canSendMsgs: true,
             banned: { $ne: true },
             forbidden: { $ne: true },
@@ -255,11 +259,12 @@ export class ChannelsService {
         ...sortStages,
         { $sort: { sortScore: -1 as const } },
         { $skip: skip },
-        { $limit: limit },
+        { $limit: queryLimit },
         { $project: { sortScore: 0 } }
       ];
 
       let result: Channel[];
+      let usedRandomFallback = false;
       try {
         // Conversion-aware, stateless sort (spec 2026-08-01) — same shared helper as ActiveChannelsService.
         const pipeline = buildPipeline(this.channelIntelligenceReadService.buildConversionAwareSortStages(prior));
@@ -273,9 +278,12 @@ export class ChannelsService {
         );
         const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
         result = await this.ChannelModel.aggregate<Channel>(fallbackPipeline, { allowDiskUse: true }).exec();
+        usedRandomFallback = true;
       }
 
-      if (result.length) {
+      // The random fallback intentionally avoids the lookup that failed above, so
+      // run the same hard exclusion as a separate fail-open safety gate only here.
+      if (usedRandomFallback && result.length) {
         const candidateIds = result
           .map((channel: any) => channel.channelId)
           .filter((channelId: any): channelId is string => Boolean(channelId));
@@ -288,11 +296,13 @@ export class ChannelsService {
           );
         }
         if (excludedIds.size) {
-          return result.filter((channel: any) => !excludedIds.has(String(channel.channelId)));
+          return result
+            .filter((channel: any) => !excludedIds.has(String(channel.channelId)))
+            .slice(0, limit);
         }
       }
 
-      return result;
+      return result.slice(0, limit);
     } catch (error) {
       console.error('🔴 Aggregation Error:', error);
       return [];

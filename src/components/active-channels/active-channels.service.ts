@@ -337,6 +337,9 @@ export class ActiveChannelsService {
 
   async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds: string[] = []): Promise<ActiveChannel[]> {
     try {
+      if (limit <= 0) return [];
+      const queryLimit = Math.min(Math.max(limit * 3, limit), 100);
+
       // Positive keywords disabled — negative filter + quality filters are sufficient for channel selection
       // const positiveKeywords = [
       //   'wife', 'adult', 'lanj', 'lesb', 'paid', 'coupl', 'cpl', 'randi', 'bhab', 'boy', 'girl',
@@ -376,18 +379,22 @@ export class ActiveChannelsService {
           // positiveFilter,
           {
             title: {
+              $exists: true,
+              $type: 'string',
               $not: { $regex: negativePattern, $options: 'i' },
             },
           },
           {
             username: {
+              $exists: true,
+              $type: 'string',
+              $ne: '',
               $not: { $regex: negativePattern, $options: 'i' },
             },
           },
           {
             channelId: { $nin: notIds },
             participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
-            username: { $ne: null },
             canSendMsgs: true,
             banned: { $ne: true },
             forbidden: { $ne: true },
@@ -399,20 +406,21 @@ export class ActiveChannelsService {
 
       const prior = await this.channelIntelligenceReadService.getFleetPrior();
 
-      // Channel exclusion is now driven entirely by getExcludedChannelIds()/
-      // ChannelIntelligenceReadService (below). The legacy deletion-rate $match on
-      // activeChannels.successMsgCount/deletedCount has been removed — those fields are
-      // migrated off activeChannels and no longer written.
+      // Hard channelIntelligence exclusion is applied inside the conversion-aware
+      // pipeline. The legacy deletion-rate $match on activeChannels.successMsgCount/
+      // deletedCount has been removed — those fields are migrated off activeChannels
+      // and no longer written.
       const buildPipeline = (sortStages: PipelineStage[]): PipelineStage[] => [
         { $match: query },
         ...sortStages,
         { $sort: { sortScore: -1 } },
         { $skip: skip },
-        { $limit: limit },
+        { $limit: queryLimit },
         { $project: { sortScore: 0 } },
       ];
 
       let results: ActiveChannel[];
+      let usedRandomFallback = false;
       try {
         // Conversion-aware, stateless sort (spec 2026-08-01): random × conversionWeight ×
         // sendQualityWeight, both shrunk toward the live fleet prior. Replaces the old
@@ -430,9 +438,12 @@ export class ActiveChannelsService {
         );
         const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
         results = await this.activeChannelModel.aggregate<ActiveChannel>(fallbackPipeline, { allowDiskUse: true }).exec();
+        usedRandomFallback = true;
       }
 
-      if (results.length) {
+      // The random fallback intentionally avoids the lookup that failed above, so
+      // run the same hard exclusion as a separate fail-open safety gate only here.
+      if (usedRandomFallback && results.length) {
         const candidateIds = results
           .map((channel) => channel.channelId)
           .filter((channelId): channelId is string => Boolean(channelId));
@@ -445,11 +456,13 @@ export class ActiveChannelsService {
           );
         }
         if (excludedIds.size) {
-          return results.filter((channel) => !excludedIds.has(String(channel.channelId)));
+          return results
+            .filter((channel) => !excludedIds.has(String(channel.channelId)))
+            .slice(0, limit);
         }
       }
 
-      return results;
+      return results.slice(0, limit);
     } catch (error) {
       throw this.handleError(error, 'Failed to fetch active channels');
     }

@@ -84,17 +84,16 @@ describe('ChannelsService channel-state persistence', () => {
 
 });
 
-// ─── getActiveChannels: getExcludedChannelIds exclusion path (flag removed) ────
-// Pins the Task-4 collapse in channels.service.getActiveChannels: the
-// channelIntelligence exclusion now runs UNCONDITIONALLY (was SCHEMA_CLEANUP-gated)
-// and is the sole channel-quality filter, with a fail-open catch so an
-// intelligence outage never returns an empty channel list. Previously uncovered.
+// ─── getActiveChannels: channelIntelligence exclusion path ───────────────────
+// Normal conversion-aware pipelines apply hard CI exclusion in Mongo.
+// getExcludedChannelIds is intentionally reserved for random-only fallback,
+// where the lookup-based conversion pipeline already failed.
 describe('ChannelsService.getActiveChannels exclusion path', () => {
   function aggregateReturning<T>(rows: T) {
     return jest.fn(() => ({ exec: jest.fn(async () => rows) }));
   }
 
-  test('always calls getExcludedChannelIds with the candidate ids and filters excluded ones out', async () => {
+  test('does not call post-fetch getExcludedChannelIds on the conversion-aware path', async () => {
     const aggregate = aggregateReturning([
       { channelId: '111' },
       { channelId: '222' },
@@ -105,13 +104,32 @@ describe('ChannelsService.getActiveChannels exclusion path', () => {
 
     const result = await service.getActiveChannels(50, 0, []);
 
-    expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
-    expect(getExcludedChannelIds).toHaveBeenCalledWith(['111', '222', '333']);
-    expect((result as any[]).map((c) => c.channelId)).toEqual(['111', '333']);
+    expect(getExcludedChannelIds).not.toHaveBeenCalled();
+    expect((result as any[]).map((c) => c.channelId)).toEqual(['111', '222', '333']);
   });
 
-  test('FAILS OPEN: when getExcludedChannelIds throws, returns ALL results (never [])', async () => {
-    const aggregate = aggregateReturning([{ channelId: '111' }, { channelId: '222' }]);
+  test('over-fetches before final limit on the conversion-aware path', async () => {
+    const aggregate = aggregateReturning([
+      { channelId: 'blocked' },
+      { channelId: 'safe-1' },
+      { channelId: 'safe-2' },
+    ]);
+    const getExcludedChannelIds = jest.fn(async () => new Set(['blocked']));
+    const service = new ChannelsService({ aggregate } as any, conversionAwareSortStub({ getExcludedChannelIds }) as any);
+
+    const result = await service.getActiveChannels(1, 0, []);
+
+    const pipeline = (aggregate.mock.calls as any)[0][0];
+    expect(pipeline).toEqual(expect.arrayContaining([{ $limit: 3 }]));
+    expect(getExcludedChannelIds).not.toHaveBeenCalled();
+    expect((result as any[]).map((c) => c.channelId)).toEqual(['blocked']);
+  });
+
+  test('FAILS OPEN on fallback: when getExcludedChannelIds throws, returns ALL fallback results', async () => {
+    const aggregate = jest
+      .fn()
+      .mockImplementationOnce(() => { throw new Error('lookup unavailable'); })
+      .mockImplementationOnce(() => ({ exec: jest.fn(async () => [{ channelId: '111' }, { channelId: '222' }]) }));
     const getExcludedChannelIds = jest.fn(async () => {
       throw new Error('channelIntelligence unavailable');
     });
@@ -120,11 +138,15 @@ describe('ChannelsService.getActiveChannels exclusion path', () => {
     const result = await service.getActiveChannels(50, 0, []);
 
     expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
+    expect(getExcludedChannelIds).toHaveBeenCalledWith(['111', '222']);
     expect((result as any[]).map((c) => c.channelId)).toEqual(['111', '222']);
   });
 
-  test('empty excluded set returns all results unchanged', async () => {
-    const aggregate = aggregateReturning([{ channelId: '111' }, { channelId: '222' }]);
+  test('fallback with an empty excluded set returns all results unchanged', async () => {
+    const aggregate = jest
+      .fn()
+      .mockImplementationOnce(() => { throw new Error('lookup unavailable'); })
+      .mockImplementationOnce(() => ({ exec: jest.fn(async () => [{ channelId: '111' }, { channelId: '222' }]) }));
     const getExcludedChannelIds = jest.fn(async () => new Set<string>());
     const service = new ChannelsService({ aggregate } as any, conversionAwareSortStub({ getExcludedChannelIds }) as any);
 

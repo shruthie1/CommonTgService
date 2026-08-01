@@ -87,7 +87,7 @@ describe('ActiveChannelsService channel-state persistence', () => {
     expect(aggregate).toHaveBeenCalled();
   });
 
-  test('getActiveChannels never applies the legacy deletion-rate match (exclusion is via getExcludedChannelIds)', async () => {
+  test('getActiveChannels never applies the legacy deletion-rate match', async () => {
     const aggregate = jest.fn(() => execQuery([]));
     const service = new ActiveChannelsService({ aggregate } as any, {} as any, conversionAwareSortStub() as any);
 
@@ -100,12 +100,11 @@ describe('ActiveChannelsService channel-state persistence', () => {
     expect(deletionRateMatch).toBeUndefined();
   });
 
-  // ─── getExcludedChannelIds exclusion path (flag removed → always runs) ────────
-  // These pin the Task-4 collapse: the channelIntelligence exclusion is now the
-  // SOLE channel-quality filter and runs UNCONDITIONALLY (was flag-gated). A
-  // reintroduced flag gate, an inverted condition, or a broken fail-open catch
-  // would each break one of these — the change previously had zero coverage here.
-  test('getActiveChannels always calls getExcludedChannelIds with the candidate channelIds and filters excluded ones out', async () => {
+  // ─── Channel-intelligence exclusion path ───────────────────────────────────
+  // Normal conversion-aware pipelines now apply the hard CI exclusion in Mongo.
+  // getExcludedChannelIds is intentionally reserved for the random-only fallback,
+  // where the lookup-based conversion pipeline already failed.
+  test('getActiveChannels does not call post-fetch getExcludedChannelIds on the conversion-aware path', async () => {
     const aggregate = jest.fn(() =>
       execQuery([{ channelId: '111' }, { channelId: '222' }, { channelId: '333' }]),
     );
@@ -118,16 +117,35 @@ describe('ActiveChannelsService channel-state persistence', () => {
 
     const result = await service.getActiveChannels(25, 0, []);
 
-    // Exclusion is unconditional: called exactly once, with all candidate ids.
-    expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
-    expect(getExcludedChannelIds).toHaveBeenCalledWith(['111', '222', '333']);
-    // The excluded channel is filtered out; the rest survive.
-    expect(result.map((c) => c.channelId)).toEqual(['111', '333']);
+    expect(getExcludedChannelIds).not.toHaveBeenCalled();
+    expect(result.map((c) => c.channelId)).toEqual(['111', '222', '333']);
   });
 
-  test('getActiveChannels FAILS OPEN: when getExcludedChannelIds throws, returns ALL results (never [])', async () => {
+  test('getActiveChannels over-fetches before final limit on the conversion-aware path', async () => {
+    const aggregate = jest.fn(() =>
+      execQuery([{ channelId: 'blocked' }, { channelId: 'safe-1' }, { channelId: 'safe-2' }]),
+    );
+    const getExcludedChannelIds = jest.fn(async () => new Set(['blocked']));
+    const service = new ActiveChannelsService(
+      { aggregate } as any,
+      {} as any,
+      conversionAwareSortStub({ getExcludedChannelIds }) as any,
+    );
+
+    const result = await service.getActiveChannels(1, 0, []);
+
+    const pipeline = (aggregate.mock.calls as any)[0][0];
+    expect(pipeline).toEqual(expect.arrayContaining([{ $limit: 3 }]));
+    expect(getExcludedChannelIds).not.toHaveBeenCalled();
+    expect(result.map((c) => c.channelId)).toEqual(['blocked']);
+  });
+
+  test('getActiveChannels FAILS OPEN on fallback: when getExcludedChannelIds throws, returns ALL fallback results', async () => {
     const rows = [{ channelId: '111' }, { channelId: '222' }];
-    const aggregate = jest.fn(() => execQuery(rows));
+    const aggregate = jest
+      .fn()
+      .mockImplementationOnce(() => { throw new Error('lookup unavailable'); })
+      .mockImplementationOnce(() => execQuery(rows));
     const getExcludedChannelIds = jest.fn(async () => {
       throw new Error('channelIntelligence unavailable');
     });
@@ -141,12 +159,16 @@ describe('ActiveChannelsService channel-state persistence', () => {
 
     // Fail-open: an intelligence outage MUST NOT starve promotions of channels.
     expect(getExcludedChannelIds).toHaveBeenCalledTimes(1);
+    expect(getExcludedChannelIds).toHaveBeenCalledWith(['111', '222']);
     expect(result.map((c) => c.channelId)).toEqual(['111', '222']);
   });
 
-  test('getActiveChannels with an empty excluded set returns all results unchanged', async () => {
+  test('getActiveChannels fallback with an empty excluded set returns all results unchanged', async () => {
     const rows = [{ channelId: '111' }, { channelId: '222' }];
-    const aggregate = jest.fn(() => execQuery(rows));
+    const aggregate = jest
+      .fn()
+      .mockImplementationOnce(() => { throw new Error('lookup unavailable'); })
+      .mockImplementationOnce(() => execQuery(rows));
     const getExcludedChannelIds = jest.fn(async () => new Set<string>());
     const service = new ActiveChannelsService(
       { aggregate } as any,

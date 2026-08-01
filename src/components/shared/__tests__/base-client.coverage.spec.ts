@@ -316,6 +316,18 @@ describe('lifecycle & map helpers', () => {
         expect((service as any).safeSetLeaveChannelMap('m1', ['c1', 'c3'])).toBe(true);
     });
 
+    test('safeSetLeaveChannelMap removes duplicate and unusable leave targets', () => {
+        const service = new TestBaseService();
+        expect((service as any).safeSetLeaveChannelMap('m1', ['-100123', '123', '', 'undefined', 'null', '0', '456'])).toBe(true);
+        expect((service as any).leaveChannelMap.get('m1')).toEqual(['123', '456']);
+    });
+
+    test('safeSetLeaveChannelMap skips entries with no usable leave targets', () => {
+        const service = new TestBaseService();
+        expect((service as any).safeSetLeaveChannelMap('m1', ['', 'undefined', 'null', '0'])).toBe(false);
+        expect((service as any).leaveChannelMap.has('m1')).toBe(false);
+    });
+
     test('removeFromLeaveMap clears the pending timer (but not the processing guard) when last entry removed', () => {
         const service = new TestBaseService();
         // Simulate an armed timer.

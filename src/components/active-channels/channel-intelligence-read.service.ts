@@ -368,6 +368,48 @@ export class ChannelIntelligenceReadService {
     return { $convert: { input: fieldRef, to: 'double', onError: 0, onNull: 0 } };
   }
 
+  private buildChannelIntelligenceExclusionFlag(): Record<string, unknown> {
+    return {
+      $let: {
+        vars: {
+          ci: { $ifNull: [{ $arrayElemAt: ['$_ci', 0] }, {}] },
+        },
+        in: {
+          $let: {
+            vars: {
+              attempted: this.numFromCi('$$ci.outcomes.attempted'),
+              deleted: this.numFromCi('$$ci.outcomes.deleted'),
+              consecutiveErrors: this.numFromCi('$$ci.safety.consecutiveErrors'),
+            },
+            in: {
+              $or: [
+                { $eq: ['$$ci.safety.status', 'blocked'] },
+                { $gte: ['$$consecutiveErrors', 3] },
+                {
+                  $and: [
+                    { $gte: ['$$attempted', 10] },
+                    {
+                      $gt: [
+                        {
+                          $cond: [
+                            { $gt: ['$$attempted', 0] },
+                            { $divide: ['$$deleted', '$$attempted'] },
+                            0,
+                          ],
+                        },
+                        0.5,
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+  }
+
   buildConversionAwareSortStages(prior: FleetPrior): PipelineStage[] {
     const priorRate = prior?.PRIOR_RATE > 0 ? prior.PRIOR_RATE : PRIOR_RATE_FALLBACK;
     const sqPriorRate = prior?.SQ_PRIOR_RATE > 0 ? prior.SQ_PRIOR_RATE : SQ_PRIOR_RATE_FALLBACK;
@@ -381,6 +423,12 @@ export class ChannelIntelligenceReadService {
           as: '_ci',
         },
       },
+      {
+        $addFields: {
+          _ciExcluded: this.buildChannelIntelligenceExclusionFlag(),
+        },
+      },
+      { $match: { _ciExcluded: { $ne: true } } },
       {
         $addFields: {
           sortScore: {
@@ -439,7 +487,7 @@ export class ChannelIntelligenceReadService {
           },
         },
       },
-      { $project: { _ci: 0 } },
+      { $project: { _ci: 0, _ciExcluded: 0 } },
     ];
   }
 
