@@ -51,6 +51,9 @@ function channelIntelligenceReadServiceStub() {
     buildConversionAwareSortStages: jest.fn(() => [
       { $addFields: { sortScore: { $rand: {} } } },
     ]),
+    buildRandomOnlySortStages: jest.fn(() => [
+      { $addFields: { sortScore: { $rand: {} } } },
+    ]),
     getExcludedChannelIds: jest.fn(async () => new Set<string>()),
   };
 }
@@ -179,8 +182,20 @@ describe('ChannelsService - search / getChannels / executeQuery / getActiveChann
     expect(Array.isArray(r)).toBe(true);
   });
 
-  test('getActiveChannels returns [] on aggregation error', async () => {
-    const spy = jest.spyOn(model, 'aggregate').mockImplementationOnce(() => { throw new Error('agg fail'); });
+  test('getActiveChannels FAILS OPEN: conversion sort error falls back to random-only selection (spec test #6)', async () => {
+    await model.create({ channelId: 'chfo-1', title: 'ch fallback', username: 'chfallback', participantsCount: 5000, canSendMsgs: true, banned: false, forbidden: false, private: false, broadcast: false } as any);
+    // First aggregate (conversion sort) throws; second (random-only fallback) runs for real.
+    const spy = jest.spyOn(model, 'aggregate').mockImplementationOnce(() => { throw new Error('lookup blew up'); });
+    const r = await service.getActiveChannels(10, 0, []);
+    expect(Array.isArray(r)).toBe(true);
+    expect(r.some((c: any) => c.channelId === 'chfo-1')).toBe(true); // returned via fallback, not starved
+    expect(spy).toHaveBeenCalledTimes(2); // conversion sort (threw) + random-only fallback
+    spy.mockRestore();
+  });
+
+  test('getActiveChannels returns [] only when BOTH sorts fail', async () => {
+    // Every aggregate call throws (conversion sort AND random-only fallback) => outer catch returns [].
+    const spy = jest.spyOn(model, 'aggregate').mockImplementation(() => { throw new Error('agg fail'); });
     const r = await service.getActiveChannels(10, 0, []);
     expect(r).toEqual([]);
     spy.mockRestore();

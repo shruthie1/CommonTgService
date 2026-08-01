@@ -250,16 +250,29 @@ export class ChannelsService {
 
       const prior = await this.channelIntelligenceReadService.getFleetPrior();
 
-      const pipeline: PipelineStage[] = [
+      const buildPipeline = (sortStages: PipelineStage[]): PipelineStage[] => [
         { $match: query },
-        // Conversion-aware, stateless sort (spec 2026-08-01) — same shared helper as ActiveChannelsService.
-        ...this.channelIntelligenceReadService.buildConversionAwareSortStages(prior),
+        ...sortStages,
         { $sort: { sortScore: -1 as const } },
         { $skip: skip },
         { $limit: limit },
         { $project: { sortScore: 0 } }
       ];
-      const result: Channel[] = await this.ChannelModel.aggregate<Channel>(pipeline, { allowDiskUse: true }).exec();
+
+      let result: Channel[];
+      try {
+        // Conversion-aware, stateless sort (spec 2026-08-01) — same shared helper as ActiveChannelsService.
+        const pipeline = buildPipeline(this.channelIntelligenceReadService.buildConversionAwareSortStages(prior));
+        result = await this.ChannelModel.aggregate<Channel>(pipeline, { allowDiskUse: true }).exec();
+      } catch (sortError) {
+        // Fail-open (spec 2026-08-01, Error handling): degrade to random-only selection if the
+        // conversion-aware aggregation ($lookup) errors, rather than starving the join pipeline.
+        console.warn(
+          `Conversion-aware sort failed, falling back to random-only selection: ${sortError instanceof Error ? sortError.message : sortError}`,
+        );
+        const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
+        result = await this.ChannelModel.aggregate<Channel>(fallbackPipeline, { allowDiskUse: true }).exec();
+      }
 
       if (result.length) {
         const candidateIds = result

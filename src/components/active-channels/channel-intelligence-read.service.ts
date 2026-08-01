@@ -414,4 +414,17 @@ export class ChannelIntelligenceReadService {
       { $project: { _ci: 0 } },
     ];
   }
+
+  /**
+   * Fail-open fallback sort: pure random, NO $lookup (so it shares none of the
+   * conversion sort's cross-collection failure surface). Used by getActiveChannels
+   * when the conversion-aware aggregation errors at runtime, so the tilt can never
+   * starve the join pipeline (spec 2026-08-01, Error handling). Returns channels in
+   * random order — the same spread the conversion sort degrades to, minus the tilt.
+   */
+  buildRandomOnlySortStages(): PipelineStage[] {
+    return [
+      { $addFields: { sortScore: { $rand: {} } } },
+    ];
+  }
 }

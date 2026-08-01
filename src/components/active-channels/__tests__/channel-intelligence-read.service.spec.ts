@@ -260,6 +260,76 @@ describe('ChannelIntelligenceReadService.buildConversionAwareSortStages', () => 
     const maxConv = Math.max(...await Promise.all([...Array(400)].map(async () => (await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 }))['converter'])));
     expect(maxDeletey).toBeLessThan(maxConv);
   });
+
+  // ─── Tightened / added coverage (adversarial-review follow-up 2026-08-01) ───────────────
+  // The tests above assert only bounds/relative order. These pin the exact load-bearing
+  // invariants the design flags as critical: untried==1.0, live self-calibration, PRIOR_RATE=0
+  // guard, and send-quality isolated from conversion. Each would fail on a plausible regression
+  // the earlier bound-only tests let pass.
+
+  // The weight product conv×sq for a channel == the supremum of sortScore over rand∈[0,1).
+  // Estimate it by the max over many draws; the true ceiling is approached from below and never
+  // exceeded, so `max` is a tight lower bound and `<= ceiling` is exact.
+  async function productCeiling(channelId: string, prior: { PRIOR_RATE: number; SQ_PRIOR_RATE: number }, draws = 800) {
+    const vals = await Promise.all([...Array(draws)].map(async () => (await weights(prior))[channelId]));
+    return Math.max(...vals);
+  }
+
+  it('untried channel weight product is EXACTLY 1.0 (spec test #1 — pins neutrality, not just <=1)', async () => {
+    // A regression that made untried normalize to e.g. 0.6×0.6=0.36 would still satisfy the
+    // (0,1] bound above; this pins the ceiling to ~1.0 so such a regression fails here.
+    const ceil = await productCeiling('untried', { PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    expect(ceil).toBeGreaterThan(0.95);   // max of 800 U(0,1) draws sits just under the true 1.0
+    expect(ceil).toBeLessThanOrEqual(1);  // conv(1.0)×sq(1.0) can never exceed 1.0
+  });
+
+  it('is self-calibrating: the SAME channel’s weight shifts when the live prior shifts (spec test #11)', async () => {
+    // 'deletey' (credited=3, attempted=100). At the fallback prior 0.03 its conversion is neutral
+    // (~1.0). Feed a HIGHER live prior (0.06): the same channel now looks below-average, so its
+    // conversion weight (and thus its ceiling) must DROP. If the builder ignored `prior` and
+    // hardcoded 0.03/0.82, both ceilings would be identical and this fails.
+    const ceilLowPrior  = await productCeiling('deletey', { PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    const ceilHighPrior = await productCeiling('deletey', { PRIOR_RATE: 0.06, SQ_PRIOR_RATE: 0.82 });
+    expect(ceilHighPrior).toBeLessThan(ceilLowPrior);
+  });
+
+  it('guards a zero PRIOR_RATE (no NaN/Infinity — spec "PRIOR_RATE resolving to 0")', async () => {
+    // getFleetPrior can hand PRIOR_RATE=0 when the fleet has sends but zero credited DMs.
+    // The builder’s `prior.PRIOR_RATE > 0 ? : FALLBACK` guard must keep every sortScore finite.
+    const s = await weights({ PRIOR_RATE: 0, SQ_PRIOR_RATE: 0 } as any);
+    for (const id of ['untried', 'dead', 'converter', 'deletey']) {
+      expect(Number.isFinite(s[id])).toBe(true);
+      expect(s[id]).toBeGreaterThanOrEqual(0);
+      expect(s[id]).toBeLessThanOrEqual(1.5); // within the clamp product ceiling (1.3×1.1)
+    }
+  });
+
+  it('send-quality is isolated: SAME-conversion clean vs delete-heavy differ ONLY by survival (spec test #9)', async () => {
+    // Two channels with IDENTICAL conversion evidence (credited=3, attempted=100 -> conv neutral)
+    // but different survival. Ranking difference is therefore attributable to sendQualityWeight
+    // alone — a regression that flattened sendQualityWeight to 1.0 would make these ceilings equal.
+    const clean = 'sq-clean', dirty = 'sq-dirty';
+    await chanModel.create([{ channelId: clean }, { channelId: dirty }]);
+    await ciModel.create([
+      { channelId: clean, outcomes: { attempted: 100, survived: 98, deleted: 1 },  DMs: { credited: 3 } },
+      { channelId: dirty, outcomes: { attempted: 100, survived: 55, deleted: 40 }, DMs: { credited: 3 } },
+    ]);
+    const ceilClean = await productCeiling(clean, { PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    const ceilDirty = await productCeiling(dirty, { PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    expect(ceilDirty).toBeLessThan(ceilClean);
+  });
+
+  it('buildRandomOnlySortStages: pure $rand sort, NO $lookup (fail-open fallback has no cross-collection failure surface)', async () => {
+    const stages = service.buildRandomOnlySortStages();
+    const json = JSON.stringify(stages);
+    expect(json).toContain('$rand');
+    expect(json).not.toContain('$lookup');            // must not share the conversion sort's failure surface
+    expect(json).not.toContain('channelIntelligence');
+    // It actually sorts a real collection without needing any CI docs.
+    const rows = await chanModel.aggregate([...stages, { $sort: { sortScore: -1 } }, { $project: { channelId: 1, sortScore: 1 } }]).exec();
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) { expect(r.sortScore).toBeGreaterThanOrEqual(0); expect(r.sortScore).toBeLessThan(1); }
+  });
 });
 
 describe('ChannelIntelligenceReadService.getFleetPrior', () => {

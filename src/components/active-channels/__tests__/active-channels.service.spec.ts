@@ -36,6 +36,9 @@ function conversionAwareSortStub(extra: Record<string, any> = {}) {
       { $addFields: { sortScore: { $rand: {} } } },
       { $project: { _ci: 0 } },
     ]),
+    buildRandomOnlySortStages: jest.fn(() => [
+      { $addFields: { sortScore: { $rand: {} } } },
+    ]),
     ...extra,
   };
 }
@@ -695,9 +698,24 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(Array.isArray(r)).toBe(true);
     });
 
-    test('error path wrapped via handleError', async () => {
-      const spy = jest.spyOn(model, 'aggregate').mockImplementationOnce(() => { throw new Error('agg'); });
+    test('error path wrapped via handleError when BOTH sorts fail', async () => {
+      // Total failure: every aggregate call throws (conversion sort AND the random-only
+      // fallback), so the outer catch wraps it. mockImplementation (not Once) => always throws.
+      const spy = jest.spyOn(model, 'aggregate').mockImplementation(() => { throw new Error('agg'); });
       await expect(service.getActiveChannels(10, 0, [])).rejects.toBeInstanceOf(InternalServerErrorException);
+      spy.mockRestore();
+    });
+
+    test('FAILS OPEN: conversion-aware sort error falls back to random-only selection (spec test #6)', async () => {
+      // Seed a channel so the fallback pipeline has something to return.
+      await seed({ channelId: 'foagg-1', title: 'fallback one', username: 'fallbackone', participantsCount: 5000, canSendMsgs: true } as any);
+      // First aggregate call (conversion-aware sort) throws; the second (random-only fallback) runs for real.
+      const spy = jest.spyOn(model, 'aggregate').mockImplementationOnce(() => { throw new Error('lookup blew up'); });
+      const r = await service.getActiveChannels(10, 0, []);
+      // Did NOT throw and did NOT starve — returned channels via the random-only fallback.
+      expect(Array.isArray(r)).toBe(true);
+      expect(r.some((c: any) => c.channelId === 'foagg-1')).toBe(true);
+      expect(spy).toHaveBeenCalledTimes(2); // conversion sort (threw) + random-only fallback
       spy.mockRestore();
     });
   });

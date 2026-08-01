@@ -22,6 +22,9 @@ function conversionAwareSortStub(extra: Record<string, any> = {}) {
       { $addFields: { sortScore: { $rand: {} } } },
       { $project: { _ci: 0 } },
     ]),
+    buildRandomOnlySortStages: jest.fn(() => [
+      { $addFields: { sortScore: { $rand: {} } } },
+    ]),
     ...extra,
   };
 }

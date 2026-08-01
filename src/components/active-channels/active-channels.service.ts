@@ -399,23 +399,36 @@ export class ActiveChannelsService {
 
       const prior = await this.channelIntelligenceReadService.getFleetPrior();
 
-      const pipeline: PipelineStage[] = [
+      // Channel exclusion is now driven entirely by getExcludedChannelIds()/
+      // ChannelIntelligenceReadService (below). The legacy deletion-rate $match on
+      // activeChannels.successMsgCount/deletedCount has been removed — those fields are
+      // migrated off activeChannels and no longer written.
+      const buildPipeline = (sortStages: PipelineStage[]): PipelineStage[] => [
         { $match: query },
-        // Channel exclusion is now driven entirely by getExcludedChannelIds()/
-        // ChannelIntelligenceReadService (below). The legacy deletion-rate $match on
-        // activeChannels.successMsgCount/deletedCount has been removed — those fields are
-        // migrated off activeChannels and no longer written.
-        // Conversion-aware, stateless sort (spec 2026-08-01): random × conversionWeight ×
-        // sendQualityWeight, both shrunk toward the live fleet prior. Replaces the old
-        // reactRestricted/clientsJoined weighting.
-        ...this.channelIntelligenceReadService.buildConversionAwareSortStages(prior),
+        ...sortStages,
         { $sort: { sortScore: -1 } },
         { $skip: skip },
         { $limit: limit },
         { $project: { sortScore: 0 } },
       ];
 
-      const results = await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();
+      let results: ActiveChannel[];
+      try {
+        // Conversion-aware, stateless sort (spec 2026-08-01): random × conversionWeight ×
+        // sendQualityWeight, both shrunk toward the live fleet prior. Replaces the old
+        // reactRestricted/clientsJoined weighting.
+        const pipeline = buildPipeline(this.channelIntelligenceReadService.buildConversionAwareSortStages(prior));
+        results = await this.activeChannelModel.aggregate<ActiveChannel>(pipeline, { allowDiskUse: true }).exec();
+      } catch (sortError) {
+        // Fail-open (spec 2026-08-01, Error handling): if the conversion-aware aggregation
+        // (its cross-collection $lookup) errors, degrade to random-only selection rather than
+        // starving the join pipeline. Never let the tilt block joins.
+        this.logger.warn(
+          `Conversion-aware sort failed, falling back to random-only selection: ${sortError instanceof Error ? sortError.message : sortError}`,
+        );
+        const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
+        results = await this.activeChannelModel.aggregate<ActiveChannel>(fallbackPipeline, { allowDiskUse: true }).exec();
+      }
 
       if (results.length) {
         const candidateIds = results
