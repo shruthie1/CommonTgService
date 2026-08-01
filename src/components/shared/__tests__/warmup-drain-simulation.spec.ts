@@ -9,7 +9,8 @@
  * No Mongo, no Telegram — every action is applied deterministically (success stamps its timestamp),
  * time advances a fixed step per simulated run. This proves, with exact numeric expectations, that:
  *   1. the backlog drains MONOTONICALLY to `ready`/`session_rotated`,
- *   2. it clears within the target SLA window (well under STUCK_WARMUP_DAYS so nothing is retired),
+ *   2. it clears within a generous horizon — INCLUDING join-blocked accounts, which advance via the
+ *      growing deadline rather than being retired (policy: age never inactivates an account),
  *   3. the self-healing cap and the sensitive sub-cap are NEVER exceeded on any run (anti-detection),
  *   4. the day-gated sub-step spacing (MIN_DAYS_BETWEEN_* etc.) is always respected — actions are
  *      never clustered faster than the warmup schedule allows.
@@ -47,7 +48,9 @@ class CapProbe extends BaseClientService<BaseClientDocument> {
     get MAX() { return (this as any).MAX_UPDATES_PER_CYCLE; }
     get SENS_CAP() { return (this as any).MAX_SENSITIVE_ACTIONS_PER_CYCLE; }
     get RUNS_PER_DAY() { return (this as any).WARMUP_RUNS_PER_DAY; }
-    get STUCK() { return (this as any).STUCK_WARMUP_DAYS; }
+    // Horizon for drain assertions (days). Age no longer retires accounts; this is just a generous
+    // upper bound the backlog must clear within, derived from the advisory long-warming threshold.
+    get HORIZON() { return (this as any).LONG_WARMING_ALERT_DAYS; }
 }
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -59,9 +62,9 @@ type SimAccount = {
     enrolledAt: number;            // ms
     channels: number;
     // Real-world failure mode surfaced by prod DB review (2026-08-02): ~12% of promote 'growing'
-    // accounts CANNOT accumulate channels (spam-limited / join-starved) and sit under the 100-channel
-    // relaxed gate for 44-60d until STUCK retires them. When true, this account's channels never grow,
-    // so it cannot leave GROWING — a bottleneck INDEPENDENT of the throughput cap this test targets.
+    // accounts CANNOT accumulate channels (spam-limited / join-starved). When true, this account's
+    // channels never grow — but the growing ADVANCE DEADLINE lets it advance anyway (age never
+    // strands or retires an account), so it still drains rather than being lost.
     joinBlocked?: boolean;
     privacyUpdatedAt?: number;
     twoFASetAt?: number;
@@ -250,7 +253,7 @@ describe('warmup drain — deterministic simulation over real prod population', 
 
             it('drains the backlog MONOTONICALLY and fully within the SLA (no stall, nothing retired)', () => {
                 const pop = buildPopulation(snapshot[coll], START);
-                const horizonDays = probe.STUCK - 5; // must finish before the stuck-retire timeout
+                const horizonDays = probe.HORIZON - 5; // must finish before the stuck-retire timeout
                 const { backlogByDay } = simulate(pop, probe, START, horizonDays);
 
                 // Monotonic non-increasing backlog (self-healing never goes backwards)
@@ -264,12 +267,12 @@ describe('warmup drain — deterministic simulation over real prod population', 
                 // Drains comfortably before STUCK_WARMUP_DAYS (find first day backlog hit 0)
                 const daysToDrain = backlogByDay.findIndex((b) => b === 0) + 1;
                 expect(daysToDrain).toBeGreaterThan(0);
-                expect(daysToDrain).toBeLessThan(probe.STUCK);
+                expect(daysToDrain).toBeLessThan(probe.HORIZON);
             });
 
             it('NEVER bursts: sensitive sub-cap and per-run cap are respected on every run (anti-detection)', () => {
                 const pop = buildPopulation(snapshot[coll], START);
-                const { maxSensitiveInAnyRun, maxSlotsInAnyRun } = simulate(pop, probe, START, probe.STUCK - 5);
+                const { maxSensitiveInAnyRun, maxSlotsInAnyRun } = simulate(pop, probe, START, probe.HORIZON - 5);
                 expect(maxSensitiveInAnyRun).toBeLessThanOrEqual(probe.SENS_CAP);
                 expect(maxSlotsInAnyRun).toBeLessThanOrEqual(probe.MAX);
             });
@@ -281,14 +284,14 @@ describe('warmup drain — deterministic simulation over real prod population', 
             });
 
             it('reports the deterministic drain curve (locked expectation)', () => {
-                const { backlogByDay } = simulate(buildPopulation(snapshot[coll], START), probe, START, probe.STUCK - 5);
+                const { backlogByDay } = simulate(buildPopulation(snapshot[coll], START), probe, START, probe.HORIZON - 5);
                 const daysToDrain = backlogByDay.findIndex((b) => b === 0) + 1;
                 // Surface the concrete numbers so a regression in throughput is visible in the diff.
                 // (These are the drain-day + first-week curve for the CURRENT prod backlog + tuning.)
                 // eslint-disable-next-line no-console
                 console.log(`[${coll}] initial backlog=${initialBacklog}, drains to 0 in ${daysToDrain} days; first 10 days=`, backlogByDay.slice(0, 10));
                 expect(daysToDrain).toBeGreaterThan(0);
-                expect(daysToDrain).toBeLessThan(probe.STUCK);
+                expect(daysToDrain).toBeLessThan(probe.HORIZON);
             });
 
             // ── Real-world failure mode: join-blocked growing accounts (prod DB, 2026-08-02) ──
@@ -299,7 +302,7 @@ describe('warmup drain — deterministic simulation over real prod population', 
             // clears — so no account is lost to the channel-supply bottleneck.
             it('DEEP-STALL SALVAGE drains join-blocked accounts (ch>=20) instead of losing them', () => {
                 const pop = buildPopulation(snapshot[coll], START, 0.12); // inject 12% join-blocked growing (ch=20)
-                const res = simulate(pop, probe, START, probe.STUCK - 5);
+                const res = simulate(pop, probe, START, probe.HORIZON - 5);
                 // The join-blocked cohort (ch=20, above the salvage floor) is now SALVAGED, not stuck.
                 expect(res.joinBlockedDrained).toBe(res.joinBlockedTotal);
                 // And the joinable backlog still fully drains — the throughput fix works too.
@@ -309,7 +312,7 @@ describe('warmup drain — deterministic simulation over real prod population', 
             });
 
             it('safety invariants still hold WITH the join-blocked cohort present (no burst)', () => {
-                const res = simulate(buildPopulation(snapshot[coll], START, 0.12), probe, START, probe.STUCK - 5);
+                const res = simulate(buildPopulation(snapshot[coll], START, 0.12), probe, START, probe.HORIZON - 5);
                 expect(res.maxSensitiveInAnyRun).toBeLessThanOrEqual(probe.SENS_CAP);
                 expect(res.maxSlotsInAnyRun).toBeLessThanOrEqual(probe.MAX);
             });

@@ -687,11 +687,12 @@ describe('PromoteClientService coverage', () => {
                 { warmupPhase: WarmupPhase.GROWING, failedUpdateAttempts: 99 }, now)).toBe(false);
         });
 
-        it('rejects accounts stuck in warmup past STUCK_WARMUP_DAYS', () => {
-            // STUCK_WARMUP_DAYS raised to 60; use 65d so it's clearly past the threshold.
-            const enrolledAt = new Date(now - 65 * 24 * 60 * 60 * 1000);
+        it('ACCEPTS an old mid-warmup account — age is not a health signal (only failures disqualify)', () => {
+            // Policy: elapsed time never makes an account unhealthy/unavailable. A very old
+            // still-warming account remains countable supply and keeps progressing.
+            const enrolledAt = new Date(now - 90 * 24 * 60 * 60 * 1000);
             expect((service as any).isHealthyPromoteClientForCap(
-                { warmupPhase: WarmupPhase.GROWING, enrolledAt }, now)).toBe(false);
+                { warmupPhase: WarmupPhase.GROWING, enrolledAt }, now)).toBe(true);
         });
 
         it('accepts a recently enrolled mid-warmup account', () => {
@@ -1273,16 +1274,17 @@ describe('PromoteClientService coverage', () => {
                 { clientId: 'cap2-client' },
                 { $set: { warmupPhase: WarmupPhase.READY } },
             );
-            // stuck account: growing phase, enrolled 60 days ago → not healthy for cap (919 true path)
+            // unhealthy account: exceeded the failed-attempt cap → not healthy for cap (919 true path).
+            // (Age no longer disqualifies — only failures do — so we use failedUpdateAttempts here.)
             await service.create(makePromoteClientData({
                 mobile: '15553959999', status: 'active', clientId: 'cap2-client', inUse: true,
-                warmupPhase: 'growing', enrolledAt: new Date(Date.now() - 65 * 24 * 60 * 60 * 1000),
+                warmupPhase: 'growing',
             }));
             await PromoteClientModel.collection.updateOne(
                 { mobile: '15553959999' },
                 { $set: {
                     warmupPhase: WarmupPhase.GROWING,
-                    enrolledAt: new Date(Date.now() - 65 * 24 * 60 * 60 * 1000),
+                    failedUpdateAttempts: 5, // >= MAX_FAILED_ATTEMPTS → excluded from healthy tally
                 } },
             );
             // need 5, remaining capacity = 30-29 = 1 → cappedNeeded(1) < totalNeeded(5) → capping reason (1035)

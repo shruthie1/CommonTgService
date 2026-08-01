@@ -717,20 +717,19 @@ describe('BufferClientService coverage', () => {
             expect((report.skippedReasons as any).session_rotated_used).toBe(1);
         });
 
-        it('flags stuck and failed-backoff accounts in the simulation', async () => {
-            const longAgo = new Date(Date.now() - 65 * 24 * 60 * 60 * 1000); // past STUCK_WARMUP_DAYS(60)
+        it('only failed-backoff accounts are skipped; an OLD account is processed (age never skips)', async () => {
+            const longAgo = new Date(Date.now() - 65 * 24 * 60 * 60 * 1000);
+            // Old settling account, NO failures — pre-refactor this was skipped as "stuck"; now it
+            // is processed normally (age is not a skip reason).
             await service.create(makeBufferClientData({
                 mobile: '15551710200', status: 'active', clientId: 'test-client-1',
-                warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 2,
-                lastUpdateFailure: longAgo,
+                warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 0,
             }));
             await BufferClientModel.collection.updateOne(
                 { mobile: '15551710200' },
-                // create() always starts a fresh account in ENROLLED. Make the
-                // diagnostic fixture explicitly old so it exercises the stuck
-                // account branch rather than the normal enrolled flow.
                 { $set: { warmupPhase: WarmupPhase.SETTLING, enrolledAt: longAgo } },
             );
+            // Failed-backoff account: 5 fails, failure just now → still skipped (failure, not age).
             await service.create(makeBufferClientData({
                 mobile: '15551710201', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'settling', enrolledAt: new Date(), failedUpdateAttempts: 5,
@@ -741,16 +740,14 @@ describe('BufferClientService coverage', () => {
                 { $set: { warmupPhase: WarmupPhase.SETTLING } },
             );
             const report = await service.diagnoseWarmupPipeline();
-            // Both active settling docs are eligible candidates...
             expect(report.totalActive).toBe(2);
             expect(report.eligibleToProcess).toBe(2);
             expect((report.phaseCounts as any).settling).toBe(2);
-            // ...but the simulation skips both: one is stuck (60d in settling),
-            // the other is in failed-backoff (5 fails, failure just now).
             const sim = report.simulation as any;
-            expect(sim.totalProcessed).toBe(0);
-            expect(sim.mutationsUsed).toBe(0);
-            expect(sim.totalSkippedOther).toBe(2);
+            // Old account is processed (1 mutation); only the failed-backoff one is skipped.
+            expect(sim.totalProcessed).toBe(1);
+            expect(sim.mutationsUsed).toBe(1);
+            expect(sim.totalSkippedOther).toBe(1);
             expect(sim.totalSkippedCooldown).toBe(0);
             expect(sim.totalSkippedAfterSlotLimit).toBe(0);
         });
@@ -1795,15 +1792,15 @@ describe('BufferClientService coverage', () => {
                 { mobile: '15554300002' },
                 { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
             );
-            // (c) a stuck + failed-cap doc exercises isHealthyBufferClientForCap false branches (158-171)
-            const longAgo = new Date(Date.now() - 65 * 24 * 60 * 60 * 1000); // past STUCK_WARMUP_DAYS(60)
+            // (c) a failed-cap doc exercises the isHealthyBufferClientForCap failure branch
+            const longAgo = new Date(Date.now() - 65 * 24 * 60 * 60 * 1000);
             await service.create(makeBufferClientData({
                 mobile: '15554300003', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 5,
                 lastUpdateFailure: longAgo,
             }));
-            // (d) stuck (60d) but UNDER the failed-attempt cap → isHealthyBufferClientForCap
-            // returns false via the stuck-days branch (line 167), not the failed-cap branch.
+            // (d) old but UNDER the failed-attempt cap → now HEALTHY (age no longer disqualifies).
+            // It counts as normal supply and keeps warming.
             await service.create(makeBufferClientData({
                 mobile: '15554300004', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 1,

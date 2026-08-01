@@ -324,23 +324,25 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
     // --------------------------------------------------------------------
     // 4b. Stuck-account detection (REAL: surfaces in diagnoseWarmupPipeline skip reasons)
     // --------------------------------------------------------------------
-    describe('Stuck-account detection (real pipeline)', () => {
-        test('a GROWING account past 60d with failures is flagged stuck in the simulation', async () => {
-            const longAgo = new Date(Date.now() - 65 * ONE_DAY_MS); // past STUCK_WARMUP_DAYS(60)
+    describe('Age never strands or skips an account (real pipeline)', () => {
+        test('an OLD GROWING account past the advance deadline is PROCESSED (advances), not stuck', async () => {
+            const longAgo = new Date(Date.now() - 65 * ONE_DAY_MS); // very old
             await BufferClientModel.create(baseClient({
                 mobile: '16660045001', warmupPhase: WarmupPhase.GROWING, enrolledAt: longAgo,
-                failedUpdateAttempts: 2, lastUpdateFailure: longAgo, channels: 120,
+                failedUpdateAttempts: 0, channels: 120, // under 200 target, but past the growing deadline
                 privacyUpdatedAt: longAgo, twoFASetAt: longAgo, otherAuthsRemovedAt: longAgo,
                 profilePicsDeletedAt: longAgo, nameBioUpdatedAt: longAgo, usernameUpdatedAt: longAgo,
             }));
 
             const report: any = await service.diagnoseWarmupPipeline();
-            // The only account in the DB is stuck (GROWING, 60d old, with failures),
-            // so the simulation records exactly one "other" skip (its stuck_* reason)
-            // and nothing reaches the mutation slots.
+            // Age no longer skips it, AND past the growing advance deadline the account advances
+            // (upload_photo → maturing) instead of looping join_channels forever. So it is processed,
+            // never marked stuck.
             expect(report.eligibleToProcess).toBe(1);
-            expect(report.simulation.totalSkippedOther).toBe(1);
-            expect(report.simulation.mutationsUsed).toBe(0);
+            expect(report.simulation.totalSkippedOther).toBe(0);
+            const entry = report.top30WouldProcess.find((e: any) => e.mobile === '16660045001');
+            expect(entry).toBeTruthy();
+            expect(entry.computedPhase).toBe(WarmupPhase.MATURING); // advanced past growing, not stuck
         });
 
         test('READY account past 60d is terminal and NOT counted as eligible churn', async () => {

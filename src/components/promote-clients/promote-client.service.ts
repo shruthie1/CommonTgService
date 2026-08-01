@@ -132,7 +132,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         };
     }
 
-    private isHealthyPromoteClientForCap(doc: Partial<PromoteClientDocument>, now: number): boolean {
+    private isHealthyPromoteClientForCap(doc: Partial<PromoteClientDocument>, _now: number): boolean {
         const phase = doc.warmupPhase;
         if (!phase) return false;
         if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
@@ -146,14 +146,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             return false;
         }
 
-        const enrolledAtMs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
-        if (enrolledAtMs > 0) {
-            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
-                return false;
-            }
-        }
-
+        // Age is NOT a health signal: a slow-warming account is still healthy supply and keeps
+        // progressing. Only permanent Telegram failures remove an account — never elapsed time.
         return true;
     }
 

@@ -292,13 +292,13 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('join_channels');
         });
 
-        test('DEEP-STALL SALVAGE: growing 50 days but only 60 channels (join-blocked) → advances to maturing, NOT stuck forever', () => {
-            // Real prod case (2026-08-02): join-blocked account far past its growing window, under the
-            // relaxed 100-channel gate. Must advance with what it has instead of being STUCK-retired.
+        test('ADVANCE DEADLINE: past the growing deadline, an account advances with WHATEVER channels it has (never stranded)', () => {
+            // Policy: age never strands an account. Past GROWING_ADVANCE_DEADLINE_DAYS the channel
+            // target stops gating — the account advances to maturing regardless of channel count.
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
-                enrolledAt: daysAgo(50, now),   // ~36 days growing (>DEEP_STALL_GROWING_DAYS=30)
-                channels: 60,                   // under relaxed 100, but >= DEEP_STALL_MIN_CHANNELS=20
+                enrolledAt: daysAgo(50, now),   // ~36 days growing (> GROWING_ADVANCE_DEADLINE_DAYS=30)
+                channels: 60,                   // under the normal/relaxed target — advances anyway
                 warmupJitter: 0,
                 ...fullySettledIdentity,
             });
@@ -307,28 +307,31 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('upload_photo'); // advancing, not join_channels
         });
 
-        test('DEEP-STALL: growing 50 days but ZERO channels → NOT salvaged (genuinely dead, keeps trying to join)', () => {
+        test('ADVANCE DEADLINE: even ZERO channels advances past the deadline (age never retires; no dead-end)', () => {
+            // "no mobile is ch=0 in practice" — but the logic must still not strand a 0-channel
+            // account: past the deadline it advances rather than looping join_channels forever.
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
                 enrolledAt: daysAgo(50, now),
-                channels: 0,                    // below DEEP_STALL_MIN_CHANNELS floor → not salvaged
+                channels: 0,
                 warmupJitter: 0,
                 ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
-            expect(result.action).toBe('join_channels'); // still blocked, not advanced
+            expect(result.phase).toBe(WarmupPhase.MATURING);
+            expect(result.action).toBe('upload_photo'); // advances, never stuck
         });
 
-        test('DEEP-STALL: growing only 20 days, 60 channels → NOT yet salvaged (still within window, keeps joining)', () => {
+        test('BEFORE DEADLINE: growing only 20 days, 60 channels → still joining (target still gates within the window)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.GROWING,
-                enrolledAt: daysAgo(20, now),   // ~6 days growing (< DEEP_STALL_GROWING_DAYS=30)
+                enrolledAt: daysAgo(20, now),   // ~6 days growing (< GROWING_ADVANCE_DEADLINE_DAYS=30)
                 channels: 60,
                 warmupJitter: 0,
                 ...fullySettledIdentity,
             });
             const result = getWarmupPhaseAction(doc, now);
-            expect(result.action).toBe('join_channels'); // not deep-stalled yet
+            expect(result.action).toBe('join_channels'); // deadline not reached — keep growing toward target
         });
 
         test('growing, channels=200, enrolled 15 days, jitter=0 → organic_only (needs 20 days for maturing)', () => {

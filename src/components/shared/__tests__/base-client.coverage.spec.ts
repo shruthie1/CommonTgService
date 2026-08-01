@@ -172,7 +172,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         set2fa: (d: any, f: number) => (this as any).set2fa(d, f),
         removeOtherAuths: (d: any, f: number) => (this as any).removeOtherAuths(d, f),
         performHealthCheck: (m: string, l: number, n: number) => (this as any).performHealthCheck(m, l, n),
-        retireIfStuck: (d: any, n: number) => (this as any).retireIfStuck(d, n),
+        logIfLongWarming: (d: any, n: number) => (this as any).logIfLongWarming(d, n),
         getEffectiveUpdatesCap: (n: number) => (this as any).getEffectiveUpdatesCap(n),
         isSensitiveWarmupAction: (a: string | undefined) => (this as any).isSensitiveWarmupAction(a),
         deactivateClient: (m: string, r: string, o?: any) => (this as any).deactivateClient(m, r, o),
@@ -380,10 +380,12 @@ describe('deactivateClient & expireUserByMobile', () => {
         expect(service.updateStatusMock).toHaveBeenCalledWith('919990000015', 'inactive', expect.stringMatching(/^\[UNSAFE\] /));
     });
 
-    test('tags a stuck-warmup reason as [STUCK]', async () => {
+    test('a non-permanent reason (incl. the retired "Stuck:" wording) is [TRANSIENT], never [STUCK]', async () => {
+        // The [STUCK] tag was removed with age-retirement: no code emits "Stuck:" reasons anymore,
+        // and if one ever appears it must NOT be treated as a special retirement class.
         const service = new TestBaseService();
         await service.pub.deactivateClient('919990000016', 'Stuck: 47d in settling');
-        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000016', 'inactive', expect.stringMatching(/^\[STUCK\] /));
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000016', 'inactive', expect.stringMatching(/^\[TRANSIENT\] /));
     });
 
     test('tags a non-permanent, non-stuck reason as [TRANSIENT]', async () => {
@@ -408,39 +410,47 @@ describe('deactivateClient & expireUserByMobile', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// retireIfStuck
+// logIfLongWarming — policy: age NEVER inactivates an account (only permanent TG failures do)
 // ════════════════════════════════════════════════════════════════════════════
-describe('retireIfStuck', () => {
+describe('logIfLongWarming (age never retires)', () => {
     const ONE_DAY = 24 * 60 * 60 * 1000;
-    test('retires a non-terminal account stuck past STUCK_WARMUP_DAYS', async () => {
+
+    test('a very-old non-terminal account is NOT inactivated — only logged', async () => {
         const service = new TestBaseService();
         const now = Date.now();
+        const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
         const doc: any = {
             mobile: '919990000020',
             warmupPhase: WarmupPhase.GROWING,
-            // Past STUCK_WARMUP_DAYS (60) — use 65d so it's clearly beyond the raised threshold.
-            enrolledAt: new Date(now - 65 * ONE_DAY),
+            enrolledAt: new Date(now - 90 * ONE_DAY), // far past any advisory threshold
             channels: 10,
             failedUpdateAttempts: 1,
         };
-        const result = await service.pub.retireIfStuck(doc, now);
-        expect(result).toBe(true);
-        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000020', 'inactive', expect.stringContaining('Stuck'));
-        expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalled();
+        service.pub.logIfLongWarming(doc, now);
+        // NEVER changes status, NEVER notifies an inactivation
+        expect(service.updateStatusMock).not.toHaveBeenCalled();
+        // Only an operator visibility log is emitted
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Long-warming'));
     });
 
-    test('does not retire READY/SESSION_ROTATED terminal accounts even when old', async () => {
+    test('does not log for terminal READY/SESSION_ROTATED accounts even when old', () => {
         const service = new TestBaseService();
         const now = Date.now();
+        const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
         const doc: any = { mobile: '919990000021', warmupPhase: WarmupPhase.READY, enrolledAt: new Date(now - 90 * ONE_DAY) };
-        expect(await service.pub.retireIfStuck(doc, now)).toBe(false);
+        service.pub.logIfLongWarming(doc, now);
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Long-warming'));
+        expect(service.updateStatusMock).not.toHaveBeenCalled();
     });
 
-    test('does not retire young accounts', async () => {
+    test('does not log for young accounts, and never inactivates them', () => {
         const service = new TestBaseService();
         const now = Date.now();
+        const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
         const doc: any = { mobile: '919990000022', warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * ONE_DAY) };
-        expect(await service.pub.retireIfStuck(doc, now)).toBe(false);
+        service.pub.logIfLongWarming(doc, now);
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Long-warming'));
+        expect(service.updateStatusMock).not.toHaveBeenCalled();
     });
 });
 

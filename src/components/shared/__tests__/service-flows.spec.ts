@@ -118,8 +118,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         return this.calculateAvailabilityBasedNeeds(clientId);
     }
 
-    public async stuckRetire(doc: BaseClientDocument, now: number): Promise<boolean> {
-        return this.retireIfStuck(doc as any, now);
+    public logLongWarming(doc: BaseClientDocument, now: number): void {
+        return this.logIfLongWarming(doc as any, now);
     }
 }
 
@@ -1622,32 +1622,29 @@ describe('Service flow reliability', () => {
     // ======= STUCK SCENARIO TESTS =======
     // These test processClient end-to-end for every scenario that could cause an account to get stuck.
 
-    describe('Stuck scenario: stuck detection at 60 days', () => {
-        test('account in settling for 65 days with 3+ failures → marks inactive', async () => {
+    describe('Age never inactivates (policy: only permanent Telegram failures retire an account)', () => {
+        test('an old settling account (65 days) is NOT inactivated by age — it keeps warming', async () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
+            jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
             const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
             const doc = {
                 mobile: '919990007771',
                 warmupPhase: WarmupPhase.SETTLING,
-                enrolledAt: new Date('2026-02-05T12:00:00.000Z'), // 65 days ago (past STUCK_WARMUP_DAYS=60)
+                enrolledAt: new Date('2026-02-05T12:00:00.000Z'), // 65 days ago (pre-refactor: retired)
                 createdAt: new Date('2026-02-05T12:00:00.000Z'),
                 privacyUpdatedAt: new Date('2026-02-07T12:00:00.000Z'),
-                failedUpdateAttempts: 3,
-                lastUpdateFailure: new Date('2026-04-03T00:00:00.000Z'), // 8+ days ago → clearly triggers reset
+                failedUpdateAttempts: 0,
                 lastUpdateAttempt: null,
                 inUse: false,
             } as any;
 
             await service.processClient(doc, { clientId: 'client-1' } as Client);
 
-            expect(updateStatusSpy).toHaveBeenCalledWith(
-                '919990007771',
-                'inactive',
-                expect.stringContaining('Stuck'),
-            );
+            // Age must NEVER produce an inactivation.
+            expect(updateStatusSpy).not.toHaveBeenCalledWith('919990007771', 'inactive', expect.anything());
         });
 
         test('account in settling for 30 days with failures → resets normally (not zombie yet)', async () => {

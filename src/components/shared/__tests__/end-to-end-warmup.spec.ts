@@ -151,49 +151,44 @@ describe('processClient — all exit paths', () => {
         expect(result.updateCount).toBe(0);
     });
 
-    test('EXIT 3: stuck account detected (65 days in settling)', async () => {
-        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
-        const doc = makeDoc({
-            warmupPhase: WarmupPhase.SETTLING,
-            enrolledAt: daysAgo(65, mockNow),
-            failedUpdateAttempts: 3,
-            lastUpdateFailure: daysAgo(10, mockNow),
-        });
-        await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(updateStatusSpy).toHaveBeenCalledWith(
-            doc.mobile,
-            'inactive',
-            expect.stringContaining('Stuck'),
-        );
-    });
-
-    test('EXIT 3a: stuck account detected with ZERO failures (BUG-2 — failure-independent)', async () => {
-        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
-        const doc = makeDoc({
-            warmupPhase: WarmupPhase.GROWING,
-            enrolledAt: daysAgo(65, mockNow),
-            failedUpdateAttempts: 0, // can't-join-channels case: no warmup failures recorded
-        });
-        await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(updateStatusSpy).toHaveBeenCalledWith(
-            doc.mobile,
-            'inactive',
-            expect.stringContaining('Stuck'),
-        );
-    });
-
-    test('EXIT 3b: 55 days in settling — NOT zombie (below 60d threshold)', async () => {
+    test('EXIT 3: an OLD non-terminal account is NOT inactivated by age (policy: age never retires)', async () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
-            enrolledAt: daysAgo(55, mockNow),
-            privacyUpdatedAt: daysAgo(40, mockNow),
-            failedUpdateAttempts: 3,
-            lastUpdateFailure: daysAgo(10, mockNow),
+            enrolledAt: daysAgo(90, mockNow), // very old — pre-refactor this was retired
+            privacyUpdatedAt: daysAgo(80, mockNow),
+            failedUpdateAttempts: 0,
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(updateStatusSpy).not.toHaveBeenCalled();
+        // Must NOT be inactivated for being old — it keeps warming.
+        expect(updateStatusSpy).not.toHaveBeenCalledWith(doc.mobile, 'inactive', expect.anything());
+    });
+
+    test('EXIT 3a: an OLD account with ZERO failures keeps warming (age-independent, never retired)', async () => {
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.GROWING,
+            enrolledAt: daysAgo(90, mockNow),
+            channels: 250,                 // has channels — will advance, not join, and never inactivate
+            failedUpdateAttempts: 0,
+            ...( { privacyUpdatedAt: daysAgo(80, mockNow), twoFASetAt: daysAgo(78, mockNow), otherAuthsRemovedAt: daysAgo(75, mockNow), profilePicsDeletedAt: daysAgo(70, mockNow), nameBioUpdatedAt: daysAgo(68, mockNow), usernameUpdatedAt: daysAgo(65, mockNow) } as any),
+        });
+        await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(updateStatusSpy).not.toHaveBeenCalledWith(doc.mobile, 'inactive', expect.anything());
+    });
+
+    test('EXIT 3b: a mid-warmup account is never inactivated by age regardless of how old', async () => {
+        const updateStatusSpy = jest.spyOn(service, 'updateStatus');
+        jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
+        const doc = makeDoc({
+            warmupPhase: WarmupPhase.SETTLING,
+            enrolledAt: daysAgo(120, mockNow), // extreme age — still not retired
+            privacyUpdatedAt: daysAgo(100, mockNow),
+            failedUpdateAttempts: 0,
+        });
+        await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(updateStatusSpy).not.toHaveBeenCalledWith(doc.mobile, 'inactive', expect.anything());
     });
 
     test('EXIT 3c: 65 days but phase=READY → NOT zombie (terminal phase)', async () => {

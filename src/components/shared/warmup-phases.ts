@@ -47,15 +47,14 @@ export const MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 export const MIN_CHANNELS_FOR_MATURING = 200;
 
 /**
- * Deep-stall salvage (real prod finding 2026-08-02): some accounts can never accumulate channels
- * (spam-limited / join-starved) and sit under even the relaxed (½) channel gate for weeks until
- * the STUCK timeout retires them. Rather than LOSE an otherwise-usable account, a growing account
- * that has been growing for this many days past its normal window is allowed to advance to maturing
- * with whatever channels it has (as long as it has a minimal floor — a truly 0-channel account is a
- * different, genuinely-dead case). This salvages accounts a bigger channel-target would strand.
+ * Hard deadline (in days spent in the GROWING phase, past its normal threshold) after which an
+ * account advances to maturing with WHATEVER channels it has — the channel target stops being a
+ * gate entirely. Guarantees no account is ever stranded in growing by a channel-supply problem
+ * (spam-limit / join-starvation). Policy: elapsed time never stalls or retires an account; only
+ * permanent Telegram failures inactivate. (Real prod finding 2026-08-02: ~18 promote accounts had
+ * been stuck sub-target in growing for 44-60 days.)
  */
-export const DEEP_STALL_GROWING_DAYS = 30;      // days IN growing (past the growing threshold) => salvage
-export const DEEP_STALL_MIN_CHANNELS = 20;      // must have at least this many channels to be worth salvaging
+export const GROWING_ADVANCE_DEADLINE_DAYS = 30; // days IN growing past which channel target no longer gates
 
 /**
  * Action returned by getWarmupPhaseAction — tells the caller what to do this cycle.
@@ -255,20 +254,19 @@ export function getWarmupPhaseAction(
         if (identityCatchup) return identityCatchup;
 
         const channels = doc.channels || 0;
-        // Relaxed channel requirement: if growing for 2x the expected duration,
-        // allow advancement with half the channel target rather than blocking forever.
+        // Channel target is a GOAL, never a permanent gate. Keep joining channels until the account
+        // reaches the target — but the requirement decays with time so a join-starved / spam-limited
+        // account is NEVER stranded in growing (policy: age never stalls or retires an account, only
+        // permanent Telegram failures do). Past GROWING_ADVANCE_DEADLINE_DAYS the account advances
+        // with whatever channels it has.
         const growingDuration = daysSinceEnrolled - (WARMUP_PHASE_THRESHOLDS.growing + jitter);
-        const expectedGrowingDays = WARMUP_PHASE_THRESHOLDS.maturing - WARMUP_PHASE_THRESHOLDS.growing;
-        const isGrowingStalled = growingDuration > expectedGrowingDays * 2;
-        const effectiveChannelTarget = isGrowingStalled
-            ? Math.floor(MIN_CHANNELS_FOR_MATURING / 2)
-            : MIN_CHANNELS_FOR_MATURING;
-        // Deep-stall salvage: an account growing far past its window that STILL can't reach the
-        // relaxed target (join-blocked / spam-limited) would otherwise sit until STUCK retires it.
-        // If it has at least a minimal channel floor, let it advance with what it has instead of
-        // being lost. A 0-channel account is NOT salvaged (that is a genuinely-dead case).
-        const isDeepStalled = growingDuration > DEEP_STALL_GROWING_DAYS && channels >= DEEP_STALL_MIN_CHANNELS;
-        if (channels < effectiveChannelTarget && !isDeepStalled) {
+        const stalledLong = growingDuration > (WARMUP_PHASE_THRESHOLDS.maturing - WARMUP_PHASE_THRESHOLDS.growing) * 2;
+        const pastAdvanceDeadline = growingDuration > GROWING_ADVANCE_DEADLINE_DAYS;
+        // Full target normally; halved once stalled; no requirement at all past the deadline.
+        const effectiveChannelTarget = pastAdvanceDeadline
+            ? 0
+            : (stalledLong ? Math.floor(MIN_CHANNELS_FOR_MATURING / 2) : MIN_CHANNELS_FOR_MATURING);
+        if (channels < effectiveChannelTarget) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
         // Channels target met — check if ready for maturing

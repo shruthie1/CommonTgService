@@ -203,7 +203,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             : Promise.resolve(query as BufferClientDocument[]);
     }
 
-    private isHealthyBufferClientForCap(doc: Partial<BufferClientDocument>, now: number): boolean {
+    private isHealthyBufferClientForCap(doc: Partial<BufferClientDocument>, _now: number): boolean {
         const phase = doc.warmupPhase;
         if (!phase) return false;
         if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
@@ -218,14 +218,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             return false;
         }
 
-        const enrolledAtMs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
-        if (enrolledAtMs > 0) {
-            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
-                return false;
-            }
-        }
-
+        // Age is NOT a health signal: a slow-warming account is still healthy supply and keeps
+        // progressing. Only permanent Telegram failures (via failedAttempts / deactivateClient)
+        // remove an account — never elapsed time.
         return true;
     }
 
@@ -1119,13 +1114,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const lastFailureTime = ClientHelperUtils.getTimestamp(bc.lastUpdateFailure);
             let processSkipReason: string | null = null;
 
-            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-                const enrolledTs = ClientHelperUtils.getTimestamp(bc.enrolledAt) || ClientHelperUtils.getTimestamp(bc.createdAt);
-                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS && warmupPhase !== WarmupPhase.SESSION_ROTATED && warmupPhase !== WarmupPhase.READY) {
-                    processSkipReason = `stuck_${Math.round(daysSinceEnrolled)}d`;
-                }
-            } else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            // Age never skips/retires an account (policy). The only non-cooldown skip is a recent
+            // failure still within its retry backoff.
+            if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
                 const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
                 if (lastFailureTime > 0 && now - lastFailureTime < retryBackoffMs) {
                     processSkipReason = `failed_${failedAttempts}_backoff`;

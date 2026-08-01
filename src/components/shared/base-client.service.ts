@@ -243,7 +243,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     // getEffectiveUpdatesCap(pending) = clamp(ceil(pending / (TARGET_DRAIN_DAYS × RUNS_PER_DAY)), MIN, MAX).
     protected readonly MAX_UPDATES_PER_CYCLE = 20;          // per-run CEILING (unchanged from original — density stays low)
     protected readonly MIN_UPDATES_PER_CYCLE = 8;           // floor — guarantees baseline throughput even on a light backlog
-    protected readonly WARMUP_TARGET_DRAIN_DAYS = 8;        // SLA: clear the pending backlog within ~8d (< STUCK_WARMUP_DAYS)
+    protected readonly WARMUP_TARGET_DRAIN_DAYS = 8;        // SLA target: clear the pending backlog within ~8d
     protected readonly WARMUP_RUNS_PER_DAY = 4;             // scheduler fires 4× daily (jittered) — throughput via frequency, not density
 
     // Separate, tighter per-run cap for HIGH-RISK Telegram actions (2FA set, revoking other
@@ -285,10 +285,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     // release path.
     protected readonly MAINTENANCE_LOCK_TTL_MS = 30 * 60 * 1000;
     protected activeMaintenanceRun: { name: string; startedAt: number } | null = null;
-    /** A non-terminal account still warming past this many days is stuck and gets retired.
-     *  Raised 45→60 so accounts are not retired mid-pipeline while the self-healing cap drains
-     *  a large backlog (the drain SLA, WARMUP_TARGET_DRAIN_DAYS, stays well under this floor). */
-    protected readonly STUCK_WARMUP_DAYS = 60;
+    /** Advisory-only: a non-terminal account warming longer than this gets an operator log line
+     *  (see logIfLongWarming). It NEVER inactivates the account — age is not a retirement trigger;
+     *  only permanent Telegram failures are. Purely for visibility into channel-supply/other stalls. */
+    protected readonly LONG_WARMING_ALERT_DAYS = 60;
     protected dailyJoinCounts: Map<string, number> = new Map();
     protected dailyJoinDate: string = '';
     /** Tracks per-mobile transient join failures in the current loop. Reset on each refill. */
@@ -404,34 +404,26 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     /**
-     * An account still in a non-terminal warmup phase past STUCK_WARMUP_DAYS is stuck and
-     * will never become usable — retire it and alert. This is independent of failure counts:
-     * many stuck states (can't join channels, steps that no-op without throwing) never
-     * increment failedUpdateAttempts, so a failure-gated check would miss them entirely.
-     * Returns true if the account was identified as stuck and retired.
+     * Surface an account that has been warming an unusually long time, for operator visibility.
+     * This is OBSERVABILITY ONLY — it never changes status. Policy: an account is inactivated
+     * exclusively on a permanent Telegram failure (SESSION_REVOKED / AUTH_KEY_* / USER_DEACTIVATED /
+     * FROZEN_* / ban), handled via isPermanentError → deactivateClient. Elapsed warmup time is never
+     * a reason to retire an account — a slow account is not a dead account, and the phase state
+     * machine (with deep-stall salvage) guarantees every mobile keeps progressing.
      */
-    protected async retireIfStuck(doc: TDoc, now: number): Promise<boolean> {
+    protected logIfLongWarming(doc: TDoc, now: number): void {
         const enrolledTs = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
         const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
         const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
-
-        // READY/SESSION_ROTATED are terminal: warmup is complete and the account is usable
-        // (a READY account just hasn't rotated its session yet — it is not lost).
-        if (daysSinceEnrolled <= this.STUCK_WARMUP_DAYS || phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
-            return false;
+        if (
+            daysSinceEnrolled > this.LONG_WARMING_ALERT_DAYS &&
+            phase !== WarmupPhase.READY &&
+            phase !== WarmupPhase.SESSION_ROTATED
+        ) {
+            this.logger.warn(
+                `Long-warming ${this.clientType} ${doc.mobile}: ${Math.round(daysSinceEnrolled)}d in ${phase} — still progressing (age never inactivates; only permanent TG failures do)`,
+            );
         }
-
-        const failedAttempts = doc.failedUpdateAttempts || 0;
-        this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
-        // NOT { permanent: true }: a stuck account is not a proven-dead session. We retire the
-        // pool record but do NOT mark the user expired (expired = revoked / banned only).
-        const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
-        this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`,
-            { parseMode: 'HTML' }
-        );
-        return true;
     }
 
     constructor(
@@ -573,9 +565,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      *                 USER_DEACTIVATED, FROZEN_*, banned). Never recoverable.
      *   [UNSAFE]    — retired by our policy though Telegram didn't kill it (e.g. foreign
      *                 2FA). Session may still work today but the account is a liability.
-     *   [STUCK]     — retired for exceeding STUCK_WARMUP_DAYS; not proven dead.
      *   [TRANSIENT] — deactivated for a non-permanent cause (should be rare; flags it
      *                 for review rather than silently mislabelling it as dead).
+     * (There is no age/STUCK tag: elapsed warmup time never inactivates an account.)
      * Idempotent: an already-tagged reason is returned unchanged.
      */
     protected classifyInactivationReason(reason: string, permanent?: boolean): string {
@@ -583,7 +575,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (/^\[[A-Z]+\]\s/.test(text)) return text; // already tagged
         let tag: string;
         if (isPermanentError({ message: text })) tag = 'DEAD';
-        else if (/^Stuck:/i.test(text)) tag = 'STUCK';
         else if (permanent) tag = 'UNSAFE';
         else tag = 'TRANSIENT';
         return `[${tag}] ${text}`;
@@ -1415,12 +1406,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const failedAttempts = doc.failedUpdateAttempts || 0;
         const lastFailureTime = ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
 
-        // Retire accounts stuck warming past the age limit — independent of failure counts,
-        // since many stuck states never increment failedUpdateAttempts (e.g. can't join
-        // channels, or steps that no-op without throwing).
-        if (await this.retireIfStuck(doc, now)) {
-            return { updateCount: 0 };
-        }
+        // Surface long-warming accounts for visibility, but NEVER retire by age — an account is
+        // only inactivated on a permanent Telegram failure. Processing continues normally.
+        this.logIfLongWarming(doc, now);
 
         if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
