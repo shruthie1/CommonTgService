@@ -27,6 +27,22 @@ export interface ChannelIntelligenceOutcomeAnalytics {
   topByDeleted: any[];
 }
 
+// ─── Conversion-aware join-sort tuning (see spec 2026-08-01-conversion-aware-channel-join-design) ───
+export const PRIOR_STRENGTH = 20;          // pseudo-sends of prior weight (conversion)
+export const WEIGHT_MIN = 0.2;             // dead channels floor
+export const WEIGHT_MAX = 1.3;             // converter ceiling (anti-clustering cap)
+export const SQ_PRIOR_STRENGTH = 20;       // pseudo-sends of prior weight (send-quality)
+export const SQ_MIN = 0.5;                 // delete-heavy floor (secondary nudge)
+export const SQ_MAX = 1.1;                 // clean-survival ceiling
+export const PRIOR_TTL_MS = 15 * 60 * 1000; // fleet-prior cache max age
+export const PRIOR_RATE_FALLBACK = 0.03;   // used ONLY when fleet has zero sends
+export const SQ_PRIOR_RATE_FALLBACK = 0.82;// used ONLY when fleet has zero sends
+
+export interface FleetPrior {
+  PRIOR_RATE: number;
+  SQ_PRIOR_RATE: number;
+}
+
 const EMPTY_OUTCOME_ANALYTICS: ChannelIntelligenceOutcomeAnalytics = {
   messageStats: {
     totalSent: 0,
@@ -283,5 +299,79 @@ export class ChannelIntelligenceReadService {
       );
       return EMPTY_OUTCOME_ANALYTICS;
     }
+  }
+
+  /**
+   * Returns the two pipeline stages that implement conversion-aware, stateless join sorting:
+   *   sortScore = rand() × conversionWeight × sendQualityWeight
+   * both weights shrunk toward the LIVE fleet prior (passed in). Pure function of (prior + constants);
+   * no I/O. Spliced into each getActiveChannels pipeline in place of the old reaction/diversity sort.
+   */
+  buildConversionAwareSortStages(prior: FleetPrior): PipelineStage[] {
+    const priorRate = prior?.PRIOR_RATE > 0 ? prior.PRIOR_RATE : PRIOR_RATE_FALLBACK;
+    const sqPriorRate = prior?.SQ_PRIOR_RATE > 0 ? prior.SQ_PRIOR_RATE : SQ_PRIOR_RATE_FALLBACK;
+
+    return [
+      {
+        $lookup: {
+          from: 'channelIntelligence',
+          localField: 'channelId',
+          foreignField: 'channelId',
+          as: '_ci',
+        },
+      },
+      {
+        $addFields: {
+          sortScore: {
+            $let: {
+              vars: {
+                ci: { $ifNull: [{ $arrayElemAt: ['$_ci', 0] }, {}] },
+              },
+              in: {
+                $let: {
+                  vars: {
+                    attempted: { $ifNull: ['$$ci.outcomes.attempted', 0] },
+                    credited: { $ifNull: ['$$ci.DMs.credited', 0] },
+                    survived: { $ifNull: ['$$ci.outcomes.survived', 0] },
+                  },
+                  in: {
+                    $let: {
+                      vars: {
+                        // conversion shrink toward live PRIOR_RATE, normalized so neutral == 1.0
+                        conversionWeight: {
+                          $min: [WEIGHT_MAX, { $max: [WEIGHT_MIN, {
+                            $divide: [
+                              { $divide: [
+                                { $add: [{ $multiply: [priorRate, PRIOR_STRENGTH] }, '$$credited'] },
+                                { $add: [PRIOR_STRENGTH, '$$attempted'] },
+                              ] },
+                              priorRate,
+                            ],
+                          }] }],
+                        },
+                        // send-quality shrink toward live SQ_PRIOR_RATE, normalized so neutral == 1.0
+                        sendQualityWeight: {
+                          $min: [SQ_MAX, { $max: [SQ_MIN, {
+                            $divide: [
+                              { $divide: [
+                                { $add: [{ $multiply: [sqPriorRate, SQ_PRIOR_STRENGTH] }, '$$survived'] },
+                                { $add: [SQ_PRIOR_STRENGTH, '$$attempted'] },
+                              ] },
+                              sqPriorRate,
+                            ],
+                          }] }],
+                        },
+                      },
+                      in: { $multiply: [{ $rand: {} }, '$$conversionWeight', '$$sendQualityWeight'] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      { $project: { _ci: 0 } },
+    ];
   }
 }

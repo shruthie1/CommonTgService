@@ -186,3 +186,78 @@ describe('ChannelIntelligenceReadService.getOutcomeAnalytics', () => {
     expect(a.topBySuccess).toEqual([]);
   });
 });
+
+// ─── buildConversionAwareSortStages (real Mongo — conversion-aware join-sort pipeline) ──────
+describe('ChannelIntelligenceReadService.buildConversionAwareSortStages', () => {
+  let mongod: MongoMemoryServer;
+  let connection: Connection;
+  let ciModel: any;       // channelIntelligence
+  let chanModel: any;     // the source collection we sort
+  let service: ChannelIntelligenceReadService;
+
+  const Bare = () => new Schema({}, { strict: false });
+
+  beforeAll(async () => {
+    mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'sortStages' }).asPromise();
+    ciModel = connection.model('channelIntelligence', new Schema({}, { strict: false, collection: 'channelIntelligence' }));
+    chanModel = connection.model('srcChan', new Schema({}, { strict: false, collection: 'srcChan' }));
+    service = new ChannelIntelligenceReadService(ciModel);
+
+    // Source channels to sort (only channelId matters for the lookup):
+    await chanModel.create([
+      { channelId: 'untried' },      // no CI doc  -> neutral 1.0 x 1.0
+      { channelId: 'dead' },         // 200 sends, 0 DMs -> conversion toward WEIGHT_MIN
+      { channelId: 'converter' },    // high credited/attempted -> conversion toward WEIGHT_MAX
+      { channelId: 'deletey' },      // 40% deleted (under 50% hard gate) -> sendQuality toward SQ_MIN
+    ]);
+    await ciModel.create([
+      { channelId: 'dead',      outcomes: { attempted: 200, survived: 180, deleted: 5 },  DMs: { credited: 0 } },
+      { channelId: 'converter', outcomes: { attempted: 100, survived: 95,  deleted: 2 },  DMs: { credited: 30 } },
+      { channelId: 'deletey',   outcomes: { attempted: 100, survived: 55,  deleted: 40 }, DMs: { credited: 3 } },
+    ]);
+  });
+
+  afterAll(async () => {
+    if (connection) { await connection.dropDatabase(); await connection.close(); }
+    if (mongod) await mongod.stop();
+  });
+
+  // Helper: run the builder's stages and expose the computed weights instead of dropping them.
+  async function weights(prior: { PRIOR_RATE: number; SQ_PRIOR_RATE: number }) {
+    const stages = service.buildConversionAwareSortStages(prior);
+    // Re-project the intermediate weights for assertion by appending a debug $addFields
+    // that recomputes nothing — we instead inspect sortScore bounds and relative order.
+    const rows = await chanModel.aggregate([...stages, { $project: { channelId: 1, sortScore: 1 } }]).exec();
+    return Object.fromEntries(rows.map((r: any) => [r.channelId, r.sortScore]));
+  }
+
+  it('untried channel (no CI doc) contributes neutral weights (sortScore in (0,1], no penalty)', async () => {
+    const s = await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 });
+    // sortScore = rand * conv(1.0) * sq(1.0) => in (0,1].
+    expect(s['untried']).toBeGreaterThan(0);
+    expect(s['untried']).toBeLessThanOrEqual(1);
+  });
+
+  it('proven-dead channel weight ceiling is far below an untried channel ceiling', async () => {
+    // Run many draws; the max achievable sortScore reflects the weight product.
+    const maxDead = Math.max(...await Promise.all([...Array(200)].map(async () => (await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 }))['dead'])));
+    const maxUntried = Math.max(...await Promise.all([...Array(200)].map(async () => (await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 }))['untried'])));
+    // dead conv ~0.2, sq ~1.0 => ceiling ~0.2 ; untried ceiling ~1.0
+    expect(maxDead).toBeLessThan(maxUntried);
+    expect(maxDead).toBeLessThanOrEqual(0.2 * 1.1 + 0.02); // WEIGHT_MIN * SQ_MAX ceiling + slack
+  });
+
+  it('proven converter can exceed neutral ceiling (weight > 1 possible)', async () => {
+    const maxConv = Math.max(...await Promise.all([...Array(400)].map(async () => (await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 }))['converter'])));
+    expect(maxConv).toBeGreaterThan(1); // WEIGHT_MAX(1.3) * SQ_MAX(1.1) ceiling ~1.43
+  });
+
+  it('delete-heavy channel (under 50% hard gate) is send-quality penalized vs a clean channel', async () => {
+    // deletey survival ~0.55 shrunk => sq < 1 ; converter survival ~0.95 => sq ~1.1
+    const maxDeletey = Math.max(...await Promise.all([...Array(400)].map(async () => (await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 }))['deletey'])));
+    // deletey conv is modest (3/100 ~ prior) and sq is depressed -> ceiling well under converter's
+    const maxConv = Math.max(...await Promise.all([...Array(400)].map(async () => (await weights({ PRIOR_RATE: 0.03, SQ_PRIOR_RATE: 0.82 }))['converter'])));
+    expect(maxDeletey).toBeLessThan(maxConv);
+  });
+});
