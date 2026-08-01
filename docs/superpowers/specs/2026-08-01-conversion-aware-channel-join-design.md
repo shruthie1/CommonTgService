@@ -10,9 +10,12 @@
 Make warmup/join channel-selection **fade proven-dead channels** (many sends, zero DMs) — and,
 secondarily, **fade delete-heavy/hostile channels** — toward the back of the selection order, while
 **preserving randomized spread and full exploration of untried channels**. The mechanism is
-**stateless and dynamic**: computed live from existing `channelIntelligence` data (`outcomes` +
-`DMs`) at query time, with **no persisted score, no cached field, no Redis prior, no backfill, no
-fixed thresholds.** The reaction-restricted weight is dropped (no usable per-channel reaction data).
+**stateless, dynamic, and fully self-calibrating**: computed live from existing `channelIntelligence`
+data (`outcomes` + `DMs`) at query time, with **no persisted score, no cached field, no Redis prior,
+no backfill, no fixed thresholds — and no hardcoded neutral point.** The "neutral" rate a channel is
+judged against is the **live fleet average**, recomputed each query from the same data, so it
+self-adjusts as the fleet drifts (nothing is a baked-in snapshot). The reaction-restricted weight is
+dropped (no usable per-channel reaction data).
 
 Non-goal: changing promotion (posting) selection, the conversation engine, or account
 health/rest logic. Those are separate. This spec touches only *which channels an account joins*.
@@ -83,26 +86,64 @@ Replace the sort expression in **both** `getActiveChannels` pipelines:
   it simplifies the sort with negligible behavioral change. (This does NOT touch the reaction
   *service* that reacts to messages — only the `reactRestricted` factor in the join sort.)
 
+### The live fleet prior — computed each query, nothing hardcoded
+
+The "neutral" DM-per-send rate (`PRIOR_RATE`) and survive-rate (`SQ_PRIOR_RATE`) that channels are
+judged against are **not constants** — they are the **live fleet averages**, computed in a cheap
+aggregation over `channelIntelligence` at query time and passed into the sort pipeline as numbers.
+This is what makes the design fully self-calibrating: as the fleet's real DM/send drifts (3% → 5% →
+…), the neutral point moves with it automatically, so a channel is always compared to *the fleet as
+it is today*, never a stale snapshot.
+
+```
+// One lightweight aggregation on channelIntelligence, run before the join query
+// (see "Prior freshness" for the small in-memory cache that keeps this off the hot path):
+fleetPrior = channelIntelligence.aggregate([
+  { $group: {
+      _id: null,
+      totalCredited:  { $sum: { $ifNull: ['$DMs.credited', 0] } },
+      totalAttempted: { $sum: { $ifNull: ['$outcomes.attempted', 0] } },
+      totalSurvived:  { $sum: { $ifNull: ['$outcomes.survived', 0] } },
+  }}
+])
+// Derived, with fallbacks so a cold/empty collection can never divide by zero:
+PRIOR_RATE    = totalAttempted > 0 ? totalCredited / totalAttempted : PRIOR_RATE_FALLBACK   // ≈0.03
+SQ_PRIOR_RATE = totalAttempted > 0 ? totalSurvived / totalAttempted : SQ_PRIOR_RATE_FALLBACK // ≈0.82
+```
+
+`PRIOR_RATE_FALLBACK` (0.03) and `SQ_PRIOR_RATE_FALLBACK` (0.82) are the only measured literals left,
+and they are used **only** when the fleet aggregation returns no sends at all (cold start / empty
+collection) — never in normal operation. `PRIOR_STRENGTH` and the weight clamps stay fixed constants
+(they are unitless tuning knobs, not fleet-derived quantities — see "Tuning constants").
+
+**Prior freshness (keeps it off the hot path).** The fleet prior changes slowly (fleet-wide averages
+over ~16k docs), so recomputing it on every single join query is wasted work. Compute it at most
+once per `PRIOR_TTL` (default 15 min) and cache the two numbers in-memory on the shared helper; the
+per-channel sort still runs live every query using the cached prior. The cache is memory-only (no
+Redis, no persistence) — it rebuilds on restart and is the *only* piece of state in the design, and
+it holds two floats, not per-channel data. `PRIOR_TTL=0` forces per-query recompute (used in tests).
+
 ### `conversionWeight` — stateless, computed live via `$lookup`
 
 Inside each `getActiveChannels` aggregation, before `$addFields: sortScore`, add a `$lookup` from
 the channel collection → `channelIntelligence` on `channelId`, then compute the weight inline from
-the joined `outcomes.attempted` and `DMs.credited`. No field is written back.
+the joined `outcomes.attempted` and `DMs.credited`, using the **live `PRIOR_RATE`** above. No field
+is written back.
 
-**Empirical-Bayes shrinkage** toward a **fleet-neutral prior**, expressed as pseudo-counts so it is
-a pure inline formula (no persisted prior):
+**Empirical-Bayes shrinkage** toward the **live fleet prior**, expressed as pseudo-counts so it is a
+pure inline formula (the prior is a number injected into the pipeline, still nothing persisted):
 
 ```
 attempted = ifNull(ci.outcomes.attempted, 0)     // 0 when no channelIntelligence doc / never posted
 credited  = ifNull(ci.DMs.credited, 0)
 
-// Prior = the fleet DM-per-send as pseudo-observations. PRIOR_RATE ≈ 0.03 (3% — the measured
-// fleet DM/send). PRIOR_STRENGTH = pseudo-sends of prior weight (see "Tuning constants").
+// Prior = the LIVE fleet DM-per-send (PRIOR_RATE, computed above) as pseudo-observations.
+// PRIOR_STRENGTH = pseudo-sends of prior weight (see "Tuning constants").
 shrunkRate = (PRIOR_RATE * PRIOR_STRENGTH + credited)
            / (PRIOR_STRENGTH + attempted)
 
 // Map shrunkRate → a narrow multiplier so it MODULATES but never dominates random().
-// Normalize against PRIOR_RATE so "neutral" (shrunkRate == PRIOR_RATE) maps to 1.0.
+// Normalize against the live PRIOR_RATE so "neutral" (shrunkRate == PRIOR_RATE) maps to 1.0.
 raw            = shrunkRate / PRIOR_RATE          // 1.0 at neutral; <1 dead-leaning; >1 converter
 conversionWeight = clamp(raw, WEIGHT_MIN, WEIGHT_MAX)   // e.g. [0.2, 1.3]
 ```
@@ -139,8 +180,9 @@ survived  = ifNull(ci.outcomes.survived, 0)
 deleted   = ifNull(ci.outcomes.deleted, 0)
 
 // survivalRate over the same shrink prior idea so low-sample stays neutral.
+// SQ_PRIOR_RATE is the LIVE fleet survive-rate (computed above), not a constant.
 survivalRate = (SQ_PRIOR_RATE * SQ_PRIOR_STRENGTH + survived)
-             / (SQ_PRIOR_STRENGTH + attempted)     // SQ_PRIOR_RATE ≈ 0.82 (measured avg survive)
+             / (SQ_PRIOR_STRENGTH + attempted)
 sendQualityWeight = clamp(survivalRate / SQ_PRIOR_RATE, SQ_MIN, SQ_MAX)   // e.g. [0.5, 1.1]
 ```
 
@@ -157,27 +199,43 @@ sendQualityWeight = clamp(survivalRate / SQ_PRIOR_RATE, SQ_MIN, SQ_MAX)   // e.g
 
 ### Tuning constants (named, in one place)
 
+**Live (computed each query, cached ≤ PRIOR_TTL) — the neutral points:**
+
+| Value | Source | Meaning |
+|---|---|---|
+| `PRIOR_RATE` | live `Σcredited / Σattempted` over channelIntelligence | Fleet DM-per-send. The conversion neutral point. Self-calibrating. |
+| `SQ_PRIOR_RATE` | live `Σsurvived / Σattempted` | Fleet survive-rate. The send-quality neutral point. Self-calibrating. |
+
+**Fixed constants (unitless tuning knobs, one place at the top of the shared helper):**
+
 | Constant | Value | Meaning |
 |---|---|---|
-| `PRIOR_RATE` | `0.03` | Fleet DM-per-send (measured 3.05%). The neutral point. |
 | `PRIOR_STRENGTH` | `20` | Pseudo-sends of prior weight. Higher = more shrinkage (slower to trust a channel's own rate); ~20 means a channel needs ~20 real sends before its own signal outweighs the prior. |
 | `WEIGHT_MIN` | `0.2` | Dead channels fade to 0.2× (never fully vanish — occasional re-test). |
 | `WEIGHT_MAX` | `1.3` | Proven converters get a mild lift, capped so they don't become account magnets (anti-clustering). |
-| `SQ_PRIOR_RATE` | `0.82` | Fleet avg survive-rate (measured 81.7%). Neutral point for send-quality. |
 | `SQ_PRIOR_STRENGTH` | `20` | Pseudo-sends of send-quality prior. |
 | `SQ_MIN` | `0.5` | Delete-heavy channels floor (secondary nudge, milder than conversion). |
 | `SQ_MAX` | `1.1` | Clean channels get a slight lift, tightly capped. |
+| `PRIOR_TTL` | `15 min` | Max age of the cached fleet prior before recompute. `0` = recompute every query (tests). |
+| `PRIOR_RATE_FALLBACK` | `0.03` | Used ONLY if the fleet aggregation returns zero sends (cold/empty collection). |
+| `SQ_PRIOR_RATE_FALLBACK` | `0.82` | Same, for survive-rate. |
 
-These live as named constants at the top of the shared logic (see "Structure"), so tuning is one
-edit and both collections agree.
+The two neutral points are self-calibrating (live), so they never need manual re-tuning. The fixed
+constants live at the top of the shared logic (see "Structure"), so tuning is one edit and both
+collections agree.
 
 ### Structure — keep it DRY across the two collections
 
 `active-channels.service.ts` and `channels.service.ts` currently duplicate the sort pipeline. To
-avoid the two drifting, extract the conversion `$lookup` + `sortScore` pipeline stages into a small
-shared helper (e.g. `buildConversionAwareSortStages()` in a shared util or on
-`ChannelIntelligenceReadService`, which already owns channelIntelligence reads). Both services call
-it. One definition, one place to tune, one place to test. Do **not** otherwise refactor these files.
+avoid the two drifting, extract into a small shared helper (e.g. on `ChannelIntelligenceReadService`,
+which already owns channelIntelligence reads):
+- `getFleetPrior()` — returns `{ PRIOR_RATE, SQ_PRIOR_RATE }`, computed via the `$group` above and
+  cached in-memory for `PRIOR_TTL`. The single owner of the live-prior computation + cache.
+- `buildConversionAwareSortStages(prior)` — takes the prior and returns the `$lookup` + `$addFields
+  sortScore` stages. Pure function of its input (prior + constants), so it is trivially unit-testable.
+
+Both services call `getFleetPrior()` then `buildConversionAwareSortStages(prior)`. One definition,
+one place to tune, one place to test. Do **not** otherwise refactor these files.
 
 ### What is explicitly KEPT unchanged
 
@@ -204,11 +262,14 @@ and removes the `diversityWeight` factor. The `clientsJoined` schema field is le
 join loop (buffer or promote)
   → account has < channelTarget channels
   → fetchJoinableChannels(currentCount, remainingDailyBudget, alreadyJoinedIds)
-      → currentCount < 220 : ActiveChannelsService.getActiveChannels(...)
-      → else               : ChannelsService.getActiveChannels(...)
+      → getFleetPrior()  → cached ≤ PRIOR_TTL; else 1 $group over channelIntelligence   ← NEW
+                           yields live PRIOR_RATE, SQ_PRIOR_RATE (fallbacks if zero sends)
+      → currentCount < 220 : ActiveChannelsService.getActiveChannels(..., prior)
+      → else               : ChannelsService.getActiveChannels(..., prior)
           [$match quality+keyword gates]
           [$lookup channelIntelligence on channelId]   ← NEW
-          [$addFields sortScore = random × conversionWeight(shrunk) × sendQualityWeight]  ← CHANGED
+          [$addFields sortScore = random × conversionWeight(shrunk vs live PRIOR_RATE)
+                                         × sendQualityWeight(vs live SQ_PRIOR_RATE)]  ← CHANGED
           [$sort desc][$skip][$limit][$project]
           → getExcludedChannelIds (safety) removes blocked/error/high-delete   ← unchanged
   → queue the returned channels for joining (rate-limited, jittered)
@@ -222,8 +283,13 @@ join loop (buffer or promote)
   `getExcludedChannelIds`: if the conversion stage errors, fall back to random-only selection
   (no conversion/send-quality tilt) rather than returning zero channels. Never let the tilt
   starve the join pipeline.
-- **PRIOR_RATE mis-set to 0** → guarded: constant is a fixed non-zero literal; a unit test asserts
-  it is > 0 so the normalization can't divide by zero.
+- **Fleet-prior aggregation fails / returns zero sends (cold start, empty collection)** → fall back
+  to `PRIOR_RATE_FALLBACK` / `SQ_PRIOR_RATE_FALLBACK` (the measured literals). The prior computation
+  is guarded so a divide-by-zero is impossible (`totalAttempted > 0 ?` check), and a failed prior
+  fetch reuses the last cached value or the fallback — it never blocks the join query.
+- **PRIOR_RATE resolving to 0** → guarded twice: the live value is only used when `totalAttempted>0`
+  (so it's strictly positive), and the fallback is a fixed non-zero literal. A unit test asserts the
+  resolved `PRIOR_RATE` used for normalization is always > 0 so the division can't blow up.
 
 ## Testing
 
@@ -245,16 +311,26 @@ Unit tests (pure pipeline / formula, no live keys):
    toward SQ_MIN; ranks below a clean-survival channel.
 10. **reactionWeight removed** → a `reactRestricted:true` channel is no longer penalized in the sort
     (only conversion + send-quality + random apply).
+11. **Live fleet prior** → given a synthetic channelIntelligence set with known Σcredited/Σattempted,
+    the computed `PRIOR_RATE` equals the fleet ratio; the same channel's `conversionWeight` shifts
+    when the fleet prior shifts (proves the neutral point is live, not baked in).
+12. **Prior fallback on empty/zero fleet** → with an empty collection (or Σattempted=0), `PRIOR_RATE`
+    resolves to `PRIOR_RATE_FALLBACK` (0.03) and no divide-by-zero occurs; join query still returns.
+13. **Prior cache TTL** → with `PRIOR_TTL>0`, two queries within the window reuse one prior
+    computation (cache hit); `PRIOR_TTL=0` recomputes each query.
 
 Live validation (read-only, before canary): sample the ~2,101 currently-unexcluded dead channels →
-confirm low conversionWeight; sample the ~62% unknown pool → confirm ≈1.0.
+confirm low conversionWeight; sample the ~62% unknown pool → confirm ≈1.0; log the computed live
+`PRIOR_RATE`/`SQ_PRIOR_RATE` and confirm they match the measured fleet averages (~0.03 / ~0.82).
 
 ## Rollout / rollback
 
 - **Lowest-risk shape:** one aggregation `$lookup` + a changed `sortScore` expression, stateless.
 - **No migration, no backfill, no new field, no Redis, no deploy-order dependency** — explicitly
   unlike the prior (reverted) `conversionRateShrunk` design, which failed on index-name collisions
-  and cold-prior hard-fails. This design persists nothing, so none of those failure modes exist.
+  and cold-prior hard-fails. This design persists nothing (the only state is a 2-float in-memory
+  prior cache that rebuilds on restart), so none of those failure modes exist. The live prior is the
+  fix for the earlier design's cold-prior hard-fail: here a cold prior just falls back to a literal.
 - **Canary:** deploy to one client pool / one VM first; watch join distribution (are dead channels
   getting joined less?), fleet DM-per-send trend, and the `USER_BANNED_IN_CHANNEL` rate. Widen after
   it holds.
