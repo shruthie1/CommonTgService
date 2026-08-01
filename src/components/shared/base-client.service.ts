@@ -1714,10 +1714,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     joinCount++;
                     this.incrementDailyJoinCount(mobile);
 
-                    // Track join for diversity scoring
-                    if (currentChannel.channelId) {
-                        this.activeChannelsService.incrementClientsJoined(currentChannel.channelId).catch(() => {});
-                    }
+                    // clientsJoined counter removed (spec 2026-08-01): it was a monotonic,
+                    // never-decremented signal driving the old diversity sort, which is now
+                    // pure random spread. No join-selection code reads clientsJoined anymore.
 
                     // Organic interleaving every 2-3 joins
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
