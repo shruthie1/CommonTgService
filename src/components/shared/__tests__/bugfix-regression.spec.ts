@@ -325,8 +325,8 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
     // 4b. Stuck-account detection (REAL: surfaces in diagnoseWarmupPipeline skip reasons)
     // --------------------------------------------------------------------
     describe('Stuck-account detection (real pipeline)', () => {
-        test('a GROWING account past 45d with failures is flagged stuck in the simulation', async () => {
-            const longAgo = new Date(Date.now() - 60 * ONE_DAY_MS);
+        test('a GROWING account past 60d with failures is flagged stuck in the simulation', async () => {
+            const longAgo = new Date(Date.now() - 65 * ONE_DAY_MS); // past STUCK_WARMUP_DAYS(60)
             await BufferClientModel.create(baseClient({
                 mobile: '16660045001', warmupPhase: WarmupPhase.GROWING, enrolledAt: longAgo,
                 failedUpdateAttempts: 2, lastUpdateFailure: longAgo, channels: 120,
@@ -343,7 +343,7 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
             expect(report.simulation.mutationsUsed).toBe(0);
         });
 
-        test('READY account past 45d is terminal and NOT counted as eligible churn', async () => {
+        test('READY account past 60d is terminal and NOT counted as eligible churn', async () => {
             const longAgo = new Date(Date.now() - 90 * ONE_DAY_MS);
             await BufferClientModel.create(baseClient({
                 mobile: '16660045002', warmupPhase: WarmupPhase.READY, enrolledAt: longAgo, channels: 220,

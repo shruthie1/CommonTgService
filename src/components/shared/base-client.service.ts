@@ -234,7 +234,46 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly MAX_FAILED_ATTEMPTS = 3;
     protected readonly FAILURE_RESET_DAYS = 7;
     protected readonly FAILURE_RETRY_BACKOFF_HOURS = 24;
-    protected readonly MAX_UPDATES_PER_CYCLE = 20;
+    // Self-healing warmup throughput — ANTI-DETECTION FIRST. Extra throughput comes from
+    // running MORE OFTEN (spread + jittered), NOT from bigger per-run batches: a dense cluster
+    // of sensitive actions on one IP in one window is itself a fingerprint, even though each
+    // account only ever does ONE action per cycle (individually rate-limited + cooldown-gated).
+    // So the per-run cap stays LOW (ceiling 20 ≈ the original conservative value); the cap is
+    // still self-healing within [MIN, MAX] so it never stalls, but it can never burst.
+    // getEffectiveUpdatesCap(pending) = clamp(ceil(pending / (TARGET_DRAIN_DAYS × RUNS_PER_DAY)), MIN, MAX).
+    protected readonly MAX_UPDATES_PER_CYCLE = 20;          // per-run CEILING (unchanged from original — density stays low)
+    protected readonly MIN_UPDATES_PER_CYCLE = 8;           // floor — guarantees baseline throughput even on a light backlog
+    protected readonly WARMUP_TARGET_DRAIN_DAYS = 8;        // SLA: clear the pending backlog within ~8d (< STUCK_WARMUP_DAYS)
+    protected readonly WARMUP_RUNS_PER_DAY = 4;             // scheduler fires 4× daily (jittered) — throughput via frequency, not density
+
+    // Separate, tighter per-run cap for HIGH-RISK Telegram actions (2FA set, revoking other
+    // sessions, username changes). Even when the overall cap is at its ceiling, no single run
+    // performs more than this many sensitive actions on one IP — keeps risky-action density flat
+    // and low regardless of backlog. Lightweight actions (privacy, photo delete/upload, organic)
+    // are NOT limited by this — they fall under the normal cap only.
+    protected readonly MAX_SENSITIVE_ACTIONS_PER_CYCLE = 5;
+    protected static readonly SENSITIVE_WARMUP_ACTIONS: ReadonlySet<string> = new Set([
+        'set_2fa', 'remove_other_auths', 'update_username',
+    ]);
+
+    /**
+     * Self-healing per-run mutation cap. Sizes the cap to the LIVE pending backlog so the pool
+     * drains toward WARMUP_TARGET_DRAIN_DAYS regardless of how the backlog changes, clamped to
+     * [MIN_UPDATES_PER_CYCLE, MAX_UPDATES_PER_CYCLE]. Pure function of its input — no I/O.
+     *
+     * @param pendingMutationCount eligible accounts wanting a slot-consuming mutation this run
+     *        (the non-session_rotated set the loop already built).
+     */
+    protected getEffectiveUpdatesCap(pendingMutationCount: number): number {
+        const pending = Math.max(0, Math.floor(pendingMutationCount || 0));
+        const perRunToHitSla = Math.ceil(pending / (this.WARMUP_TARGET_DRAIN_DAYS * this.WARMUP_RUNS_PER_DAY));
+        return Math.max(this.MIN_UPDATES_PER_CYCLE, Math.min(this.MAX_UPDATES_PER_CYCLE, perRunToHitSla));
+    }
+
+    /** True if a warmup action is high-risk (sensitive) and should count against the sensitive sub-cap. */
+    protected isSensitiveWarmupAction(action: string | undefined): boolean {
+        return !!action && BaseClientService.SENSITIVE_WARMUP_ACTIONS.has(action);
+    }
     // Session rotation is deliberately paced. A normal warmup pass never handles
     // READY accounts; the dedicated scheduler handles at most one terminal READY
     // outcome per run to avoid bursts of sensitive Telegram session activity.
@@ -246,8 +285,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     // release path.
     protected readonly MAINTENANCE_LOCK_TTL_MS = 30 * 60 * 1000;
     protected activeMaintenanceRun: { name: string; startedAt: number } | null = null;
-    /** A non-terminal account still warming past this many days is stuck and gets retired. */
-    protected readonly STUCK_WARMUP_DAYS = 45;
+    /** A non-terminal account still warming past this many days is stuck and gets retired.
+     *  Raised 45→60 so accounts are not retired mid-pipeline while the self-healing cap drains
+     *  a large backlog (the drain SLA, WARMUP_TARGET_DRAIN_DAYS, stays well under this floor). */
+    protected readonly STUCK_WARMUP_DAYS = 60;
     protected dailyJoinCounts: Map<string, number> = new Map();
     protected dailyJoinDate: string = '';
     /** Tracks per-mobile transient join failures in the current loop. Reset on each refill. */

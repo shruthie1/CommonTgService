@@ -1062,16 +1062,29 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
         promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
 
+        // Self-healing cap: size this run's mutation budget to the live pending backlog (see
+        // getEffectiveUpdatesCap). Promote's backlog is larger, so this lifts the cap toward the
+        // ceiling automatically while it catches up, then relaxes as the pool drains.
+        const effectiveCap = this.getEffectiveUpdatesCap(promoteClientsToProcess.length);
+        let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
+        this.logger.log(`Promote warmup run: ${promoteClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}`);
+
         for (const { promoteClient, client } of promoteClientsToProcess) {
-            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
+            if (totalUpdates >= effectiveCap) break;
             const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
                 const healthCheck = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
                 if (!healthCheck.passed) continue;
             }
+            // Anti-detection sub-cap: keep high-risk actions sparse per run (see buffer equivalent).
+            const nextAction = getWarmupPhaseAction(promoteClient, now).action;
+            if (this.isSensitiveWarmupAction(nextAction) && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                continue;
+            }
             const processResult = await this.processClient(promoteClient, client);
             if (processResult.updateCount > 0) {
+                if (this.isSensitiveWarmupAction(processResult.updateSummary)) sensitiveUpdates++;
                 totalUpdates += processResult.updateCount;
                 updatedEntries.push(
                     `${client.clientId} | ${promoteClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,

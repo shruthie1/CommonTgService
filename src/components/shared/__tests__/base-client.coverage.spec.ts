@@ -173,6 +173,8 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         removeOtherAuths: (d: any, f: number) => (this as any).removeOtherAuths(d, f),
         performHealthCheck: (m: string, l: number, n: number) => (this as any).performHealthCheck(m, l, n),
         retireIfStuck: (d: any, n: number) => (this as any).retireIfStuck(d, n),
+        getEffectiveUpdatesCap: (n: number) => (this as any).getEffectiveUpdatesCap(n),
+        isSensitiveWarmupAction: (a: string | undefined) => (this as any).isSensitiveWarmupAction(a),
         deactivateClient: (m: string, r: string, o?: any) => (this as any).deactivateClient(m, r, o),
         processJoinChannelSequentially: () => (this as any).processJoinChannelSequentially(),
         processLeaveChannelSequentially: () => (this as any).processLeaveChannelSequentially(),
@@ -416,7 +418,8 @@ describe('retireIfStuck', () => {
         const doc: any = {
             mobile: '919990000020',
             warmupPhase: WarmupPhase.GROWING,
-            enrolledAt: new Date(now - 60 * ONE_DAY),
+            // Past STUCK_WARMUP_DAYS (60) — use 65d so it's clearly beyond the raised threshold.
+            enrolledAt: new Date(now - 65 * ONE_DAY),
             channels: 10,
             failedUpdateAttempts: 1,
         };
@@ -2656,5 +2659,71 @@ describe('non-Error error-text fallbacks', () => {
         const errSpy = jest.spyOn((service as any).logger, 'error').mockImplementation(() => {});
         await expect((service as any).safeUnregisterClient('m1')).resolves.toBeUndefined();
         expect(errSpy).toHaveBeenCalled();
+    });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Self-healing warmup throughput: getEffectiveUpdatesCap + sensitive-action sub-cap
+// Defaults on TestBaseService: MIN=8, MAX=20, TARGET_DRAIN_DAYS=8, RUNS_PER_DAY=4 -> divisor 32
+// ════════════════════════════════════════════════════════════════════════════
+describe('getEffectiveUpdatesCap (self-healing per-run cap)', () => {
+    test('empty/zero backlog returns the floor (never zero — baseline throughput guaranteed)', () => {
+        const s = new TestBaseService();
+        expect(s.pub.getEffectiveUpdatesCap(0)).toBe(8);   // MIN
+        expect(s.pub.getEffectiveUpdatesCap(-5 as any)).toBe(8);
+        expect(s.pub.getEffectiveUpdatesCap(1)).toBe(8);   // ceil(1/32)=1 -> clamped up to MIN
+    });
+
+    test('small backlog stays at the floor (no burst on a light day)', () => {
+        const s = new TestBaseService();
+        // ceil(200/32)=7 -> clamped up to MIN 8
+        expect(s.pub.getEffectiveUpdatesCap(200)).toBe(8);
+        // ceil(256/32)=8 -> exactly MIN
+        expect(s.pub.getEffectiveUpdatesCap(256)).toBe(8);
+    });
+
+    test('grows with backlog between floor and ceiling (self-healing middle band)', () => {
+        const s = new TestBaseService();
+        // ceil(320/32)=10
+        expect(s.pub.getEffectiveUpdatesCap(320)).toBe(10);
+        // ceil(480/32)=15
+        expect(s.pub.getEffectiveUpdatesCap(480)).toBe(15);
+    });
+
+    test('large backlog is capped at the ceiling (never bursts — anti-detection)', () => {
+        const s = new TestBaseService();
+        // ceil(640/32)=20 -> exactly MAX
+        expect(s.pub.getEffectiveUpdatesCap(640)).toBe(20);
+        // ceil(5000/32)=157 -> clamped down to MAX 20
+        expect(s.pub.getEffectiveUpdatesCap(5000)).toBe(20);
+        expect(s.pub.getEffectiveUpdatesCap(100000)).toBe(20);
+    });
+
+    test('is monotonic non-decreasing in backlog and always within [MIN, MAX]', () => {
+        const s = new TestBaseService();
+        let prev = 0;
+        for (let n = 0; n <= 2000; n += 37) {
+            const cap = s.pub.getEffectiveUpdatesCap(n);
+            expect(cap).toBeGreaterThanOrEqual(8);
+            expect(cap).toBeLessThanOrEqual(20);
+            expect(cap).toBeGreaterThanOrEqual(prev);
+            prev = cap;
+        }
+    });
+});
+
+describe('isSensitiveWarmupAction (sub-cap classifier)', () => {
+    test('classifies the high-risk actions as sensitive', () => {
+        const s = new TestBaseService();
+        expect(s.pub.isSensitiveWarmupAction('set_2fa')).toBe(true);
+        expect(s.pub.isSensitiveWarmupAction('remove_other_auths')).toBe(true);
+        expect(s.pub.isSensitiveWarmupAction('update_username')).toBe(true);
+    });
+
+    test('classifies lightweight actions as NOT sensitive', () => {
+        const s = new TestBaseService();
+        for (const a of ['set_privacy', 'delete_photos', 'update_name_bio', 'upload_photo', 'organic_only', 'wait', 'join_channels', 'advance_to_ready', undefined]) {
+            expect(s.pub.isSensitiveWarmupAction(a as any)).toBe(false);
+        }
     });
 });

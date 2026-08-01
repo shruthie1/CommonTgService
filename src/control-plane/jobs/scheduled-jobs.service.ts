@@ -82,7 +82,11 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
   private registerCmsJobs(): void {
     if (!this.config.enabled('CMS_SCHEDULER')) return;
 
-    this.register('cms-buffer-check', '25 2 * * *', () =>
+    // Run buffer warmup advancement 4× daily (was once) at spread, non-round IST times so no
+    // fixed-interval fingerprint and each run stays a SMALL batch. Throughput comes from
+    // frequency, not per-run density (anti-detection); the self-healing cap keeps each run small
+    // and the sensitive sub-cap keeps high-risk actions sparse per run.
+    this.register('cms-buffer-check', '17 1,7,13,19 * * *', () =>
       this.appService.checkBufferClients(),
     );
     // CMS owns buffer READY rotation. Run at most one candidate each hour;
@@ -113,7 +117,11 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
   private registerUmsJobs(): void {
     if (!this.config.enabled('UMS_SCHEDULER')) return;
 
-    this.register('maintenance-promote-client-check', '35 16 * * *', () =>
+    // Run promote warmup advancement 4× daily (was once) at spread IST times OFFSET from the
+    // buffer-check hours so CMS and UMS never do sensitive Telegram work simultaneously. Same
+    // anti-detection posture: small self-healing per-run batch + sensitive sub-cap; frequency,
+    // not density, provides the throughput to drain the (larger) promote backlog.
+    this.register('maintenance-promote-client-check', '43 4,10,16,22 * * *', () =>
       this.maintenance.checkPromoteClients(),
     );
     // Keep promote joins independently paced and owned by UMS.  It is

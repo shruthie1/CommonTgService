@@ -718,7 +718,7 @@ describe('BufferClientService coverage', () => {
         });
 
         it('flags stuck and failed-backoff accounts in the simulation', async () => {
-            const longAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+            const longAgo = new Date(Date.now() - 65 * 24 * 60 * 60 * 1000); // past STUCK_WARMUP_DAYS(60)
             await service.create(makeBufferClientData({
                 mobile: '15551710200', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 2,
@@ -1796,7 +1796,7 @@ describe('BufferClientService coverage', () => {
                 { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
             );
             // (c) a stuck + failed-cap doc exercises isHealthyBufferClientForCap false branches (158-171)
-            const longAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+            const longAgo = new Date(Date.now() - 65 * 24 * 60 * 60 * 1000); // past STUCK_WARMUP_DAYS(60)
             await service.create(makeBufferClientData({
                 mobile: '15554300003', status: 'active', clientId: 'test-client-1',
                 warmupPhase: 'settling', enrolledAt: longAgo, failedUpdateAttempts: 5,

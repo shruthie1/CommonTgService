@@ -688,7 +688,8 @@ describe('PromoteClientService coverage', () => {
         });
 
         it('rejects accounts stuck in warmup past STUCK_WARMUP_DAYS', () => {
-            const enrolledAt = new Date(now - 60 * 24 * 60 * 60 * 1000);
+            // STUCK_WARMUP_DAYS raised to 60; use 65d so it's clearly past the threshold.
+            const enrolledAt = new Date(now - 65 * 24 * 60 * 60 * 1000);
             expect((service as any).isHealthyPromoteClientForCap(
                 { warmupPhase: WarmupPhase.GROWING, enrolledAt }, now)).toBe(false);
         });
@@ -1173,7 +1174,10 @@ describe('PromoteClientService coverage', () => {
             for (let i = 0; i < 3; i++) {
                 await service.create(makePromoteClientData({ mobile: `1555421${String(i).padStart(4, '0')}`, status: 'active', clientId: 'test-client-1', warmupPhase: 'enrolled' }));
             }
+            // The effective per-run cap is self-healing (getEffectiveUpdatesCap clamps to
+            // [MIN,MAX]). To force a cap of exactly 1 for this test, pin BOTH bounds to 1.
             (service as any).MAX_UPDATES_PER_CYCLE = 1;
+            (service as any).MIN_UPDATES_PER_CYCLE = 1;
             const processSpy = jest.spyOn(service as any, 'processClient').mockResolvedValue({ updateCount: 5, updateSummary: 's' });
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
@@ -1181,6 +1185,7 @@ describe('PromoteClientService coverage', () => {
             await service.checkPromoteClients();
             expect(processSpy).toHaveBeenCalledTimes(1);
             (service as any).MAX_UPDATES_PER_CYCLE = 20;
+            (service as any).MIN_UPDATES_PER_CYCLE = 8;
         });
     });
 
@@ -1271,13 +1276,13 @@ describe('PromoteClientService coverage', () => {
             // stuck account: growing phase, enrolled 60 days ago → not healthy for cap (919 true path)
             await service.create(makePromoteClientData({
                 mobile: '15553959999', status: 'active', clientId: 'cap2-client', inUse: true,
-                warmupPhase: 'growing', enrolledAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+                warmupPhase: 'growing', enrolledAt: new Date(Date.now() - 65 * 24 * 60 * 60 * 1000),
             }));
             await PromoteClientModel.collection.updateOne(
                 { mobile: '15553959999' },
                 { $set: {
                     warmupPhase: WarmupPhase.GROWING,
-                    enrolledAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+                    enrolledAt: new Date(Date.now() - 65 * 24 * 60 * 60 * 1000),
                 } },
             );
             // need 5, remaining capacity = 30-29 = 1 → cappedNeeded(1) < totalNeeded(5) → capping reason (1035)

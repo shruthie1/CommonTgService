@@ -151,11 +151,11 @@ describe('processClient — all exit paths', () => {
         expect(result.updateCount).toBe(0);
     });
 
-    test('EXIT 3: stuck account detected (50 days in settling)', async () => {
+    test('EXIT 3: stuck account detected (65 days in settling)', async () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
-            enrolledAt: daysAgo(50, mockNow),
+            enrolledAt: daysAgo(65, mockNow),
             failedUpdateAttempts: 3,
             lastUpdateFailure: daysAgo(10, mockNow),
         });
@@ -171,7 +171,7 @@ describe('processClient — all exit paths', () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         const doc = makeDoc({
             warmupPhase: WarmupPhase.GROWING,
-            enrolledAt: daysAgo(50, mockNow),
+            enrolledAt: daysAgo(65, mockNow),
             failedUpdateAttempts: 0, // can't-join-channels case: no warmup failures recorded
         });
         await service.processClient(doc, { clientId: 'c1' } as Client);
@@ -182,12 +182,12 @@ describe('processClient — all exit paths', () => {
         );
     });
 
-    test('EXIT 3b: 44 days in settling — NOT zombie (below 45d threshold)', async () => {
+    test('EXIT 3b: 55 days in settling — NOT zombie (below 60d threshold)', async () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         jest.spyOn(service as any, 'set2fa').mockResolvedValue(1);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
-            enrolledAt: daysAgo(44, mockNow),
+            enrolledAt: daysAgo(55, mockNow),
             privacyUpdatedAt: daysAgo(40, mockNow),
             failedUpdateAttempts: 3,
             lastUpdateFailure: daysAgo(10, mockNow),
@@ -196,12 +196,12 @@ describe('processClient — all exit paths', () => {
         expect(updateStatusSpy).not.toHaveBeenCalled();
     });
 
-    test('EXIT 3c: 50 days but phase=READY → NOT zombie (terminal phase)', async () => {
+    test('EXIT 3c: 65 days but phase=READY → NOT zombie (terminal phase)', async () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
         jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.READY,
-            enrolledAt: daysAgo(50, mockNow),
+            enrolledAt: daysAgo(65, mockNow),
             failedUpdateAttempts: 3,
             lastUpdateFailure: daysAgo(10, mockNow),
             privacyUpdatedAt: daysAgo(45, mockNow),

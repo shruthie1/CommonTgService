@@ -1622,8 +1622,8 @@ describe('Service flow reliability', () => {
     // ======= STUCK SCENARIO TESTS =======
     // These test processClient end-to-end for every scenario that could cause an account to get stuck.
 
-    describe('Stuck scenario: stuck detection at 45 days', () => {
-        test('account in settling for 50 days with 3+ failures → marks inactive', async () => {
+    describe('Stuck scenario: stuck detection at 60 days', () => {
+        test('account in settling for 65 days with 3+ failures → marks inactive', async () => {
             const service = new TestBaseService();
             const mockNow = new Date('2026-04-11T12:00:00.000Z').getTime();
             jest.spyOn(Date, 'now').mockReturnValue(mockNow);
@@ -1632,9 +1632,9 @@ describe('Service flow reliability', () => {
             const doc = {
                 mobile: '919990007771',
                 warmupPhase: WarmupPhase.SETTLING,
-                enrolledAt: new Date('2026-02-20T12:00:00.000Z'), // 50 days ago
-                createdAt: new Date('2026-02-20T12:00:00.000Z'),
-                privacyUpdatedAt: new Date('2026-02-22T12:00:00.000Z'),
+                enrolledAt: new Date('2026-02-05T12:00:00.000Z'), // 65 days ago (past STUCK_WARMUP_DAYS=60)
+                createdAt: new Date('2026-02-05T12:00:00.000Z'),
+                privacyUpdatedAt: new Date('2026-02-07T12:00:00.000Z'),
                 failedUpdateAttempts: 3,
                 lastUpdateFailure: new Date('2026-04-03T00:00:00.000Z'), // 8+ days ago → clearly triggers reset
                 lastUpdateAttempt: null,

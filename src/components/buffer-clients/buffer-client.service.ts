@@ -1180,12 +1180,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         wouldProcess.sort((a, b) => b.priority - a.priority);
 
-        // Simulate processing loop with new MAX_UPDATES_PER_CYCLE
+        // Simulate processing loop with the SELF-HEALING effective cap (sized to the live
+        // eligible backlog), matching what the real run does.
+        const simEffectiveCap = this.getEffectiveUpdatesCap(wouldProcess.length);
         let simUpdates = 0;
         const simProcessed: WarmupSimulationEntry[] = [];
         const simSkipped: WarmupSimulationSkip[] = [];
         for (const entry of wouldProcess) {
-            if (simUpdates >= this.MAX_UPDATES_PER_CYCLE) {
+            if (simUpdates >= simEffectiveCap) {
                 simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
                 continue;
             }
@@ -1216,9 +1218,13 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             actionCounts,
             skippedReasons,
             maxUpdatesPerCycle: this.MAX_UPDATES_PER_CYCLE,
+            effectiveUpdatesCap: simEffectiveCap,
+            capMin: this.MIN_UPDATES_PER_CYCLE,
+            targetDrainDays: this.WARMUP_TARGET_DRAIN_DAYS,
+            runsPerDay: this.WARMUP_RUNS_PER_DAY,
             eligibleToProcess: wouldProcess.length,
             simulation: {
-                totalMutationSlots: this.MAX_UPDATES_PER_CYCLE,
+                totalMutationSlots: simEffectiveCap,
                 mutationsUsed: simUpdates,
                 totalProcessed: simProcessed.length,
                 totalSkippedAfterSlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').length,
@@ -1419,18 +1425,32 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Sort by priority (highest first)
         bufferClientsToProcess.sort((a, b) => b.priority - a.priority);
 
+        // Self-healing cap: size this run's mutation budget to the live pending backlog so the
+        // pool drains toward the target SLA — grows when starved, shrinks when caught up.
+        const effectiveCap = this.getEffectiveUpdatesCap(bufferClientsToProcess.length);
+        let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
+        this.logger.log(`Buffer warmup run: ${bufferClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}`);
+
         // Process in priority order using base class processClient
         for (const { bufferClient, client } of bufferClientsToProcess) {
-            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE) break;
+            if (totalUpdates >= effectiveCap) break;
             const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
                 const lastChecked = bufferClient.lastChecked ? new Date(bufferClient.lastChecked).getTime() : 0;
                 const healthCheck = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
                 if (!healthCheck.passed) continue;
             }
+            // Anti-detection sub-cap: keep high-risk actions (2FA/remove_auths/username) sparse per
+            // run. If this account's next action is sensitive and we've hit the sub-cap, defer it to
+            // a later run (it stays high-priority) rather than clustering risky actions on one IP.
+            const nextAction = getWarmupPhaseAction(bufferClient, now).action;
+            if (this.isSensitiveWarmupAction(nextAction) && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                continue;
+            }
             const processResult = await this.processClient(bufferClient, client);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
+                if (this.isSensitiveWarmupAction(processResult.updateSummary)) sensitiveUpdates++;
                 updatedEntries.push(
                     `${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,
                 );
