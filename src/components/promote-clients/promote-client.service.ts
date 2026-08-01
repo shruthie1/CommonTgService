@@ -559,6 +559,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 const client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
                 const channels = await channelInfo(client.client, true);
                 await this.update(doc.mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length)) continue;
 
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
@@ -592,6 +593,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
 
         return added;
+    }
+
+    private isTerminalOperationalAfterRefresh(doc: Pick<PromoteClientDocument, 'warmupPhase'>, channels: number): boolean {
+        const phase = doc.warmupPhase;
+        return (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED)
+            && channels >= (this.config.operationalChannelThreshold ?? 230);
     }
 
     private async fetchJoinableChannels(currentChannels: number, limit: number, excludedIds: string[]): Promise<(Channel | ActiveChannel)[]> {
@@ -835,6 +842,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     const channels = await channelInfo(client.client, true);
                     await sleep(5000 + Math.random() * 3000);
                     await this.update(mobile, { channels: channels.ids.length });
+                    if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
+                        successCount++;
+                        continue;
+                    }
 
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = channels.ids;

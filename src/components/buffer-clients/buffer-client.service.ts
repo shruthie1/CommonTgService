@@ -823,6 +823,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
                 const channels = await channelInfo(client.client, true);
                 await this.update(doc.mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length)) continue;
 
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
@@ -856,6 +857,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         return added;
+    }
+
+    private isTerminalOperationalAfterRefresh(doc: Pick<BufferClientDocument, 'warmupPhase'>, channels: number): boolean {
+        const phase = doc.warmupPhase;
+        return (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED)
+            && channels >= (this.config.operationalChannelThreshold ?? 200);
     }
 
     private async fetchJoinableChannels(currentChannels: number, limit: number, excludedIds: string[]): Promise<(Channel | ActiveChannel)[]> {
@@ -1592,6 +1599,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                 const channels = await channelInfo(client.client, true);
                 await this.update(mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
+                    successCount++;
+                    continue;
+                }
 
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = channels.ids;

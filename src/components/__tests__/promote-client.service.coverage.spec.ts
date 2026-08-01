@@ -291,6 +291,31 @@ describe('PromoteClientService coverage', () => {
             expect((service as any).joinChannelMap.has('15551500006')).toBe(false);
         });
 
+        it('recovers ready clients below the promote floor but skips stale terminal records that refresh above it', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551500014', channels: 229, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makePromoteClientData({ mobile: '15551500015', channels: 230, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makePromoteClientData({ mobile: '15551500016', channels: 50, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany(
+                { mobile: { $in: ['15551500014', '15551500015', '15551500016'] } },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            const idsBelowFloor = Array.from({ length: 229 }, (_, index) => `p${index}`);
+            const idsAtFloor = Array.from({ length: 230 }, (_, index) => `f${index}`);
+            const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo')
+                .mockResolvedValueOnce({ ids: idsBelowFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any)
+                .mockResolvedValueOnce({ ids: idsAtFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            channelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            expect(await service.refillJoinQueue('test-client-1')).toBe(1);
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500014', '15551500016']);
+            expect((service as any).joinChannelMap.has('15551500014')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551500015')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500016')).toBe(false);
+            expect(channelsService.getActiveChannels).toHaveBeenCalledTimes(1);
+        });
+
         it('queues a leave when too many unsendable channels', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500002', channels: 50, status: 'active', clientId: 'test-client-1' }));
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
@@ -300,6 +325,26 @@ describe('PromoteClientService coverage', () => {
             const added = await service.refillJoinQueue('test-client-1');
             expect(added).toBe(0);
             expect((service as any).leaveChannelMap.get('15551500002')).toEqual(['l1', 'l2']);
+        });
+
+        it('queues terminal recovery for leave cleanup when below-floor ready channels are unsendable', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551500017', channels: 229, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15551500017' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
+                ids: Array.from({ length: 229 }, (_, index) => `c${index}`),
+                canSendFalseCount: 12,
+                canSendFalseChats: ['leave-1', 'leave-2'],
+            } as any);
+
+            expect(await service.refillJoinQueue('test-client-1')).toBe(0);
+            expect((service as any).joinChannelMap.has('15551500017')).toBe(false);
+            expect((service as any).leaveChannelMap.get('15551500017')).toEqual(['leave-1', 'leave-2']);
         });
 
         it('deactivates on permanent error', async () => {
@@ -359,6 +404,30 @@ describe('PromoteClientService coverage', () => {
             expect(after!.inUse).toBe(false);
             expect(after!.message).toContain('SESSION_REVOKED');
             expect(usersService.expireAccount).toHaveBeenCalledWith('15551600003', expect.any(String));
+        });
+
+        it('sweeps below-floor ready promote clients but not ready clients already at the floor', async () => {
+            await service.create(makePromoteClientData({ mobile: '15551600011', channels: 229, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makePromoteClientData({ mobile: '15551600012', channels: 230, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateMany(
+                { mobile: { $in: ['15551600011', '15551600012'] } },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
+                ids: Array.from({ length: 229 }, (_, index) => `c${index}`),
+                canSendFalseCount: 0,
+                canSendFalseChats: [],
+            } as any);
+            channelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            const result = await service.joinchannelForPromoteClients(true);
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551600011']);
+            expect((service as any).joinChannelMap.has('15551600011')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551600012')).toBe(false);
+            expect(result).toContain('Initiated Joining channels for 1');
         });
     });
 

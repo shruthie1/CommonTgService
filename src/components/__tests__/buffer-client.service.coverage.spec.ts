@@ -513,6 +513,51 @@ describe('BufferClientService coverage', () => {
             expect((service as any).joinChannelMap.has('15551500006')).toBe(false);
         });
 
+        it('recovers ready clients below the floor but skips stale terminal records that refresh above it', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500014', channels: 199, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makeBufferClientData({ mobile: '15551500015', channels: 200, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makeBufferClientData({ mobile: '15551500016', channels: 50, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany(
+                { mobile: { $in: ['15551500014', '15551500015', '15551500016'] } },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            const idsBelowFloor = Array.from({ length: 199 }, (_, index) => `b${index}`);
+            const idsAtFloor = Array.from({ length: 200 }, (_, index) => `f${index}`);
+            const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo')
+                .mockResolvedValueOnce({ ids: idsBelowFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any)
+                .mockResolvedValueOnce({ ids: idsAtFloor, canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            expect(await service.refillJoinQueue('test-client-1')).toBe(1);
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500014', '15551500016']);
+            expect((service as any).joinChannelMap.has('15551500014')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551500015')).toBe(false);
+            expect((service as any).joinChannelMap.has('15551500016')).toBe(false);
+            expect(activeChannelsService.getActiveChannels).toHaveBeenCalledTimes(1);
+        });
+
+        it('queues terminal recovery for leave cleanup when below-floor ready channels are unsendable', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500017', channels: 199, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateOne(
+                { mobile: '15551500017' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
+                ids: Array.from({ length: 199 }, (_, index) => `c${index}`),
+                canSendFalseCount: 12,
+                canSendFalseChats: ['leave-1', 'leave-2'],
+            } as any);
+
+            expect(await service.refillJoinQueue('test-client-1')).toBe(0);
+            expect((service as any).joinChannelMap.has('15551500017')).toBe(false);
+            expect((service as any).leaveChannelMap.get('15551500017')).toEqual(['leave-1', 'leave-2']);
+        });
+
         it('queues terminal recovery before higher-channel warming accounts', async () => {
             await service.create(makeBufferClientData({ mobile: '15551500007', channels: 300, status: 'active', clientId: 'test-client-1' }));
             await service.create(makeBufferClientData({ mobile: '15551500008', channels: 190, status: 'active', clientId: 'test-client-1' }));
@@ -620,6 +665,30 @@ describe('BufferClientService coverage', () => {
             const result = await service.joinchannelForBufferClients(true);
             expect(highChannelSpy).toHaveBeenCalled();
             expect(result).toContain('Buffer Join queued');
+        });
+
+        it('sweeps below-floor ready buffer clients but not ready clients already at the floor', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551600011', channels: 199, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makeBufferClientData({ mobile: '15551600012', channels: 200, status: 'active', clientId: 'test-client-1' }));
+            await BufferClientModel.collection.updateMany(
+                { mobile: { $in: ['15551600011', '15551600012'] } },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({
+                ids: Array.from({ length: 199 }, (_, index) => `c${index}`),
+                canSendFalseCount: 0,
+                canSendFalseChats: [],
+            } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            const result = await service.joinchannelForBufferClients(true, 'test-client-1');
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551600011']);
+            expect((service as any).joinChannelMap.has('15551600011')).toBe(true);
+            expect((service as any).joinChannelMap.has('15551600012')).toBe(false);
+            expect(result).toContain('Buffer Join queued for: 1');
         });
     });
 
