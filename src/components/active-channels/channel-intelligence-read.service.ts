@@ -82,8 +82,48 @@ const EMPTY_OUTCOME_ANALYTICS: ChannelIntelligenceOutcomeAnalytics = {
 @Injectable()
 export class ChannelIntelligenceReadService {
   private readonly logger = new Logger(ChannelIntelligenceReadService.name);
+  private _priorCache: { value: FleetPrior; at: number } | null = null;
 
   constructor(@InjectModel('channelIntelligence') private readonly model: Model<any>) {}
+
+  /**
+   * Live fleet prior: PRIOR_RATE = Σcredited/Σattempted, SQ_PRIOR_RATE = Σsurvived/Σattempted,
+   * over the whole channelIntelligence collection. Cached in-memory for `ttlMs` (two floats only).
+   * Fails open to the last cached value, then to the measured literals. Never throws.
+   */
+  async getFleetPrior(ttlMs: number = PRIOR_TTL_MS): Promise<FleetPrior> {
+    const now = Date.now();
+    if (ttlMs > 0 && this._priorCache && now - this._priorCache.at < ttlMs) {
+      return this._priorCache.value;
+    }
+    try {
+      const [row] = await this.model
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalCredited: { $sum: { $ifNull: ['$DMs.credited', 0] } },
+              totalAttempted: { $sum: { $ifNull: ['$outcomes.attempted', 0] } },
+              totalSurvived: { $sum: { $ifNull: ['$outcomes.survived', 0] } },
+            },
+          },
+        ])
+        .exec();
+
+      const totalAttempted = row?.totalAttempted ?? 0;
+      const value: FleetPrior = {
+        PRIOR_RATE: totalAttempted > 0 ? (row.totalCredited ?? 0) / totalAttempted : PRIOR_RATE_FALLBACK,
+        SQ_PRIOR_RATE: totalAttempted > 0 ? (row.totalSurvived ?? 0) / totalAttempted : SQ_PRIOR_RATE_FALLBACK,
+      };
+      this._priorCache = { value, at: now };
+      return value;
+    } catch (error) {
+      this.logger.warn(
+        `getFleetPrior failed, using ${this._priorCache ? 'cached' : 'fallback'} prior: ${error instanceof Error ? error.message : error}`,
+      );
+      return this._priorCache?.value ?? { PRIOR_RATE: PRIOR_RATE_FALLBACK, SQ_PRIOR_RATE: SQ_PRIOR_RATE_FALLBACK };
+    }
+  }
 
   async getExcludedChannelIds(candidateIds: string[]): Promise<Set<string>> {
     const excluded = new Set<string>();

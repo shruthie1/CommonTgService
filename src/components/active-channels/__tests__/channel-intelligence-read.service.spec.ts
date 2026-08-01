@@ -261,3 +261,53 @@ describe('ChannelIntelligenceReadService.buildConversionAwareSortStages', () => 
     expect(maxDeletey).toBeLessThan(maxConv);
   });
 });
+
+describe('ChannelIntelligenceReadService.getFleetPrior', () => {
+  it('computes live fleet prior from Σcredited/Σattempted and Σsurvived/Σattempted', async () => {
+    const docs = [
+      { outcomes: { attempted: 100, survived: 80 }, DMs: { credited: 5 } },
+      { outcomes: { attempted: 100, survived: 84 }, DMs: { credited: 1 } },
+    ]; // Σattempted=200, Σcredited=6 -> 0.03 ; Σsurvived=164 -> 0.82
+    const model = {
+      aggregate: () => ({ exec: async () => [{ totalCredited: 6, totalAttempted: 200, totalSurvived: 164 }] }),
+    } as any;
+    const svc = new ChannelIntelligenceReadService(model);
+    const prior = await svc.getFleetPrior(0);
+    expect(prior.PRIOR_RATE).toBeCloseTo(0.03, 5);
+    expect(prior.SQ_PRIOR_RATE).toBeCloseTo(0.82, 5);
+  });
+
+  it('falls back to literals when the fleet has zero sends', async () => {
+    const model = { aggregate: () => ({ exec: async () => [{ totalCredited: 0, totalAttempted: 0, totalSurvived: 0 }] }) } as any;
+    const svc = new ChannelIntelligenceReadService(model);
+    const prior = await svc.getFleetPrior(0);
+    expect(prior.PRIOR_RATE).toBe(0.03);
+    expect(prior.SQ_PRIOR_RATE).toBe(0.82);
+  });
+
+  it('fails open to fallback when the aggregation throws', async () => {
+    const model = { aggregate: () => ({ exec: async () => { throw new Error('boom'); } }) } as any;
+    const svc = new ChannelIntelligenceReadService(model);
+    const prior = await svc.getFleetPrior(0);
+    expect(prior.PRIOR_RATE).toBe(0.03);
+    expect(prior.SQ_PRIOR_RATE).toBe(0.82);
+  });
+
+  it('caches within TTL: a second call inside the window does not re-query', async () => {
+    const exec = jest.fn(async () => [{ totalCredited: 6, totalAttempted: 200, totalSurvived: 164 }]);
+    const model = { aggregate: () => ({ exec }) } as any;
+    const svc = new ChannelIntelligenceReadService(model);
+    await svc.getFleetPrior(60_000);
+    await svc.getFleetPrior(60_000);
+    expect(exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('ttl=0 recomputes every call', async () => {
+    const exec = jest.fn(async () => [{ totalCredited: 6, totalAttempted: 200, totalSurvived: 164 }]);
+    const model = { aggregate: () => ({ exec }) } as any;
+    const svc = new ChannelIntelligenceReadService(model);
+    await svc.getFleetPrior(0);
+    await svc.getFleetPrior(0);
+    expect(exec).toHaveBeenCalledTimes(2);
+  });
+});
