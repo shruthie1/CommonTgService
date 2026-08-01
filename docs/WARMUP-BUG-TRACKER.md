@@ -7,6 +7,40 @@ Severity: **CRIT** (account silently lost/stuck forever) · **HIGH** (stuck unti
 
 ---
 
+## ⚠️ POLICY CHANGE (2026-08-02) — age NEVER inactivates an account
+
+**This supersedes the age-based retirement described in BUG-2 and BUG-3 below.** Per operator
+decision, an account is inactivated **exclusively** on a **permanent Telegram failure**
+(`SESSION_REVOKED` / `AUTH_KEY_*` / `USER_DEACTIVATED` / `FROZEN_*` / ban). Elapsed warmup time
+never stalls, skips, or retires an account — a slow account is not a dead account.
+
+What changed (commits `081a1890`, `1bb5c0d3`, `e8636299`, `521e63ea`; deployed to cms/ums/ums-test):
+- **`retireIfStuck` REMOVED** → replaced by `logIfLongWarming` (observability-only; never touches
+  status). `STUCK_WARMUP_DAYS` → `LONG_WARMING_ALERT_DAYS` (advisory log threshold only).
+- **`[STUCK]` inactivation tag removed** from `classifyInactivationReason` (a `Stuck:` reason now
+  classifies as `[TRANSIENT]`). No code emits `Stuck:` reasons anymore.
+- **Age branch removed** from `isHealthyBufferClientForCap` / `isHealthyPromoteClientForCap` — age
+  is not a health/availability signal; only the failed-attempt cap disqualifies.
+- **`stuck_Nd` skip reason removed** from the diagnose simulation.
+- **Growing gate collapsed** into one rule: the channel target decays with time and stops gating
+  entirely past `GROWING_ADVANCE_DEADLINE_DAYS` (30 days-in-growing), so a join-starved / spam-limited
+  account advances to maturing with whatever channels it has — never stranded. (Replaced the
+  earlier relaxed-target + deep-stall-floor pair; removed the ch=0 special case.)
+- **Self-healing throughput:** per-run cap is now `getEffectiveUpdatesCap(pendingBacklog)` clamped
+  `[MIN 8, MAX 20]`; sensitive actions (2FA/remove-auths/username) capped separately at ≤5/run
+  (anti-detection); warmup checks run 4×/day at spread jittered IST times (throughput via frequency,
+  not per-run density).
+- **Terminal over-join guard** (`isTerminalOperationalAfterRefresh`): a READY/SESSION_ROTATED account
+  already at the operational floor (200 buffer / 230 promote) stops joining more channels.
+
+**DB repair (2026-08-02):** 5 buffer accounts wrongly inactivated by the old age-STUCK logic
+(350-360 channels, valid sessions, single-record) were reactivated. 0 promote were age-retired.
+
+> BUG-2 and BUG-3 below are retained for history but their `retireIfStuck` / `STUCK_WARMUP_DAYS`
+> mechanism is **no longer in the codebase** — see this section for the current behavior.
+
+---
+
 ## Fixed
 
 ### BUG-1 — `update_name_bio` infinite loop when profile already matches persona — CRIT
@@ -18,7 +52,7 @@ Severity: **CRIT** (account silently lost/stuck forever) · **HIGH** (stuck unti
 
 ---
 
-### BUG-2 — Zombie detection misses accounts stuck with zero `failedUpdateAttempts` — HIGH
+### BUG-2 — Zombie detection misses accounts stuck with zero `failedUpdateAttempts` — HIGH  ⚠️ SUPERSEDED 2026-08-02 (see top)
 - **Where:** `base-client.service.ts` `processClient`, the `if (failedAttempts > 0 && ...)` block that wrapped zombie detection.
 - **Cause:** Zombie detection only ran when `failedUpdateAttempts > 0`. But several stuck states never increment that counter:
   - GROWING accounts that can't join channels — join failures go to the in-memory `joinFailureCounts` map, never `failedUpdateAttempts`.
@@ -29,7 +63,7 @@ Severity: **CRIT** (account silently lost/stuck forever) · **HIGH** (stuck unti
 - **Test:** `bugfix-regression.spec.ts` → "Stuck-account detection (failure-independent)" (4 cases).
 - **Status:** ✅ Fixed, tsc clean, 21/21 regression tests pass.
 
-### BUG-3 — "stuck = 45 days" threshold duplicated as a magic number across 4 sites — MED (maintainability / drift)
+### BUG-3 — "stuck = 45 days" threshold duplicated as a magic number across 4 sites — MED (maintainability / drift)  ⚠️ SUPERSEDED 2026-08-02 (see top)
 - **Where:** magic `45` in `buffer-client.service.ts:165` (`isHealthyBufferClientForCap`), `:1039` (diagnostics simulation), `promote-client.service.ts:135` (`isHealthyPromoteClientForCap`) — plus the `processClient` copy (fixed in BUG-2).
 - **Cause:** The same business threshold is hand-copied. Already proven drift-prone: the `processClient` copy was failures-gated and wrong (BUG-2); the `isHealthy*ForCap` copies gate differently again. A future change to "45" has to find every copy.
 - **Fix:** Replaced all magic `45` with the centralized `STUCK_WARMUP_DAYS` constant on the base class. Diagnostic label renamed `zombie_*` → `stuck_*` for consistency. One source of truth.
