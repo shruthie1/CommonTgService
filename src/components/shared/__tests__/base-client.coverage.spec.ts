@@ -2388,11 +2388,10 @@ describe('helper fallback branches', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('unknown'));
     });
 
-    test('getUsageStatistics reports zero average gap when fewer than two used accounts', async () => {
+    test('getUsageStatistics reports zero average gap when no accounts were used', async () => {
         const countDocuments = jest.fn()
             .mockResolvedValueOnce(1).mockResolvedValueOnce(1).mockResolvedValueOnce(0).mockResolvedValueOnce(0);
-        // single used doc -> gapCount stays 0 -> averageUsageGap branch false (line 2415)
-        const find = jest.fn(() => ({ exec: jest.fn(async () => [{ lastUsed: new Date() }]) }));
+        const find = jest.fn(() => ({ exec: jest.fn(async () => [{ lastUsed: null }]) }));
         const service = new TestBaseService({ countDocuments, find });
         const stats = await service.getUsageStatistics('client-1');
         expect(stats.averageUsageGap).toBe(0);
