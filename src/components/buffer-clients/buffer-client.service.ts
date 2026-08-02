@@ -98,15 +98,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
     private readyRotationInProgress = false;
 
-    /** @deprecated Test compatibility alias for the single shared maintenance lock. */
+    /** @deprecated Test compatibility alias: now reflects the warmup-check reentrancy flag
+     *  (the global maintenance lock was removed). >0 means a warmup check is in progress. */
     private get checkingBufferClientsSince(): number {
-        return this.activeMaintenanceRun?.startedAt || 0;
+        return this.isWarmupCheckProcessing ? 1 : 0;
     }
 
     private set checkingBufferClientsSince(value: number) {
-        this.activeMaintenanceRun = value > 0
-            ? { name: 'legacy-buffer-test-lock', startedAt: value }
-            : null;
+        this.isWarmupCheckProcessing = value > 0;
     }
 
     private promoteClientService: PromoteClientService;
@@ -1240,12 +1239,16 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: Check & process buffer clients ----
 
     async checkBufferClients() {
-        if (!this.beginMaintenanceRun('checkBufferClients')) return;
-        if (this.telegramService.hasActiveClientSetup()) {
-            this.logger.warn('Ignored active check buffer channels as active client setup exists');
-            this.endMaintenanceRun();
+        // Self-reentrancy only (no global lock — warmup may run alongside join/leave).
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Skipping checkBufferClients: a warmup check is already running');
             return;
         }
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ignored active check buffer channels as active client setup exists');
+            return;
+        }
+        this.isWarmupCheckProcessing = true;
         try {
             await this._checkBufferClientsInternal();
         } catch (error) {
@@ -1253,7 +1256,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.error(`checkBufferClients crashed: ${errMsg}`);
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkBufferClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
-            this.endMaintenanceRun();
+            this.isWarmupCheckProcessing = false;
         }
     }
 
@@ -1271,8 +1274,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.warn('Ready buffer rotation skipped: active client setup exists');
             return false;
         }
-        if (this.isMaintenanceRunActive() && !this.isJoinOrLeaveMaintenanceRun()) {
-            this.logger.warn('Ready buffer rotation skipped: non-join maintenance is active');
+        // Skip rotation while a warmup check is editing account state — rotating a session
+        // mid-warmup-edit on the same account is the one same-session concern worth avoiding.
+        // (Join/leave may overlap rotation: terminal phases are excluded from join queries.)
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Ready buffer rotation skipped: warmup check is active');
             return false;
         }
 
@@ -1554,9 +1560,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        if (!this.beginMaintenanceRun('prepareBufferJoinChannels')) {
-            return 'Warmup maintenance active, skipped';
+        // Dedicated prepare-join reentrancy guard (replaces the old global lock): two concurrent
+        // prepare sweeps (cron + API/manual) must not overlap.
+        if (this.isPrepareJoinChannelsProcessing) {
+            return 'Join-channel prepare already running, skipped';
         }
+        this.isPrepareJoinChannelsProcessing = true;
 
         this.logger.log('Starting join channel process for buffer clients');
         try {
@@ -1644,7 +1653,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
             return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
         } finally {
-            this.endMaintenanceRun();
+            this.isPrepareJoinChannelsProcessing = false;
         }
     }
 

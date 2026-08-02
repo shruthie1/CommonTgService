@@ -111,12 +111,21 @@ describe('withTimeout', () => {
 
   test('rejects when the signal aborts during execution', async () => {
     const controller = new AbortController();
+    let taskTimer: NodeJS.Timeout | undefined;
+    let abortTimer: NodeJS.Timeout | undefined;
     const promise = withTimeout(
-      () => new Promise((res) => setTimeout(() => res('late'), 1000)),
+      () => new Promise((res) => {
+        taskTimer = setTimeout(() => res('late'), 1000);
+      }),
       { cancelSignal: controller.signal, timeout: 5000, maxRetries: 1 },
     );
-    setTimeout(() => controller.abort(), 5);
-    await expect(promise).rejects.toThrow('Operation cancelled');
+    abortTimer = setTimeout(() => controller.abort(), 5);
+    try {
+      await expect(promise).rejects.toThrow('Operation cancelled');
+    } finally {
+      if (taskTimer) clearTimeout(taskTimer);
+      if (abortTimer) clearTimeout(abortTimer);
+    }
   });
 
   test('invokes onTimeout callback before final rejection', async () => {

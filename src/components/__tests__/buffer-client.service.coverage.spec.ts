@@ -611,6 +611,16 @@ describe('BufferClientService coverage', () => {
             expect(await service.joinchannelForBufferClients()).toContain('skipping');
         });
 
+        it('does NOT double-prepare: a second concurrent prepare is skipped (dedicated prepare flag)', async () => {
+            telegramService.hasActiveClientSetup.mockReturnValue(false);
+            (service as any).isPrepareJoinChannelsProcessing = true; // simulate a prepare already in flight
+            const refresh = jest.spyOn(service as any, 'prepareJoinChannelRefresh');
+            const res = await service.joinchannelForBufferClients(true, 'test-client-1');
+            expect(res).toContain('already running');
+            expect(refresh).not.toHaveBeenCalled(); // never entered the prepare body
+            (service as any).isPrepareJoinChannelsProcessing = false;
+        });
+
         it('queues join + leave sets based on channel info', async () => {
             await service.create(makeBufferClientData({ mobile: '15551600001', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makeBufferClientData({ mobile: '15551600002', channels: 20, status: 'active', clientId: 'test-client-1' }));
@@ -870,6 +880,34 @@ describe('BufferClientService coverage', () => {
             (service as any).checkingBufferClientsSince = 0;
         });
 
+        // ─── lock-removal refactor: dedicated reentrancy flags (no global maintenance lock) ───
+        it('a second checkBufferClients is skipped while one is already running (self-reentrancy)', async () => {
+            (service as any).isWarmupCheckProcessing = true;
+            const internal = jest.spyOn(service as any, '_checkBufferClientsInternal').mockResolvedValue(undefined);
+            await service.checkBufferClients();
+            expect(internal).not.toHaveBeenCalled(); // did not enter — a check is already running
+            (service as any).isWarmupCheckProcessing = false;
+        });
+
+        it('clears isWarmupCheckProcessing after a normal run AND after a crash', async () => {
+            // normal
+            jest.spyOn(service as any, '_checkBufferClientsInternal').mockResolvedValueOnce(undefined);
+            await service.checkBufferClients();
+            expect((service as any).isWarmupCheckProcessing).toBe(false);
+            // crash
+            jest.spyOn(service as any, '_checkBufferClientsInternal').mockRejectedValueOnce(new Error('boom'));
+            await service.checkBufferClients();
+            expect((service as any).isWarmupCheckProcessing).toBe(false); // finally still resets it
+        });
+
+        it('checkBufferClients runs even while a channel JOIN is in progress (no global lock)', async () => {
+            (service as any).isJoinChannelProcessing = true;
+            const internal = jest.spyOn(service as any, '_checkBufferClientsInternal').mockResolvedValue(undefined);
+            await service.checkBufferClients();
+            expect(internal).toHaveBeenCalled(); // join no longer blocks warmup
+            (service as any).isJoinChannelProcessing = false;
+        });
+
         it('skips when active client setup exists without mutating any client', async () => {
             await service.create(makeBufferClientData({
                 mobile: '15551800060', status: 'active', clientId: 'test-client-1', warmupPhase: 'enrolled',
@@ -964,7 +1002,9 @@ describe('BufferClientService coverage', () => {
                 { mobile: '15551800105' },
                 { $set: { warmupPhase: WarmupPhase.READY } },
             );
-            (service as any).activeMaintenanceRun = { name: 'processJoinChannelInterval', startedAt: Date.now() };
+            // Ready-rotation must proceed even while a join sweep is running (join no longer
+            // blocks rotation — the global lock was removed; only an active warmup check blocks it).
+            (service as any).isJoinChannelProcessing = true;
 
             jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
                 await service.update(mobile, {
@@ -977,7 +1017,15 @@ describe('BufferClientService coverage', () => {
             await service.rotateReadyBufferClients();
 
             expect((await service.findOne('15551800105'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
-            (service as any).activeMaintenanceRun = null;
+            (service as any).isJoinChannelProcessing = false;
+        });
+
+        it('ready rotation is SKIPPED while a warmup check is active (same-session safety kept)', async () => {
+            const rotate = jest.spyOn(service, 'rotateSession').mockResolvedValue(true);
+            (service as any).isWarmupCheckProcessing = true;
+            await service.rotateReadyBufferClients();
+            expect(rotate).not.toHaveBeenCalled(); // blocked by active warmup check
+            (service as any).isWarmupCheckProcessing = false;
         });
     });
 

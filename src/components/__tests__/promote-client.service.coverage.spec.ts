@@ -370,6 +370,16 @@ describe('PromoteClientService coverage', () => {
             expect(await service.joinchannelForPromoteClients()).toContain('skipping');
         });
 
+        it('does NOT double-prepare: a second concurrent prepare is skipped', async () => {
+            telegramService.hasActiveClientSetup.mockReturnValue(false);
+            (service as any).isPrepareJoinChannelsProcessing = true;
+            const refresh = jest.spyOn(service as any, 'prepareJoinChannelRefresh');
+            const res = await service.joinchannelForPromoteClients(true);
+            expect(res).toContain('already running');
+            expect(refresh).not.toHaveBeenCalled();
+            (service as any).isPrepareJoinChannelsProcessing = false;
+        });
+
         it('queues join + leave based on channel info', async () => {
             await service.create(makePromoteClientData({ mobile: '15551600001', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makePromoteClientData({ mobile: '15551600002', channels: 20, status: 'active', clientId: 'test-client-1' }));
@@ -477,6 +487,32 @@ describe('PromoteClientService coverage', () => {
             expect(after!.warmupPhase).toBe(WarmupPhase.ENROLLED);
             expect(after!.lastUpdateAttempt ?? null).toBeNull();
             expect((service as any).checkingPromoteClientsSince).toBe(0);
+        });
+
+        // ─── lock-removal refactor: dedicated reentrancy flags (no global maintenance lock) ───
+        it('a second checkPromoteClients is skipped while one is already running', async () => {
+            (service as any).isWarmupCheckProcessing = true;
+            const internal = jest.spyOn(service as any, '_checkPromoteClientsInternal').mockResolvedValue(undefined);
+            await service.checkPromoteClients();
+            expect(internal).not.toHaveBeenCalled();
+            (service as any).isWarmupCheckProcessing = false;
+        });
+
+        it('clears isWarmupCheckProcessing after a normal run AND after a crash', async () => {
+            jest.spyOn(service as any, '_checkPromoteClientsInternal').mockResolvedValueOnce(undefined);
+            await service.checkPromoteClients();
+            expect((service as any).isWarmupCheckProcessing).toBe(false);
+            jest.spyOn(service as any, '_checkPromoteClientsInternal').mockRejectedValueOnce(new Error('boom'));
+            await service.checkPromoteClients();
+            expect((service as any).isWarmupCheckProcessing).toBe(false);
+        });
+
+        it('checkPromoteClients runs even while a channel JOIN is in progress (no global lock)', async () => {
+            (service as any).isJoinChannelProcessing = true;
+            const internal = jest.spyOn(service as any, '_checkPromoteClientsInternal').mockResolvedValue(undefined);
+            await service.checkPromoteClients();
+            expect(internal).toHaveBeenCalled();
+            (service as any).isJoinChannelProcessing = false;
         });
 
         it('leaves READY+lastUsed accounts for the paced ready-rotation scheduler', async () => {

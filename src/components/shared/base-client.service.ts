@@ -217,6 +217,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected leaveChannelIntervalId: NodeJS.Timeout | null = null;
     protected isJoinChannelProcessing: boolean = false;
     protected isLeaveChannelProcessing: boolean = false;
+    // Dedicated reentrancy flags that replace the old GLOBAL cross-operation maintenance lock.
+    // Each long-running operation guards only ITSELF (join/leave already had their own flags above).
+    // Cross-operation exclusion (warmup vs join) was removed on purpose: overlapping Telegram work on
+    // a session is harmless (worst case a transient FLOOD_WAIT the retry/backoff absorbs) and the old
+    // global lock was starving the daily warmup-check for hours while the join sweep held it.
+    protected isWarmupCheckProcessing: boolean = false;        // guards checkBuffer/PromoteClients vs itself
+    protected isPrepareJoinChannelsProcessing: boolean = false; // guards the prepare-join sweep vs itself
     protected activeTimeouts: Set<NodeJS.Timeout> = new Set();
 
     protected readonly ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -278,13 +285,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     // READY accounts; the dedicated scheduler handles at most one terminal READY
     // outcome per run to avoid bursts of sensitive Telegram session activity.
     protected readonly MAX_READY_ROTATIONS_PER_SWEEP = 1;
-    protected readonly MAX_MAINTENANCE_DURATION_MS = 10 * 60 * 1000;
-    // This is an alert threshold, not an automatic unlock. Releasing an in-memory
-    // lock while its Telegram promise is still alive would permit overlapping work.
-    // A stuck run must be investigated/restarted; `finally` remains the only normal
-    // release path.
-    protected readonly MAINTENANCE_LOCK_TTL_MS = 30 * 60 * 1000;
-    protected activeMaintenanceRun: { name: string; startedAt: number } | null = null;
+    // (The global cross-operation maintenance lock was removed — each long-running operation now
+    //  guards only itself via its own reentrancy flag: isJoinChannelProcessing,
+    //  isLeaveChannelProcessing, isWarmupCheckProcessing, isPrepareJoinChannelsProcessing.)
     /** Advisory-only: a non-terminal account warming longer than this gets an operator log line
      *  (see logIfLongWarming). It NEVER inactivates the account — age is not a retirement trigger;
      *  only permanent Telegram failures are. Purely for visibility into channel-supply/other stalls. */
@@ -1358,52 +1361,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
     }
 
-    /**
-     * Warmup checks, ready rotation, and channel joins mutate the same
-     * account/session state. Never release this lock while its operation may
-     * still be alive: a timeout is observability only, not authorization to
-     * overlap Telegram work.
-     */
-    protected beginMaintenanceRun(name: string): boolean {
-        if (!this.activeMaintenanceRun) {
-            this.activeMaintenanceRun = { name, startedAt: Date.now() };
-            return true;
-        }
-
-        const elapsedMs = Date.now() - this.activeMaintenanceRun.startedAt;
-        if (elapsedMs >= this.MAINTENANCE_LOCK_TTL_MS) {
-            this.logger.error(
-                `Maintenance lock overdue: ${this.activeMaintenanceRun.name} has run for ${Math.floor(elapsedMs / 1000)}s; keeping lock to prevent overlapping Telegram work`,
-            );
-        }
-        const duration = Math.floor(elapsedMs / 1000);
-        const overdue = elapsedMs >= this.MAX_MAINTENANCE_DURATION_MS ? ' (past advisory duration)' : '';
-        this.logger.warn(
-            `Skipping ${name}: ${this.activeMaintenanceRun.name} is still running for ${duration}s${overdue}`,
-        );
-        return false;
-    }
-
-    protected endMaintenanceRun(): void {
-        this.activeMaintenanceRun = null;
-    }
-
-    protected isMaintenanceRunActive(): boolean {
-        return this.activeMaintenanceRun !== null;
-    }
-
-    /**
-     * READY rotation may overlap join/leave work because terminal warmup phases
-     * are excluded from both join candidate queries. Other maintenance still
-     * changes warmup/session state and remains serialized with rotation.
-     */
-    protected isJoinOrLeaveMaintenanceRun(): boolean {
-        return this.activeMaintenanceRun?.name === 'prepareBufferJoinChannels'
-            || this.activeMaintenanceRun?.name === 'preparePromoteJoinChannels'
-            || this.activeMaintenanceRun?.name === 'processJoinChannelInterval'
-            || this.activeMaintenanceRun?.name === 'processLeaveChannelInterval';
-    }
-
     async processClient(doc: TDoc, client: Client): Promise<ProcessClientResult> {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
@@ -1678,12 +1635,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             await this.scheduleNextJoinRound();
             return;
         }
-        if (!this.beginMaintenanceRun('processJoinChannelInterval')) {
-            this.logger.warn('Deferring join-channel round while another warmup operation is active');
-            await this.scheduleNextJoinRound();
-            return;
-        }
 
+        // Only self-reentrancy matters (isJoinChannelProcessing). No global lock: join may safely
+        // overlap warmup/leave — overlapping Telegram work is harmless and the global lock starved warmup.
         this.isJoinChannelProcessing = true;
         try {
             await this.processJoinChannelSequentially();
@@ -1691,7 +1645,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error('Error in join channel queue', error);
         } finally {
             this.isJoinChannelProcessing = false;
-            this.endMaintenanceRun();
             // Schedule next round (randomized) instead of fixed interval
             await this.scheduleNextJoinRound();
         }
@@ -1946,12 +1899,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.clearLeaveChannelInterval();
             return;
         }
-        if (!this.beginMaintenanceRun('processLeaveChannelInterval')) {
-            this.logger.warn('Deferring leave-channel round while another warmup operation is active');
-            this.scheduleNextLeaveRound();
-            return;
-        }
 
+        // Only self-reentrancy matters (isLeaveChannelProcessing). No global lock (see join loop).
         this.isLeaveChannelProcessing = true;
         try {
             await this.processLeaveChannelSequentially();
@@ -1959,7 +1908,6 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error('Error in leave channel queue', error);
         } finally {
             this.isLeaveChannelProcessing = false;
-            this.endMaintenanceRun();
             this.scheduleNextLeaveRound();
 
             // After leave processing, kick the join loop if it's idle — accounts that

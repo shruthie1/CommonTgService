@@ -57,15 +57,14 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
     private readyRotationInProgress = false;
 
-    /** @deprecated Test compatibility alias for the single shared maintenance lock. */
+    /** @deprecated Test compatibility alias: now reflects the warmup-check reentrancy flag
+     *  (the global maintenance lock was removed). >0 means a warmup check is in progress. */
     private get checkingPromoteClientsSince(): number {
-        return this.activeMaintenanceRun?.startedAt || 0;
+        return this.isWarmupCheckProcessing ? 1 : 0;
     }
 
     private set checkingPromoteClientsSince(value: number) {
-        this.activeMaintenanceRun = value > 0
-            ? { name: 'legacy-promote-test-lock', startedAt: value }
-            : null;
+        this.isWarmupCheckProcessing = value > 0;
     }
 
     private bufferClientService: BufferClientService;
@@ -802,9 +801,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        if (!this.beginMaintenanceRun('preparePromoteJoinChannels')) {
-            return 'Warmup maintenance active, skipped';
+        // Dedicated prepare-join reentrancy guard (replaces the old global lock).
+        if (this.isPrepareJoinChannelsProcessing) {
+            return 'Join-channel prepare already running, skipped';
         }
+        this.isPrepareJoinChannelsProcessing = true;
 
         try {
             this.logger.log('Starting join channel process');
@@ -898,19 +899,23 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 throw new Error('Failed to initiate channel joining process');
             }
         } finally {
-            this.endMaintenanceRun();
+            this.isPrepareJoinChannelsProcessing = false;
         }
     }
 
     // ---- Promote-specific: Check & process promote clients ----
 
     async checkPromoteClients() {
-        if (!this.beginMaintenanceRun('checkPromoteClients')) return;
-        if (this.telegramService.hasActiveClientSetup()) {
-            this.logger.warn('Ignored active check promote channels as active client setup exists');
-            this.endMaintenanceRun();
+        // Self-reentrancy only (no global lock — warmup may run alongside join/leave).
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Skipping checkPromoteClients: a warmup check is already running');
             return;
         }
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ignored active check promote channels as active client setup exists');
+            return;
+        }
+        this.isWarmupCheckProcessing = true;
         try {
             await this._checkPromoteClientsInternal();
         } catch (error) {
@@ -918,7 +923,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
             try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkPromoteClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
         } finally {
-            this.endMaintenanceRun();
+            this.isWarmupCheckProcessing = false;
         }
     }
 
@@ -935,8 +940,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.warn('Ready promote rotation skipped: active client setup exists');
             return false;
         }
-        if (this.isMaintenanceRunActive() && !this.isJoinOrLeaveMaintenanceRun()) {
-            this.logger.warn('Ready promote rotation skipped: non-join maintenance is active');
+        // Skip rotation while a warmup check is editing account state (same-session concern).
+        // Join/leave may overlap rotation (terminal phases are excluded from join queries).
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Ready promote rotation skipped: warmup check is active');
             return false;
         }
 
