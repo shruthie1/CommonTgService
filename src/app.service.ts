@@ -266,7 +266,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   async leaveChannelsAll() {
-    await this.sendToAll('leavechannels');
+    void this.sendToAll('leavechannels').catch((error) => {
+      parseError(error, 'leaveChannelsAll dispatch failed');
+    });
   }
 
   async sendToAll(endpoint: string) {

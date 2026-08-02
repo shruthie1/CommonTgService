@@ -136,3 +136,23 @@ describe('AppService client channel join contract', () => {
     expect((service as any).joinChannelQueue).toHaveBeenCalled();
   });
 });
+
+describe('AppService leave-all dispatch contract', () => {
+  it('starts leavechannels dispatch without waiting for the dispatch loop to finish', async () => {
+    let resolveDispatch: () => void;
+    const service = Object.assign(Object.create(AppService.prototype), {
+      sendToAll: jest.fn(() => new Promise<void>((resolve) => {
+        resolveDispatch = resolve;
+      })),
+    }) as AppService;
+
+    const result = await Promise.race([
+      service.leaveChannelsAll().then(() => 'returned'),
+      new Promise((resolve) => setImmediate(() => resolve('pending'))),
+    ]);
+
+    expect(result).toBe('returned');
+    expect((service as any).sendToAll).toHaveBeenCalledWith('leavechannels');
+    resolveDispatch!();
+  });
+});
