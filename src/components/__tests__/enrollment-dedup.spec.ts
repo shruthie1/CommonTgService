@@ -933,8 +933,10 @@ describe('Enrollment Deduplication', () => {
         });
 
         it('promote: recently active users are not eligible (lastActive filter)', async () => {
-            // lastActive is recent — should be excluded by the 3-month cutoff
-            await insertUser({ mobile: '15550400001', lastActive: '2026-04-30' });
+            const recentLastActive = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .slice(0, 10);
+            await insertUser({ mobile: '15550400001', lastActive: recentLastActive });
 
             const result = await (promoteService as any).addNewUserstoPromoteClientsDynamic(
                 [],

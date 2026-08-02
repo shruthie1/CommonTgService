@@ -251,6 +251,8 @@ describe('lifecycle & map helpers', () => {
         (service as any).joinScopeClientId = 'client-9';
         (service as any).isJoinChannelProcessing = true;
         (service as any).isLeaveChannelProcessing = true;
+        (service as any).isWarmupCheckProcessing = true;
+        (service as any).isPrepareJoinChannelsProcessing = true;
 
         await service.onModuleDestroy();
 
@@ -261,6 +263,8 @@ describe('lifecycle & map helpers', () => {
         expect((service as any).joinScopeClientId).toBeNull();
         expect((service as any).isJoinChannelProcessing).toBe(false);
         expect((service as any).isLeaveChannelProcessing).toBe(false);
+        expect((service as any).isWarmupCheckProcessing).toBe(false);
+        expect((service as any).isPrepareJoinChannelsProcessing).toBe(false);
     });
 
     test('removeFromLeaveMap does NOT clear the processing guard mid-iteration', async () => {

@@ -502,6 +502,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.leaveChannelMap.clear();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
+            this.isWarmupCheckProcessing = false;
+            this.isPrepareJoinChannelsProcessing = false;
         } catch (error) {
             this.logger.error('Error during cleanup:', error);
         }

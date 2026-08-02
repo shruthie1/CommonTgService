@@ -380,6 +380,34 @@ describe('PromoteClientService coverage', () => {
             (service as any).isPrepareJoinChannelsProcessing = false;
         });
 
+        it('a real in-flight prepare sets the flag, blocks a concurrent call, then clears it', async () => {
+            telegramService.hasActiveClientSetup.mockReturnValue(false);
+            let release: () => void = () => {};
+            const gate = new Promise<Set<string>>((resolve) => {
+                release = () => resolve(new Set<string>());
+            });
+            jest.spyOn(service as any, 'prepareJoinChannelRefresh').mockReturnValue(gate);
+
+            const first = service.joinchannelForPromoteClients(true);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect((service as any).isPrepareJoinChannelsProcessing).toBe(true);
+
+            const second = await service.joinchannelForPromoteClients(true);
+            expect(second).toContain('already running');
+
+            release();
+            await first;
+            expect((service as any).isPrepareJoinChannelsProcessing).toBe(false);
+        });
+
+        it('clears isPrepareJoinChannelsProcessing even when prepare THROWS (finally path — no leak)', async () => {
+            telegramService.hasActiveClientSetup.mockReturnValue(false);
+            jest.spyOn(service as any, 'prepareJoinChannelRefresh').mockRejectedValue(new Error('prepare boom'));
+            await expect(service.joinchannelForPromoteClients(true)).rejects.toThrow('prepare boom');
+            expect((service as any).isPrepareJoinChannelsProcessing).toBe(false);
+        });
+
         it('queues join + leave based on channel info', async () => {
             await service.create(makePromoteClientData({ mobile: '15551600001', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makePromoteClientData({ mobile: '15551600002', channels: 20, status: 'active', clientId: 'test-client-1' }));
@@ -512,6 +540,56 @@ describe('PromoteClientService coverage', () => {
             const internal = jest.spyOn(service as any, '_checkPromoteClientsInternal').mockResolvedValue(undefined);
             await service.checkPromoteClients();
             expect(internal).toHaveBeenCalled();
+            (service as any).isJoinChannelProcessing = false;
+        });
+
+        it('ready rotation is skipped while a warmup check is active', async () => {
+            const findAll = clientService.findAll as jest.Mock;
+            (service as any).isWarmupCheckProcessing = true;
+
+            const rotated = await service.rotateReadyPromoteClients();
+
+            expect(rotated).toBe(false);
+            expect(findAll).not.toHaveBeenCalled();
+            (service as any).isWarmupCheckProcessing = false;
+        });
+
+        it('ready rotation runs while channel join is processing', async () => {
+            const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            await service.create(makePromoteClientData({
+                mobile: '15551800105',
+                status: 'active',
+                clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.READY,
+                inUse: false,
+                enrolledAt: past,
+                lastUsed: past,
+                channels: 230,
+                privacyUpdatedAt: past,
+                twoFASetAt: past,
+                otherAuthsRemovedAt: past,
+                profilePicsDeletedAt: past,
+                nameBioUpdatedAt: past,
+                usernameUpdatedAt: past,
+                profilePicsUpdatedAt: past,
+            }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15551800105' },
+                { $set: { warmupPhase: WarmupPhase.READY } },
+            );
+            (service as any).isJoinChannelProcessing = true;
+            jest.spyOn(service, 'rotateSession').mockImplementation(async (mobile) => {
+                await service.update(mobile, {
+                    warmupPhase: WarmupPhase.SESSION_ROTATED,
+                    sessionRotatedAt: new Date(),
+                });
+                return true;
+            });
+
+            const rotated = await service.rotateReadyPromoteClients();
+
+            expect(rotated).toBe(true);
+            expect((await service.findOne('15551800105'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
             (service as any).isJoinChannelProcessing = false;
         });
 

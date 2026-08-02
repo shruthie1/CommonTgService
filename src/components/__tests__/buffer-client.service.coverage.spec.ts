@@ -621,6 +621,34 @@ describe('BufferClientService coverage', () => {
             (service as any).isPrepareJoinChannelsProcessing = false;
         });
 
+        it('a REAL in-flight prepare sets the flag and blocks a concurrent call, then clears it', async () => {
+            telegramService.hasActiveClientSetup.mockReturnValue(false);
+            // Make the prepare hang until we release it, so we can observe the flag mid-flight.
+            let release: () => void = () => {};
+            const gate = new Promise<Set<string>>((res) => { release = () => res(new Set<string>()); });
+            jest.spyOn(service as any, 'prepareJoinChannelRefresh').mockReturnValue(gate);
+            jest.spyOn(service as any, 'getPrimaryClientMobiles').mockResolvedValue(new Set<string>());
+
+            const first = service.joinchannelForBufferClients(true, 'test-client-1'); // starts, hangs on gate
+            await Promise.resolve(); await Promise.resolve(); // let it reach the await
+            expect((service as any).isPrepareJoinChannelsProcessing).toBe(true); // flag set during real run
+            const second = await service.joinchannelForBufferClients(true, 'test-client-1'); // concurrent
+            expect(second).toContain('already running'); // blocked by the real in-flight prepare
+
+            release();
+            await first;
+            expect((service as any).isPrepareJoinChannelsProcessing).toBe(false); // cleared after completion
+        });
+
+        it('clears isPrepareJoinChannelsProcessing even when prepare THROWS (finally path — no leak)', async () => {
+            telegramService.hasActiveClientSetup.mockReturnValue(false);
+            jest.spyOn(service as any, 'getPrimaryClientMobiles').mockResolvedValue(new Set<string>());
+            jest.spyOn(service as any, 'prepareJoinChannelRefresh').mockRejectedValue(new Error('prepare boom'));
+            await expect(service.joinchannelForBufferClients(true, 'test-client-1')).rejects.toThrow('prepare boom');
+            // The flag MUST be reset by the finally block, otherwise all future prepares would be locked out.
+            expect((service as any).isPrepareJoinChannelsProcessing).toBe(false);
+        });
+
         it('queues join + leave sets based on channel info', async () => {
             await service.create(makeBufferClientData({ mobile: '15551600001', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makeBufferClientData({ mobile: '15551600002', channels: 20, status: 'active', clientId: 'test-client-1' }));
