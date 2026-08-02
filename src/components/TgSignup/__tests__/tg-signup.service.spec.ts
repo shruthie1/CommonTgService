@@ -153,7 +153,10 @@ function getActiveSignupSessions(): Map<string, any> {
 }
 
 describe('TgSignupService practical flows', () => {
+    const services: TgSignupService[] = [];
+
     beforeEach(() => {
+        services.length = 0;
         resetQueues();
         generateTGConfigMock.mockReset();
         computeCheckMock.mockReset();
@@ -161,6 +164,7 @@ describe('TgSignupService practical flows', () => {
     });
 
     afterEach(async () => {
+        await Promise.all(services.map(service => service.onModuleDestroy()));
         for (const session of getActiveSignupSessions().values()) {
             clearTimeout(session.timeoutId);
             await session.client.destroy().catch(() => undefined);
@@ -170,10 +174,12 @@ describe('TgSignupService practical flows', () => {
     });
 
     function makeService(usersServiceOverrides: any = {}) {
-        return new TgSignupService({
+        const service = new TgSignupService({
             create: jest.fn().mockResolvedValue(undefined),
             ...usersServiceOverrides,
         } as any);
+        services.push(service);
+        return service;
     }
 
     function mockConfig() {

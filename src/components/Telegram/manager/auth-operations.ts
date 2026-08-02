@@ -208,9 +208,11 @@ export async function set2fa(ctx: TgContext): Promise<{ email: string; hint: str
 }
 
 export async function createNewSession(ctx: TgContext): Promise<string> {
-    const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Session creation timed out after 1 minute')), 1 * 60 * 1000)
-    );
+    let timeoutId: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<string>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Session creation timed out after 1 minute')), 1 * 60 * 1000);
+        timeoutId.unref?.();
+    });
 
     const sessionPromise = (async () => {
         const me = <Api.User>await ctx.client.getMe();
@@ -235,7 +237,11 @@ export async function createNewSession(ctx: TgContext): Promise<string> {
         return session;
     })();
 
-    return Promise.race([sessionPromise, timeoutPromise]);
+    try {
+        return await Promise.race([sessionPromise, timeoutPromise]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
 }
 
 export async function waitForOtp(ctx: TgContext): Promise<string> {

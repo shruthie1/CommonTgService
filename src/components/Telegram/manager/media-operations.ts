@@ -915,7 +915,7 @@ export async function getFileUrl(ctx: TgContext, url: string, filename: string):
             response.data.on('error', reject);
         });
 
-        setTimeout(() => {
+        const cleanupTimer = setTimeout(() => {
             try {
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
@@ -925,6 +925,7 @@ export async function getFileUrl(ctx: TgContext, url: string, filename: string):
                 ctx.logger.warn(ctx.phoneNumber, `Failed to cleanup temp file ${filePath}:`, cleanupError);
             }
         }, TEMP_FILE_CLEANUP_DELAY);
+        cleanupTimer.unref?.();
 
         return filePath;
     } catch (error:any) {

@@ -54,6 +54,18 @@ export class ClientRegistry {
         return ClientRegistry.instance;
     }
 
+    public static resetForTesting(): void {
+        ClientRegistry.instance?.dispose();
+        ClientRegistry.instance = null;
+    }
+
+    public dispose(): void {
+        clearInterval(this.inactiveClientCleanupInterval);
+        clearInterval(this.expiredLockCleanupInterval);
+        this.clients.clear();
+        this.locks.clear();
+    }
+
     /**
      * Acquire a lock for a phone number to prevent concurrent operations
      */

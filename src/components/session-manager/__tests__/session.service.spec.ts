@@ -67,7 +67,7 @@ function makeStubAudit(overrides: any = {}) {
 // Reset the SessionManager + ClientRegistry singletons so tests are isolated.
 function resetSingletons() {
     (SessionManager as any).instance = null;
-    (ClientRegistry as any).instance = null;
+    ClientRegistry.resetForTesting();
 }
 
 describe('session.service', () => {

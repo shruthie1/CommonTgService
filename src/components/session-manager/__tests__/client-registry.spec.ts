@@ -14,7 +14,7 @@ function makeClient(overrides: any = {}): any {
 
 // Reset singleton so each test starts clean (and so constructor setInterval runs under fake timers)
 function freshRegistry(): ClientRegistry {
-    (ClientRegistry as any).instance = null;
+    ClientRegistry.resetForTesting();
     return ClientRegistry.getInstance();
 }
 
@@ -27,6 +27,7 @@ describe('ClientRegistry', () => {
     });
 
     afterEach(() => {
+        ClientRegistry.resetForTesting();
         jest.clearAllTimers();
         jest.useRealTimers();
     });

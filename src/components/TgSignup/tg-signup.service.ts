@@ -86,6 +86,7 @@ export class TgSignupService implements OnModuleDestroy {
     private refreshSessionTimeout(phone: string, session: ActiveSignupSession): void {
         clearTimeout(session.timeoutId);
         session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService.LOGIN_TIMEOUT);
+        session.timeoutId.unref?.();
         session.lastActivityAt = Date.now();
     }
 
@@ -207,6 +208,7 @@ export class TgSignupService implements OnModuleDestroy {
             ) as Api.auth.SentCode;
 
             const timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService.LOGIN_TIMEOUT);
+            timeoutId.unref?.();
             const mapped = this.mapSentCodeResult(sendResult);
             const activeSession: ActiveSignupSession = {
                 client,
