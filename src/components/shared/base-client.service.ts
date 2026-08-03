@@ -1206,27 +1206,26 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             const errorDetails = this.handleError(error, 'Error removing other auths', doc.mobile);
             const errorMsg = errorDetails?.message || '';
 
-            // If the self-check failed, our session is dead — this is critical
-            if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
-                this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
-                // Notify via bot
-                this.botsService.sendMessageByCategory(
-                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                    `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`,
-                    { parseMode: 'HTML' }
-                );
-                return 0;
-            }
-
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: failedAttempts + 1,
                 lastUpdateFailure: new Date(),
             });
+            // Only a PROVEN permanent Telegram failure (revocation token, matched by boundary in
+            // isPermanentError) inactivates. The old code also killed on the string "Session self-check
+            // failed", but that wraps ANY getMe() error — including a transient connection teardown
+            // (e.g. the shared per-mobile client being unregistered by a concurrent join round) — which
+            // must NOT permanently lose a healthy account. A real revocation still carries a permanent
+            // token in the message and is caught here; a hiccup just retries next cycle.
             if (isPermanentError(errorDetails)) {
+                this.logger.error(`Session permanently lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason, { permanent: true });
+                const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
+                this.botsService.sendMessageByCategory(
+                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                    `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`,
+                    { parseMode: 'HTML' }
+                );
             }
             return 0;
         } finally {

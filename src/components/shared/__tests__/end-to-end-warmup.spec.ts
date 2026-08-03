@@ -931,10 +931,13 @@ describe('removeOtherAuths branches', () => {
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
         const result = await (service as any).removeOtherAuths(doc, 0);
         expect(result).toBe(0);
+        // A real revocation token (session_revoked) is still permanently deactivated — now via the
+        // precise isPermanentError path (reason built by buildPermanentAccountReason), not the old
+        // fragile "Session self-check failed" string branch.
         expect(updateStatusSpy).toHaveBeenCalledWith(
             doc.mobile,
             'inactive',
-            expect.stringContaining('Session lost'),
+            expect.stringContaining('session_revoked'),
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
             expect.anything(),

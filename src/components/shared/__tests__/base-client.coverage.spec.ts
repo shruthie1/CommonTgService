@@ -710,14 +710,31 @@ describe('removeOtherAuths', () => {
         expect(service.updateMock).toHaveBeenCalledWith('919990000050', expect.objectContaining({ otherAuthsRemovedAt: expect.any(Date) }));
     });
 
-    test('self-check failure marks inactive and notifies', async () => {
+    test('a self-check failure from a CONNECTION teardown (no revocation token) retries, does NOT permanently deactivate', async () => {
+        // Regression guard for the lock-removal race: a concurrent join round can destroy the shared
+        // per-mobile client mid removeOtherAuths, so getMe() throws a plain connection error wrapped as
+        // "Session self-check failed: ...not connected". That must NOT be treated as a revocation — a
+        // healthy warming account would be irreversibly lost. It should increment failures and retry.
         const service = new TestBaseService();
-        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('Session self-check failed'); }) });
+        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('Session self-check failed after removeOtherAuths: Error: not connected'); }) });
+        jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
+        jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+        const n = await service.pub.removeOtherAuths(doc, 1);
+        expect(n).toBe(0);
+        expect(service.updateStatusMock).not.toHaveBeenCalled();        // NOT deactivated
+        expect(service.updateMock).toHaveBeenCalledWith('919990000050', expect.objectContaining({ failedUpdateAttempts: 2 }));
+    });
+
+    test('a self-check failure that carries a REAL revocation token still deactivates permanently', async () => {
+        // A genuine revocation surfaces via the self-check as "Session self-check failed: ...SESSION_REVOKED".
+        // isPermanentError matches the SESSION_REVOKED token by boundary, so this correctly stays permanent.
+        const service = new TestBaseService();
+        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('Session self-check failed after removeOtherAuths: RPCError: SESSION_REVOKED (401)'); }) });
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
         const n = await service.pub.removeOtherAuths(doc, 0);
         expect(n).toBe(0);
-        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000050', 'inactive', expect.stringContaining('Session lost'));
+        expect(service.updateStatusMock).toHaveBeenCalledWith('919990000050', 'inactive', expect.any(String));
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalled();
     });
 
