@@ -47,6 +47,7 @@ import {
     performOrganicActivity,
     WarmupPhase,
     getWarmupPhaseAction,
+    calculateWarmupPriority,
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
@@ -1126,24 +1127,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const warmupAction = getWarmupPhaseAction(bc, now);
             const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
 
-            const lastUpdateAttempt = bc.lastUpdateAttempt ? new Date(bc.lastUpdateAttempt).getTime() : 0;
-            const lastAttemptAgeHours = lastUpdateAttempt > 0
-                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                : 10000;
             const computedPhase = warmupAction.phase;
-            const phaseBoost: Record<string, number> = {
-                [WarmupPhase.READY]: 25000, [WarmupPhase.MATURING]: 15000, [WarmupPhase.GROWING]: 10000,
-                [WarmupPhase.IDENTITY]: 7000, [WarmupPhase.SETTLING]: 5000, [WarmupPhase.ENROLLED]: 3000,
-                [WarmupPhase.SESSION_ROTATED]: 0,
-            };
-            const subStepBonus: Record<string, number> = {
-                'remove_other_auths': 2000, 'set_2fa': 1000, 'update_username': 1500,
-                'update_name_bio': 1000, 'upload_photo': 1000, 'rotate_session': 2000,
-            };
-            const actionBonus = subStepBonus[warmupAction.action] || 0;
-            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
-            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
-            const priority = (phaseBoost[computedPhase] || 5000) + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+            const priority = calculateWarmupPriority(bc, warmupAction, now);
 
             actionCounts[warmupAction.action] = (actionCounts[warmupAction.action] || 0) + 1;
 
@@ -1382,40 +1367,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             // ready-rotation scheduler. A normal maintenance run must never turn
             // a catch-up batch into a burst of sensitive session work.
             if (warmupPhase === WarmupPhase.READY) continue;
-            const failedAttempts = bufferClient.failedUpdateAttempts || 0;
-            const lastAttemptAgeHours = lastUpdateAttempt > 0
-                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                : 10000;
             // Use the COMPUTED warmup phase for priority so that enrolled accounts
             // whose state machine already says "settling" get the same priority as
             // DB-settling accounts — prevents permanent starvation of newer accounts.
             const warmupAction = getWarmupPhaseAction(bufferClient, now);
-            const computedPhase = warmupAction.phase;
-            const phaseBoost: Record<string, number> = {
-                [WarmupPhase.MATURING]: 15000,         // almost done
-                [WarmupPhase.GROWING]: 10000,          // mid-pipeline
-                [WarmupPhase.IDENTITY]: 7000,          // early-mid
-                [WarmupPhase.SETTLING]: 5000,          // early
-                [WarmupPhase.ENROLLED]: 3000,           // just started
-                [WarmupPhase.SESSION_ROTATED]: 0,      // done — health checks only
-            };
-            // Sub-step progression bonus: accounts further along within a phase
-            // get priority over those just starting. Prevents starvation where e.g.
-            // 98 set_privacy accounts perpetually block 47 remove_other_auths accounts
-            // because both share the same SETTLING phase boost.
-            const subStepBonus: Record<string, number> = {
-                'remove_other_auths': 2000,  // last settling step — almost graduates
-                'set_2fa': 1000,             // middle settling step
-                'update_username': 1500,     // last identity step
-                'update_name_bio': 1000,     // middle identity step
-                'upload_photo': 1000,        // maturing step
-            };
-            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
-            const actionBonus = subStepBonus[warmupAction.action] || 0;
-            // Cap penalties/bonuses to prevent extreme priority values
-            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100; // max -2000
-            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168); // max 7 days worth
-            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+            const priority = calculateWarmupPriority(bufferClient, warmupAction, now);
 
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
         }

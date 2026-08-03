@@ -1353,6 +1353,44 @@ describe('PromoteClientService coverage', () => {
             expect(processedMobiles).not.toContain('15554200003');
         });
 
+        it('fair aging processes a stale settling account before fresh maturing accounts under the cap', async () => {
+            clientService.findAll.mockResolvedValue([{ clientId: 'test-client-1', mobile: '15559990000', firstNames: [], promoteLastNames: [], bios: [], profilePics: [] }]);
+            const now = Date.now();
+            const old = new Date(now - 45 * 24 * 60 * 60 * 1000);
+            const staleAttempt = new Date(now - 31 * 24 * 60 * 60 * 1000);
+            const freshAttempt = new Date(now - 48 * 60 * 60 * 1000);
+
+            await service.create(makePromoteClientData({
+                mobile: '15554201000', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.SETTLING, enrolledAt: old, lastUpdateAttempt: staleAttempt,
+                inUse: false, lastUsed: null,
+            }));
+            for (let i = 0; i < 9; i++) {
+                await service.create(makePromoteClientData({
+                    mobile: `15554202${String(i).padStart(3, '0')}`, status: 'active', clientId: 'test-client-1',
+                    warmupPhase: WarmupPhase.MATURING, enrolledAt: old, lastUpdateAttempt: freshAttempt,
+                    channels: 230, inUse: false, lastUsed: null,
+                    privacyUpdatedAt: old, twoFASetAt: old, otherAuthsRemovedAt: old,
+                    profilePicsDeletedAt: old, nameBioUpdatedAt: old, usernameUpdatedAt: old,
+                    profilePicsUpdatedAt: null,
+                }));
+            }
+
+            jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+                totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
+            });
+            const processed: string[] = [];
+            jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any) => {
+                processed.push(doc.mobile);
+                return { updateCount: 1, updateSummary: 'set_privacy' };
+            });
+
+            await service.checkPromoteClients();
+
+            expect(processed).toHaveLength(8);
+            expect(processed[0]).toBe('15554201000');
+        });
+
         it('stops processing once MAX_UPDATES_PER_CYCLE is reached (987)', async () => {
             clientService.findAll.mockResolvedValue([{ clientId: 'test-client-1', mobile: '15559990000', firstNames: [], promoteLastNames: [], bios: [], profilePics: [] }]);
             for (let i = 0; i < 3; i++) {

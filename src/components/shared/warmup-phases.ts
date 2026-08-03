@@ -78,6 +78,85 @@ export interface WarmupAction {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+const WARMUP_PHASE_PRIORITY: Record<WarmupPhaseType, number> = {
+    [WarmupPhase.READY]: 25000,
+    [WarmupPhase.MATURING]: 15000,
+    [WarmupPhase.GROWING]: 10000,
+    [WarmupPhase.IDENTITY]: 7000,
+    [WarmupPhase.SETTLING]: 5000,
+    [WarmupPhase.ENROLLED]: 3000,
+    [WarmupPhase.SESSION_ROTATED]: 0,
+};
+
+const WARMUP_ACTION_PRIORITY: Partial<Record<WarmupAction['action'], number>> = {
+    remove_other_auths: 2000,
+    set_2fa: 1000,
+    update_username: 1500,
+    update_name_bio: 1000,
+    upload_photo: 1000,
+    rotate_session: 2000,
+};
+
+const WARMUP_FAIR_AGING_ACTIONS: ReadonlySet<WarmupAction['action']> = new Set([
+    'set_privacy',
+    'set_2fa',
+    'remove_other_auths',
+    'delete_photos',
+    'update_name_bio',
+    'update_username',
+    'upload_photo',
+    'advance_to_ready',
+    'rotate_session',
+]);
+
+const WARMUP_FAILURE_PENALTY_CAP = 20;
+const WARMUP_FAILURE_PENALTY_POINTS = 100;
+const FAIR_AGING_GRACE_HOURS = 3 * 24;
+const FAIR_AGING_FULL_RESCUE_HOURS = 30 * 24;
+const FAIR_AGING_MAX_BONUS = 20000;
+
+export interface WarmupPriorityInput {
+    warmupPhase?: WarmupPhaseType;
+    lastUpdateAttempt?: Date | string | null;
+    enrolledAt?: Date | string | null;
+    createdAt?: Date | string | null;
+    failedUpdateAttempts?: number | null;
+}
+
+/**
+ * Scores a warmup account for bounded fair scheduling.
+ *
+ * Freshly touched accounts keep the normal phase/sub-step priority, so near-finished accounts still
+ * drain first in ordinary operation. Once an account has not been touched for several days, the
+ * age bonus grows until it can dominate phase gaps; this prevents old early-stage accounts from
+ * being permanently hidden behind recently-touched growing/maturing accounts.
+ */
+export function calculateWarmupPriority(
+    doc: WarmupPriorityInput,
+    warmupAction: WarmupAction,
+    now: number,
+): number {
+    const phaseBoost = WARMUP_PHASE_PRIORITY[warmupAction.phase] ?? 5000;
+    const actionBonus = WARMUP_ACTION_PRIORITY[warmupAction.action] || 0;
+    const failedAttempts = Math.max(0, doc.failedUpdateAttempts || 0);
+    const failurePenalty = Math.min(failedAttempts, WARMUP_FAILURE_PENALTY_CAP) * WARMUP_FAILURE_PENALTY_POINTS;
+
+    const lastTouch =
+        ClientHelperUtils.getTimestamp(doc.lastUpdateAttempt) ||
+        ClientHelperUtils.getTimestamp(doc.enrolledAt) ||
+        ClientHelperUtils.getTimestamp(doc.createdAt);
+    const lastTouchAgeHours = lastTouch > 0 ? Math.max(0, (now - lastTouch) / ONE_HOUR_MS) : 0;
+    const agingWindowHours = FAIR_AGING_FULL_RESCUE_HOURS - FAIR_AGING_GRACE_HOURS;
+    const starvationHours = Math.max(0, lastTouchAgeHours - FAIR_AGING_GRACE_HOURS);
+    const ageRatio = Math.min(1, starvationHours / agingWindowHours);
+    const fairAgeBonus = WARMUP_FAIR_AGING_ACTIONS.has(warmupAction.action)
+        ? Math.round(ageRatio * FAIR_AGING_MAX_BONUS)
+        : 0;
+
+    return phaseBoost + actionBonus + fairAgeBonus - failurePenalty;
+}
 
 /**
  * Determine what warmup action to perform for a client document.

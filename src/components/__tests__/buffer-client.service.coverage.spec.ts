@@ -1637,6 +1637,44 @@ describe('BufferClientService coverage', () => {
             expect(after!.privacyUpdatedAt).toBeInstanceOf(Date);
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });
+
+        it('fair aging processes a stale settling account before fresh maturing accounts under the cap', async () => {
+            const now = Date.now();
+            const old = new Date(now - 45 * 24 * 60 * 60 * 1000);
+            const staleAttempt = new Date(now - 31 * 24 * 60 * 60 * 1000);
+            const freshAttempt = new Date(now - 48 * 60 * 60 * 1000);
+
+            await service.create(makeBufferClientData({
+                mobile: '15555001000', status: 'active', clientId: 'test-client-1',
+                warmupPhase: WarmupPhase.SETTLING, enrolledAt: old, lastUpdateAttempt: staleAttempt,
+                inUse: false, lastUsed: null,
+            }));
+            for (let i = 0; i < 9; i++) {
+                await service.create(makeBufferClientData({
+                    mobile: `15555002${String(i).padStart(3, '0')}`, status: 'active', clientId: 'test-client-1',
+                    warmupPhase: WarmupPhase.MATURING, enrolledAt: old, lastUpdateAttempt: freshAttempt,
+                    channels: 230, inUse: false, lastUsed: null,
+                    privacyUpdatedAt: old, twoFASetAt: old, otherAuthsRemovedAt: old,
+                    profilePicsDeletedAt: old, nameBioUpdatedAt: old, usernameUpdatedAt: old,
+                    profilePicsUpdatedAt: null,
+                }));
+            }
+
+            jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+                totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0,
+                calculationReason: 'ok', priority: 0, replenishmentWindowNeeds: [],
+            });
+            const processed: string[] = [];
+            jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any) => {
+                processed.push(doc.mobile);
+                return { updateCount: 1, updateSummary: 'set_privacy' };
+            });
+
+            await service.checkBufferClients();
+
+            expect(processed).toHaveLength(8);
+            expect(processed[0]).toBe('15555001000');
+        });
     });
 
     // ─── updateInfo: empty pool ──────────────────────────────────────────────

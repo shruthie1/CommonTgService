@@ -35,6 +35,7 @@ import {
     WarmupPhase,
     WarmupPhaseType,
     WarmupAction,
+    calculateWarmupPriority,
     isAccountReady,
     isAccountWarmingUp,
     MIN_CHANNELS_FOR_MATURING,
@@ -200,7 +201,7 @@ export interface AvailabilityNeeds {
 }
 
 // Re-export for subclasses
-export { WarmupPhase, WarmupAction, isAccountReady, isAccountWarmingUp, getWarmupPhaseAction, performOrganicActivity };
+export { WarmupPhase, WarmupAction, isAccountReady, isAccountWarmingUp, getWarmupPhaseAction, calculateWarmupPriority, performOrganicActivity };
 
 /**
  * Abstract base class for buffer and promote client services.

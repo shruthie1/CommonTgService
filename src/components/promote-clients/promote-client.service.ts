@@ -43,6 +43,7 @@ import {
     performOrganicActivity,
     WarmupPhase,
     getWarmupPhaseAction,
+    calculateWarmupPriority,
 } from '../shared/base-client.service';
 import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
@@ -1034,34 +1035,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             // maintenance must never re-enter them or perform extra Telegram
             // health/session work on already-consumable accounts.
             if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) continue;
-            const failedAttempts = promoteClient.failedUpdateAttempts || 0;
-            const lastAttemptAgeHours = lastUpdateAttempt > 0
-                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                : 10000;
             const warmupAction = getWarmupPhaseAction(promoteClient, now);
-            const computedPhase = warmupAction.phase;
-            const phaseBoost: Record<string, number> = {
-                [WarmupPhase.MATURING]: 15000,
-                [WarmupPhase.GROWING]: 10000,
-                [WarmupPhase.IDENTITY]: 7000,
-                [WarmupPhase.SETTLING]: 5000,
-                [WarmupPhase.ENROLLED]: 3000,
-                [WarmupPhase.SESSION_ROTATED]: 0,
-            };
-            // Sub-step progression bonus: prioritize accounts further along within a phase
-            const subStepBonus: Record<string, number> = {
-                'remove_other_auths': 2000,
-                'set_2fa': 1000,
-                'update_username': 1500,
-                'update_name_bio': 1000,
-                'upload_photo': 1000,
-            };
-            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
-            const actionBonus = subStepBonus[warmupAction.action] || 0;
-            // Cap penalties/bonuses to prevent extreme priority values
-            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100; // max -2000
-            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168); // max 7 days worth
-            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+            const priority = calculateWarmupPriority(promoteClient, warmupAction, now);
 
             promoteClientsToProcess.push({ promoteClient: promoteClient as PromoteClientDocument, client, clientId: promoteClient.clientId, priority });
         }

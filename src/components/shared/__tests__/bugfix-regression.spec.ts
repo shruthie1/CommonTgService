@@ -9,7 +9,7 @@
  *
  * 1. Mongoose spread bug — spreading a Mongoose doc loses getter-based properties
  * 2. repairWarmupMetadata — must return fresh Mongoose doc, not a spread merge
- * 3. Priority capping — failedAttempts and lastAttemptAgeHours must be bounded (real formula)
+ * 3. Priority capping — failedAttempts is bounded and fair aging stays positive (real formula)
  * 4. Promote persona handling — missing persona must still mark nameBioUpdatedAt (real method)
  * 5. Dead catch variable — getErrorText must read the caught error
  * 6. lastActive ISO string — must be comparable with Mongo $lt (real query)
@@ -244,7 +244,7 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
             .find((e: any) => e.mobile === mobile);
 
     // --------------------------------------------------------------------
-    // 3. Priority capping (REAL formula via diagnoseWarmupPipeline)
+    // 3. Priority/fair-aging scoring (REAL formula via diagnoseWarmupPipeline)
     // --------------------------------------------------------------------
     describe('Priority capping (real diagnoseWarmupPipeline formula)', () => {
         test('250 failed attempts does NOT produce a deeply negative priority — penalty is capped', async () => {
@@ -263,7 +263,7 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
             const report: any = await service.diagnoseWarmupPipeline();
             const entry = report.top30WouldProcess.find((e: any) => e.mobile === '16660000250');
             expect(entry).toBeTruthy();
-            // SETTLING boost 5000, age bonus capped 168, penalty capped 2000 → ~3168.
+            // SETTLING boost 5000 plus a small 5-day fair-aging bonus, with penalty capped at 2000.
             expect(entry.priority).toBeGreaterThan(0);
             expect(entry.priority).toBeLessThan(5000);
             expect(entry.priority).toBeGreaterThan(2900);
