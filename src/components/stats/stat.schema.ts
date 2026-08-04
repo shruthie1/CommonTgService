@@ -42,10 +42,6 @@ export class Stat {
   @Prop({ required: true })
   secondShow: boolean;
 
-  @ApiProperty({ description: 'Did Pay' })
-  @Prop({ required: false })
-  didPay: boolean | null;
-
   @ApiProperty({ description: 'Client' })
   @Prop({ required: true })
   client: string;

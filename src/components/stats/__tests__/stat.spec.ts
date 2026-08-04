@@ -16,7 +16,6 @@ function makeStatData(overrides: Partial<any> = {}): any {
         paidReply: false,
         name: 'tester',
         secondShow: false,
-        didPay: null,
         client: 'client-1',
         profile: 'profile-1',
         ...overrides,

@@ -29,9 +29,6 @@ export class CreateStatDto {
   @ApiProperty({ description: 'Second Show' })
   secondShow: boolean;
 
-  @ApiProperty({ description: 'Did Pay' })
-  didPay: boolean | null;
-
   @ApiProperty({ description: 'Client' })
   client: string;
 
