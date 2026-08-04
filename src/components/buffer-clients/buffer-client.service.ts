@@ -1337,12 +1337,16 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const updatedEntries: string[] = [];
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
 
-        // Collect buffer clients for priority-sorted processing
+        // Collect buffer clients for priority-sorted processing. The warmupAction is computed ONCE
+        // here and carried through — the priority sort, the sensitive precheck, and the organic
+        // precheck all reuse it instead of recomputing (which was done 3× per account and risked a
+        // TOCTOU mismatch between the precheck action and what processClient actually did).
         const bufferClientsToProcess: Array<{
             bufferClient: BufferClientDocument;
             client: Client;
             clientId: string;
             priority: number;
+            warmupAction: ReturnType<typeof getWarmupPhaseAction>;
         }> = [];
 
         for (const bufferClient of assignedBufferClients) {
@@ -1373,7 +1377,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const warmupAction = getWarmupPhaseAction(bufferClient, now);
             const priority = calculateWarmupPriority(bufferClient, warmupAction, now);
 
-            bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
+            bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority, warmupAction });
         }
 
         // Sort by priority (highest first)
@@ -1383,10 +1387,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // pool drains toward the target SLA — grows when starved, shrinks when caught up.
         const effectiveCap = this.getEffectiveUpdatesCap(bufferClientsToProcess.length);
         let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
-        this.logger.log(`Buffer warmup run: ${bufferClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}`);
+        let organicUpdates = 0;   // separate budget so organic no-ops can't monopolize the run
+        this.logger.log(`Buffer warmup run: ${bufferClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
 
         // Process in priority order using base class processClient
-        for (const { bufferClient, client } of bufferClientsToProcess) {
+        for (const { bufferClient, client, warmupAction } of bufferClientsToProcess) {
             if (totalUpdates >= effectiveCap) break;
             const warmupPhase = bufferClient.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
@@ -1394,17 +1399,34 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 const healthCheck = await this.performHealthCheck(bufferClient.mobile, lastChecked, now);
                 if (!healthCheck.passed) continue;
             }
+            const plannedAction = warmupAction.action; // computed once above; reused here
+
+            // Organic sub-cap: organic_only makes no phase progress but costs a ~20s TG session.
+            // Once the run has done its organic quota, skip further organic accounts so the
+            // remaining time/budget goes to accounts with a REAL mutation waiting. Skipped accounts
+            // keep their lastUpdateAttempt untouched, so they stay eligible for the next run.
+            if (plannedAction === 'organic_only' && organicUpdates >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+
             // Anti-detection sub-cap: keep high-risk actions (2FA/remove_auths/username) sparse per
             // run. If this account's next action is sensitive and we've hit the sub-cap, defer it to
             // a later run (it stays high-priority) rather than clustering risky actions on one IP.
-            const nextAction = getWarmupPhaseAction(bufferClient, now).action;
-            if (this.isSensitiveWarmupAction(nextAction) && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+            const plannedSensitive = this.isSensitiveWarmupAction(plannedAction);
+            if (plannedSensitive && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
                 continue;
             }
-            const processResult = await this.processClient(bufferClient, client);
+
+            // Count the PLANNED sensitive action against the sub-cap now that we're committing to
+            // invoke it — a failed sensitive action (updateCount 0) still consumed a risky attempt
+            // on this IP, so it must count. (Previously the cap only saw succeeded actions, letting
+            // a run retry unbounded sensitive actions after failures.)
+            if (plannedSensitive) sensitiveUpdates++;
+            if (plannedAction === 'organic_only') organicUpdates++;
+
+            const processResult = await this.processClient(bufferClient, client, warmupAction);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
-                if (this.isSensitiveWarmupAction(processResult.updateSummary)) sensitiveUpdates++;
                 updatedEntries.push(
                     `${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,
                 );

@@ -260,6 +260,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     // and low regardless of backlog. Lightweight actions (privacy, photo delete/upload, organic)
     // are NOT limited by this — they fall under the normal cap only.
     protected readonly MAX_SENSITIVE_ACTIONS_PER_CYCLE = 5;
+
+    // Per-run cap for 'organic_only' activity. organic_only is what a day-gated account (waiting
+    // out an inter-step cooldown) resolves to — it performs no phase MUTATION but still connects a
+    // TG client and runs ~20s of activity to keep the account looking alive. Left uncapped it
+    // monopolizes the serial warmup run: with 200+ gated accounts a single run spends the whole
+    // window (and the isWarmupCheckProcessing lock) doing organic no-ops, so accounts with a REAL
+    // step waiting never get reached and ready-rotation is blocked the entire time. This cap keeps
+    // the liveness signal without letting organic starve mutation progress. Gated accounts beyond
+    // the cap are simply skipped this run (their lastUpdateAttempt is untouched, so they stay
+    // eligible next run) — they lose nothing but a single organic tick.
+    protected readonly MAX_ORGANIC_ACTIONS_PER_CYCLE = 5;
+
     protected static readonly SENSITIVE_WARMUP_ACTIONS: ReadonlySet<string> = new Set([
         'set_2fa', 'remove_other_auths', 'update_username',
     ]);
@@ -1363,7 +1375,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
     }
 
-    async processClient(doc: TDoc, client: Client): Promise<ProcessClientResult> {
+    async processClient(doc: TDoc, client: Client, plannedWarmupAction?: WarmupAction): Promise<ProcessClientResult> {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
             return { updateCount: 0 };
@@ -1415,7 +1427,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return { updateCount: 0 };
         }
 
-        const warmupAction = getWarmupPhaseAction(doc, now);
+        const warmupAction = plannedWarmupAction || getWarmupPhaseAction(doc, now);
         this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
             privacyUpdatedAt: doc.privacyUpdatedAt || null,
             twoFASetAt: doc.twoFASetAt || null,

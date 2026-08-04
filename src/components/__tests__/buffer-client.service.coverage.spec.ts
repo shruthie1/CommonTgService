@@ -1665,8 +1665,10 @@ describe('BufferClientService coverage', () => {
                 calculationReason: 'ok', priority: 0, replenishmentWindowNeeds: [],
             });
             const processed: string[] = [];
-            jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any) => {
+            const plannedActions: string[] = [];
+            jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any, _client: any, warmupAction: any) => {
                 processed.push(doc.mobile);
+                plannedActions.push(warmupAction?.action);
                 return { updateCount: 1, updateSummary: 'set_privacy' };
             });
 
@@ -1674,6 +1676,8 @@ describe('BufferClientService coverage', () => {
 
             expect(processed).toHaveLength(8);
             expect(processed[0]).toBe('15555001000');
+            expect(plannedActions).toHaveLength(8);
+            expect(plannedActions).not.toContain(undefined);
         });
     });
 

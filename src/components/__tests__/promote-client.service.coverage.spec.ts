@@ -1380,8 +1380,10 @@ describe('PromoteClientService coverage', () => {
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
             });
             const processed: string[] = [];
-            jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any) => {
+            const plannedActions: string[] = [];
+            jest.spyOn(service as any, 'processClient').mockImplementation(async (doc: any, _client: any, warmupAction: any) => {
                 processed.push(doc.mobile);
+                plannedActions.push(warmupAction?.action);
                 return { updateCount: 1, updateSummary: 'set_privacy' };
             });
 
@@ -1389,6 +1391,8 @@ describe('PromoteClientService coverage', () => {
 
             expect(processed).toHaveLength(8);
             expect(processed[0]).toBe('15554201000');
+            expect(plannedActions).toHaveLength(8);
+            expect(plannedActions).not.toContain(undefined);
         });
 
         it('stops processing once MAX_UPDATES_PER_CYCLE is reached (987)', async () => {

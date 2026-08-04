@@ -47,6 +47,7 @@ class CapProbe extends BaseClientService<BaseClientDocument> {
     get MIN() { return (this as any).MIN_UPDATES_PER_CYCLE; }
     get MAX() { return (this as any).MAX_UPDATES_PER_CYCLE; }
     get SENS_CAP() { return (this as any).MAX_SENSITIVE_ACTIONS_PER_CYCLE; }
+    get ORGANIC_CAP() { return (this as any).MAX_ORGANIC_ACTIONS_PER_CYCLE; }
     get RUNS_PER_DAY() { return (this as any).WARMUP_RUNS_PER_DAY; }
     // Horizon for drain assertions (days). Age no longer retires accounts; this is just a generous
     // upper bound the backlog must clear within, derived from the advisory long-warming threshold.
@@ -318,4 +319,65 @@ describe('warmup drain — deterministic simulation over real prod population', 
             });
         });
     }
+});
+
+/**
+ * Focused invariants for the per-run sub-caps, mirroring the REAL warmup mutation loop
+ * (buffer-client / promote-client _checkClientsInternal) exactly:
+ *   - organic_only is capped per run (MAX_ORGANIC_ACTIONS_PER_CYCLE) so gated accounts — which
+ *     make no phase progress but cost a ~20s TG session each — cannot monopolize the serial run
+ *     and starve accounts that have a real mutation waiting.
+ *   - a PLANNED sensitive action counts against the sensitive sub-cap when it is invoked, NOT only
+ *     when it succeeds — a failed sensitive action still consumed a risky attempt on the IP.
+ */
+describe('warmup per-run sub-caps: organic cap + sensitive-counted-on-plan', () => {
+    const probe = new CapProbe();
+
+    // Reproduces the real loop's cap accounting for an arbitrary planned-action sequence.
+    function runLoop(plannedActions: string[]) {
+        let sensitive = 0, organic = 0, mutations = 0;
+        const invoked: string[] = [];
+        for (const action of plannedActions) {
+            if (action === 'organic_only' && organic >= probe.ORGANIC_CAP) continue; // organic sub-cap
+            const isSens = probe.isSensitive(action);
+            if (isSens && sensitive >= probe.SENS_CAP) continue;                      // sensitive sub-cap
+            if (isSens) sensitive++;                                                  // count on PLAN, not success
+            if (action === 'organic_only') organic++;
+            invoked.push(action);
+            if (action !== 'organic_only' && action !== 'wait') mutations++;
+        }
+        return { sensitive, organic, mutations, invoked };
+    }
+
+    it('never invokes more than MAX_ORGANIC_ACTIONS_PER_CYCLE organic actions in a run', () => {
+        const many = Array(50).fill('organic_only');
+        const res = runLoop(many);
+        expect(res.organic).toBeLessThanOrEqual(probe.ORGANIC_CAP);
+        expect(res.invoked.length).toBe(probe.ORGANIC_CAP); // the rest are skipped, not run
+    });
+
+    it('organic overflow does NOT block real mutations behind it', () => {
+        // 20 organic (only ORGANIC_CAP run) followed by a real step — the step must still be reached.
+        const seq = [...Array(20).fill('organic_only'), 'set_privacy', 'delete_photos'];
+        const res = runLoop(seq);
+        expect(res.invoked).toContain('set_privacy');
+        expect(res.invoked).toContain('delete_photos');
+        expect(res.organic).toBe(probe.ORGANIC_CAP);
+    });
+
+    it('counts a PLANNED sensitive action against the sub-cap even when it would fail', () => {
+        // SENS_CAP+3 sensitive actions planned: only SENS_CAP are invoked, regardless of success.
+        const seq = Array(probe.SENS_CAP + 3).fill('set_2fa');
+        const res = runLoop(seq);
+        expect(res.sensitive).toBe(probe.SENS_CAP);
+        expect(res.invoked.length).toBe(probe.SENS_CAP); // failures still consumed the cap
+    });
+
+    it('non-sensitive, non-organic actions are not limited by either sub-cap', () => {
+        const seq = Array(10).fill('set_privacy'); // lightweight mutation, neither sub-cap applies
+        const res = runLoop(seq);
+        expect(res.invoked.length).toBe(10);
+        expect(res.sensitive).toBe(0);
+        expect(res.organic).toBe(0);
+    });
 });
