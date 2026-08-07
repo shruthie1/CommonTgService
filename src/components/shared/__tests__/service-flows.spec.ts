@@ -488,7 +488,7 @@ describe('Service flow reliability', () => {
         await service.checkPromoteClients();
 
         expect((service as any).performHealthCheck).not.toHaveBeenCalled();
-        expect((service as any).processClient).toHaveBeenCalledWith(warmDoc, { clientId: 'client-1', mobile: 'main-1' });
+        expect((service as any).processClient).toHaveBeenCalledWith(warmDoc, { clientId: 'client-1', mobile: 'main-1' }, expect.objectContaining({ action: expect.any(String) }));
     });
 
     test('checkPromoteClients leaves ready accounts for the dedicated rotation worker', async () => {
@@ -642,7 +642,7 @@ describe('Service flow reliability', () => {
         await service.checkPromoteClients();
 
         expect(processSpy).toHaveBeenCalledTimes(1);
-        expect(processSpy).toHaveBeenCalledWith(warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+        expect(processSpy).toHaveBeenCalledWith(warmingDoc, { clientId: 'client-2', mobile: 'main-2' }, expect.objectContaining({ action: expect.any(String) }));
     });
 
     test('checkPromoteClients does not enroll beyond the healthy per-client cap', async () => {
@@ -912,7 +912,7 @@ describe('Service flow reliability', () => {
         await service.checkBufferClients();
 
         expect(processSpy).toHaveBeenCalledTimes(1);
-        expect(processSpy).toHaveBeenCalledWith(warmingDoc, { clientId: 'client-2', mobile: 'main-2' });
+        expect(processSpy).toHaveBeenCalledWith(warmingDoc, { clientId: 'client-2', mobile: 'main-2' }, expect.objectContaining({ action: expect.any(String) }));
     });
 
     test('checkBufferClients does not enroll beyond the healthy per-client cap', async () => {

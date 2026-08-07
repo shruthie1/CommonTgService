@@ -123,6 +123,20 @@ export interface WarmupPriorityInput {
     enrolledAt?: Date | string | null;
     createdAt?: Date | string | null;
     failedUpdateAttempts?: number | null;
+    // Real-progress timestamps: fair-aging measures time since the account last made ACTUAL
+    // warmup progress (a completed step), NOT time since it was last touched. lastUpdateAttempt is
+    // bumped by organic-only ticks too, which would reset the starvation clock on a day-gated
+    // account and permanently hide it behind fresher accounts — the exact "68-day still-settling"
+    // symptom. Keying on these step stamps lets a genuinely-stalled account accumulate its rescue
+    // bonus regardless of organic activity. (lastUpdateAttempt still drives COOLDOWN, unchanged.)
+    privacyUpdatedAt?: Date | string | null;
+    twoFASetAt?: Date | string | null;
+    otherAuthsRemovedAt?: Date | string | null;
+    profilePicsDeletedAt?: Date | string | null;
+    nameBioUpdatedAt?: Date | string | null;
+    usernameUpdatedAt?: Date | string | null;
+    profilePicsUpdatedAt?: Date | string | null;
+    sessionRotatedAt?: Date | string | null;
 }
 
 /**
@@ -143,10 +157,24 @@ export function calculateWarmupPriority(
     const failedAttempts = Math.max(0, doc.failedUpdateAttempts || 0);
     const failurePenalty = Math.min(failedAttempts, WARMUP_FAILURE_PENALTY_CAP) * WARMUP_FAILURE_PENALTY_POINTS;
 
-    const lastTouch =
-        ClientHelperUtils.getTimestamp(doc.lastUpdateAttempt) ||
-        ClientHelperUtils.getTimestamp(doc.enrolledAt) ||
-        ClientHelperUtils.getTimestamp(doc.createdAt);
+    // Fair-aging clock = time since last REAL progress (a completed warmup step), not time since
+    // last touch. Using the max of the step stamps means an account waiting out an inter-step
+    // day-gate — or being deferred by the sensitive cap — keeps aging, while organic-only ticks
+    // (which bump lastUpdateAttempt) no longer reset it. Falls back to enrol/ created for accounts
+    // that have not completed a step yet (so brand-new enrolled accounts still age from enrollment).
+    const lastProgress = Math.max(
+        ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt),
+        ClientHelperUtils.getTimestamp(doc.twoFASetAt),
+        ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt),
+        ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt),
+        ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt),
+        ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt),
+        ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt),
+        ClientHelperUtils.getTimestamp(doc.sessionRotatedAt),
+    );
+    const lastTouch = lastProgress > 0
+        ? lastProgress
+        : (ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt));
     const lastTouchAgeHours = lastTouch > 0 ? Math.max(0, (now - lastTouch) / ONE_HOUR_MS) : 0;
     const agingWindowHours = FAIR_AGING_FULL_RESCUE_HOURS - FAIR_AGING_GRACE_HOURS;
     const starvationHours = Math.max(0, lastTouchAgeHours - FAIR_AGING_GRACE_HOURS);
