@@ -43,6 +43,13 @@ export interface BotHealthRunResult {
     failures: string[];
     dryRun: boolean;
     proposedActions: string[];
+    /**
+     * Categories whose CHANNEL is unreachable (getChat "chat not found" / bot not a member).
+     * A bot can pass getMe (token alive) and still be unable to post because the channel itself
+     * is dead — the exact blind spot that let the FailedPayments channel sit dead unnoticed.
+     * Empty on a healthy run.
+     */
+    deadChannels: string[];
 }
 
 export interface SendMessageOptions {
@@ -1010,6 +1017,68 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * Probe whether a bot can actually reach its target CHANNEL via getChat.
+     *   'alive'   — getChat ok:true (channel exists and this bot is a member).
+     *   'dead'    — 400 "chat not found" / 403 "bot is not a member"/"kicked" — the channel is
+     *               unreachable for this bot; sends will silently no-op.
+     *   'unknown' — timeout / 5xx / 429 / network — transient, do NOT treat as dead.
+     * getMe proves only the TOKEN is alive; this proves the CHANNEL is postable. The gap between
+     * the two is exactly what let the FailedPayments channel sit dead unnoticed.
+     */
+    private async probeChannelAlive(token: string, channelId: string): Promise<'alive' | 'dead' | 'unknown'> {
+        try {
+            const res = await axios.get(`https://api.telegram.org/bot${token}/getChat`, {
+                params: { chat_id: channelId }, timeout: 12000,
+            });
+            return res.data?.ok === true ? 'alive' : 'unknown';
+        } catch (error: any) {
+            const status = error?.response?.status;
+            const desc = String(error?.response?.data?.description || '').toLowerCase();
+            if (status === 400 && desc.includes('chat not found')) return 'dead';
+            if (status === 403 && (desc.includes('not a member') || desc.includes('kicked') || desc.includes('bot was blocked'))) return 'dead';
+            if (status === 400 || status === 404) return 'dead';
+            return 'unknown';
+        }
+    }
+
+    /**
+     * Category-channel canary: for every category that has at least one live bot, verify the
+     * category's CHANNEL is actually reachable (getChat). Returns the list of categories whose
+     * channel is dead. This is the check missing from getMe + admin-reconcile: those confirm the
+     * token is alive and (for pending bots) that the bot is a channel admin, but NEVER that the
+     * channel itself still exists / is postable. A dead channel (e.g. deleted, or the bot removed)
+     * therefore fails every send as a swallowed log line, indefinitely, with no operator signal.
+     *
+     * One getChat per distinct (category, channelId) using that category's own live bot token, so
+     * the probe uses a token that SHOULD be a member. Alerting is folded into the health summary,
+     * and additionally emitted to stderr (console.error) — an independent, non-Telegram trace, so a
+     * dead ACCOUNT_NOTIFICATIONS channel (the alert channel itself) still leaves a footprint.
+     */
+    private async probeCategoryChannels(bots: Array<Partial<Bot>>): Promise<string[]> {
+        // One representative live bot per (category → channelId). Skip dead-token / no-channel bots.
+        const probes = new Map<string, { category: string; channelId: string; token: string }>();
+        for (const bot of bots) {
+            if (!bot.channelId || !bot.token) continue;
+            if (this.lifecycleOf(bot) === 'dead_token') continue;
+            const key = `${bot.category}::${bot.channelId}`;
+            if (!probes.has(key)) probes.set(key, { category: String(bot.category), channelId: bot.channelId, token: bot.token });
+        }
+
+        const deadChannels: string[] = [];
+        for (const { category, channelId, token } of probes.values()) {
+            const verdict = await this.probeChannelAlive(token, channelId);
+            if (verdict === 'dead') {
+                deadChannels.push(`${category} (channel ${channelId})`);
+                // Independent-of-Telegram trace: if the dead channel IS the alert channel, the
+                // health-summary send will also fail — this stderr line is the only surviving signal.
+                console.error(JSON.stringify({ event: 'dead_channel_detected', category, channelId }));
+            }
+            await this.sleep(1200); // space getChat calls, same pacing as getMe
+        }
+        return deadChannels;
+    }
+
+    /**
      * Daily job: validate every bot, mark 401s inactive, and conservatively replace
      * dead bots via BotFather using a random healthy user account. Title = category,
      * description = "<creatorMobile> @<creatorUsername>". New bot is added to the dead
@@ -1018,7 +1087,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     async validateAndReplaceBots(options: BotHealthRunOptions = {}): Promise<BotHealthRunResult> {
         const empty = (failure: string): BotHealthRunResult => ({
             checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0,
-            failures: [failure], dryRun: Boolean(options.dryRun), proposedActions: [],
+            failures: [failure], dryRun: Boolean(options.dryRun), proposedActions: [], deadChannels: [],
         });
         // Per-process guard: catches same-pod overlap (scheduled tick + a manual endpoint call).
         if (this.replaceInProgress) {
@@ -1131,10 +1200,15 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 }
             }
 
+            // Canary: verify each configured category's CHANNEL is still reachable (getChat), not
+            // just that the tokens are alive. Runs in dry-run too — it's read-only (no mutations).
+            const deadChannels = await this.probeCategoryChannels(bots);
+            for (const dc of deadChannels) failures.push(`DEAD CHANNEL: ${dc} — sends silently no-op; repair/rotate the channel`);
+
             if (!options.dryRun) {
                 await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
             }
-            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions };
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions, deadChannels };
         } finally {
             this.replaceInProgress = false;
         }

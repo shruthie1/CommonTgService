@@ -18869,10 +18869,51 @@ let BotsService = BotsService_1 = class BotsService {
             return { verdict: 'unknown', status };
         }
     }
+    async probeChannelAlive(token, channelId) {
+        try {
+            const res = await axios_1.default.get(`https://api.telegram.org/bot${token}/getChat`, {
+                params: { chat_id: channelId }, timeout: 12000,
+            });
+            return res.data?.ok === true ? 'alive' : 'unknown';
+        }
+        catch (error) {
+            const status = error?.response?.status;
+            const desc = String(error?.response?.data?.description || '').toLowerCase();
+            if (status === 400 && desc.includes('chat not found'))
+                return 'dead';
+            if (status === 403 && (desc.includes('not a member') || desc.includes('kicked') || desc.includes('bot was blocked')))
+                return 'dead';
+            if (status === 400 || status === 404)
+                return 'dead';
+            return 'unknown';
+        }
+    }
+    async probeCategoryChannels(bots) {
+        const probes = new Map();
+        for (const bot of bots) {
+            if (!bot.channelId || !bot.token)
+                continue;
+            if (this.lifecycleOf(bot) === 'dead_token')
+                continue;
+            const key = `${bot.category}::${bot.channelId}`;
+            if (!probes.has(key))
+                probes.set(key, { category: String(bot.category), channelId: bot.channelId, token: bot.token });
+        }
+        const deadChannels = [];
+        for (const { category, channelId, token } of probes.values()) {
+            const verdict = await this.probeChannelAlive(token, channelId);
+            if (verdict === 'dead') {
+                deadChannels.push(`${category} (channel ${channelId})`);
+                console.error(JSON.stringify({ event: 'dead_channel_detected', category, channelId }));
+            }
+            await this.sleep(1200);
+        }
+        return deadChannels;
+    }
     async validateAndReplaceBots(options = {}) {
         const empty = (failure) => ({
             checked: 0, alive: 0, dead: 0, unknown: 0, replaced: 0, toppedUp: 0,
-            failures: [failure], dryRun: Boolean(options.dryRun), proposedActions: [],
+            failures: [failure], dryRun: Boolean(options.dryRun), proposedActions: [], deadChannels: [],
         });
         if (this.replaceInProgress) {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
@@ -18978,10 +19019,13 @@ let BotsService = BotsService_1 = class BotsService {
                     (0, utils_1.parseError)(err, `[BotHealth] ${msg}`, false);
                 }
             }
+            const deadChannels = await this.probeCategoryChannels(bots);
+            for (const dc of deadChannels)
+                failures.push(`DEAD CHANNEL: ${dc} — sends silently no-op; repair/rotate the channel`);
             if (!options.dryRun) {
                 await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
             }
-            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions };
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions, deadChannels };
         }
         finally {
             this.replaceInProgress = false;

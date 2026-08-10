@@ -1008,4 +1008,94 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     expect(res.proposedActions.some(a => /reuse live-token/i.test(a))).toBe(true);
   });
 
+  // ---- Category-channel canary (getChat): detect channels that are dead even though tokens live ----
+  //
+  // getMe (checkBotToken) proves the TOKEN is alive; it says nothing about whether the target
+  // CHANNEL still exists / is postable. These tests pin the missing check: a bot whose token
+  // passes getMe but whose channel returns getChat "chat not found" must be surfaced as a dead
+  // channel (the FailedPayments failure mode). axios.get is URL-aware: getMe→alive, getChat→per test.
+
+  test('CANARY: token alive (getMe ok) but channel dead (getChat "chat not found") → deadChannels alert', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    (service as any).sleep = jest.fn(async () => undefined);
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      // getChat → channel is gone
+      throw { response: { status: 400, data: { ok: false, description: 'Bad Request: chat not found' } } };
+    });
+    await seedBot({ category: ChannelCategory.FAILED_PAYMENTS, channelId: '-100deadchan', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    // Token was alive, so NOT retired as dead_token…
+    const bot = await model.findOne({ category: ChannelCategory.FAILED_PAYMENTS });
+    expect(bot.lifecycle).toBe('active_verified');
+    // …but the dead CHANNEL is surfaced.
+    expect(res.deadChannels.some(d => /FAILED_PAYMENTS/.test(d) && /-100deadchan/.test(d))).toBe(true);
+    expect(res.failures.some(f => /DEAD CHANNEL/i.test(f) && /FAILED_PAYMENTS/.test(f))).toBe(true);
+  });
+
+  test('CANARY: healthy channel (getChat ok) → no deadChannels', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    (service as any).sleep = jest.fn(async () => undefined);
+    // Both getMe and getChat return ok.
+    mockedAxios.get.mockResolvedValue({ status: 200, data: { ok: true, result: { username: 'gm_bot', id: -100 } } } as any);
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100alive', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.deadChannels).toEqual([]);
+    expect(res.failures.some(f => /DEAD CHANNEL/i.test(f))).toBe(false);
+  });
+
+  test('CANARY: transient getChat 5xx is NOT treated as a dead channel (no false alert)', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    (service as any).sleep = jest.fn(async () => undefined);
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      throw { response: { status: 500, data: { ok: false, description: 'Internal Server Error' } } };
+    });
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100flaky', status: 'active' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect(res.deadChannels).toEqual([]);
+  });
+
+  test('CANARY: probes each distinct channel once, skips dead_token bots', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    (service as any).sleep = jest.fn(async () => undefined);
+    const getChatCalls: string[] = [];
+    mockedAxios.get.mockImplementation(async (url: string, cfg?: any) => {
+      if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      getChatCalls.push(String(cfg?.params?.chat_id));
+      return { status: 200, data: { ok: true, result: {} } } as any;
+    });
+    // Two live bots on the SAME channel (probe once) + one dead_token bot (skip probe entirely).
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100shared', status: 'active' });
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100shared', status: 'active' });
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100deadtok', status: 'inactive', lifecycle: 'dead_token' });
+
+    await service.validateAndReplaceBots();
+
+    // -100shared probed exactly once; the dead_token channel never probed.
+    expect(getChatCalls.filter(c => c === '-100shared')).toHaveLength(1);
+    expect(getChatCalls).not.toContain('-100deadtok');
+  });
+
+  test('CANARY: runs in dry-run (read-only) and still reports dead channels', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    (service as any).sleep = jest.fn(async () => undefined);
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      throw { response: { status: 400, data: { ok: false, description: 'Bad Request: chat not found' } } };
+    });
+    await seedBot({ category: ChannelCategory.FAILED_PAYMENTS, channelId: '-100drychan', status: 'active' });
+
+    const res = await service.validateAndReplaceBots({ dryRun: true });
+
+    expect(res.dryRun).toBe(true);
+    expect(res.deadChannels.some(d => /-100drychan/.test(d))).toBe(true);
+  });
+
 });
