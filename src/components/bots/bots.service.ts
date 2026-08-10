@@ -1080,7 +1080,12 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
             if (!options.dryRun) await this.refreshBotCache();
 
-            const pendingRepair = await this.reconcilePendingAdminBots(options);
+            // Per-run cache of channel controllability (channelId -> admin mobile | null). Shared by
+            // reconcile + top-up so resolveChannelAdminMobile (Telegram admin-list scans) runs at
+            // most once per channel per run, and both paths make the SAME create/skip decision.
+            const controllability = new Map<string, string | null>();
+
+            const pendingRepair = await this.reconcilePendingAdminBots(options, controllability);
             failures.push(...pendingRepair.failures);
             proposedActions.push(...pendingRepair.proposedActions);
             stopPrivilegedWork = pendingRepair.stopPrivilegedWork;
@@ -1113,7 +1118,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             let toppedUp = 0;
             if (!stopPrivilegedWork && creationBudget > 0) {
                 try {
-                    const topUp = await this.topUpCategoriesToMinHealthy(creationBudget, options.dryRun);
+                    const topUp = await this.topUpCategoriesToMinHealthy(creationBudget, options.dryRun, controllability);
                     toppedUp = topUp.toppedUp;
                     creationBudget -= topUp.creationAttempts;
                     failures.push(...topUp.topUpFailures);
@@ -1136,7 +1141,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /** Reconcile pending bot records without treating a valid token as proof of channel access. */
-    private async reconcilePendingAdminBots(options: BotHealthRunOptions): Promise<{ failures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean }> {
+    private async reconcilePendingAdminBots(options: BotHealthRunOptions, controllability: Map<string, string | null>): Promise<{ failures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean }> {
         const failures: string[] = [];
         const proposedActions: string[] = [];
         const now = new Date();
@@ -1163,8 +1168,18 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             if (options.dryRun) {
                 // Dry-run validates tokens above, then reports the bounded reconciliation that a
                 // real run would attempt. Do not connect accounts, query channel admins, trigger
-                // fetchWithTimeout notifications, or perform any Telegram mutation.
+                // fetchWithTimeout notifications, or perform any Telegram mutation (so the
+                // controllability scan below is deliberately NOT run in dry-run).
                 proposedActions.push(`reconcile pending-admin @${bot.username} in ${bot.channelId}`);
+                continue;
+            }
+            // Skip bots whose channel is NOT controllable: re-adding can never succeed (no admin
+            // account of ours), so retrying just hammers Telegram and burns the retry cap toward
+            // manual_attention for a problem that isn't the bot's fault. Don't touch repairAttempts;
+            // leave it pending so it auto-recovers once the channel is made controllable. The
+            // top-up circuit-breaker raises the one alert. (Cache: at most one scan per channel/run.)
+            if (!(await this.resolveChannelAdminCached(bot.channelId, controllability))) {
+                proposedActions.push(`skip pending-admin @${bot.username}: channel ${bot.channelId} not controllable (no re-add possible)`);
                 continue;
             }
             try {
@@ -1348,6 +1363,88 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * REUSE-FIRST: before minting a new bot, try to (re)activate an existing bot in the category
+     * that has a LIVE token but isn't verified in the channel (pending_admin / manual_attention).
+     * We accumulated dozens of such live-token bots (kicked from the channel) while the top-up
+     * kept creating brand-new ones that hit the same wall — pure waste. Re-adding an existing live
+     * bot is free (no BotFather budget) and idempotent. Returns the number reactivated (0..want).
+     */
+    private async reuseExistingBotsForCategory(
+        category: ChannelCategory,
+        channelId: string,
+        want: number,
+        dryRun: boolean,
+        controllability: Map<string, string | null>,
+    ): Promise<{ reused: number; proposedActions: string[]; stopPrivilegedWork: boolean }> {
+        const proposedActions: string[] = [];
+        if (want <= 0) return { reused: 0, proposedActions, stopPrivilegedWork: false };
+        // Candidates: same category+channel, live-token-but-unverified (pending_admin/manual_attention).
+        const candidates = await this.botModel.find({
+            category,
+            channelId,
+            lifecycle: { $in: ['pending_admin', 'manual_attention'] },
+        }).sort({ lastValidatedAt: -1, createdAt: -1 }).limit(want * 3).lean().exec();
+        if (candidates.length === 0) return { reused: 0, proposedActions, stopPrivilegedWork: false };
+        // Dry-run: report the reuse that a real run would attempt, WITHOUT the controllability
+        // scan or any Telegram mutation (honor the no-Telegram dry-run contract).
+        if (dryRun) {
+            for (const bot of candidates.slice(0, want)) {
+                proposedActions.push(`reuse live-token @${bot.username} (${category}) — would re-add to ${channelId} instead of creating`);
+            }
+            return { reused: Math.min(want, candidates.length), proposedActions, stopPrivilegedWork: false };
+        }
+        // Real run: reuse only makes sense on a CONTROLLABLE channel — if we can't add bots at all,
+        // don't bother; the circuit-breaker handles the alert.
+        if (!(await this.resolveChannelAdminCached(channelId, controllability))) {
+            return { reused: 0, proposedActions, stopPrivilegedWork: false };
+        }
+        let reused = 0;
+        for (const bot of candidates) {
+            if (reused >= want) break;
+            // Only reuse a bot whose token is actually alive (else it's genuinely dead → skip).
+            const check = await this.checkBotToken(bot.token);
+            if (check.verdict !== 'alive') continue;
+            proposedActions.push(`reuse live-token @${bot.username} (${category}) — re-add to ${channelId} instead of creating`);
+            try {
+                const info = await this.telegramService.getBotInfo(bot.token);
+                const botId = String(info?.id || '');
+                if (!botId) continue;
+                await this.addBotToChannelAsAdmin(channelId, bot.token, bot.username);
+                if (!(await this.verifyBotIsChannelAdmin(channelId, botId))) continue; // re-add didn't stick; leave as-is
+                await this.botModel.updateOne({ _id: bot._id }, {
+                    $set: { lifecycle: 'active_verified', lifecycleReason: 'reused: re-added to channel as admin', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', repairAttempts: 0 },
+                    $unset: { deadReason: '', deadAt: '', nextRepairAt: '' },
+                }).exec();
+                reused++;
+                console.log(`[BotHealth] REUSED @${bot.username} (${category}) — re-added to ${channelId} (no new bot created)`);
+            } catch (err) {
+                // A FLOOD/spam signal on the manager account means back off ALL privileged work this
+                // run — don't keep re-adding more bots (that hammers a flooding account).
+                if (this.isFloodSignal(err)) {
+                    if (reused > 0 && !dryRun) await this.refreshBotCache();
+                    return { reused, proposedActions, stopPrivilegedWork: true };
+                }
+                // Any other re-add failure: leave the bot as-is, try the next candidate.
+            }
+        }
+        if (reused > 0 && !dryRun) await this.refreshBotCache();
+        return { reused, proposedActions, stopPrivilegedWork: false };
+    }
+
+    /**
+     * Per-run controllability cache: resolveChannelAdminMobile does Telegram admin-list scans
+     * across viewer accounts (expensive + a mild footprint), and the same channel is checked by
+     * both reconcile and top-up. Resolve it at most ONCE per channel per run. null = not
+     * controllable by any of our accounts (bots can never be added → creation is futile).
+     */
+    private async resolveChannelAdminCached(channelId: string, cache: Map<string, string | null>): Promise<string | null> {
+        if (cache.has(channelId)) return cache.get(channelId) ?? null;
+        const admin = await this.resolveChannelAdminMobile(channelId).catch(() => null);
+        cache.set(channelId, admin);
+        return admin;
+    }
+
+    /**
      * Ensure every category holds at least `minHealthyBotsPerCategory` HEALTHY (active) bots.
      * Runs AFTER the dead-replacement pass so a just-revived/just-replaced bot counts. Provisions
      * fresh bots for any category below the floor, subject to the run's shared BotFather creation
@@ -1356,6 +1453,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private async topUpCategoriesToMinHealthy(
         creationBudget: number,
         dryRun: boolean,
+        controllability: Map<string, string | null>,
     ): Promise<{ toppedUp: number; creationAttempts: number; topUpFailures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean }> {
         const topUpFailures: string[] = [];
         const proposedActions: string[] = [];
@@ -1384,7 +1482,38 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
                 continue;
             }
-            const need = Math.min(deficit, creationBudget - creationAttempts);
+
+            // REUSE-FIRST: satisfy the deficit from existing live-token bots (re-add to channel)
+            // before spending any BotFather budget. Free, idempotent, and prevents the "create a
+            // fresh bot that hits the same wall" waste (this incident: 20+ live bots, kept minting).
+            const reuse = await this.reuseExistingBotsForCategory(category as ChannelCategory, channelId, deficit, dryRun, controllability);
+            proposedActions.push(...reuse.proposedActions);
+            if (reuse.stopPrivilegedWork) { stopPrivilegedWork = true; break; } // flood during reuse → abort run
+            const remainingDeficit = deficit - reuse.reused;
+            if (remainingDeficit <= 0) {
+                if (reuse.reused > 0) console.log(`[BotHealth] ${category}: deficit met by REUSING ${reuse.reused} existing bot(s) — no creation`);
+                continue;
+            }
+
+            // CIRCUIT-BREAKER: if the channel is NOT controllable (no account of ours is an admin,
+            // so a bot can never be added), creating more bots is futile — every new one lands in
+            // pending_admin and is abandoned (the root cause of the over-creation loop). Stop
+            // creating for this category and alert for a one-time human fix instead of minting corpses.
+            // Uses the per-run controllability cache (resolved at most once per channel). Skipped in
+            // dry-run to honor the no-Telegram contract (the scan hits accounts) — dry-run just
+            // reports the would-create below.
+            if (!dryRun) {
+                const adminMobile = await this.resolveChannelAdminCached(channelId, controllability);
+                if (!adminMobile) {
+                    const msg = `${category}: channel ${channelId} has NO controllable admin — NOT creating bots (would be abandoned). ${liveCount}/${this.minHealthyBotsPerCategory} live; ${reuse.reused} reused. Fix: make a manager account admin of the channel, or re-point the category to a controllable channel.`;
+                    topUpFailures.push(msg);
+                    await this.notify(`<b>Bot top-up BLOCKED — uncontrollable channel</b>\nCategory: ${category}\nChannel: ${channelId}\nHealthy: ${liveCount}/${this.minHealthyBotsPerCategory}\nCreation skipped to avoid orphan bots. Add a manager as channel admin, then bots self-heal.`);
+                    console.warn(`[BotHealth] ${msg}`);
+                    continue;
+                }
+            }
+
+            const need = Math.min(remainingDeficit, creationBudget - creationAttempts);
             for (let i = 0; i < need; i++) {
                 try {
                     proposedActions.push(`top up ${category} in ${channelId}`);

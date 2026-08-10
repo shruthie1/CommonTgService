@@ -913,4 +913,99 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     delete process.env.channelManagerPrimary;
   });
 
+  test('REUSE-FIRST: a live-token pending_admin bot is re-added instead of creating a new one', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    wireHealthyDeps();
+    // 1 active (floor is 2 → deficit 1) + 1 live-token pending_admin bot in the SAME category/channel.
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100reuse', status: 'active' });
+    const pending = await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100reuse', status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    const res = await service.validateAndReplaceBots();
+
+    // The deficit was met by REUSING the existing bot → NO new bot created.
+    expect(createdCount).toBe(0);
+    const reused = await model.findById(pending._id);
+    expect(reused.lifecycle).toBe('active_verified');
+    expect(reused.status).toBe('active');
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('CIRCUIT-BREAKER: uncontrollable channel → NO bot creation, alert instead', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    wireHealthyDeps();
+    // Make resolveChannelAdminMobile find NO controllable admin: admin scan returns strangers only
+    // (none of our accounts) AND channel About has no creator mobile → uncontrollable.
+    const { telegramService } = wireHealthyDeps();
+    (telegramService.getGroupAdmins as jest.Mock).mockResolvedValue([{ userId: '99999', rank: 'creator' }]);
+    (telegramService.getChannelAbout as jest.Mock).mockResolvedValue('');
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100uncontrollable', status: 'active' }); // 1 live, deficit 1
+
+    const res = await service.validateAndReplaceBots();
+
+    // Deficit exists but channel is uncontrollable → do NOT create (would be abandoned).
+    expect(createdCount).toBe(0);
+    expect(res.toppedUp).toBe(0);
+    // A failure/alert is recorded for the blocked category.
+    expect(res.failures.some(f => /NO controllable admin|not controllable/i.test(f))).toBe(true);
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('RECONCILE-SKIP: pending_admin bot on an uncontrollable channel is left untouched (no retry burn)', async () => {
+    wireHealthyDeps();
+    const { telegramService } = wireHealthyDeps();
+    // uncontrollable: admin scan returns only strangers, no creator in About
+    (telegramService.getGroupAdmins as jest.Mock).mockResolvedValue([{ userId: '99999' }]);
+    (telegramService.getChannelAbout as jest.Mock).mockResolvedValue('');
+    const promoteSpy = telegramService.promoteBotInChannel as jest.Mock;
+    const pending = await seedBot({
+      category: ChannelCategory.UNVDS, channelId: '-100nocontrol',
+      status: 'inactive', lifecycle: 'pending_admin', repairAttempts: 1, nextRepairAt: new Date(0),
+    });
+
+    await service.validateAndReplaceBots();
+
+    const bot = await model.findById(pending._id);
+    // repairAttempts must NOT have incremented (we skipped, didn't retry) and it stays pending.
+    expect(bot.repairAttempts).toBe(1);
+    expect(bot.lifecycle).toBe('pending_admin');
+    // and we never attempted to promote it (no wasted Telegram add on a doomed channel).
+    expect(promoteSpy).not.toHaveBeenCalled();
+  });
+
+  test('FLOOD-DURING-REUSE: a flood on re-add stops all privileged work this run', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    const { telegramService } = wireHealthyDeps();
+    // Channel IS controllable (reuse proceeds), but the re-add (promoteBotInChannel) throws FLOOD.
+    (telegramService.promoteBotInChannel as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('420: FLOOD_WAIT_X'), { errorMessage: 'FLOOD_WAIT_X', seconds: 300 }),
+    );
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100flood', status: 'active' }); // deficit 1
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100flood', status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    const res = await service.validateAndReplaceBots();
+
+    // Flood during reuse → back off: no new bot created this run.
+    expect(createdCount).toBe(0);
+    delete process.env.channelManagerPrimary;
+  });
+
+  test('DRY-RUN reuse: reports would-reuse WITHOUT resolving TelegramService (no live scan)', async () => {
+    // If dry-run touched Telegram, resolving TelegramService throws — proving no live call is made.
+    mockModuleRef.get.mockReset().mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) throw new Error('must not resolve TelegramService in dry-run reuse');
+      return {};
+    });
+    mockedAxios.get.mockResolvedValue(axiosOk());
+    (service as any).sleep = jest.fn(async () => undefined);
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100dry', status: 'active' });
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100dry', status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    const res = await service.validateAndReplaceBots({ dryRun: true });
+
+    // Dry-run must not throw (no Telegram resolve) and should propose a reuse.
+    expect(res.dryRun).toBe(true);
+    expect(res.proposedActions.some(a => /reuse live-token/i.test(a))).toBe(true);
+  });
+
 });
