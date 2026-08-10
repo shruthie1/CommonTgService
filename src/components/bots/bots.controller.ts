@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { BotsService } from './bots.service';
+import { SendRateLimitGuard } from '../../guards/send-rate-limit.guard';
 import { Bot } from './schemas/bot.schema';
 import { ChannelCategory } from './channel-category.enum';
 
@@ -106,6 +107,7 @@ export class BotsController {
 
   // Message Sending Endpoints - By Category
   @Post('category/:category/message')
+  @UseGuards(SendRateLimitGuard)
   @ApiOperation({
     summary: 'Send a message using bots in a category',
     description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.' })
@@ -142,6 +144,7 @@ export class BotsController {
   }
 
   @Post('category/:category/photo')
+  @UseGuards(SendRateLimitGuard)
   @ApiOperation({
     summary: 'Send a photo using bots in a category',
     description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.' })
@@ -177,6 +180,7 @@ export class BotsController {
   }
 
   @Post('category/:category/video')
+  @UseGuards(SendRateLimitGuard)
   @ApiOperation({
     summary: 'Send a video using bots in a category',
     description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.' })

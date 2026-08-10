@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Post, Query, Res, UseInterceptors, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpException, HttpStatus, Param, ParseIntPipe, Post, Query, Res, UseGuards, UseInterceptors, ValidationPipe } from '@nestjs/common';
+import { SendRateLimitGuard } from './guards/send-rate-limit.guard';
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import axios, { AxiosError, AxiosResponse } from 'axios';
 import { ExecuteRequestDto } from './components/shared/dto/execute-request.dto';
@@ -395,6 +396,7 @@ export class AppController {
   }
 
   @Get('sendToChannel')
+  @UseGuards(SendRateLimitGuard) // per-IP send cap (vcui fallback + unauthenticated) — see guard
   @ApiOperation({ summary: 'Send message to channel' })
   @ApiQuery({ name: 'msg', description: 'Message to send', type: String, required: true })
   @ApiQuery({ name: 'chatId', description: 'Chat ID of the channel', type: String, required: false })
