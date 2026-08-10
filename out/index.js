@@ -372,6 +372,7 @@ var AppController_1;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AppController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const send_rate_limit_guard_1 = __webpack_require__(/*! ./guards/send-rate-limit.guard */ "./src/guards/send-rate-limit.guard.ts");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const axios_1 = __importDefault(__webpack_require__(/*! axios */ "axios"));
 const execute_request_dto_1 = __webpack_require__(/*! ./components/shared/dto/execute-request.dto */ "./src/components/shared/dto/execute-request.dto.ts");
@@ -691,6 +692,14 @@ let AppController = AppController_1 = class AppController {
         this.appService.exitSecondary();
         return '2';
     }
+    async exitPromotePrimary() {
+        this.appService.exitPromotePrimary();
+        return '1';
+    }
+    async exitPromoteSecondary() {
+        this.appService.exitPromoteSecondary();
+        return '2';
+    }
     async getVidData(profile, clientId, chatId) {
         return await this.appService.getUserData(profile, clientId, chatId);
     }
@@ -860,6 +869,7 @@ __decorate([
 ], AppController.prototype, "getPaymentStats", null);
 __decorate([
     (0, common_1.Get)('sendToChannel'),
+    (0, common_1.UseGuards)(send_rate_limit_guard_1.SendRateLimitGuard),
     (0, swagger_1.ApiOperation)({ summary: 'Send message to channel' }),
     (0, swagger_1.ApiQuery)({ name: 'msg', description: 'Message to send', type: String, required: true }),
     (0, swagger_1.ApiQuery)({ name: 'chatId', description: 'Chat ID of the channel', type: String, required: false }),
@@ -968,6 +978,22 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], AppController.prototype, "exitSecondary", null);
+__decorate([
+    (0, common_1.Get)('exitPromotePrimary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Exit primary promote clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of exiting primary promote clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "exitPromotePrimary", null);
+__decorate([
+    (0, common_1.Get)('exitPromoteSecondary'),
+    (0, swagger_1.ApiOperation)({ summary: 'Exit secondary promote clients' }),
+    (0, swagger_1.ApiResponse)({ description: 'Returns confirmation of exiting secondary promote clients' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AppController.prototype, "exitPromoteSecondary", null);
 __decorate([
     (0, common_1.Get)('/getviddata'),
     (0, swagger_1.ApiOperation)({ summary: 'Get video data' }),
@@ -1409,7 +1435,9 @@ let AppService = AppService_1 = class AppService {
         return resp;
     }
     async leaveChannelsAll() {
-        await this.sendToAll('leavechannels');
+        void this.sendToAll('leavechannels').catch((error) => {
+            (0, utils_1.parseError)(error, 'leaveChannelsAll dispatch failed');
+        });
     }
     async sendToAll(endpoint) {
         const clients = await this.clientService.findAll();
@@ -1437,6 +1465,26 @@ let AppService = AppService_1 = class AppService {
                 await (0, Helpers_1.sleep)(40000);
             }
         }
+    }
+    async exitPromoteClients(clientIdMarker) {
+        const clients = await this.clientService.findAll();
+        for (const client of clients) {
+            if (!client.clientId?.toLowerCase().includes(clientIdMarker))
+                continue;
+            const promoteRepl = client.promoteRepl?.trim();
+            if (!promoteRepl) {
+                this.logger.warn(`Skipping promote exit for ${client.clientId}: promoteRepl is missing`);
+                continue;
+            }
+            await (0, utils_1.fetchWithTimeout)(`${promoteRepl.replace(/\/+$/, '')}/exit`);
+            await (0, Helpers_1.sleep)(40000);
+        }
+    }
+    async exitPromotePrimary() {
+        await this.exitPromoteClients('1');
+    }
+    async exitPromoteSecondary() {
+        await this.exitPromoteClients('2');
     }
     async refreshPrimary() {
         const clients = await this.clientService.findAll();
@@ -1668,7 +1716,8 @@ let AppService = AppService_1 = class AppService {
                 await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Channel SendTrue :: ${document.clientId}: ${resp.data.canSendTrueCount}`);
                 if (resp?.data?.canSendTrueCount &&
                     resp?.data?.canSendTrueCount < 350) {
-                    const result = await this.activeChannelsService.getActiveChannels(150, 0, resp.data?.ids);
+                    const excludedIds = this.getJoinedChannelIdsFromInfo(resp.data);
+                    const result = await this.activeChannelsService.getActiveChannels(25, 0, excludedIds);
                     await (0, utils_1.fetchWithTimeout)(`${(0, utils_1.ppplbot)()}&text=Started Joining Channels for ${document.clientId}: ${result.length}`);
                     this.joinChannelMap.set(document.repl, result);
                 }
@@ -1698,9 +1747,14 @@ let AppService = AppService_1 = class AppService {
                             const channel = channels.shift();
                             console.log(url, ' Pending Channels :', channels.length);
                             this.joinChannelMap.set(url, channels);
+                            const joinUrl = this.buildJoinChannelUrl(url, channel);
+                            if (!joinUrl) {
+                                this.logger.warn(`Skipping channel join without usable target for ${url}`);
+                                return;
+                            }
                             try {
-                                await (0, utils_1.fetchWithTimeout)(`${url}/joinchannel?username=${channel.username}`);
-                                console.log(url, ' Trying to join :', channel.username);
+                                await (0, utils_1.fetchWithTimeout)(joinUrl);
+                                console.log(url, ' Trying to join :', this.describeJoinableChannel(channel));
                             }
                             catch (error) {
                                 (0, utils_1.parseError)(error, 'Outer Err: ');
@@ -1720,6 +1774,36 @@ let AppService = AppService_1 = class AppService {
                 this.joinChannelQueueRunning = false;
             }
         }, 3 * 60 * 1000);
+    }
+    getJoinedChannelIdsFromInfo(channels) {
+        return [...new Set([...(channels?.ids ?? []), ...(channels?.canSendFalseChats ?? [])].map(String).filter(Boolean))];
+    }
+    normalizeTelegramUsername(value) {
+        if (typeof value !== 'string')
+            return null;
+        const username = value.trim().replace(/^@+/, '');
+        if (!username || username === 'undefined' || username === 'null')
+            return null;
+        return /^[A-Za-z0-9_]{5,32}$/.test(username) ? username : null;
+    }
+    normalizeChannelId(value) {
+        const channelId = String(value ?? '').trim().replace(/^-100/, '');
+        return /^[1-9]\d*$/.test(channelId) ? channelId : null;
+    }
+    buildJoinChannelUrl(baseUrl, channel) {
+        if (!channel)
+            return null;
+        const username = this.normalizeTelegramUsername(channel.username);
+        if (!username)
+            return null;
+        const url = new URL('/joinchannel', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+        url.searchParams.set('username', username);
+        return url.toString();
+    }
+    describeJoinableChannel(channel) {
+        return this.normalizeTelegramUsername(channel.username)
+            ?? this.normalizeChannelId(channel.channelId)
+            ?? '<missing-target>';
     }
     clearJoinChannelInterval() {
         if (this.joinChannelIntervalId) {
@@ -9042,7 +9126,11 @@ async function set2fa(ctx) {
     }
 }
 async function createNewSession(ctx) {
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Session creation timed out after 1 minute')), 1 * 60 * 1000));
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Session creation timed out after 1 minute')), 1 * 60 * 1000);
+        timeoutId.unref?.();
+    });
     const sessionPromise = (async () => {
         const me = await ctx.client.getMe();
         const { apiId, apiHash, params: tgParams } = await (0, generateTGConfig_1.generateTGConfig)(ctx.phoneNumber);
@@ -9057,7 +9145,13 @@ async function createNewSession(ctx) {
         await newClient.destroy();
         return session;
     })();
-    return Promise.race([sessionPromise, timeoutPromise]);
+    try {
+        return await Promise.race([sessionPromise, timeoutPromise]);
+    }
+    finally {
+        if (timeoutId)
+            clearTimeout(timeoutId);
+    }
 }
 async function waitForOtp(ctx) {
     for (let i = 0; i < 3; i++) {
@@ -10762,7 +10856,8 @@ async function createBot(ctx, options) {
         ctx.logger.info(ctx.phoneNumber, '[BOT CREATION] Successfully connected to BotFather');
         const waitForBotFatherReply = async (afterId, timeoutMs = 15000) => {
             const deadline = Date.now() + timeoutMs;
-            while (Date.now() < deadline) {
+            const maxAttempts = Math.max(1, Math.ceil(timeoutMs / 1000));
+            for (let attempt = 0; attempt < maxAttempts && Date.now() < deadline; attempt++) {
                 await (0, Helpers_1.sleep)(1000);
                 const msgs = await client.getMessages(entity, { limit: 5 });
                 const reply = (msgs || [])
@@ -12753,7 +12848,7 @@ async function getFileUrl(ctx, url, filename) {
             response.data.pipe(writer);
             response.data.on('error', reject);
         });
-        setTimeout(() => {
+        const cleanupTimer = setTimeout(() => {
             try {
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
@@ -12764,6 +12859,7 @@ async function getFileUrl(ctx, url, filename) {
                 ctx.logger.warn(ctx.phoneNumber, `Failed to cleanup temp file ${filePath}:`, cleanupError);
             }
         }, helpers_1.TEMP_FILE_CLEANUP_DELAY);
+        cleanupTimer.unref?.();
         return filePath;
     }
     catch (error) {
@@ -15427,6 +15523,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
     refreshSessionTimeout(phone, session) {
         clearTimeout(session.timeoutId);
         session.timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
+        session.timeoutId.unref?.();
         session.lastActivityAt = Date.now();
     }
     captureSessionSnapshot(session) {
@@ -15528,6 +15625,7 @@ let TgSignupService = TgSignupService_1 = class TgSignupService {
                 }),
             }));
             const timeoutId = setTimeout(() => this.disconnectClient(phone), TgSignupService_1.LOGIN_TIMEOUT);
+            timeoutId.unref?.();
             const mapped = this.mapSentCodeResult(sendResult);
             const activeSession = {
                 client,
@@ -15948,11 +16046,14 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ActiveChannelsModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const active_channels_service_1 = __webpack_require__(/*! ./active-channels.service */ "./src/components/active-channels/active-channels.service.ts");
 const active_channels_controller_1 = __webpack_require__(/*! ./active-channels.controller */ "./src/components/active-channels/active-channels.controller.ts");
 const active_channel_schema_1 = __webpack_require__(/*! ./schemas/active-channel.schema */ "./src/components/active-channels/schemas/active-channel.schema.ts");
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
 const promote_msgs_module_1 = __webpack_require__(/*! ../promote-msgs/promote-msgs.module */ "./src/components/promote-msgs/promote-msgs.module.ts");
+const channel_intelligence_read_service_1 = __webpack_require__(/*! ./channel-intelligence-read.service */ "./src/components/active-channels/channel-intelligence-read.service.ts");
+const ChannelIntelligenceSchema = new mongoose_2.Schema({}, { strict: false, collection: 'channelIntelligence' });
 let ActiveChannelsModule = class ActiveChannelsModule {
 };
 exports.ActiveChannelsModule = ActiveChannelsModule;
@@ -15960,12 +16061,15 @@ exports.ActiveChannelsModule = ActiveChannelsModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ name: active_channel_schema_1.ActiveChannel.name, schema: active_channel_schema_1.ActiveChannelSchema }]),
+            mongoose_1.MongooseModule.forFeature([
+                { name: active_channel_schema_1.ActiveChannel.name, schema: active_channel_schema_1.ActiveChannelSchema },
+                { name: 'channelIntelligence', schema: ChannelIntelligenceSchema },
+            ]),
             promote_msgs_module_1.PromoteMsgModule
         ],
         controllers: [active_channels_controller_1.ActiveChannelsController],
-        providers: [active_channels_service_1.ActiveChannelsService],
-        exports: [active_channels_service_1.ActiveChannelsService]
+        providers: [active_channels_service_1.ActiveChannelsService, channel_intelligence_read_service_1.ChannelIntelligenceReadService],
+        exports: [active_channels_service_1.ActiveChannelsService, channel_intelligence_read_service_1.ChannelIntelligenceReadService]
     })
 ], ActiveChannelsModule);
 
@@ -16005,10 +16109,12 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const durable_channel_upsert_1 = __webpack_require__(/*! ../../utils/telegram-utils/durable-channel-upsert */ "./src/utils/telegram-utils/durable-channel-upsert.ts");
+const channel_intelligence_read_service_1 = __webpack_require__(/*! ./channel-intelligence-read.service */ "./src/components/active-channels/channel-intelligence-read.service.ts");
 let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsService {
-    constructor(activeChannelModel, promoteMsgsService) {
+    constructor(activeChannelModel, promoteMsgsService, channelIntelligenceReadService) {
         this.activeChannelModel = activeChannelModel;
         this.promoteMsgsService = promoteMsgsService;
+        this.channelIntelligenceReadService = channelIntelligenceReadService;
         this.DEFAULT_LIMIT = 50;
         this.DEFAULT_SKIP = 0;
         this.MIN_PARTICIPANTS_COUNT = 600;
@@ -16018,10 +16124,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             'canSendMsgs', 'megagroup', 'availableMsgs', 'banned', 'bannedAt',
             'forbidden', 'private', 'reactRestricted', 'reactRestrictedAt',
             'clientsJoined', 'lastHydrationReason', 'lastHydrationStatus',
-            'lastHydratedAt', 'lastLiveCheckedAt', 'lastMessageTime', 'messageIndex',
-            'messageId', 'deletedCount', 'successMsgCount', 'failureMsgCount',
-            'followupMsgSuccessCount', 'followupMsgFailureCount',
-            'freeformDeletedCount', 'followUpDeletedCount', 'message',
+            'lastHydratedAt', 'lastLiveCheckedAt',
         ]);
         this.REACT_RESTRICTED_HEAL_MS = 3 * 24 * 60 * 60 * 1000;
     }
@@ -16088,8 +16191,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                     canSendMsgs: false,
                     participantsCount: 0,
                     reactRestricted: false,
-                    freeformDeletedCount: 0,
-                    followUpDeletedCount: 0,
                     availableMsgs: [],
                     banned: dto.banned === true,
                     bannedAt: dto.banned === true ? (dto.bannedAt ?? Date.now()) : null,
@@ -16138,6 +16239,16 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         catch (error) {
             throw this.handleError(error, 'Failed to fetch channel');
         }
+    }
+    async findExistingChannelIds(channelIds) {
+        const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+        if (!ids.length)
+            return [];
+        const rows = await this.activeChannelModel
+            .find({ channelId: { $in: ids } }, { channelId: 1, _id: 0 })
+            .lean()
+            .exec();
+        return rows.map((row) => row.channelId).filter((channelId) => Boolean(channelId));
     }
     async update(channelId, updateActiveChannelDto) {
         try {
@@ -16243,6 +16354,9 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async getActiveChannels(limit = this.DEFAULT_LIMIT, skip = this.DEFAULT_SKIP, notIds = []) {
         try {
+            if (limit <= 0)
+                return [];
+            const queryLimit = Math.min(Math.max(limit * 3, limit), 100);
             const negativeKeywords = [
                 'online', 'realestat', 'propert', 'freefire', 'bgmi', 'promo', 'agent', 'board', 'design',
                 'realt', 'clas', 'PROFIT', 'wholesale', 'retail', 'topper', 'exam', 'motivat', 'medico',
@@ -16262,18 +16376,22 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 $and: [
                     {
                         title: {
+                            $exists: true,
+                            $type: 'string',
                             $not: { $regex: negativePattern, $options: 'i' },
                         },
                     },
                     {
                         username: {
+                            $exists: true,
+                            $type: 'string',
+                            $ne: '',
                             $not: { $regex: negativePattern, $options: 'i' },
                         },
                     },
                     {
                         channelId: { $nin: notIds },
                         participantsCount: { $gt: this.MIN_PARTICIPANTS_COUNT },
-                        username: { $ne: null },
                         canSendMsgs: true,
                         banned: { $ne: true },
                         forbidden: { $ne: true },
@@ -16282,36 +16400,45 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                     },
                 ],
             };
-            const pipeline = [
+            const prior = await this.channelIntelligenceReadService.getFleetPrior();
+            const buildPipeline = (sortStages) => [
                 { $match: query },
-                {
-                    $match: {
-                        $or: [
-                            { $expr: { $lt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }] }, 5] } },
-                            { $expr: { $lte: [
-                                        { $divide: [{ $ifNull: ['$deletedCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$deletedCount', 0] }, 0.01] }] },
-                                        0.15
-                                    ] } },
-                        ],
-                    },
-                },
-                {
-                    $addFields: {
-                        sortScore: {
-                            $multiply: [
-                                { $rand: {} },
-                                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
-                                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
-                            ],
-                        },
-                    },
-                },
+                ...sortStages,
                 { $sort: { sortScore: -1 } },
                 { $skip: skip },
-                { $limit: limit },
+                { $limit: queryLimit },
                 { $project: { sortScore: 0 } },
             ];
-            return await this.activeChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
+            let results;
+            let usedRandomFallback = false;
+            try {
+                const pipeline = buildPipeline(this.channelIntelligenceReadService.buildConversionAwareSortStages(prior));
+                results = await this.activeChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
+            }
+            catch (sortError) {
+                this.logger.error(`Conversion-aware sort failed — falling back to RANDOM-ONLY selection (conversion tilt disabled this query): ${sortError instanceof Error ? sortError.message : sortError}`);
+                const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
+                results = await this.activeChannelModel.aggregate(fallbackPipeline, { allowDiskUse: true }).exec();
+                usedRandomFallback = true;
+            }
+            if (usedRandomFallback && results.length) {
+                const candidateIds = results
+                    .map((channel) => channel.channelId)
+                    .filter((channelId) => Boolean(channelId));
+                let excludedIds = new Set();
+                try {
+                    excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+                }
+                catch (excludeError) {
+                    this.logger.warn(`getExcludedChannelIds failed, skipping exclusion (fail-open): ${excludeError instanceof Error ? excludeError.message : excludeError}`);
+                }
+                if (excludedIds.size) {
+                    return results
+                        .filter((channel) => !excludedIds.has(String(channel.channelId)))
+                        .slice(0, limit);
+                }
+            }
+            return results.slice(0, limit);
         }
         catch (error) {
             throw this.handleError(error, 'Failed to fetch active channels');
@@ -16355,23 +16482,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                             },
                         },
                     ],
-                    messageStats: [
-                        {
-                            $group: {
-                                _id: null,
-                                totalSent: { $sum: { $ifNull: ['$successMsgCount', 0] } },
-                                totalFailed: { $sum: { $ifNull: ['$failureMsgCount', 0] } },
-                                totalDeleted: { $sum: { $ifNull: ['$deletedCount', 0] } },
-                                followupSent: { $sum: { $ifNull: ['$followupMsgSuccessCount', 0] } },
-                                followupFailed: { $sum: { $ifNull: ['$followupMsgFailureCount', 0] } },
-                                channelsWithSends: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$successMsgCount', 0] }, 0] }, 1, 0] } },
-                                channelsWithFailures: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$failureMsgCount', 0] }, 0] }, 1, 0] } },
-                                channelsWithDeleted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$deletedCount', 0] }, 0] }, 1, 0] } },
-                                avgSent: { $avg: { $ifNull: ['$successMsgCount', 0] } },
-                                avgFailed: { $avg: { $ifNull: ['$failureMsgCount', 0] } },
-                            },
-                        },
-                    ],
                     participantStats: [
                         {
                             $group: {
@@ -16382,17 +16492,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                                 above10k: { $sum: { $cond: [{ $gte: [{ $ifNull: ['$participantsCount', 0] }, 10000] }, 1, 0] } },
                                 above1k: { $sum: { $cond: [{ $gte: [{ $ifNull: ['$participantsCount', 0] }, 1000] }, 1, 0] } },
                                 below600: { $sum: { $cond: [{ $lt: [{ $ifNull: ['$participantsCount', 0] }, 600] }, 1, 0] } },
-                            },
-                        },
-                    ],
-                    restrictionStats: [
-                        {
-                            $group: {
-                                _id: null,
-                                freeformDeletionChannels: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$freeformDeletedCount', 0] }, 0] }, 1, 0] } },
-                                followUpDeletionChannels: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$followUpDeletedCount', 0] }, 0] }, 1, 0] } },
-                                totalFreeformDeletions: { $sum: { $ifNull: ['$freeformDeletedCount', 0] } },
-                                totalFollowUpDeletions: { $sum: { $ifNull: ['$followUpDeletedCount', 0] } },
                             },
                         },
                     ],
@@ -16407,65 +16506,18 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                             },
                         },
                     ],
-                    successRateDist: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $gt: [{ $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$failureMsgCount', 0] }] }, 0],
-                                },
-                            },
-                        },
-                        {
-                            $addFields: {
-                                _rate: {
-                                    $multiply: [
-                                        { $divide: [{ $ifNull: ['$successMsgCount', 0] }, { $add: [{ $ifNull: ['$successMsgCount', 0] }, { $ifNull: ['$failureMsgCount', 0] }] }] },
-                                        100,
-                                    ],
-                                },
-                            },
-                        },
-                        {
-                            $bucket: {
-                                groupBy: '$_rate',
-                                boundaries: [0, 20, 40, 60, 80, 101],
-                                default: 'other',
-                                output: { count: { $sum: 1 } },
-                            },
-                        },
-                    ],
-                    topBySuccess: [
-                        { $match: { successMsgCount: { $gt: 0 } } },
-                        { $sort: { successMsgCount: -1 } },
-                        { $limit: 10 },
-                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, failureMsgCount: 1, deletedCount: 1 } },
-                    ],
-                    topByFailure: [
-                        { $match: { failureMsgCount: { $gt: 0 } } },
-                        { $sort: { failureMsgCount: -1 } },
-                        { $limit: 10 },
-                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, failureMsgCount: 1 } },
-                    ],
-                    topByDeleted: [
-                        { $match: { deletedCount: { $gt: 0 } } },
-                        { $sort: { deletedCount: -1 } },
-                        { $limit: 10 },
-                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, deletedCount: 1, successMsgCount: 1 } },
-                    ],
                     topByParticipants: [
                         { $sort: { participantsCount: -1 } },
                         { $limit: 10 },
-                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, successMsgCount: 1, canSendMsgs: 1, banned: 1 } },
+                        { $project: { channelId: 1, title: 1, username: 1, participantsCount: 1, canSendMsgs: 1, banned: 1 } },
                     ],
                 },
             },
         ]).allowDiskUse(true).exec();
         const overview = result.overview[0] || {};
-        const msgStats = result.messageStats[0] || {};
         const partStats = result.participantStats[0] || {};
-        const restrictStats = result.restrictionStats[0] || {};
         const promoCov = result.promoCoverage[0] || {};
-        const totalAttempts = (msgStats.totalSent || 0) + (msgStats.totalFailed || 0);
+        const outcomeAnalytics = await this.channelIntelligenceReadService.getOutcomeAnalytics();
         return {
             overview: {
                 total: overview.total || 0,
@@ -16479,19 +16531,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 megagroup: overview.megagroup || 0,
                 withUsername: overview.withUsername || 0,
             },
-            messages: {
-                totalSent: msgStats.totalSent || 0,
-                totalFailed: msgStats.totalFailed || 0,
-                totalDeleted: msgStats.totalDeleted || 0,
-                followupSent: msgStats.followupSent || 0,
-                followupFailed: msgStats.followupFailed || 0,
-                successRate: totalAttempts > 0 ? Math.round(((msgStats.totalSent || 0) / totalAttempts) * 100) : 0,
-                channelsWithSends: msgStats.channelsWithSends || 0,
-                channelsWithFailures: msgStats.channelsWithFailures || 0,
-                channelsWithDeleted: msgStats.channelsWithDeleted || 0,
-                avgSent: Math.round(msgStats.avgSent || 0),
-                avgFailed: Math.round(msgStats.avgFailed || 0),
-            },
+            messages: outcomeAnalytics.messageStats,
             participants: {
                 total: partStats.totalParticipants || 0,
                 average: Math.round(partStats.avgParticipants || 0),
@@ -16500,30 +16540,22 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 above1k: partStats.above1k || 0,
                 below600: partStats.below600 || 0,
             },
-            restrictions: {
-                freeformDeletionChannels: restrictStats.freeformDeletionChannels || 0,
-                followUpDeletionChannels: restrictStats.followUpDeletionChannels || 0,
-                totalFreeformDeletions: restrictStats.totalFreeformDeletions || 0,
-                totalFollowUpDeletions: restrictStats.totalFollowUpDeletions || 0,
-            },
+            restrictions: outcomeAnalytics.restrictionStats,
             promos: {
                 withPromos: promoCov.withPromos || 0,
                 exhausted: promoCov.exhausted || 0,
                 avgPromoCount: Math.round((promoCov.avgPromoCount || 0) * 10) / 10,
                 totalPromos: promoCov.totalPromos || 0,
             },
-            successRateDistribution: (result.successRateDist || []).map((b) => ({
-                range: b._id === 'other' ? 'other' : `${b._id}-${b._id + 20}%`,
-                count: b.count,
-            })),
-            topBySuccess: result.topBySuccess || [],
-            topByFailure: result.topByFailure || [],
-            topByDeleted: result.topByDeleted || [],
+            successRateDistribution: outcomeAnalytics.successRateDistribution,
+            topBySuccess: outcomeAnalytics.topBySuccess,
+            topByFailure: outcomeAnalytics.topByFailure,
+            topByDeleted: outcomeAnalytics.topByDeleted,
             topByParticipants: result.topByParticipants || [],
         };
     }
     async paginated(options) {
-        const { page = 1, limit = 50, sortBy = 'successMsgCount', sortOrder = 'desc', search, filter = 'all', } = options;
+        const { page = 1, limit = 50, sortBy = 'participantsCount', sortOrder = 'desc', search, filter = 'all', } = options;
         const pageNum = Math.max(1, Math.floor(page));
         const limitNum = Math.min(Math.max(1, Math.floor(limit)), 200);
         const skip = (pageNum - 1) * limitNum;
@@ -16547,9 +16579,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
         }
         else if (filter === 'exhausted') {
             query.$expr = { $eq: [{ $size: { $ifNull: ['$availableMsgs', []] } }, 0] };
-        }
-        else if (filter === 'high_deleted') {
-            query.deletedCount = { $gt: 30 };
         }
         if (search?.trim()) {
             const q = search.trim();
@@ -16606,7 +16635,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     async resetMessageDeletionCounters() {
         try {
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: reset message deletion counters`)}`);
-            await this.activeChannelModel.updateMany({ banned: false }, { $set: { freeformDeletedCount: 0, followUpDeletedCount: 0, updatedAt: new Date() } });
+            await this.activeChannelModel.updateMany({ banned: false }, { $set: { updatedAt: new Date() } });
         }
         catch (error) {
             throw this.handleError(error, 'Failed to reset message deletion counters');
@@ -16622,8 +16651,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 },
             }, {
                 $set: {
-                    freeformDeletedCount: 0,
-                    followUpDeletedCount: 0,
                     availableMsgs,
                     updatedAt: new Date(),
                 },
@@ -16638,8 +16665,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             await (0, fetchWithTimeout_1.fetchWithTimeout)(`${(0, logbots_1.notifbot)()}&text=${encodeURIComponent(`Channel maint: update banned channels`)}`);
             await this.activeChannelModel.updateMany({ $or: [{ banned: true }, { private: true }] }, {
                 $set: {
-                    freeformDeletedCount: 0,
-                    followUpDeletedCount: 0,
                     updatedAt: new Date(),
                 },
             });
@@ -16674,8 +16699,415 @@ exports.ActiveChannelsService = ActiveChannelsService = ActiveChannelsService_1 
     __param(0, (0, mongoose_1.InjectModel)(active_channel_schema_1.ActiveChannel.name)),
     __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => promote_msgs_service_1.PromoteMsgsService))),
     __metadata("design:paramtypes", [mongoose_2.Model,
-        promote_msgs_service_1.PromoteMsgsService])
+        promote_msgs_service_1.PromoteMsgsService,
+        channel_intelligence_read_service_1.ChannelIntelligenceReadService])
 ], ActiveChannelsService);
+
+
+/***/ },
+
+/***/ "./src/components/active-channels/channel-intelligence-read.service.ts"
+/*!*****************************************************************************!*\
+  !*** ./src/components/active-channels/channel-intelligence-read.service.ts ***!
+  \*****************************************************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+var ChannelIntelligenceReadService_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ChannelIntelligenceReadService = exports.SQ_PRIOR_RATE_FALLBACK = exports.PRIOR_RATE_FALLBACK = exports.PRIOR_TTL_MS = exports.SQ_MAX = exports.SQ_MIN = exports.SQ_PRIOR_STRENGTH = exports.WEIGHT_MAX = exports.WEIGHT_MIN = exports.PRIOR_STRENGTH = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
+exports.PRIOR_STRENGTH = 20;
+exports.WEIGHT_MIN = 0.2;
+exports.WEIGHT_MAX = 1.3;
+exports.SQ_PRIOR_STRENGTH = 20;
+exports.SQ_MIN = 0.5;
+exports.SQ_MAX = 1.1;
+exports.PRIOR_TTL_MS = 15 * 60 * 1000;
+exports.PRIOR_RATE_FALLBACK = 0.03;
+exports.SQ_PRIOR_RATE_FALLBACK = 0.82;
+const EMPTY_OUTCOME_ANALYTICS = {
+    messageStats: {
+        totalSent: 0,
+        totalFailed: 0,
+        totalDeleted: 0,
+        successRate: 0,
+        channelsWithSends: 0,
+        channelsWithFailures: 0,
+        channelsWithDeleted: 0,
+        avgSent: 0,
+        avgFailed: 0,
+    },
+    restrictionStats: {
+        freeformDeletionChannels: 0,
+        followUpDeletionChannels: 0,
+        totalFreeformDeletions: 0,
+        totalFollowUpDeletions: 0,
+    },
+    successRateDistribution: [],
+    topBySuccess: [],
+    topByFailure: [],
+    topByDeleted: [],
+};
+let ChannelIntelligenceReadService = ChannelIntelligenceReadService_1 = class ChannelIntelligenceReadService {
+    constructor(model) {
+        this.model = model;
+        this.logger = new common_1.Logger(ChannelIntelligenceReadService_1.name);
+        this._priorCache = null;
+    }
+    async getFleetPrior(ttlMs = exports.PRIOR_TTL_MS) {
+        const now = Date.now();
+        if (ttlMs > 0 && this._priorCache && now - this._priorCache.at < ttlMs) {
+            return this._priorCache.value;
+        }
+        try {
+            const [row] = await this.model
+                .aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalCredited: { $sum: this.numFromCi('$DMs.credited') },
+                        totalAttempted: { $sum: this.numFromCi('$outcomes.attempted') },
+                        totalSurvived: { $sum: this.numFromCi('$outcomes.survived') },
+                    },
+                },
+            ])
+                .exec();
+            const totalAttempted = row?.totalAttempted ?? 0;
+            const value = {
+                PRIOR_RATE: totalAttempted > 0 ? (row.totalCredited ?? 0) / totalAttempted : exports.PRIOR_RATE_FALLBACK,
+                SQ_PRIOR_RATE: totalAttempted > 0 ? (row.totalSurvived ?? 0) / totalAttempted : exports.SQ_PRIOR_RATE_FALLBACK,
+            };
+            this._priorCache = { value, at: now };
+            this.logger.log(`Live fleet prior computed: PRIOR_RATE=${value.PRIOR_RATE.toFixed(5)} SQ_PRIOR_RATE=${value.SQ_PRIOR_RATE.toFixed(5)} (Σattempted=${totalAttempted})`);
+            return value;
+        }
+        catch (error) {
+            this.logger.warn(`getFleetPrior failed, using ${this._priorCache ? 'cached' : 'fallback'} prior: ${error instanceof Error ? error.message : error}`);
+            return this._priorCache?.value ?? { PRIOR_RATE: exports.PRIOR_RATE_FALLBACK, SQ_PRIOR_RATE: exports.SQ_PRIOR_RATE_FALLBACK };
+        }
+    }
+    async getExcludedChannelIds(candidateIds) {
+        const excluded = new Set();
+        if (!candidateIds?.length)
+            return excluded;
+        const docs = await this.model
+            .find({ channelId: { $in: candidateIds } }, {
+            channelId: 1,
+            'safety.status': 1,
+            'safety.consecutiveErrors': 1,
+            'outcomes.attempted': 1,
+            'outcomes.deleted': 1,
+        })
+            .lean()
+            .exec();
+        for (const doc of docs) {
+            if (this.shouldExclude(doc)) {
+                excluded.add(String(doc.channelId));
+            }
+        }
+        return excluded;
+    }
+    shouldExclude(doc) {
+        if (!doc)
+            return false;
+        if (doc.safety?.status === 'blocked')
+            return true;
+        const consecutiveErrors = doc.safety?.consecutiveErrors;
+        if (typeof consecutiveErrors === 'number' && consecutiveErrors >= 3)
+            return true;
+        const attempted = doc.outcomes?.attempted ?? 0;
+        const deleted = doc.outcomes?.deleted ?? 0;
+        if (attempted >= 10 && deleted / attempted > 0.5)
+            return true;
+        return false;
+    }
+    async getOutcomeAnalytics() {
+        try {
+            const pipeline = [
+                {
+                    $addFields: {
+                        _channelSideFailed: {
+                            $reduce: {
+                                input: { $ifNull: ['$messagePool', []] },
+                                initialValue: 0,
+                                in: { $add: ['$$value', { $ifNull: ['$$this.channelSideFailed', 0] }] },
+                            },
+                        },
+                    },
+                },
+                {
+                    $facet: {
+                        messageStats: [
+                            {
+                                $group: {
+                                    _id: null,
+                                    totalSent: { $sum: { $ifNull: ['$outcomes.survived', 0] } },
+                                    totalFailed: { $sum: '$_channelSideFailed' },
+                                    totalDeleted: { $sum: { $ifNull: ['$outcomes.deleted', 0] } },
+                                    channelsWithSends: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$outcomes.survived', 0] }, 0] }, 1, 0] } },
+                                    channelsWithFailures: { $sum: { $cond: [{ $gt: ['$_channelSideFailed', 0] }, 1, 0] } },
+                                    channelsWithDeleted: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$outcomes.deleted', 0] }, 0] }, 1, 0] } },
+                                    avgSent: { $avg: { $ifNull: ['$outcomes.survived', 0] } },
+                                    avgFailed: { $avg: '$_channelSideFailed' },
+                                },
+                            },
+                        ],
+                        restrictionStats: [
+                            {
+                                $group: {
+                                    _id: null,
+                                    freeformDeletionChannels: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$outcomes.freeformDeleted', 0] }, 0] }, 1, 0] } },
+                                    followUpDeletionChannels: { $sum: { $cond: [{ $gt: [{ $ifNull: ['$outcomes.followUpDeleted', 0] }, 0] }, 1, 0] } },
+                                    totalFreeformDeletions: { $sum: { $ifNull: ['$outcomes.freeformDeleted', 0] } },
+                                    totalFollowUpDeletions: { $sum: { $ifNull: ['$outcomes.followUpDeleted', 0] } },
+                                },
+                            },
+                        ],
+                        successRateDist: [
+                            {
+                                $match: {
+                                    $expr: { $gt: [{ $ifNull: ['$outcomes.attempted', 0] }, 0] },
+                                },
+                            },
+                            {
+                                $addFields: {
+                                    _rate: {
+                                        $multiply: [
+                                            { $divide: [{ $ifNull: ['$outcomes.survived', 0] }, '$outcomes.attempted'] },
+                                            100,
+                                        ],
+                                    },
+                                },
+                            },
+                            {
+                                $bucket: {
+                                    groupBy: '$_rate',
+                                    boundaries: [0, 20, 40, 60, 80, 101],
+                                    default: 'other',
+                                    output: { count: { $sum: 1 } },
+                                },
+                            },
+                        ],
+                        topBySuccess: [
+                            { $match: { 'outcomes.survived': { $gt: 0 } } },
+                            { $sort: { 'outcomes.survived': -1 } },
+                            { $limit: 10 },
+                            {
+                                $project: {
+                                    _id: 0,
+                                    channelId: 1,
+                                    survived: '$outcomes.survived',
+                                    deleted: '$outcomes.deleted',
+                                    channelSideFailed: '$_channelSideFailed',
+                                },
+                            },
+                        ],
+                        topByFailure: [
+                            { $match: { _channelSideFailed: { $gt: 0 } } },
+                            { $sort: { _channelSideFailed: -1 } },
+                            { $limit: 10 },
+                            {
+                                $project: {
+                                    _id: 0,
+                                    channelId: 1,
+                                    survived: '$outcomes.survived',
+                                    channelSideFailed: '$_channelSideFailed',
+                                },
+                            },
+                        ],
+                        topByDeleted: [
+                            { $match: { 'outcomes.deleted': { $gt: 0 } } },
+                            { $sort: { 'outcomes.deleted': -1 } },
+                            { $limit: 10 },
+                            {
+                                $project: {
+                                    _id: 0,
+                                    channelId: 1,
+                                    deleted: '$outcomes.deleted',
+                                    survived: '$outcomes.survived',
+                                },
+                            },
+                        ],
+                    },
+                },
+            ];
+            const [result] = await this.model.aggregate(pipeline).allowDiskUse(true).exec();
+            const msgStats = result?.messageStats?.[0] || {};
+            const restrictStats = result?.restrictionStats?.[0] || {};
+            const totalAttempts = (msgStats.totalSent || 0) + (msgStats.totalFailed || 0);
+            return {
+                messageStats: {
+                    totalSent: msgStats.totalSent || 0,
+                    totalFailed: msgStats.totalFailed || 0,
+                    totalDeleted: msgStats.totalDeleted || 0,
+                    successRate: totalAttempts > 0 ? Math.round(((msgStats.totalSent || 0) / totalAttempts) * 100) : 0,
+                    channelsWithSends: msgStats.channelsWithSends || 0,
+                    channelsWithFailures: msgStats.channelsWithFailures || 0,
+                    channelsWithDeleted: msgStats.channelsWithDeleted || 0,
+                    avgSent: Math.round(msgStats.avgSent || 0),
+                    avgFailed: Math.round(msgStats.avgFailed || 0),
+                },
+                restrictionStats: {
+                    freeformDeletionChannels: restrictStats.freeformDeletionChannels || 0,
+                    followUpDeletionChannels: restrictStats.followUpDeletionChannels || 0,
+                    totalFreeformDeletions: restrictStats.totalFreeformDeletions || 0,
+                    totalFollowUpDeletions: restrictStats.totalFollowUpDeletions || 0,
+                },
+                successRateDistribution: (result?.successRateDist || []).map((b) => ({
+                    range: b._id === 'other' ? 'other' : `${b._id}-${b._id + 20}%`,
+                    count: b.count,
+                })),
+                topBySuccess: result?.topBySuccess || [],
+                topByFailure: result?.topByFailure || [],
+                topByDeleted: result?.topByDeleted || [],
+            };
+        }
+        catch (error) {
+            this.logger.warn(`getOutcomeAnalytics failed, returning empty stats (fail-open): ${error instanceof Error ? error.message : error}`);
+            return EMPTY_OUTCOME_ANALYTICS;
+        }
+    }
+    numFromCi(fieldRef) {
+        return { $convert: { input: fieldRef, to: 'double', onError: 0, onNull: 0 } };
+    }
+    buildChannelIntelligenceExclusionFlag() {
+        return {
+            $let: {
+                vars: {
+                    ci: { $ifNull: [{ $arrayElemAt: ['$_ci', 0] }, {}] },
+                },
+                in: {
+                    $let: {
+                        vars: {
+                            attempted: this.numFromCi('$$ci.outcomes.attempted'),
+                            deleted: this.numFromCi('$$ci.outcomes.deleted'),
+                            consecutiveErrors: this.numFromCi('$$ci.safety.consecutiveErrors'),
+                        },
+                        in: {
+                            $or: [
+                                { $eq: ['$$ci.safety.status', 'blocked'] },
+                                { $gte: ['$$consecutiveErrors', 3] },
+                                {
+                                    $and: [
+                                        { $gte: ['$$attempted', 10] },
+                                        {
+                                            $gt: [
+                                                {
+                                                    $cond: [
+                                                        { $gt: ['$$attempted', 0] },
+                                                        { $divide: ['$$deleted', '$$attempted'] },
+                                                        0,
+                                                    ],
+                                                },
+                                                0.5,
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+        };
+    }
+    buildConversionAwareSortStages(prior) {
+        const priorRate = prior?.PRIOR_RATE > 0 ? prior.PRIOR_RATE : exports.PRIOR_RATE_FALLBACK;
+        const sqPriorRate = prior?.SQ_PRIOR_RATE > 0 ? prior.SQ_PRIOR_RATE : exports.SQ_PRIOR_RATE_FALLBACK;
+        return [
+            {
+                $lookup: {
+                    from: 'channelIntelligence',
+                    localField: 'channelId',
+                    foreignField: 'channelId',
+                    as: '_ci',
+                },
+            },
+            {
+                $addFields: {
+                    _ciExcluded: this.buildChannelIntelligenceExclusionFlag(),
+                },
+            },
+            { $match: { _ciExcluded: { $ne: true } } },
+            {
+                $addFields: {
+                    sortScore: {
+                        $let: {
+                            vars: {
+                                ci: { $ifNull: [{ $arrayElemAt: ['$_ci', 0] }, {}] },
+                            },
+                            in: {
+                                $let: {
+                                    vars: {
+                                        attempted: this.numFromCi('$$ci.outcomes.attempted'),
+                                        credited: this.numFromCi('$$ci.DMs.credited'),
+                                        survived: this.numFromCi('$$ci.outcomes.survived'),
+                                    },
+                                    in: {
+                                        $let: {
+                                            vars: {
+                                                conversionWeight: {
+                                                    $min: [exports.WEIGHT_MAX, { $max: [exports.WEIGHT_MIN, {
+                                                                    $divide: [
+                                                                        { $divide: [
+                                                                                { $add: [{ $multiply: [priorRate, exports.PRIOR_STRENGTH] }, '$$credited'] },
+                                                                                { $add: [exports.PRIOR_STRENGTH, '$$attempted'] },
+                                                                            ] },
+                                                                        priorRate,
+                                                                    ],
+                                                                }] }],
+                                                },
+                                                sendQualityWeight: {
+                                                    $min: [exports.SQ_MAX, { $max: [exports.SQ_MIN, {
+                                                                    $divide: [
+                                                                        { $divide: [
+                                                                                { $add: [{ $multiply: [sqPriorRate, exports.SQ_PRIOR_STRENGTH] }, '$$survived'] },
+                                                                                { $add: [exports.SQ_PRIOR_STRENGTH, '$$attempted'] },
+                                                                            ] },
+                                                                        sqPriorRate,
+                                                                    ],
+                                                                }] }],
+                                                },
+                                            },
+                                            in: { $multiply: [{ $rand: {} }, '$$conversionWeight', '$$sendQualityWeight'] },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+            { $project: { _ci: 0, _ciExcluded: 0 } },
+        ];
+    }
+    buildRandomOnlySortStages() {
+        return [
+            { $addFields: { sortScore: { $rand: {} } } },
+        ];
+    }
+};
+exports.ChannelIntelligenceReadService = ChannelIntelligenceReadService;
+exports.ChannelIntelligenceReadService = ChannelIntelligenceReadService = ChannelIntelligenceReadService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, mongoose_1.InjectModel)('channelIntelligence')),
+    __metadata("design:paramtypes", [mongoose_2.Model])
+], ChannelIntelligenceReadService);
 
 
 /***/ },
@@ -16783,50 +17215,6 @@ __decorate([
     (0, swagger_1.ApiProperty)({ required: false, type: Number, default: null }),
     __metadata("design:type", Number)
 ], CreateActiveChannelDto.prototype, "lastLiveCheckedAt", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "successMsgCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "failureMsgCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "followupMsgSuccessCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "followupMsgFailureCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "deletedCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "freeformDeletedCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "followUpDeletedCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: null }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "lastMessageTime", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: String, default: null }),
-    __metadata("design:type", String)
-], CreateActiveChannelDto.prototype, "messageIndex", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: Number, default: null }),
-    __metadata("design:type", Number)
-], CreateActiveChannelDto.prototype, "messageId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ required: false, type: String }),
-    __metadata("design:type", String)
-], CreateActiveChannelDto.prototype, "message", void 0);
 
 
 /***/ },
@@ -17036,61 +17424,6 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Number, default: null }),
     __metadata("design:type", Number)
 ], ActiveChannel.prototype, "lastLiveCheckedAt", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: null }),
-    (0, mongoose_1.Prop)({ type: Number, default: null }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "lastMessageTime", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: String, default: null }),
-    (0, mongoose_1.Prop)({ type: String, default: null }),
-    __metadata("design:type", String)
-], ActiveChannel.prototype, "messageIndex", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: null }),
-    (0, mongoose_1.Prop)({ type: Number, default: null }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "messageId", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
-    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "deletedCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
-    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "successMsgCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
-    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "failureMsgCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
-    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "followupMsgSuccessCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
-    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "followupMsgFailureCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, required: false }),
-    (0, mongoose_1.Prop)({ type: Number }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "freeformDeletedCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, required: false }),
-    (0, mongoose_1.Prop)({ type: Number }),
-    __metadata("design:type", Number)
-], ActiveChannel.prototype, "followUpDeletedCount", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: String, required: false }),
-    (0, mongoose_1.Prop)({ type: String }),
-    __metadata("design:type", String)
-], ActiveChannel.prototype, "message", void 0);
 exports.ActiveChannel = ActiveChannel = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'activeChannels',
@@ -17161,6 +17494,7 @@ exports.BotsController = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const swagger_1 = __webpack_require__(/*! @nestjs/swagger */ "@nestjs/swagger");
 const bots_service_1 = __webpack_require__(/*! ./bots.service */ "./src/components/bots/bots.service.ts");
+const send_rate_limit_guard_1 = __webpack_require__(/*! ../../guards/send-rate-limit.guard */ "./src/guards/send-rate-limit.guard.ts");
 const channel_category_enum_1 = __webpack_require__(/*! ./channel-category.enum */ "./src/components/bots/channel-category.enum.ts");
 const create_bot_dto_1 = __webpack_require__(/*! ./dto/create-bot.dto */ "./src/components/bots/dto/create-bot.dto.ts");
 const send_message_dto_1 = __webpack_require__(/*! ./dto/send-message.dto */ "./src/components/bots/dto/send-message.dto.ts");
@@ -17374,6 +17708,7 @@ __decorate([
 ], BotsController.prototype, "deleteBot", null);
 __decorate([
     (0, common_1.Post)('category/:category/message'),
+    (0, common_1.UseGuards)(send_rate_limit_guard_1.SendRateLimitGuard),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a message using bots in a category',
         description: 'Sends a text message using either all bots in a category or a specific bot if botId is provided.'
@@ -17404,6 +17739,7 @@ __decorate([
 ], BotsController.prototype, "sendMessageByCategory", null);
 __decorate([
     (0, common_1.Post)('category/:category/photo'),
+    (0, common_1.UseGuards)(send_rate_limit_guard_1.SendRateLimitGuard),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a photo using bots in a category',
         description: 'Sends a photo using either all bots in a category or a specific bot if botId is provided.'
@@ -17434,6 +17770,7 @@ __decorate([
 ], BotsController.prototype, "sendPhotoByCategory", null);
 __decorate([
     (0, common_1.Post)('category/:category/video'),
+    (0, common_1.UseGuards)(send_rate_limit_guard_1.SendRateLimitGuard),
     (0, swagger_1.ApiOperation)({
         summary: 'Send a video using bots in a category',
         description: 'Sends a video using either all bots in a category or a specific bot if botId is provided.'
@@ -17798,8 +18135,6 @@ let BotsService = BotsService_1 = class BotsService {
         this.maxBotCreationsPerRun = 1;
         this.maxPendingAdminRepairsPerRun = 1;
         this.maxPendingAdminRepairAttempts = 3;
-        this.healthLeaseMs = 30 * 60 * 1000;
-        this.healthLeaseId = `${process.pid}:${Math.random().toString(36).slice(2)}`;
         this.healthCheckJob = null;
         this.flushTimer = null;
         this.destroyed = false;
@@ -17822,17 +18157,17 @@ let BotsService = BotsService_1 = class BotsService {
         }
         await this.initializeCache();
         this.startPeriodicFlush();
-        if (this.isBotHealthJobEnabled()) {
-            console.log('[BotHealth] BOT_HEALTH_JOB_ENABLED is set on this pod — scheduling daily job');
+        if (this.isCmsSchedulerEnabled()) {
+            console.log('[BotHealth] ENABLE_CMS_SCHEDULER is set on CMS — scheduling daily job');
             this.scheduleBotHealthCheck();
         }
         else {
-            console.log('[BotHealth] daily job disabled on this pod (set BOT_HEALTH_JOB_ENABLED=true on ONE pod to enable)');
+            console.log('[BotHealth] daily job disabled on CMS (set ENABLE_CMS_SCHEDULER=true to enable)');
         }
     }
-    isBotHealthJobEnabled() {
-        const v = (process.env.BOT_HEALTH_JOB_ENABLED || '').trim().toLowerCase();
-        return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+    isCmsSchedulerEnabled() {
+        const value = (process.env.ENABLE_CMS_SCHEDULER || '').trim().toLowerCase();
+        return value === 'true' || value === '1' || value === 'yes' || value === 'on';
     }
     scheduleBotHealthCheck() {
         this.healthCheckJob = schedule.scheduleJob(BotsService_1.HEALTH_JOB_NAME, BotsService_1.HEALTH_JOB_CRON, BotsService_1.HEALTH_JOB_TZ, async () => {
@@ -17911,27 +18246,6 @@ let BotsService = BotsService_1 = class BotsService {
         if (cached)
             this.cache.set(categoryKey, cached.filter(item => item._id.toString() !== id));
         this.cache.del('all-bots');
-    }
-    async acquireHealthLease() {
-        const now = new Date();
-        try {
-            const res = await this.botModel.db.collection('botHealthLeases').findOneAndUpdate({ _id: 'bot-health', $or: [{ expiresAt: { $lte: now } }, { holderId: this.healthLeaseId }] }, { $set: { holderId: this.healthLeaseId, acquiredAt: now, expiresAt: new Date(now.getTime() + this.healthLeaseMs) } }, { upsert: true, returnDocument: 'after' });
-            return res?.holderId === this.healthLeaseId;
-        }
-        catch (err) {
-            if (err?.code === 11000)
-                return false;
-            console.error('[BotHealth] unable to acquire distributed lease; skipping run', err?.message || err);
-            return false;
-        }
-    }
-    async releaseHealthLease() {
-        try {
-            await this.botModel.db.collection('botHealthLeases').deleteOne({ _id: 'bot-health', holderId: this.healthLeaseId });
-        }
-        catch (err) {
-            console.warn('[BotHealth] unable to release distributed lease; it will expire', err?.message || err);
-        }
     }
     async initializeCache() {
         try {
@@ -18564,10 +18878,6 @@ let BotsService = BotsService_1 = class BotsService {
             console.warn('[BotHealth] validateAndReplaceBots already running on this pod — skipping');
             return empty('already running (this pod)');
         }
-        if (!(await this.acquireHealthLease())) {
-            console.warn('[BotHealth] validateAndReplaceBots lease held by another CMS process — skipping');
-            return empty('already running (distributed lease)');
-        }
         this.replaceInProgress = true;
         const failures = [];
         const proposedActions = [];
@@ -18624,7 +18934,8 @@ let BotsService = BotsService_1 = class BotsService {
             }
             if (!options.dryRun)
                 await this.refreshBotCache();
-            const pendingRepair = await this.reconcilePendingAdminBots(options);
+            const controllability = new Map();
+            const pendingRepair = await this.reconcilePendingAdminBots(options, controllability);
             failures.push(...pendingRepair.failures);
             proposedActions.push(...pendingRepair.proposedActions);
             stopPrivilegedWork = pendingRepair.stopPrivilegedWork;
@@ -18654,7 +18965,7 @@ let BotsService = BotsService_1 = class BotsService {
             let toppedUp = 0;
             if (!stopPrivilegedWork && creationBudget > 0) {
                 try {
-                    const topUp = await this.topUpCategoriesToMinHealthy(creationBudget, options.dryRun);
+                    const topUp = await this.topUpCategoriesToMinHealthy(creationBudget, options.dryRun, controllability);
                     toppedUp = topUp.toppedUp;
                     creationBudget -= topUp.creationAttempts;
                     failures.push(...topUp.topUpFailures);
@@ -18674,10 +18985,9 @@ let BotsService = BotsService_1 = class BotsService {
         }
         finally {
             this.replaceInProgress = false;
-            await this.releaseHealthLease();
         }
     }
-    async reconcilePendingAdminBots(options) {
+    async reconcilePendingAdminBots(options, controllability) {
         const failures = [];
         const proposedActions = [];
         const now = new Date();
@@ -18702,6 +19012,10 @@ let BotsService = BotsService_1 = class BotsService {
             }
             if (options.dryRun) {
                 proposedActions.push(`reconcile pending-admin @${bot.username} in ${bot.channelId}`);
+                continue;
+            }
+            if (!(await this.resolveChannelAdminCached(bot.channelId, controllability))) {
+                proposedActions.push(`skip pending-admin @${bot.username}: channel ${bot.channelId} not controllable (no re-add possible)`);
                 continue;
             }
             try {
@@ -18849,7 +19163,69 @@ let BotsService = BotsService_1 = class BotsService {
         console.log(`[BotHealth] replaced dead @${deadBot.username} (${deadBot.category}) — active`);
         return saved;
     }
-    async topUpCategoriesToMinHealthy(creationBudget, dryRun) {
+    async reuseExistingBotsForCategory(category, channelId, want, dryRun, controllability) {
+        const proposedActions = [];
+        if (want <= 0)
+            return { reused: 0, proposedActions, stopPrivilegedWork: false };
+        const candidates = await this.botModel.find({
+            category,
+            channelId,
+            lifecycle: { $in: ['pending_admin', 'manual_attention'] },
+        }).sort({ lastValidatedAt: -1, createdAt: -1 }).limit(want * 3).lean().exec();
+        if (candidates.length === 0)
+            return { reused: 0, proposedActions, stopPrivilegedWork: false };
+        if (dryRun) {
+            for (const bot of candidates.slice(0, want)) {
+                proposedActions.push(`reuse live-token @${bot.username} (${category}) — would re-add to ${channelId} instead of creating`);
+            }
+            return { reused: Math.min(want, candidates.length), proposedActions, stopPrivilegedWork: false };
+        }
+        if (!(await this.resolveChannelAdminCached(channelId, controllability))) {
+            return { reused: 0, proposedActions, stopPrivilegedWork: false };
+        }
+        let reused = 0;
+        for (const bot of candidates) {
+            if (reused >= want)
+                break;
+            const check = await this.checkBotToken(bot.token);
+            if (check.verdict !== 'alive')
+                continue;
+            proposedActions.push(`reuse live-token @${bot.username} (${category}) — re-add to ${channelId} instead of creating`);
+            try {
+                const info = await this.telegramService.getBotInfo(bot.token);
+                const botId = String(info?.id || '');
+                if (!botId)
+                    continue;
+                await this.addBotToChannelAsAdmin(channelId, bot.token, bot.username);
+                if (!(await this.verifyBotIsChannelAdmin(channelId, botId)))
+                    continue;
+                await this.botModel.updateOne({ _id: bot._id }, {
+                    $set: { lifecycle: 'active_verified', lifecycleReason: 'reused: re-added to channel as admin', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', repairAttempts: 0 },
+                    $unset: { deadReason: '', deadAt: '', nextRepairAt: '' },
+                }).exec();
+                reused++;
+                console.log(`[BotHealth] REUSED @${bot.username} (${category}) — re-added to ${channelId} (no new bot created)`);
+            }
+            catch (err) {
+                if (this.isFloodSignal(err)) {
+                    if (reused > 0 && !dryRun)
+                        await this.refreshBotCache();
+                    return { reused, proposedActions, stopPrivilegedWork: true };
+                }
+            }
+        }
+        if (reused > 0 && !dryRun)
+            await this.refreshBotCache();
+        return { reused, proposedActions, stopPrivilegedWork: false };
+    }
+    async resolveChannelAdminCached(channelId, cache) {
+        if (cache.has(channelId))
+            return cache.get(channelId) ?? null;
+        const admin = await this.resolveChannelAdminMobile(channelId).catch(() => null);
+        cache.set(channelId, admin);
+        return admin;
+    }
+    async topUpCategoriesToMinHealthy(creationBudget, dryRun, controllability) {
         const topUpFailures = [];
         const proposedActions = [];
         let toppedUp = 0;
@@ -18874,7 +19250,29 @@ let BotsService = BotsService_1 = class BotsService {
                 topUpFailures.push(`${category}: below floor (${liveCount}/${this.minHealthyBotsPerCategory}) but no channelId known — skipped`);
                 continue;
             }
-            const need = Math.min(deficit, creationBudget - creationAttempts);
+            const reuse = await this.reuseExistingBotsForCategory(category, channelId, deficit, dryRun, controllability);
+            proposedActions.push(...reuse.proposedActions);
+            if (reuse.stopPrivilegedWork) {
+                stopPrivilegedWork = true;
+                break;
+            }
+            const remainingDeficit = deficit - reuse.reused;
+            if (remainingDeficit <= 0) {
+                if (reuse.reused > 0)
+                    console.log(`[BotHealth] ${category}: deficit met by REUSING ${reuse.reused} existing bot(s) — no creation`);
+                continue;
+            }
+            if (!dryRun) {
+                const adminMobile = await this.resolveChannelAdminCached(channelId, controllability);
+                if (!adminMobile) {
+                    const msg = `${category}: channel ${channelId} has NO controllable admin — NOT creating bots (would be abandoned). ${liveCount}/${this.minHealthyBotsPerCategory} live; ${reuse.reused} reused. Fix: make a manager account admin of the channel, or re-point the category to a controllable channel.`;
+                    topUpFailures.push(msg);
+                    await this.notify(`<b>Bot top-up BLOCKED — uncontrollable channel</b>\nCategory: ${category}\nChannel: ${channelId}\nHealthy: ${liveCount}/${this.minHealthyBotsPerCategory}\nCreation skipped to avoid orphan bots. Add a manager as channel admin, then bots self-heal.`);
+                    console.warn(`[BotHealth] ${msg}`);
+                    continue;
+                }
+            }
+            const need = Math.min(remainingDeficit, creationBudget - creationAttempts);
             for (let i = 0; i < need; i++) {
                 try {
                     proposedActions.push(`top up ${category} in ${channelId}`);
@@ -19122,6 +19520,7 @@ var ChannelCategory;
     ChannelCategory["PROMOTION_ACCOUNT"] = "PROMOTION_ACCOUNT";
     ChannelCategory["CLIENT_ACCOUNT"] = "CLIENT_ACCOUNT";
     ChannelCategory["PAYMENT_FAIL_QUERIES"] = "PAYMENT_FAIL_QUERIES";
+    ChannelCategory["FAILED_PAYMENTS"] = "FAILED_PAYMENTS";
     ChannelCategory["WEB_TELEMETRY"] = "WEB_TELEMETRY";
     ChannelCategory["SAVED_MESSAGES"] = "SAVED_MESSAGES";
     ChannelCategory["HTTP_FAILURES"] = "HTTP_FAILURES";
@@ -20708,12 +21107,10 @@ const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.ut
 const enrollment_lock_1 = __webpack_require__(/*! ../shared/enrollment-lock */ "./src/components/shared/enrollment-lock.ts");
 let BufferClientService = BufferClientService_1 = class BufferClientService extends base_client_service_1.BaseClientService {
     get checkingBufferClientsSince() {
-        return this.activeMaintenanceRun?.startedAt || 0;
+        return this.isWarmupCheckProcessing ? 1 : 0;
     }
     set checkingBufferClientsSince(value) {
-        this.activeMaintenanceRun = value > 0
-            ? { name: 'legacy-buffer-test-lock', startedAt: value }
-            : null;
+        this.isWarmupCheckProcessing = value > 0;
     }
     constructor(bufferClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, promoteClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, BufferClientService_1.name);
@@ -20768,7 +21165,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             ? executable.exec()
             : Promise.resolve(query);
     }
-    isHealthyBufferClientForCap(doc, now) {
+    isHealthyBufferClientForCap(doc, _now) {
         const phase = doc.warmupPhase;
         if (!phase)
             return false;
@@ -20778,13 +21175,6 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         const failedAttempts = doc.failedUpdateAttempts || 0;
         if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
             return false;
-        }
-        const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-        if (enrolledAtMs > 0) {
-            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
-                return false;
-            }
         }
         return true;
     }
@@ -21292,9 +21682,11 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 const client = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
                 const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                 await this.update(doc.mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length))
+                    continue;
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
-                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, channels.ids);
+                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
                     if (channelsToJoin.length === 0)
                         continue;
                     if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
@@ -21545,14 +21937,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             const failedAttempts = bc.failedUpdateAttempts || 0;
             const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.lastUpdateFailure);
             let processSkipReason = null;
-            if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
-                const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(bc.createdAt);
-                const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
-                if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS && warmupPhase !== base_client_service_1.WarmupPhase.SESSION_ROTATED && warmupPhase !== base_client_service_1.WarmupPhase.READY) {
-                    processSkipReason = `stuck_${Math.round(daysSinceEnrolled)}d`;
-                }
-            }
-            else if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
+            if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
                 const retryBackoffMs = this.FAILURE_RETRY_BACKOFF_HOURS * 60 * 60 * 1000;
                 if (lastFailureTime > 0 && now - lastFailureTime < retryBackoffMs) {
                     processSkipReason = `failed_${failedAttempts}_backoff`;
@@ -21560,24 +21945,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
             const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bc, now);
             const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
-            const lastUpdateAttempt = bc.lastUpdateAttempt ? new Date(bc.lastUpdateAttempt).getTime() : 0;
-            const lastAttemptAgeHours = lastUpdateAttempt > 0
-                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                : 10000;
             const computedPhase = warmupAction.phase;
-            const phaseBoost = {
-                [base_client_service_1.WarmupPhase.READY]: 25000, [base_client_service_1.WarmupPhase.MATURING]: 15000, [base_client_service_1.WarmupPhase.GROWING]: 10000,
-                [base_client_service_1.WarmupPhase.IDENTITY]: 7000, [base_client_service_1.WarmupPhase.SETTLING]: 5000, [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
-                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
-            };
-            const subStepBonus = {
-                'remove_other_auths': 2000, 'set_2fa': 1000, 'update_username': 1500,
-                'update_name_bio': 1000, 'upload_photo': 1000, 'rotate_session': 2000,
-            };
-            const actionBonus = subStepBonus[warmupAction.action] || 0;
-            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
-            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
-            const priority = (phaseBoost[computedPhase] || 5000) + actionBonus + cappedAgeBonus - cappedFailurePenalty;
+            const priority = (0, base_client_service_1.calculateWarmupPriority)(bc, warmupAction, now);
             actionCounts[warmupAction.action] = (actionCounts[warmupAction.action] || 0) + 1;
             const entry = {
                 mobile: bc.mobile,
@@ -21600,11 +21969,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             wouldProcess.push(entry);
         }
         wouldProcess.sort((a, b) => b.priority - a.priority);
+        const simEffectiveCap = this.getEffectiveUpdatesCap(wouldProcess.length);
         let simUpdates = 0;
         const simProcessed = [];
         const simSkipped = [];
         for (const entry of wouldProcess) {
-            if (simUpdates >= this.MAX_UPDATES_PER_CYCLE) {
+            if (simUpdates >= simEffectiveCap) {
                 simSkipped.push({ mobile: entry.mobile, action: entry.action, priority: entry.priority, reason: 'slot_limit_reached' });
                 continue;
             }
@@ -21635,9 +22005,13 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             actionCounts,
             skippedReasons,
             maxUpdatesPerCycle: this.MAX_UPDATES_PER_CYCLE,
+            effectiveUpdatesCap: simEffectiveCap,
+            capMin: this.MIN_UPDATES_PER_CYCLE,
+            targetDrainDays: this.WARMUP_TARGET_DRAIN_DAYS,
+            runsPerDay: this.WARMUP_RUNS_PER_DAY,
             eligibleToProcess: wouldProcess.length,
             simulation: {
-                totalMutationSlots: this.MAX_UPDATES_PER_CYCLE,
+                totalMutationSlots: simEffectiveCap,
                 mutationsUsed: simUpdates,
                 totalProcessed: simProcessed.length,
                 totalSkippedAfterSlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').length,
@@ -21658,13 +22032,15 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
         };
     }
     async checkBufferClients() {
-        if (!this.beginMaintenanceRun('checkBufferClients'))
-            return;
-        if (this.telegramService.hasActiveClientSetup()) {
-            this.logger.warn('Ignored active check buffer channels as active client setup exists');
-            this.endMaintenanceRun();
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Skipping checkBufferClients: a warmup check is already running');
             return;
         }
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ignored active check buffer channels as active client setup exists');
+            return;
+        }
+        this.isWarmupCheckProcessing = true;
         try {
             await this._checkBufferClientsInternal();
         }
@@ -21677,7 +22053,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             catch { }
         }
         finally {
-            this.endMaintenanceRun();
+            this.isWarmupCheckProcessing = false;
         }
     }
     async rotateReadyBufferClients() {
@@ -21689,8 +22065,8 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             this.logger.warn('Ready buffer rotation skipped: active client setup exists');
             return false;
         }
-        if (this.isMaintenanceRunActive() && !this.isJoinOrLeaveMaintenanceRun()) {
-            this.logger.warn('Ready buffer rotation skipped: non-join maintenance is active');
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Ready buffer rotation skipped: warmup check is active');
             return false;
         }
         this.readyRotationInProgress = true;
@@ -21776,37 +22152,17 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
             if (warmupPhase === base_client_service_1.WarmupPhase.READY)
                 continue;
-            const failedAttempts = bufferClient.failedUpdateAttempts || 0;
-            const lastAttemptAgeHours = lastUpdateAttempt > 0
-                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                : 10000;
             const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bufferClient, now);
-            const computedPhase = warmupAction.phase;
-            const phaseBoost = {
-                [base_client_service_1.WarmupPhase.MATURING]: 15000,
-                [base_client_service_1.WarmupPhase.GROWING]: 10000,
-                [base_client_service_1.WarmupPhase.IDENTITY]: 7000,
-                [base_client_service_1.WarmupPhase.SETTLING]: 5000,
-                [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
-                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
-            };
-            const subStepBonus = {
-                'remove_other_auths': 2000,
-                'set_2fa': 1000,
-                'update_username': 1500,
-                'update_name_bio': 1000,
-                'upload_photo': 1000,
-            };
-            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
-            const actionBonus = subStepBonus[warmupAction.action] || 0;
-            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
-            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
-            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
-            bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority });
+            const priority = (0, base_client_service_1.calculateWarmupPriority)(bufferClient, warmupAction, now);
+            bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority, warmupAction });
         }
         bufferClientsToProcess.sort((a, b) => b.priority - a.priority);
-        for (const { bufferClient, client } of bufferClientsToProcess) {
-            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
+        const effectiveCap = this.getEffectiveUpdatesCap(bufferClientsToProcess.length);
+        let sensitiveUpdates = 0;
+        let organicUpdates = 0;
+        this.logger.log(`Buffer warmup run: ${bufferClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
+        for (const { bufferClient, client, warmupAction } of bufferClientsToProcess) {
+            if (totalUpdates >= effectiveCap)
                 break;
             const warmupPhase = bufferClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
@@ -21815,7 +22171,19 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                 if (!healthCheck.passed)
                     continue;
             }
-            const processResult = await this.processClient(bufferClient, client);
+            const plannedAction = warmupAction.action;
+            if (plannedAction === 'organic_only' && organicUpdates >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+            const plannedSensitive = this.isSensitiveWarmupAction(plannedAction);
+            if (plannedSensitive && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+            if (plannedSensitive)
+                sensitiveUpdates++;
+            if (plannedAction === 'organic_only')
+                organicUpdates++;
+            const processResult = await this.processClient(bufferClient, client, warmupAction);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
                 updatedEntries.push(`${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`);
@@ -21903,9 +22271,10 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        if (!this.beginMaintenanceRun('prepareBufferJoinChannels')) {
-            return 'Warmup maintenance active, skipped';
+        if (this.isPrepareJoinChannelsProcessing) {
+            return 'Join-channel prepare already running, skipped';
         }
+        this.isPrepareJoinChannelsProcessing = true;
         this.logger.log('Starting join channel process for buffer clients');
         try {
             this.joinScopeClientId = clientId || null;
@@ -21936,8 +22305,12 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                     const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                     await this.update(mobile, { channels: channels.ids.length });
+                    if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
+                        successCount++;
+                        continue;
+                    }
                     if (channels.canSendFalseCount < 10) {
-                        const excludedIds = channels.ids;
+                        const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
                         const result = channels.ids.length < 220
                             ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds)
                             : await this.channelsService.getActiveChannels(25, 0, excludedIds);
@@ -21981,7 +22354,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             return `Buffer Join queued for: ${joinSet.size}, Leave queued for: ${leaveSet.size}`;
         }
         finally {
-            this.endMaintenanceRun();
+            this.isPrepareJoinChannelsProcessing = false;
         }
     }
     async isMobileEnrolledAnywhere(mobile) {
@@ -23283,10 +23656,13 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ChannelsModule = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const mongoose_1 = __webpack_require__(/*! @nestjs/mongoose */ "@nestjs/mongoose");
+const mongoose_2 = __webpack_require__(/*! mongoose */ "mongoose");
 const channels_service_1 = __webpack_require__(/*! ./channels.service */ "./src/components/channels/channels.service.ts");
 const channels_controller_1 = __webpack_require__(/*! ./channels.controller */ "./src/components/channels/channels.controller.ts");
 const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./src/components/channels/schemas/channel.schema.ts");
 const init_module_1 = __webpack_require__(/*! ../ConfigurationInit/init.module */ "./src/components/ConfigurationInit/init.module.ts");
+const channel_intelligence_read_service_1 = __webpack_require__(/*! ../active-channels/channel-intelligence-read.service */ "./src/components/active-channels/channel-intelligence-read.service.ts");
+const ChannelIntelligenceSchema = new mongoose_2.Schema({}, { strict: false, collection: 'channelIntelligence' });
 let ChannelsModule = class ChannelsModule {
 };
 exports.ChannelsModule = ChannelsModule;
@@ -23294,10 +23670,13 @@ exports.ChannelsModule = ChannelsModule = __decorate([
     (0, common_1.Module)({
         imports: [
             init_module_1.InitModule,
-            mongoose_1.MongooseModule.forFeature([{ name: channel_schema_1.Channel.name, schema: channel_schema_1.ChannelSchema }]),
+            mongoose_1.MongooseModule.forFeature([
+                { name: channel_schema_1.Channel.name, schema: channel_schema_1.ChannelSchema },
+                { name: 'channelIntelligence', schema: ChannelIntelligenceSchema },
+            ]),
         ],
         controllers: [channels_controller_1.ChannelsController],
-        providers: [channels_service_1.ChannelsService],
+        providers: [channels_service_1.ChannelsService, channel_intelligence_read_service_1.ChannelIntelligenceReadService],
         exports: [channels_service_1.ChannelsService]
     })
 ], ChannelsModule);
@@ -23333,9 +23712,11 @@ const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const durable_channel_upsert_1 = __webpack_require__(/*! ../../utils/telegram-utils/durable-channel-upsert */ "./src/utils/telegram-utils/durable-channel-upsert.ts");
+const channel_intelligence_read_service_1 = __webpack_require__(/*! ../active-channels/channel-intelligence-read.service */ "./src/components/active-channels/channel-intelligence-read.service.ts");
 let ChannelsService = class ChannelsService {
-    constructor(ChannelModel) {
+    constructor(ChannelModel, channelIntelligenceReadService) {
         this.ChannelModel = ChannelModel;
+        this.channelIntelligenceReadService = channelIntelligenceReadService;
     }
     async create(createChannelDto) {
         const createdChannel = new this.ChannelModel(createChannelDto);
@@ -23358,8 +23739,6 @@ let ChannelsService = class ChannelsService {
                 'broadcast',
                 'canSendMsgs',
                 'reactRestricted',
-                'starred',
-                'score',
             ]);
             if (typeof dto.private === 'boolean')
                 setFields.private = dto.private;
@@ -23398,6 +23777,16 @@ let ChannelsService = class ChannelsService {
     async findOne(channelId) {
         const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
         return channel;
+    }
+    async findExistingChannelIds(channelIds) {
+        const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+        if (!ids.length)
+            return [];
+        const rows = await this.ChannelModel
+            .find({ channelId: { $in: ids } }, { channelId: 1, _id: 0 })
+            .lean()
+            .exec();
+        return rows.map((row) => row.channelId).filter((channelId) => Boolean(channelId));
     }
     async update(channelId, updateChannelDto) {
         const existing = await this.ChannelModel.findOne({ channelId }).lean().exec();
@@ -23490,6 +23879,9 @@ let ChannelsService = class ChannelsService {
         }
     }
     async getActiveChannels(limit = 50, skip = 0, notIds = []) {
+        if (limit <= 0)
+            return [];
+        const queryLimit = Math.min(Math.max(limit * 3, limit), 100);
         const query = {
             '$and': [
                 {
@@ -23498,6 +23890,7 @@ let ChannelsService = class ChannelsService {
                             title: {
                                 $exists: true,
                                 $type: "string",
+                                $ne: '',
                                 '$not': { '$regex': /online|realestat|propert|freefire|bgmi|promo|agent|board|design|realt|clas|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i }
                             }
                         },
@@ -23505,6 +23898,7 @@ let ChannelsService = class ChannelsService {
                             username: {
                                 $exists: true,
                                 $type: "string",
+                                $ne: '',
                                 '$not': { '$regex': /online|freefire|bgmi|promo|agent|realestat|propert|board|design|realt|clas|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i }
                             }
                         },
@@ -23513,7 +23907,6 @@ let ChannelsService = class ChannelsService {
                 {
                     channelId: { '$nin': notIds },
                     participantsCount: { $gt: 1000 },
-                    username: { $ne: null },
                     canSendMsgs: true,
                     banned: { $ne: true },
                     forbidden: { $ne: true },
@@ -23523,26 +23916,45 @@ let ChannelsService = class ChannelsService {
             ]
         };
         try {
-            const pipeline = [
+            const prior = await this.channelIntelligenceReadService.getFleetPrior();
+            const buildPipeline = (sortStages) => [
                 { $match: query },
-                {
-                    $addFields: {
-                        sortScore: {
-                            $multiply: [
-                                { $rand: {} },
-                                { $cond: [{ $eq: ['$reactRestricted', true] }, 0.3, 1] },
-                                { $divide: [1, { $add: [{ $ifNull: ['$clientsJoined', 0] }, 1] }] },
-                            ],
-                        },
-                    },
-                },
+                ...sortStages,
                 { $sort: { sortScore: -1 } },
                 { $skip: skip },
-                { $limit: limit },
+                { $limit: queryLimit },
                 { $project: { sortScore: 0 } }
             ];
-            const result = await this.ChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
-            return result;
+            let result;
+            let usedRandomFallback = false;
+            try {
+                const pipeline = buildPipeline(this.channelIntelligenceReadService.buildConversionAwareSortStages(prior));
+                result = await this.ChannelModel.aggregate(pipeline, { allowDiskUse: true }).exec();
+            }
+            catch (sortError) {
+                console.error(`Conversion-aware sort failed — falling back to RANDOM-ONLY selection (conversion tilt disabled this query): ${sortError instanceof Error ? sortError.message : sortError}`);
+                const fallbackPipeline = buildPipeline(this.channelIntelligenceReadService.buildRandomOnlySortStages());
+                result = await this.ChannelModel.aggregate(fallbackPipeline, { allowDiskUse: true }).exec();
+                usedRandomFallback = true;
+            }
+            if (usedRandomFallback && result.length) {
+                const candidateIds = result
+                    .map((channel) => channel.channelId)
+                    .filter((channelId) => Boolean(channelId));
+                let excludedIds = new Set();
+                try {
+                    excludedIds = await this.channelIntelligenceReadService.getExcludedChannelIds(candidateIds);
+                }
+                catch (excludeError) {
+                    console.warn(`getExcludedChannelIds failed, skipping exclusion (fail-open): ${excludeError instanceof Error ? excludeError.message : excludeError}`);
+                }
+                if (excludedIds.size) {
+                    return result
+                        .filter((channel) => !excludedIds.has(String(channel.channelId)))
+                        .slice(0, limit);
+                }
+            }
+            return result.slice(0, limit);
         }
         catch (error) {
             console.error('🔴 Aggregation Error:', error);
@@ -23561,7 +23973,8 @@ exports.ChannelsService = ChannelsService;
 exports.ChannelsService = ChannelsService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(channel_schema_1.Channel.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        channel_intelligence_read_service_1.ChannelIntelligenceReadService])
 ], ChannelsService);
 
 
@@ -23593,8 +24006,6 @@ class CreateChannelDto {
         this.reactRestricted = false;
         this.banned = false;
         this.bannedAt = null;
-        this.starred = false;
-        this.score = 0;
     }
 }
 exports.CreateChannelDto = CreateChannelDto;
@@ -23680,14 +24091,6 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Timestamp when the channel was marked banned', type: Number, required: false, nullable: true, default: null }),
     __metadata("design:type", Number)
 ], CreateChannelDto.prototype, "bannedAt", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Starred status', default: false, required: false }),
-    __metadata("design:type", Boolean)
-], CreateChannelDto.prototype, "starred", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Channel score', default: 0, required: false }),
-    __metadata("design:type", Number)
-], CreateChannelDto.prototype, "score", void 0);
 
 
 /***/ },
@@ -23967,16 +24370,6 @@ __decorate([
     (0, mongoose_1.Prop)({ type: Number, default: null }),
     __metadata("design:type", Number)
 ], Channel.prototype, "bannedAt", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ default: false }),
-    (0, mongoose_1.Prop)({ default: false }),
-    __metadata("design:type", Boolean)
-], Channel.prototype, "starred", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ type: Number, default: 0 }),
-    (0, mongoose_1.Prop)({ type: Number, default: 0 }),
-    __metadata("design:type", Number)
-], Channel.prototype, "score", void 0);
 exports.Channel = Channel = __decorate([
     (0, mongoose_1.Schema)({
         collection: 'channels', versionKey: false, autoIndex: true, timestamps: true,
@@ -24770,22 +25163,43 @@ let ClientService = ClientService_1 = class ClientService {
         const existingClientMobile = existingClient.mobile;
         this.logger.log('setupClientQueryDto:', setupClientQueryDto);
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
-        const query = {
+        const permanentReplacement = this.isPermanentReplacementReason(setupClientQueryDto.reason);
+        const baseCandidateQuery = {
             clientId,
             mobile: setupClientQueryDto.mobile || { $ne: existingClientMobile },
             createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
-            availableDate: { $lte: today },
             channels: { $gte: warmup_phases_1.MIN_CHANNELS_FOR_MATURING },
             status: 'active',
             inUse: { $ne: true },
             warmupPhase: warmup_phases_1.WarmupPhase.SESSION_ROTATED,
         };
-        const candidateBufferClients = await this.bufferClientService.executeQuery(query, { availableDate: 1, createdAt: 1 }, 10);
-        this.logger.info(`[${clientId}] Setup candidate scan completed`, { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query });
-        const newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
+        const dueCandidateQuery = {
+            ...baseCandidateQuery,
+            availableDate: { $lte: today },
+        };
+        const candidateBufferClients = await this.bufferClientService.executeQuery(dueCandidateQuery, { availableDate: 1, createdAt: 1 }, 10);
+        this.logger.info(`[${clientId}] Setup candidate scan completed`, { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query: dueCandidateQuery });
+        let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
+        let usedFutureAvailableFallback = false;
+        if (!newBufferClient && permanentReplacement) {
+            const futureCandidateQuery = {
+                ...baseCandidateQuery,
+                availableDate: { $gt: today },
+            };
+            const futureCandidateBufferClients = await this.bufferClientService.executeQuery(futureCandidateQuery, { availableDate: 1, createdAt: 1 }, 10);
+            newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session);
+            usedFutureAvailableFallback = !!newBufferClient;
+            this.logger.warn(`[${clientId}] Permanent replacement fallback scan completed`, {
+                existingMobile: existingClientMobile,
+                reason: setupClientQueryDto.reason,
+                candidateCount: futureCandidateBufferClients.length,
+                selected: newBufferClient?.mobile,
+                query: futureCandidateQuery,
+            });
+        }
         if (!newBufferClient) {
             let existingRetired = false;
-            if (this.isPermanentReplacementReason(setupClientQueryDto.reason)) {
+            if (permanentReplacement) {
                 this.logger.warn(`[${clientId}] No replacement buffer available, but setup reason is permanent; marking existing mobile inactive`, {
                     existingMobile: existingClientMobile,
                     reason: setupClientQueryDto.reason,
@@ -24806,7 +25220,11 @@ let ClientService = ClientService_1 = class ClientService {
         }
         this.setupCooldownMap.set(clientId, Date.now());
         try {
-            this.logger.info(`[${clientId}] Selected replacement buffer client`, { existingMobile: existingClientMobile, newMobile: newBufferClient.mobile });
+            this.logger.info(`[${clientId}] Selected replacement buffer client`, {
+                existingMobile: existingClientMobile,
+                newMobile: newBufferClient.mobile,
+                usedFutureAvailableFallback,
+            });
             await this.notify(`Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}`);
             this.telegramService.setActiveClientSetup({
                 ...setupClientQueryDto,
@@ -24828,6 +25246,7 @@ let ClientService = ClientService_1 = class ClientService {
                 clientId,
                 existingMobile: existingClientMobile,
                 newMobile: newBufferClient.mobile,
+                usedFutureAvailableFallback,
                 message: 'Client swap completed',
             };
         }
@@ -33534,12 +33953,10 @@ const client_helper_utils_1 = __webpack_require__(/*! ../shared/client-helper.ut
 const enrollment_lock_1 = __webpack_require__(/*! ../shared/enrollment-lock */ "./src/components/shared/enrollment-lock.ts");
 let PromoteClientService = PromoteClientService_1 = class PromoteClientService extends base_client_service_1.BaseClientService {
     get checkingPromoteClientsSince() {
-        return this.activeMaintenanceRun?.startedAt || 0;
+        return this.isWarmupCheckProcessing ? 1 : 0;
     }
     set checkingPromoteClientsSince(value) {
-        this.activeMaintenanceRun = value > 0
-            ? { name: 'legacy-promote-test-lock', startedAt: value }
-            : null;
+        this.isWarmupCheckProcessing = value > 0;
     }
     constructor(promoteClientModel, telegramService, usersService, activeChannelsService, clientService, channelsService, bufferClientServiceRef, sessionService, botsService) {
         super(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, PromoteClientService_1.name);
@@ -33572,7 +33989,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             operationalChannelThreshold: 230,
         };
     }
-    isHealthyPromoteClientForCap(doc, now) {
+    isHealthyPromoteClientForCap(doc, _now) {
         const phase = doc.warmupPhase;
         if (!phase)
             return false;
@@ -33582,13 +33999,6 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
         const failedAttempts = doc.failedUpdateAttempts || 0;
         if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
             return false;
-        }
-        const enrolledAtMs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
-        if (enrolledAtMs > 0) {
-            const daysSinceEnrolled = (now - enrolledAtMs) / this.ONE_DAY_MS;
-            if (daysSinceEnrolled > this.STUCK_WARMUP_DAYS) {
-                return false;
-            }
         }
         return true;
     }
@@ -33931,9 +34341,11 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 const client = await connection_manager_1.connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
                 const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                 await this.update(doc.mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length))
+                    continue;
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
-                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, channels.ids);
+                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
                     if (channelsToJoin.length === 0)
                         continue;
                     if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
@@ -34151,9 +34563,10 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             this.logger.warn('Join/leave processing still in progress, skipping re-entry');
             return 'Join/leave still processing, skipped';
         }
-        if (!this.beginMaintenanceRun('preparePromoteJoinChannels')) {
-            return 'Warmup maintenance active, skipped';
+        if (this.isPrepareJoinChannelsProcessing) {
+            return 'Join-channel prepare already running, skipped';
         }
+        this.isPrepareJoinChannelsProcessing = true;
         try {
             this.logger.log('Starting join channel process');
             const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
@@ -34179,8 +34592,12 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                         const channels = await (0, channelinfo_1.channelInfo)(client.client, true);
                         await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
                         await this.update(mobile, { channels: channels.ids.length });
+                        if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
+                            successCount++;
+                            continue;
+                        }
                         if (channels.canSendFalseCount < 10) {
-                            const excludedIds = channels.ids;
+                            const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
                             await (0, Helpers_1.sleep)(5000 + Math.random() * 3000);
                             const isBelowThreshold = channels.ids.length < 220;
                             const result = isBelowThreshold
@@ -34234,17 +34651,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }
         }
         finally {
-            this.endMaintenanceRun();
+            this.isPrepareJoinChannelsProcessing = false;
         }
     }
     async checkPromoteClients() {
-        if (!this.beginMaintenanceRun('checkPromoteClients'))
-            return;
-        if (this.telegramService.hasActiveClientSetup()) {
-            this.logger.warn('Ignored active check promote channels as active client setup exists');
-            this.endMaintenanceRun();
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Skipping checkPromoteClients: a warmup check is already running');
             return;
         }
+        if (this.telegramService.hasActiveClientSetup()) {
+            this.logger.warn('Ignored active check promote channels as active client setup exists');
+            return;
+        }
+        this.isWarmupCheckProcessing = true;
         try {
             await this._checkPromoteClientsInternal();
         }
@@ -34257,7 +34676,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             catch { }
         }
         finally {
-            this.endMaintenanceRun();
+            this.isWarmupCheckProcessing = false;
         }
     }
     async rotateReadyPromoteClients() {
@@ -34269,8 +34688,8 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             this.logger.warn('Ready promote rotation skipped: active client setup exists');
             return false;
         }
-        if (this.isMaintenanceRunActive() && !this.isJoinOrLeaveMaintenanceRun()) {
-            this.logger.warn('Ready promote rotation skipped: non-join maintenance is active');
+        if (this.isWarmupCheckProcessing) {
+            this.logger.warn('Ready promote rotation skipped: warmup check is active');
             return false;
         }
         this.readyRotationInProgress = true;
@@ -34344,39 +34763,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 this.logger.warn(`Skipping promote client ${promoteClient.mobile}: incomplete lifecycle metadata`);
                 continue;
             }
-            if (warmupPhase === base_client_service_1.WarmupPhase.READY)
+            if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED)
                 continue;
-            const failedAttempts = promoteClient.failedUpdateAttempts || 0;
-            const lastAttemptAgeHours = lastUpdateAttempt > 0
-                ? (now - lastUpdateAttempt) / (60 * 60 * 1000)
-                : 10000;
             const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now);
-            const computedPhase = warmupAction.phase;
-            const phaseBoost = {
-                [base_client_service_1.WarmupPhase.MATURING]: 15000,
-                [base_client_service_1.WarmupPhase.GROWING]: 10000,
-                [base_client_service_1.WarmupPhase.IDENTITY]: 7000,
-                [base_client_service_1.WarmupPhase.SETTLING]: 5000,
-                [base_client_service_1.WarmupPhase.ENROLLED]: 3000,
-                [base_client_service_1.WarmupPhase.SESSION_ROTATED]: 0,
-            };
-            const subStepBonus = {
-                'remove_other_auths': 2000,
-                'set_2fa': 1000,
-                'update_username': 1500,
-                'update_name_bio': 1000,
-                'upload_photo': 1000,
-            };
-            const warmupBoost = phaseBoost[computedPhase] ?? 5000;
-            const actionBonus = subStepBonus[warmupAction.action] || 0;
-            const cappedFailurePenalty = Math.min(failedAttempts, 20) * 100;
-            const cappedAgeBonus = Math.min(lastAttemptAgeHours, 168);
-            const priority = warmupBoost + actionBonus + cappedAgeBonus - cappedFailurePenalty;
-            promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority });
+            const priority = (0, base_client_service_1.calculateWarmupPriority)(promoteClient, warmupAction, now);
+            promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority, warmupAction });
         }
         promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
-        for (const { promoteClient, client } of promoteClientsToProcess) {
-            if (totalUpdates >= this.MAX_UPDATES_PER_CYCLE)
+        const effectiveCap = this.getEffectiveUpdatesCap(promoteClientsToProcess.length);
+        let sensitiveUpdates = 0;
+        let organicUpdates = 0;
+        this.logger.log(`Promote warmup run: ${promoteClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
+        for (const { promoteClient, client, warmupAction } of promoteClientsToProcess) {
+            if (totalUpdates >= effectiveCap)
                 break;
             const warmupPhase = promoteClient.warmupPhase || base_client_service_1.WarmupPhase.ENROLLED;
             if (warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED) {
@@ -34385,7 +34784,19 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
                 if (!healthCheck.passed)
                     continue;
             }
-            const processResult = await this.processClient(promoteClient, client);
+            const plannedAction = warmupAction.action;
+            if (plannedAction === 'organic_only' && organicUpdates >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+            const plannedSensitive = this.isSensitiveWarmupAction(plannedAction);
+            if (plannedSensitive && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+            if (plannedSensitive)
+                sensitiveUpdates++;
+            if (plannedAction === 'organic_only')
+                organicUpdates++;
+            const processResult = await this.processClient(promoteClient, client, warmupAction);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
                 updatedEntries.push(`${client.clientId} | ${promoteClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`);
@@ -35704,14 +36115,26 @@ let ClientRegistry = ClientRegistry_1 = class ClientRegistry {
         this.LOCK_TIMEOUT = 30000;
         this.LOCK_EXPIRY = 120000;
         this.CLIENT_TIMEOUT = 300000;
-        setInterval(() => this.cleanupInactiveClients(), 60000);
-        setInterval(() => this.cleanupExpiredLocks(), 30000);
+        this.inactiveClientCleanupInterval = setInterval(() => void this.cleanupInactiveClients(), 60000);
+        this.expiredLockCleanupInterval = setInterval(() => this.cleanupExpiredLocks(), 30000);
+        this.inactiveClientCleanupInterval.unref?.();
+        this.expiredLockCleanupInterval.unref?.();
     }
     static getInstance() {
         if (!ClientRegistry_1.instance) {
             ClientRegistry_1.instance = new ClientRegistry_1();
         }
         return ClientRegistry_1.instance;
+    }
+    static resetForTesting() {
+        ClientRegistry_1.instance?.dispose();
+        ClientRegistry_1.instance = null;
+    }
+    dispose() {
+        clearInterval(this.inactiveClientCleanupInterval);
+        clearInterval(this.expiredLockCleanupInterval);
+        this.clients.clear();
+        this.locks.clear();
     }
     async acquireLock(mobile) {
         const lockId = `${mobile}_${Date.now()}_${Math.random()}`;
@@ -37802,7 +38225,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.BaseClientService = exports.performOrganicActivity = exports.getWarmupPhaseAction = exports.isAccountWarmingUp = exports.isAccountReady = exports.WarmupPhase = exports.ClientStatus = void 0;
+exports.BaseClientService = exports.performOrganicActivity = exports.calculateWarmupPriority = exports.getWarmupPhaseAction = exports.isAccountWarmingUp = exports.isAccountReady = exports.WarmupPhase = exports.ClientStatus = void 0;
 const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
 const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers");
 const parseError_1 = __webpack_require__(/*! ../../utils/parseError */ "./src/utils/parseError.ts");
@@ -37826,6 +38249,7 @@ Object.defineProperty(exports, "performOrganicActivity", ({ enumerable: true, ge
 const warmup_phases_1 = __webpack_require__(/*! ./warmup-phases */ "./src/components/shared/warmup-phases.ts");
 Object.defineProperty(exports, "getWarmupPhaseAction", ({ enumerable: true, get: function () { return warmup_phases_1.getWarmupPhaseAction; } }));
 Object.defineProperty(exports, "WarmupPhase", ({ enumerable: true, get: function () { return warmup_phases_1.WarmupPhase; } }));
+Object.defineProperty(exports, "calculateWarmupPriority", ({ enumerable: true, get: function () { return warmup_phases_1.calculateWarmupPriority; } }));
 Object.defineProperty(exports, "isAccountReady", ({ enumerable: true, get: function () { return warmup_phases_1.isAccountReady; } }));
 Object.defineProperty(exports, "isAccountWarmingUp", ({ enumerable: true, get: function () { return warmup_phases_1.isAccountWarmingUp; } }));
 const mobile_utils_1 = __webpack_require__(/*! ./mobile-utils */ "./src/components/shared/mobile-utils.ts");
@@ -37837,6 +38261,14 @@ function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 class BaseClientService {
+    getEffectiveUpdatesCap(pendingMutationCount) {
+        const pending = Math.max(0, Math.floor(pendingMutationCount || 0));
+        const perRunToHitSla = Math.ceil(pending / (this.WARMUP_TARGET_DRAIN_DAYS * this.WARMUP_RUNS_PER_DAY));
+        return Math.max(this.MIN_UPDATES_PER_CYCLE, Math.min(this.MAX_UPDATES_PER_CYCLE, perRunToHitSla));
+    }
+    isSensitiveWarmupAction(action) {
+        return !!action && BaseClientService.SENSITIVE_WARMUP_ACTIONS.has(action);
+    }
     resetDailyJoinCountersIfNeeded() {
         const today = client_helper_utils_1.ClientHelperUtils.getTodayDateString();
         if (today !== this.dailyJoinDate) {
@@ -37899,6 +38331,14 @@ class BaseClientService {
             ],
         };
     }
+    isTerminalOperationalAfterRefresh(doc, channels) {
+        const phase = doc.warmupPhase;
+        return (phase === warmup_phases_1.WarmupPhase.READY || phase === warmup_phases_1.WarmupPhase.SESSION_ROTATED)
+            && channels >= (this.config.operationalChannelThreshold ?? warmup_phases_1.MIN_CHANNELS_FOR_MATURING);
+    }
+    getJoinedChannelIdsFromInfo(channels) {
+        return [...new Set([...(channels?.ids ?? []), ...(channels?.canSendFalseChats ?? [])].map(String).filter(Boolean))];
+    }
     getOperationalChannelEligibilityFilter() {
         return {
             channels: { $gte: this.config.operationalChannelThreshold ?? warmup_phases_1.MIN_CHANNELS_FOR_MATURING },
@@ -37916,18 +38356,15 @@ class BaseClientService {
         ];
         return requiredTimestamps.filter((field) => client_helper_utils_1.ClientHelperUtils.getTimestamp(doc[field]) <= 0);
     }
-    async retireIfStuck(doc, now) {
+    logIfLongWarming(doc, now) {
         const enrolledTs = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
         const daysSinceEnrolled = enrolledTs > 0 ? (now - enrolledTs) / this.ONE_DAY_MS : 0;
         const phase = doc.warmupPhase || warmup_phases_1.WarmupPhase.ENROLLED;
-        if (daysSinceEnrolled <= this.STUCK_WARMUP_DAYS || phase === warmup_phases_1.WarmupPhase.READY || phase === warmup_phases_1.WarmupPhase.SESSION_ROTATED) {
-            return false;
+        if (daysSinceEnrolled > this.LONG_WARMING_ALERT_DAYS &&
+            phase !== warmup_phases_1.WarmupPhase.READY &&
+            phase !== warmup_phases_1.WarmupPhase.SESSION_ROTATED) {
+            this.logger.warn(`Long-warming ${this.clientType} ${doc.mobile}: ${Math.round(daysSinceEnrolled)}d in ${phase} — still progressing (age never inactivates; only permanent TG failures do)`);
         }
-        const failedAttempts = doc.failedUpdateAttempts || 0;
-        this.logger.error(`Stuck account detected: ${doc.mobile} has been warming for ${Math.round(daysSinceEnrolled)}d in phase ${phase} — marking inactive`);
-        const deactivated = await this.deactivateClient(doc.mobile, `Stuck: ${Math.round(daysSinceEnrolled)}d in ${phase}`);
-        this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>STUCK</b> ${this.clientType} ${doc.mobile} — ${phase} ${Math.round(daysSinceEnrolled)}d — ${deactivated ? 'inactivated' : 'inactivate FAILED'}`, { parseMode: 'HTML' });
-        return true;
     }
     constructor(telegramService, usersService, activeChannelsService, clientService, channelsService, sessionService, botsService, loggerName) {
         this.telegramService = telegramService;
@@ -37943,6 +38380,8 @@ class BaseClientService {
         this.leaveChannelIntervalId = null;
         this.isJoinChannelProcessing = false;
         this.isLeaveChannelProcessing = false;
+        this.isWarmupCheckProcessing = false;
+        this.isPrepareJoinChannelsProcessing = false;
         this.activeTimeouts = new Set();
         this.ONE_DAY_MS = 24 * 60 * 60 * 1000;
         this.THREE_MONTHS_MS = 3 * 30 * this.ONE_DAY_MS;
@@ -37957,11 +38396,13 @@ class BaseClientService {
         this.FAILURE_RESET_DAYS = 7;
         this.FAILURE_RETRY_BACKOFF_HOURS = 24;
         this.MAX_UPDATES_PER_CYCLE = 20;
+        this.MIN_UPDATES_PER_CYCLE = 8;
+        this.WARMUP_TARGET_DRAIN_DAYS = 8;
+        this.WARMUP_RUNS_PER_DAY = 4;
+        this.MAX_SENSITIVE_ACTIONS_PER_CYCLE = 5;
+        this.MAX_ORGANIC_ACTIONS_PER_CYCLE = 5;
         this.MAX_READY_ROTATIONS_PER_SWEEP = 1;
-        this.MAX_MAINTENANCE_DURATION_MS = 10 * 60 * 1000;
-        this.MAINTENANCE_LOCK_TTL_MS = 30 * 60 * 1000;
-        this.activeMaintenanceRun = null;
-        this.STUCK_WARMUP_DAYS = 45;
+        this.LONG_WARMING_ALERT_DAYS = 60;
         this.dailyJoinCounts = new Map();
         this.dailyJoinDate = '';
         this.joinFailureCounts = new Map();
@@ -37985,6 +38426,8 @@ class BaseClientService {
             this.leaveChannelMap.clear();
             this.isJoinChannelProcessing = false;
             this.isLeaveChannelProcessing = false;
+            this.isWarmupCheckProcessing = false;
+            this.isPrepareJoinChannelsProcessing = false;
         }
         catch (error) {
             this.logger.error('Error during cleanup:', error);
@@ -38042,8 +38485,6 @@ class BaseClientService {
         let tag;
         if ((0, isPermanentError_1.default)({ message: text }))
             tag = 'DEAD';
-        else if (/^Stuck:/i.test(text))
-            tag = 'STUCK';
         else if (permanent)
             tag = 'UNSAFE';
         else
@@ -38196,8 +38637,19 @@ class BaseClientService {
             this.logger.warn(`Leave channel map size limit reached (${this.config.maxMapSize}), cannot add ${mobile}`);
             return false;
         }
-        this.leaveChannelMap.set(mobile, channels);
+        const normalizedChannels = this.normalizeLeaveChannelIds(channels);
+        if (normalizedChannels.length === 0) {
+            this.logger.debug(`${mobile} has no valid channel ids to leave`);
+            this.removeFromLeaveMap(mobile);
+            return false;
+        }
+        this.leaveChannelMap.set(mobile, normalizedChannels);
         return true;
+    }
+    normalizeLeaveChannelIds(channels) {
+        return [...new Set((channels ?? [])
+                .map((channel) => String(channel ?? '').trim().replace(/^-100/, ''))
+                .filter((channel) => channel && channel !== 'undefined' && channel !== 'null' && channel !== '0'))];
     }
     removeFromJoinMap(key) {
         this.joinChannelMap.delete(key);
@@ -38571,20 +39023,16 @@ class BaseClientService {
         catch (error) {
             const errorDetails = this.handleError(error, 'Error removing other auths', doc.mobile);
             const errorMsg = errorDetails?.message || '';
-            if (errorMsg.includes('Session self-check failed') || errorMsg.includes('session_revoked') || errorMsg.includes('auth_key_unregistered')) {
-                this.logger.error(`CRITICAL: Session lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
-                const deactivated = await this.deactivateClient(doc.mobile, `Session lost during auth cleanup: ${errorMsg}`, { permanent: true });
-                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
-                return 0;
-            }
             await this.update(doc.mobile, {
                 lastUpdateAttempt: new Date(),
                 failedUpdateAttempts: failedAttempts + 1,
                 lastUpdateFailure: new Date(),
             });
             if ((0, isPermanentError_1.default)(errorDetails)) {
+                this.logger.error(`Session permanently lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
-                await this.deactivateClient(doc.mobile, reason, { permanent: true });
+                const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
+                this.botsService.sendMessageByCategory(channel_category_enum_1.ChannelCategory.ACCOUNT_NOTIFICATIONS, `<b>CRITICAL SESSION LOSS</b> ${this.clientType} ${doc.mobile} — revoked during auth cleanup, ${deactivated ? 'inactivated' : 'inactivate FAILED'}\n${errorMsg?.substring(0, 120)}`, { parseMode: 'HTML' });
             }
             return 0;
         }
@@ -38682,33 +39130,7 @@ class BaseClientService {
             await (0, Helpers_1.sleep)(client_helper_utils_1.ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
         }
     }
-    beginMaintenanceRun(name) {
-        if (!this.activeMaintenanceRun) {
-            this.activeMaintenanceRun = { name, startedAt: Date.now() };
-            return true;
-        }
-        const elapsedMs = Date.now() - this.activeMaintenanceRun.startedAt;
-        if (elapsedMs >= this.MAINTENANCE_LOCK_TTL_MS) {
-            this.logger.error(`Maintenance lock overdue: ${this.activeMaintenanceRun.name} has run for ${Math.floor(elapsedMs / 1000)}s; keeping lock to prevent overlapping Telegram work`);
-        }
-        const duration = Math.floor(elapsedMs / 1000);
-        const overdue = elapsedMs >= this.MAX_MAINTENANCE_DURATION_MS ? ' (past advisory duration)' : '';
-        this.logger.warn(`Skipping ${name}: ${this.activeMaintenanceRun.name} is still running for ${duration}s${overdue}`);
-        return false;
-    }
-    endMaintenanceRun() {
-        this.activeMaintenanceRun = null;
-    }
-    isMaintenanceRunActive() {
-        return this.activeMaintenanceRun !== null;
-    }
-    isJoinOrLeaveMaintenanceRun() {
-        return this.activeMaintenanceRun?.name === 'prepareBufferJoinChannels'
-            || this.activeMaintenanceRun?.name === 'preparePromoteJoinChannels'
-            || this.activeMaintenanceRun?.name === 'processJoinChannelInterval'
-            || this.activeMaintenanceRun?.name === 'processLeaveChannelInterval';
-    }
-    async processClient(doc, client) {
+    async processClient(doc, client, plannedWarmupAction) {
         if (doc.inUse === true) {
             this.logger.debug(`Client ${doc.mobile} is marked as in use`);
             return { updateCount: 0 };
@@ -38725,9 +39147,7 @@ class BaseClientService {
         }
         const failedAttempts = doc.failedUpdateAttempts || 0;
         const lastFailureTime = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.lastUpdateFailure);
-        if (await this.retireIfStuck(doc, now)) {
-            return { updateCount: 0 };
-        }
+        this.logIfLongWarming(doc, now);
         if (failedAttempts > 0 && (lastFailureTime <= 0 || now - lastFailureTime > this.FAILURE_RESET_DAYS * this.ONE_DAY_MS)) {
             this.logger.log(`Resetting failure count for ${doc.mobile}`);
             const resetFields = { failedUpdateAttempts: 0, lastUpdateFailure: null };
@@ -38751,7 +39171,7 @@ class BaseClientService {
             this.logger.debug(`Client ${doc.mobile} on cooldown`);
             return { updateCount: 0 };
         }
-        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        const warmupAction = plannedWarmupAction || (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
         this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
             privacyUpdatedAt: doc.privacyUpdatedAt || null,
             twoFASetAt: doc.twoFASetAt || null,
@@ -38916,11 +39336,6 @@ class BaseClientService {
             await this.scheduleNextJoinRound();
             return;
         }
-        if (!this.beginMaintenanceRun('processJoinChannelInterval')) {
-            this.logger.warn('Deferring join-channel round while another warmup operation is active');
-            await this.scheduleNextJoinRound();
-            return;
-        }
         this.isJoinChannelProcessing = true;
         try {
             await this.processJoinChannelSequentially();
@@ -38930,7 +39345,6 @@ class BaseClientService {
         }
         finally {
             this.isJoinChannelProcessing = false;
-            this.endMaintenanceRun();
             await this.scheduleNextJoinRound();
         }
     }
@@ -38978,9 +39392,6 @@ class BaseClientService {
                     await this.telegramService.tryJoiningChannel(mobile, currentChannel);
                     joinCount++;
                     this.incrementDailyJoinCount(mobile);
-                    if (currentChannel.channelId) {
-                        this.activeChannelsService.incrementClientsJoined(currentChannel.channelId).catch(() => { });
-                    }
                     if (joinCount > 0 && joinCount % (2 + Math.floor(Math.random() * 2)) === 0) {
                         try {
                             const client = await connection_manager_1.connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
@@ -39118,11 +39529,6 @@ class BaseClientService {
             this.clearLeaveChannelInterval();
             return;
         }
-        if (!this.beginMaintenanceRun('processLeaveChannelInterval')) {
-            this.logger.warn('Deferring leave-channel round while another warmup operation is active');
-            this.scheduleNextLeaveRound();
-            return;
-        }
         this.isLeaveChannelProcessing = true;
         try {
             await this.processLeaveChannelSequentially();
@@ -39132,7 +39538,6 @@ class BaseClientService {
         }
         finally {
             this.isLeaveChannelProcessing = false;
-            this.endMaintenanceRun();
             this.scheduleNextLeaveRound();
             if (!this.joinChannelIntervalId && !this.isJoinChannelProcessing) {
                 this.scheduleNextJoinRound();
@@ -39922,6 +40327,9 @@ class BaseClientService {
     }
 }
 exports.BaseClientService = BaseClientService;
+BaseClientService.SENSITIVE_WARMUP_ACTIONS = new Set([
+    'set_2fa', 'remove_other_auths', 'update_username',
+]);
 
 
 /***/ },
@@ -40450,7 +40858,8 @@ async function performFullActivity(client) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
+exports.GROWING_ADVANCE_DEADLINE_DAYS = exports.MIN_CHANNELS_FOR_MATURING = exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = exports.MIN_DAYS_BETWEEN_IDENTITY_STEPS = exports.WARMUP_PHASE_THRESHOLDS = exports.WarmupPhase = void 0;
+exports.calculateWarmupPriority = calculateWarmupPriority;
 exports.getWarmupPhaseAction = getWarmupPhaseAction;
 exports.isAccountReady = isAccountReady;
 exports.isAccountWarmingUp = isAccountWarmingUp;
@@ -40476,7 +40885,60 @@ exports.MIN_DAYS_AFTER_AUTH_CLEANUP_BEFORE_IDENTITY = 3;
 exports.MIN_DAYS_AFTER_NAME_BIO_BEFORE_USERNAME = 3;
 exports.MIN_DAYS_AFTER_USERNAME_BEFORE_GROWING = 2;
 exports.MIN_CHANNELS_FOR_MATURING = 200;
+exports.GROWING_ADVANCE_DEADLINE_DAYS = 30;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const WARMUP_PHASE_PRIORITY = {
+    [exports.WarmupPhase.READY]: 25000,
+    [exports.WarmupPhase.MATURING]: 15000,
+    [exports.WarmupPhase.GROWING]: 10000,
+    [exports.WarmupPhase.IDENTITY]: 7000,
+    [exports.WarmupPhase.SETTLING]: 5000,
+    [exports.WarmupPhase.ENROLLED]: 3000,
+    [exports.WarmupPhase.SESSION_ROTATED]: 0,
+};
+const WARMUP_ACTION_PRIORITY = {
+    remove_other_auths: 2000,
+    set_2fa: 1000,
+    update_username: 1500,
+    update_name_bio: 1000,
+    upload_photo: 1000,
+    rotate_session: 2000,
+};
+const WARMUP_FAIR_AGING_ACTIONS = new Set([
+    'set_privacy',
+    'set_2fa',
+    'remove_other_auths',
+    'delete_photos',
+    'update_name_bio',
+    'update_username',
+    'upload_photo',
+    'advance_to_ready',
+    'rotate_session',
+]);
+const WARMUP_FAILURE_PENALTY_CAP = 20;
+const WARMUP_FAILURE_PENALTY_POINTS = 100;
+const FAIR_AGING_GRACE_HOURS = 3 * 24;
+const FAIR_AGING_FULL_RESCUE_HOURS = 30 * 24;
+const FAIR_AGING_MAX_BONUS = 20000;
+function calculateWarmupPriority(doc, warmupAction, now) {
+    const phaseBoost = WARMUP_PHASE_PRIORITY[warmupAction.phase] ?? 5000;
+    const actionBonus = WARMUP_ACTION_PRIORITY[warmupAction.action] || 0;
+    const failedAttempts = Math.max(0, doc.failedUpdateAttempts || 0);
+    const failurePenalty = Math.min(failedAttempts, WARMUP_FAILURE_PENALTY_CAP) * WARMUP_FAILURE_PENALTY_POINTS;
+    const lastProgress = Math.max(client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.twoFASetAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.otherAuthsRemovedAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsDeletedAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.nameBioUpdatedAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.usernameUpdatedAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.profilePicsUpdatedAt), client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.sessionRotatedAt));
+    const lastTouch = lastProgress > 0
+        ? lastProgress
+        : (client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt));
+    const lastTouchAgeHours = lastTouch > 0 ? Math.max(0, (now - lastTouch) / ONE_HOUR_MS) : 0;
+    const agingWindowHours = FAIR_AGING_FULL_RESCUE_HOURS - FAIR_AGING_GRACE_HOURS;
+    const starvationHours = Math.max(0, lastTouchAgeHours - FAIR_AGING_GRACE_HOURS);
+    const ageRatio = Math.min(1, starvationHours / agingWindowHours);
+    const fairAgeBonus = WARMUP_FAIR_AGING_ACTIONS.has(warmupAction.action)
+        ? Math.round(ageRatio * FAIR_AGING_MAX_BONUS)
+        : 0;
+    return phaseBoost + actionBonus + fairAgeBonus - failurePenalty;
+}
 function getWarmupPhaseAction(doc, now) {
     const jitter = doc.warmupJitter || 0;
     const enrolledAt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
@@ -40593,11 +41055,11 @@ function getWarmupPhaseAction(doc, now) {
             return identityCatchup;
         const channels = doc.channels || 0;
         const growingDuration = daysSinceEnrolled - (exports.WARMUP_PHASE_THRESHOLDS.growing + jitter);
-        const expectedGrowingDays = exports.WARMUP_PHASE_THRESHOLDS.maturing - exports.WARMUP_PHASE_THRESHOLDS.growing;
-        const isGrowingStalled = growingDuration > expectedGrowingDays * 2;
-        const effectiveChannelTarget = isGrowingStalled
-            ? Math.floor(exports.MIN_CHANNELS_FOR_MATURING / 2)
-            : exports.MIN_CHANNELS_FOR_MATURING;
+        const stalledLong = growingDuration > (exports.WARMUP_PHASE_THRESHOLDS.maturing - exports.WARMUP_PHASE_THRESHOLDS.growing) * 2;
+        const pastAdvanceDeadline = growingDuration > exports.GROWING_ADVANCE_DEADLINE_DAYS;
+        const effectiveChannelTarget = pastAdvanceDeadline
+            ? 0
+            : (stalledLong ? Math.floor(exports.MIN_CHANNELS_FOR_MATURING / 2) : exports.MIN_CHANNELS_FOR_MATURING);
         if (channels < effectiveChannelTarget) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
@@ -40717,10 +41179,6 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Second Show' }),
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "secondShow", void 0);
-__decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
-    __metadata("design:type", Boolean)
-], CreateStatDto.prototype, "didPay", void 0);
 __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Client' }),
     __metadata("design:type", String)
@@ -40961,11 +41419,6 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Stat.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
-    (0, mongoose_1.Prop)({ required: false }),
-    __metadata("design:type", Boolean)
-], Stat.prototype, "didPay", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Client' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -41131,10 +41584,6 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateStatDto.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
-    __metadata("design:type", Boolean)
-], CreateStatDto.prototype, "didPay", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Client' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "client", void 0);
@@ -41142,6 +41591,10 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'Profile' }),
     __metadata("design:type", String)
 ], CreateStatDto.prototype, "profile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Paid channel-attribution credit timestamp', required: false }),
+    __metadata("design:type", Number)
+], CreateStatDto.prototype, "paymentAttributionCreditedAt", void 0);
 
 
 /***/ },
@@ -41374,11 +41827,6 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Stat2.prototype, "secondShow", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ description: 'Did Pay' }),
-    (0, mongoose_1.Prop)({ required: false }),
-    __metadata("design:type", Boolean)
-], Stat2.prototype, "didPay", void 0);
-__decorate([
     (0, swagger_1.ApiProperty)({ description: 'Client' }),
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
@@ -41388,6 +41836,11 @@ __decorate([
     (0, mongoose_1.Prop)({ required: true }),
     __metadata("design:type", String)
 ], Stat2.prototype, "profile", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Paid channel-attribution credit timestamp', required: false }),
+    (0, mongoose_1.Prop)({ type: Number, required: false }),
+    __metadata("design:type", Number)
+], Stat2.prototype, "paymentAttributionCreditedAt", void 0);
 exports.Stat2 = Stat2 = __decorate([
     (0, mongoose_1.Schema)()
 ], Stat2);
@@ -43097,6 +43550,14 @@ __decorate([
     (0, swagger_1.ApiProperty)({ description: 'videos' }),
     __metadata("design:type", Array)
 ], CreateUserDataDto.prototype, "videos", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Canonical common-channel IDs used for promotion attribution', default: [] }),
+    __metadata("design:type", Array)
+], CreateUserDataDto.prototype, "attributionChannelIds", void 0);
+__decorate([
+    (0, swagger_1.ApiProperty)({ description: 'Unix timestamp of the latest attribution lookup', default: 0 }),
+    __metadata("design:type", Number)
+], CreateUserDataDto.prototype, "attributionUpdatedAt", void 0);
 
 
 /***/ },
@@ -43221,6 +43682,14 @@ __decorate([
     (0, swagger_1.ApiPropertyOptional)({ description: 'Number of demo pictures sent', type: Number }),
     __metadata("design:type", Number)
 ], SearchDto.prototype, "picsSent", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Canonical common-channel IDs used for promotion attribution', type: [String] }),
+    __metadata("design:type", Array)
+], SearchDto.prototype, "attributionChannelIds", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ description: 'Unix timestamp of the latest attribution lookup', type: Number }),
+    __metadata("design:type", Number)
+], SearchDto.prototype, "attributionUpdatedAt", void 0);
 
 
 /***/ },
@@ -43407,6 +43876,14 @@ __decorate([
     (0, mongoose_1.Prop)({ type: [String], required: true, default: [] }),
     __metadata("design:type", Array)
 ], UserData.prototype, "videos", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ type: [String], required: true, default: [] }),
+    __metadata("design:type", Array)
+], UserData.prototype, "attributionChannelIds", void 0);
+__decorate([
+    (0, mongoose_1.Prop)({ required: true, default: 0 }),
+    __metadata("design:type", Number)
+], UserData.prototype, "attributionUpdatedAt", void 0);
 __decorate([
     (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Date)
@@ -47318,7 +47795,7 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
     registerCmsJobs() {
         if (!this.config.enabled('CMS_SCHEDULER'))
             return;
-        this.register('cms-buffer-check', '25 2 * * *', () => this.appService.checkBufferClients());
+        this.register('cms-buffer-check', '17 1,7,13,19 * * *', () => this.appService.checkBufferClients());
         this.register('cms-buffer-ready-rotation', '45 * * * *', async () => {
             await this.appService.rotateReadyBufferClients();
         });
@@ -47334,7 +47811,7 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
     registerUmsJobs() {
         if (!this.config.enabled('UMS_SCHEDULER'))
             return;
-        this.register('maintenance-promote-client-check', '35 16 * * *', () => this.maintenance.checkPromoteClients());
+        this.register('maintenance-promote-client-check', '43 4,10,16,22 * * *', () => this.maintenance.checkPromoteClients());
         this.register('maintenance-promote-client-join', '20 */3 * * *', async () => {
             await this.maintenance.preparePromoteClientJoin();
         });
@@ -47383,6 +47860,11 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
             await new Promise((resolve) => setTimeout(resolve, 30_000));
             await this.activeChannelsService.resetMessageDeletionCounters();
         });
+        this.register('maintenance-daily-user-stats-reset', '25 0 * * *', () => this.runDailyUserStatsReset());
+        this.register('maintenance-daily-user-stats-reset-recovery', '30,45 0 * * *', () => this.runDailyUserStatsReset());
+        if (this.isDailyResetRecoveryWindow()) {
+            this.afterStartup('ums-test-daily-user-stats-reset-recovery', 15_000, () => this.runDailyUserStatsReset());
+        }
         this.afterStartup('ums-test-initial-user-processing', 120_000, () => this.maintenance.processEligibleUsers(400, 0));
     }
     afterStartup(name, delayMs, task) {
@@ -47462,6 +47944,37 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
             this.logger.error('Daily promoteStats reset completed, but its notification failed', error instanceof Error ? error.stack : String(error));
         }
     }
+    async runDailyUserStatsReset() {
+        const db = this.requireDatabase('daily user stats reset');
+        const jobId = `daily-user-stats-reset:${this.istDateKey()}`;
+        if (!(await this.claimJob(db.collection('controlPlaneJobRuns'), jobId))) {
+            this.logger.warn(`Daily user stats reset already claimed or completed: ${jobId}`);
+            return;
+        }
+        try {
+            const result = await this.resetUserStatsWithRetries(db.collection('stats2'), db.collection('userData'));
+            await db.collection('controlPlaneJobRuns').updateOne({ _id: jobId }, {
+                $set: {
+                    completedAt: new Date(),
+                    stats2DeletedCount: result.stats2DeletedCount,
+                    paidUsersMatchedCount: result.paidUsersMatchedCount,
+                    paidUsersModifiedCount: result.paidUsersModifiedCount,
+                },
+                $unset: { leaseOwner: '', leaseExpiresAt: '' },
+            });
+        }
+        catch (error) {
+            await db.collection('controlPlaneJobRuns').updateOne({ _id: jobId }, {
+                $set: {
+                    failedAt: new Date(),
+                    error: error instanceof Error ? error.message : String(error),
+                    leaseExpiresAt: new Date(0),
+                },
+                $unset: { leaseOwner: '' },
+            });
+            throw error;
+        }
+    }
     async resetPromoteStatsWithRetries(promoteStats) {
         let lastError;
         for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -47480,6 +47993,36 @@ let ScheduledJobsService = ScheduledJobsService_1 = class ScheduledJobsService {
             catch (error) {
                 lastError = error;
                 this.logger.warn(`Daily promoteStats reset attempt ${attempt}/3 failed`);
+                if (attempt < 3)
+                    await new Promise((resolve) => setTimeout(resolve, 30_000));
+            }
+        }
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
+    async resetUserStatsWithRetries(stats2, userData) {
+        let lastError;
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+                const now = Date.now();
+                const [stats2Result, paidUsersResult] = await Promise.all([
+                    stats2.deleteMany({}),
+                    userData.updateMany({ payAmount: { $gt: 10 }, totalCount: { $gt: 30 } }, {
+                        $set: {
+                            totalCount: 10,
+                            limitTime: now,
+                            paidReply: true,
+                        },
+                    }),
+                ]);
+                return {
+                    stats2DeletedCount: stats2Result.deletedCount ?? 0,
+                    paidUsersMatchedCount: paidUsersResult.matchedCount ?? 0,
+                    paidUsersModifiedCount: paidUsersResult.modifiedCount ?? 0,
+                };
+            }
+            catch (error) {
+                lastError = error;
+                this.logger.warn(`Daily user stats reset attempt ${attempt}/3 failed`);
                 if (attempt < 3)
                     await new Promise((resolve) => setTimeout(resolve, 30_000));
             }
@@ -47712,15 +48255,16 @@ let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaint
             if (!(0, channel_eligibility_1.isEligibleDiscoveredChannel)(channel))
                 return null;
             const facts = await (0, channel_live_facts_1.getTelegramChannelLiveFacts)({ getEntity: async () => channel }, { channelId: channel.id, entity: channel });
-            if (!facts || !facts.canSendMsgs || (facts.participantsCount ?? 0) <= 50) {
+            if (!facts) {
                 return null;
             }
             return {
                 channelId: facts.channelId,
-                canSendMsgs: true,
-                private: false,
+                canSendMsgs: facts.canSendMsgs,
+                private: facts.private,
+                forbidden: facts.forbidden,
                 lastHydrationStatus: 'success',
-                lastHydrationReason: 'live_sendable',
+                lastHydrationReason: facts.canSendMsgs ? 'live_sendable' : 'live_unsendable',
                 lastHydratedAt: now,
                 lastLiveCheckedAt: now,
                 participantsCount: facts.participantsCount,
@@ -47731,11 +48275,25 @@ let AccountMaintenanceService = AccountMaintenanceService_1 = class AccountMaint
                 username: facts.username ?? '',
             };
         }));
-        const channels = discovered.filter((channel) => channel !== null);
-        if (!channels.length)
+        const observedChannels = discovered.filter((channel) => channel !== null);
+        if (!observedChannels.length)
             return;
-        await this.channelsService.createMultiple(channels);
-        await this.activeChannelsService.createMultiple(channels);
+        const observedIds = observedChannels.map((channel) => channel.channelId);
+        const [knownActiveIds, knownChannelIds] = await Promise.all([
+            this.activeChannelsService.findExistingChannelIds(observedIds),
+            this.channelsService.findExistingChannelIds(observedIds),
+        ]);
+        const knownActiveIdSet = new Set(knownActiveIds);
+        const knownChannelIdSet = new Set(knownChannelIds);
+        const isNewSendableChannel = (channel) => channel.canSendMsgs && (channel.participantsCount ?? 0) > 50;
+        const activeChannelUpdates = observedChannels.filter((channel) => isNewSendableChannel(channel) || knownActiveIdSet.has(channel.channelId));
+        const channelUpdates = observedChannels.filter((channel) => isNewSendableChannel(channel) || knownChannelIdSet.has(channel.channelId));
+        if (!activeChannelUpdates.length && !channelUpdates.length)
+            return;
+        await Promise.all([
+            channelUpdates.length ? this.channelsService.createMultiple(channelUpdates) : Promise.resolve(),
+            activeChannelUpdates.length ? this.activeChannelsService.createMultiple(activeChannelUpdates) : Promise.resolve(),
+        ]);
     }
 };
 exports.AccountMaintenanceService = AccountMaintenanceService;
@@ -48294,6 +48852,87 @@ __exportStar(__webpack_require__(/*! ./auth.guard */ "./src/guards/auth.guard.ts
 
 /***/ },
 
+/***/ "./src/guards/send-rate-limit.guard.ts"
+/*!*********************************************!*\
+  !*** ./src/guards/send-rate-limit.guard.ts ***!
+  \*********************************************/
+(__unused_webpack_module, exports, __webpack_require__) {
+
+
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var SendRateLimitGuard_1;
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SendRateLimitGuard = void 0;
+const common_1 = __webpack_require__(/*! @nestjs/common */ "@nestjs/common");
+let SendRateLimitGuard = SendRateLimitGuard_1 = class SendRateLimitGuard {
+    constructor() {
+        this.logger = new common_1.Logger(SendRateLimitGuard_1.name);
+        this.windowMs = 60_000;
+        this.hits = new Map();
+        this.lastSweep = 0;
+    }
+    get limit() {
+        const n = Number(process.env.RATE_LIMIT_SENDS_PER_MIN);
+        return Number.isFinite(n) && n > 0 ? n : 30;
+    }
+    canActivate(context) {
+        const req = context.switchToHttp().getRequest();
+        const now = Date.now();
+        const ip = this.extractRealClientIP(req);
+        if (now - this.lastSweep > this.windowMs) {
+            this.lastSweep = now;
+            for (const [k, arr] of this.hits) {
+                if (arr.length === 0 || now - arr[arr.length - 1] > this.windowMs)
+                    this.hits.delete(k);
+            }
+        }
+        const arr = this.hits.get(ip) ?? [];
+        const fresh = arr.filter((t) => now - t < this.windowMs);
+        if (fresh.length >= this.limit) {
+            this.hits.set(ip, fresh);
+            this.logger.warn(`Send rate limit hit: ip=${ip} count=${fresh.length}/${this.limit} in ${this.windowMs}ms`);
+            throw new common_1.HttpException({ statusCode: common_1.HttpStatus.TOO_MANY_REQUESTS, message: `Send rate limit exceeded (${this.limit}/min per IP)` }, common_1.HttpStatus.TOO_MANY_REQUESTS);
+        }
+        fresh.push(now);
+        this.hits.set(ip, fresh);
+        return true;
+    }
+    extractRealClientIP(req) {
+        const header = (name) => {
+            const raw = req.headers[name];
+            return Array.isArray(raw) ? raw[0] : raw;
+        };
+        if (process.env.TRUST_PROXY_HEADERS !== 'false') {
+            const cf = header('cf-connecting-ip');
+            if (cf)
+                return cf;
+            const xr = header('x-real-ip');
+            if (xr)
+                return xr;
+            const xff = header('x-forwarded-for');
+            if (xff)
+                return xff.split(',')[0].trim();
+        }
+        if (req.ip)
+            return req.ip.replace('::ffff:', '');
+        if (req.connection?.remoteAddress)
+            return req.connection.remoteAddress.replace('::ffff:', '');
+        return 'unknown';
+    }
+};
+exports.SendRateLimitGuard = SendRateLimitGuard;
+exports.SendRateLimitGuard = SendRateLimitGuard = SendRateLimitGuard_1 = __decorate([
+    (0, common_1.Injectable)()
+], SendRateLimitGuard);
+
+
+/***/ },
+
 /***/ "./src/interceptors/Exception-filter.ts"
 /*!**********************************************!*\
   !*** ./src/interceptors/Exception-filter.ts ***!
@@ -48703,14 +49342,22 @@ function setProcessListeners(onShutdown) {
         console.log(`⚡ ${signal} received, shutting down...`);
         const cleanup = onShutdown ?? shutdownHandler;
         if (cleanup) {
+            let shutdownTimeout;
             try {
+                const timeout = new Promise((resolve) => {
+                    shutdownTimeout = setTimeout(resolve, SHUTDOWN_TIMEOUT_MS);
+                });
                 await Promise.race([
                     cleanup(),
-                    new Promise((resolve) => setTimeout(resolve, SHUTDOWN_TIMEOUT_MS)),
+                    timeout,
                 ]);
             }
             catch (err) {
                 console.error('❌ Error during graceful shutdown:', err);
+            }
+            finally {
+                if (shutdownTimeout)
+                    clearTimeout(shutdownTimeout);
             }
         }
         process.exit(0);
