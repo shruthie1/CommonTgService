@@ -539,7 +539,11 @@ export async function createGroupWithOptions(ctx: TgContext, options: GroupOptio
 
 export async function updateGroupSettings(ctx: TgContext, settings: GroupSettingsUpdate): Promise<boolean> {
     if (!ctx.client) throw new Error('Client not initialized');
-    const channel = await ctx.client.getEntity(settings.groupId);
+    // channels.EditTitle / UpdateUsername / ToggleSlowMode below are channel-only. `settings.groupId`
+    // is caller-supplied, so it can name a basic group (Api.Chat) or a user — those fail with
+    // CHANNEL_INVALID / PEER_ID_INVALID, and because these RPCs run in sequence with no transaction
+    // a failure midway leaves a PARTIAL update applied. Same guard as updateChatSettings.
+    const channel = await resolveInputChannelOrThrow(ctx, String(settings.groupId), 'updateGroupSettings');
 
     if (settings.title) {
         await ctx.client.invoke(new Api.channels.EditTitle({ channel, title: settings.title || '' }));

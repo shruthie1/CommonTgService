@@ -9731,7 +9731,7 @@ async function createGroupWithOptions(ctx, options) {
 async function updateGroupSettings(ctx, settings) {
     if (!ctx.client)
         throw new Error('Client not initialized');
-    const channel = await ctx.client.getEntity(settings.groupId);
+    const channel = await resolveInputChannelOrThrow(ctx, String(settings.groupId), 'updateGroupSettings');
     if (settings.title) {
         await ctx.client.invoke(new telegram_1.Api.channels.EditTitle({ channel, title: settings.title || '' }));
     }

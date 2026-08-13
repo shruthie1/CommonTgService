@@ -586,7 +586,7 @@ describe('updateGroupSettings', () => {
         await expect(updateGroupSettings(makeCtx(null), { groupId: 'g' } as any)).rejects.toThrow('Client not initialized');
     });
     test('applies all settings', async () => {
-        const ctx = makeCtx({ getEntity: jest.fn().mockResolvedValue('chan'), invoke: jest.fn().mockResolvedValue(undefined) });
+        const ctx = makeCtx({ getEntity: jest.fn().mockResolvedValue(makeChannelEntity('g')), invoke: jest.fn().mockResolvedValue(undefined) });
         const result = await updateGroupSettings(ctx, { groupId: 'g', title: 'T', description: 'D', username: 'U', slowMode: 30 } as any);
         expect(result).toBe(true);
         const args = ctx.client.invoke.mock.calls.map((c: any[]) => c[0]);
@@ -596,7 +596,7 @@ describe('updateGroupSettings', () => {
         expect(args.some((a: any) => a instanceof Api.channels.ToggleSlowMode)).toBe(true);
     });
     test('no-op when no settings provided', async () => {
-        const ctx = makeCtx({ getEntity: jest.fn().mockResolvedValue('chan'), invoke: jest.fn() });
+        const ctx = makeCtx({ getEntity: jest.fn().mockResolvedValue(makeChannelEntity('g')), invoke: jest.fn() });
         const result = await updateGroupSettings(ctx, { groupId: 'g' } as any);
         expect(result).toBe(true);
         expect(ctx.client.invoke).not.toHaveBeenCalled();
