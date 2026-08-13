@@ -756,6 +756,17 @@ export async function getChats(ctx: TgContext, options: {
 export async function updateChatSettings(ctx: TgContext, settings: ChatSettingsUpdate): Promise<boolean> {
     if (!ctx.client) throw new Error('Client not initialized');
     const chat = await ctx.client.getEntity(settings.chatId);
+    // Every RPC below (channels.EditTitle / EditPhoto / ToggleSlowMode / SetDiscussionGroup /
+    // UpdateUsername) is channel-only and needs an InputChannel. `settings.chatId` is caller-supplied
+    // via the controller, so it can name a basic group (Api.Chat) or a user — those throw
+    // CHANNEL_INVALID / PEER_ID_INVALID. Worse, there is no transactional boundary and a delay
+    // between each call, so failing midway leaves a PARTIAL update applied (e.g. title changed but
+    // photo not). Reject up front instead. (Same guard shape used elsewhere in this file.)
+    if (!(chat instanceof Api.Channel)) {
+        throw new Error(
+            `updateChatSettings requires a channel/supergroup; ${settings.chatId} resolved to ${chat?.className ?? 'an unknown entity'}`,
+        );
+    }
     const delayBetween = () => new Promise<void>(resolve => setTimeout(resolve, 1500 + Math.random() * 2500));
 
     if (settings.title) {

@@ -6,6 +6,26 @@ import { CustomFile } from 'telegram/client/uploads';
 import { Dialog } from 'telegram/tl/custom/dialog';
 import { TgContext, GroupCreationResult, GroupMember, PaginatedGroupMembers, AdminInfo, BannedUserInfo, GroupSettingsUpdate, GroupOptions } from './types';
 import { parseError } from '../../../utils/parseError';
+
+/**
+ * Resolve `groupId` to an InputChannel for a channel-only RPC.
+ *
+ * `client.getInputEntity()` happily returns an InputPeerChat for a BASIC GROUP and an InputPeerUser
+ * for a user — but every Api.channels.* RPC requires an InputChannel and rejects those with
+ * CHANNEL_INVALID / PEER_ID_INVALID. These ids arrive as route parameters, so the bad case is
+ * reachable from the API surface. Resolve the real entity, verify it is a channel/supergroup, and
+ * fail with a clear message instead of a confusing Telegram error.
+ */
+async function resolveInputChannelOrThrow(ctx: TgContext, groupId: string, operation: string) {
+    const entity = await ctx.client!.getEntity(groupId);
+    if (!(entity instanceof Api.Channel)) {
+        throw new Error(
+            `${operation} requires a channel/supergroup; ${groupId} resolved to ${(entity as { className?: string })?.className ?? 'an unknown entity'}`,
+        );
+    }
+    return entity;
+}
+
 import isPermanentError from '../../../utils/isPermanentError';
 import { downloadFileFromUrl } from './helpers';
 import { connectionManager } from '../utils/connection-manager';
@@ -390,7 +410,7 @@ export async function unblockGroupUser(ctx: TgContext, groupId: string, userId: 
 export async function getChannelAbout(ctx: TgContext, groupId: string): Promise<string> {
     if (!ctx.client) throw new Error('Client not initialized');
     const full = await ctx.client.invoke(new Api.channels.GetFullChannel({
-        channel: await ctx.client.getInputEntity(groupId),
+        channel: await resolveInputChannelOrThrow(ctx, groupId, 'getChannelAbout'),
     }));
     return (full.fullChat as any)?.about || '';
 }
@@ -399,7 +419,7 @@ export async function getGroupAdmins(ctx: TgContext, groupId: string): Promise<A
     if (!ctx.client) throw new Error('Client not initialized');
 
     const result = await ctx.client.invoke(new Api.channels.GetParticipants({
-        channel: await ctx.client.getInputEntity(groupId),
+        channel: await resolveInputChannelOrThrow(ctx, groupId, 'getGroupAdmins'),
         filter: new Api.ChannelParticipantsAdmins(),
         offset: 0, limit: 100, hash: bigInt(0),
     }));
@@ -433,7 +453,7 @@ export async function getGroupBannedUsers(ctx: TgContext, groupId: string): Prom
     if (!ctx.client) throw new Error('Client not initialized');
 
     const result = await ctx.client.invoke(new Api.channels.GetParticipants({
-        channel: await ctx.client.getInputEntity(groupId),
+        channel: await resolveInputChannelOrThrow(ctx, groupId, 'getGroupBannedUsers'),
         filter: new Api.ChannelParticipantsBanned({ q: '' }),
         offset: 0, limit: 100, hash: bigInt(0),
     }));

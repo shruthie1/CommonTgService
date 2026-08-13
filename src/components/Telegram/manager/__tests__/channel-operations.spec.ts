@@ -426,7 +426,7 @@ describe('member management', () => {
         await expect(addGroupMembers(makeCtx(null), 'g', [])).rejects.toThrow('Client not initialized');
     });
     test('addGroupMembers invites', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue(undefined) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue(undefined) });
         await addGroupMembers(ctx, 'g', ['u1', 'u2']);
         expect(ctx.client.invoke.mock.calls[0][0]).toBeInstanceOf(Api.channels.InviteToChannel);
     });
@@ -434,7 +434,7 @@ describe('member management', () => {
         await expect(removeGroupMembers(makeCtx(null), 'g', [])).rejects.toThrow('Client not initialized');
     });
     test('removeGroupMembers bans each member', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue(undefined) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue(undefined) });
         await removeGroupMembers(ctx, 'g', ['u1', 'u2']);
         expect(ctx.client.invoke).toHaveBeenCalledTimes(2);
         expect(ctx.client.invoke.mock.calls[0][0]).toBeInstanceOf(Api.channels.EditBanned);
@@ -446,7 +446,7 @@ describe('admin operations', () => {
         await expect(promoteToAdmin(makeCtx(null), 'g', 'u')).rejects.toThrow('Client not initialized');
     });
     test('promoteToAdmin with default and custom permissions', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue(undefined) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue(undefined) });
         await promoteToAdmin(ctx, 'g', 'u');
         await promoteToAdmin(ctx, 'g', 'u', { banUsers: true, postMessages: true }, 'Boss');
         const call = ctx.client.invoke.mock.calls[1][0] as Api.channels.EditAdmin;
@@ -457,7 +457,7 @@ describe('admin operations', () => {
         await expect(demoteAdmin(makeCtx(null), 'g', 'u')).rejects.toThrow('Client not initialized');
     });
     test('demoteAdmin zeros rights', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue(undefined) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue(undefined) });
         await demoteAdmin(ctx, 'g', 'u');
         expect(ctx.client.invoke.mock.calls[0][0]).toBeInstanceOf(Api.channels.EditAdmin);
     });
@@ -465,7 +465,7 @@ describe('admin operations', () => {
         await expect(unblockGroupUser(makeCtx(null), 'g', 'u')).rejects.toThrow('Client not initialized');
     });
     test('unblockGroupUser clears banned rights', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue(undefined) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue(undefined) });
         await unblockGroupUser(ctx, 'g', 'u');
         expect(ctx.client.invoke.mock.calls[0][0]).toBeInstanceOf(Api.channels.EditBanned);
     });
@@ -478,12 +478,12 @@ describe('getGroupAdmins', () => {
     test('maps admin participants', async () => {
         const rights = Object.assign(Object.create(Api.ChatAdminRights.prototype), { changeInfo: true, banUsers: true });
         const admin = Object.assign(Object.create(Api.ChannelParticipantAdmin.prototype), { userId: bigInt(7), rank: 'Mod', adminRights: rights });
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue({ users: [], participants: [admin] }) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue({ users: [], participants: [admin] }) });
         const result = await getGroupAdmins(ctx, 'g');
         expect(result[0]).toMatchObject({ userId: '7', rank: 'Mod', permissions: { changeInfo: true, banUsers: true } });
     });
     test('returns empty when no users field', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue({}) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue({}) });
         expect(await getGroupAdmins(ctx, 'g')).toEqual([]);
     });
 });
@@ -496,12 +496,12 @@ describe('getGroupBannedUsers', () => {
         const rights = Object.assign(Object.create(Api.ChatBannedRights.prototype), { viewMessages: true, untilDate: 99 });
         const peer = Object.assign(Object.create(Api.PeerChat.prototype), { chatId: bigInt(3) });
         const banned = Object.assign(Object.create(Api.ChannelParticipantBanned.prototype), { peer, bannedRights: rights });
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue({ users: [], participants: [banned] }) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue({ users: [], participants: [banned] }) });
         const result = await getGroupBannedUsers(ctx, 'g');
         expect(result[0]).toMatchObject({ userId: '3', bannedRights: { viewMessages: true, untilDate: 99 } });
     });
     test('returns empty when no users field', async () => {
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue({}) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue({}) });
         expect(await getGroupBannedUsers(ctx, 'g')).toEqual([]);
     });
     test('maps a banned PeerUser (the real Telegram shape) without crashing', async () => {
@@ -510,7 +510,7 @@ describe('getGroupBannedUsers', () => {
         const rights = Object.assign(Object.create(Api.ChatBannedRights.prototype), { viewMessages: true, untilDate: 42 });
         const peer = Object.assign(Object.create(Api.PeerUser.prototype), { userId: bigInt(7) });
         const banned = Object.assign(Object.create(Api.ChannelParticipantBanned.prototype), { peer, bannedRights: rights });
-        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), invoke: jest.fn().mockResolvedValue({ users: [], participants: [banned] }) });
+        const ctx = makeCtx({ getInputEntity: jest.fn().mockResolvedValue('e'), getEntity: jest.fn().mockResolvedValue(makeChannelEntity('1')), invoke: jest.fn().mockResolvedValue({ users: [], participants: [banned] }) });
         const result = await getGroupBannedUsers(ctx, 'g');
         expect(result[0]).toMatchObject({ userId: '7', bannedRights: { viewMessages: true, untilDate: 42 } });
     });

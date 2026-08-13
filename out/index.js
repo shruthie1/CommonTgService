@@ -9266,6 +9266,13 @@ const Helpers_1 = __webpack_require__(/*! telegram/Helpers */ "telegram/Helpers"
 const big_integer_1 = __importDefault(__webpack_require__(/*! big-integer */ "big-integer"));
 const uploads_1 = __webpack_require__(/*! telegram/client/uploads */ "telegram/client/uploads");
 const parseError_1 = __webpack_require__(/*! ../../../utils/parseError */ "./src/utils/parseError.ts");
+async function resolveInputChannelOrThrow(ctx, groupId, operation) {
+    const entity = await ctx.client.getEntity(groupId);
+    if (!(entity instanceof telegram_1.Api.Channel)) {
+        throw new Error(`${operation} requires a channel/supergroup; ${groupId} resolved to ${entity?.className ?? 'an unknown entity'}`);
+    }
+    return entity;
+}
 const isPermanentError_1 = __importDefault(__webpack_require__(/*! ../../../utils/isPermanentError */ "./src/utils/isPermanentError.ts"));
 const helpers_1 = __webpack_require__(/*! ./helpers */ "./src/components/Telegram/manager/helpers.ts");
 const connection_manager_1 = __webpack_require__(/*! ../utils/connection-manager */ "./src/components/Telegram/utils/connection-manager.ts");
@@ -9604,7 +9611,7 @@ async function getChannelAbout(ctx, groupId) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const full = await ctx.client.invoke(new telegram_1.Api.channels.GetFullChannel({
-        channel: await ctx.client.getInputEntity(groupId),
+        channel: await resolveInputChannelOrThrow(ctx, groupId, 'getChannelAbout'),
     }));
     return full.fullChat?.about || '';
 }
@@ -9612,7 +9619,7 @@ async function getGroupAdmins(ctx, groupId) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const result = await ctx.client.invoke(new telegram_1.Api.channels.GetParticipants({
-        channel: await ctx.client.getInputEntity(groupId),
+        channel: await resolveInputChannelOrThrow(ctx, groupId, 'getGroupAdmins'),
         filter: new telegram_1.Api.ChannelParticipantsAdmins(),
         offset: 0, limit: 100, hash: (0, big_integer_1.default)(0),
     }));
@@ -9644,7 +9651,7 @@ async function getGroupBannedUsers(ctx, groupId) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const result = await ctx.client.invoke(new telegram_1.Api.channels.GetParticipants({
-        channel: await ctx.client.getInputEntity(groupId),
+        channel: await resolveInputChannelOrThrow(ctx, groupId, 'getGroupBannedUsers'),
         filter: new telegram_1.Api.ChannelParticipantsBanned({ q: '' }),
         offset: 0, limit: 100, hash: (0, big_integer_1.default)(0),
     }));
@@ -10478,6 +10485,9 @@ async function updateChatSettings(ctx, settings) {
     if (!ctx.client)
         throw new Error('Client not initialized');
     const chat = await ctx.client.getEntity(settings.chatId);
+    if (!(chat instanceof telegram_1.Api.Channel)) {
+        throw new Error(`updateChatSettings requires a channel/supergroup; ${settings.chatId} resolved to ${chat?.className ?? 'an unknown entity'}`);
+    }
     const delayBetween = () => new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2500));
     if (settings.title) {
         await ctx.client.invoke(new telegram_1.Api.channels.EditTitle({ channel: chat, title: settings.title }));
