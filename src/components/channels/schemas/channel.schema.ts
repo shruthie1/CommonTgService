@@ -44,9 +44,13 @@ export class Channel {
   @Prop({ default: false, required: false })
   forbidden: boolean;
 
-  @ApiProperty({ default: true })
-  @Prop({ default: true })
-  megagroup: boolean;
+  // No schema default: defaulting this to `true` asserted "supergroup" for a channel nobody had
+  // observed, and because the field was then PRESENT the doc satisfied the consumer-side
+  // critical-field freshness check and never re-hydrated — so the invented value stuck forever.
+  // Absent = "type unknown", which is the truth and lets hydration write the real value.
+  @ApiProperty({ required: false })
+  @Prop({ required: false })
+  megagroup?: boolean;
 
   @ApiProperty({ default: false })
   @Prop({ default: false })

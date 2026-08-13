@@ -62,7 +62,10 @@ export class ChannelsService {
         availableMsgs: [],
         banned: false,
         bannedAt: null,
-        megagroup: true,
+        // `megagroup` deliberately NOT defaulted — see active-channels.service. Defaulting it to
+        // `true` invented a supergroup claim for an unobserved channel AND made the doc pass the
+        // consumer-side critical-field check, so it never self-healed. Absent = "unknown", which
+        // is the truth and lets hydration fill in the real value.
         private: false,
       };
 

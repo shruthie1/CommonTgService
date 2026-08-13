@@ -125,7 +125,13 @@ export class ActiveChannelsService {
           availableMsgs: [],
           banned: dto.banned === true,
           bannedAt: dto.banned === true ? (dto.bannedAt ?? Date.now()) : null,
-          megagroup: true,
+          // NOTE: `megagroup` is deliberately NOT defaulted here. It used to default to `true`,
+          // which asserted "this is a supergroup" for a channel nobody had observed — and worse,
+          // because the field was PRESENT the doc satisfied tg-platform's critical-field check and
+          // therefore never re-hydrated, so the wrong value stuck forever. Leaving it absent makes
+          // the doc legitimately "missing megagroup", so the promotion side self-heals it with the
+          // real value on first encounter. The real value is still written whenever the caller
+          // supplies it (copyDefinedFields above) — this only removes the invented default.
           private: false,
           forbidden: false,
           createdAt: new Date(),

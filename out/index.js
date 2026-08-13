@@ -16194,7 +16194,6 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                     availableMsgs: [],
                     banned: dto.banned === true,
                     bannedAt: dto.banned === true ? (dto.bannedAt ?? Date.now()) : null,
-                    megagroup: true,
                     private: false,
                     forbidden: false,
                     createdAt: new Date(),
@@ -23801,7 +23800,6 @@ let ChannelsService = class ChannelsService {
                 availableMsgs: [],
                 banned: false,
                 bannedAt: null,
-                megagroup: true,
                 private: false,
             };
             return {
@@ -24385,8 +24383,8 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Channel.prototype, "forbidden", void 0);
 __decorate([
-    (0, swagger_1.ApiProperty)({ default: true }),
-    (0, mongoose_1.Prop)({ default: true }),
+    (0, swagger_1.ApiProperty)({ required: false }),
+    (0, mongoose_1.Prop)({ required: false }),
     __metadata("design:type", Boolean)
 ], Channel.prototype, "megagroup", void 0);
 __decorate([
