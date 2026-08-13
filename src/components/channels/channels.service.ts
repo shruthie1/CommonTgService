@@ -8,10 +8,37 @@ import { PipelineStage } from 'mongoose';
 import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
 import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
+import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from '../active-channels/channel-intelligence-read.service';
 
 @Injectable()
 export class ChannelsService {
+  /**
+   * Fields a caller may write through `update()`. Mirrors ActiveChannelsService.writableFields.
+   *
+   * `update()` previously did a raw `$set` of the whole DTO, so ANY caller-supplied key landed in
+   * the document — including `_id` and `channelId` (which would move the doc's identity out from
+   * under its own filter on an upsert) and any stray/typo'd field, which then silently accumulates
+   * as schema drift. The durable-flag guards below are kept; this only bounds WHICH keys are set.
+   */
+  private readonly writableFields = new Set([
+    'title', 'username', 'participantsCount', 'broadcast', 'canSendMsgs',
+    'megagroup', 'availableMsgs', 'banned', 'bannedAt', 'forbidden',
+    'private', 'reactRestricted', 'reactRestrictedAt',
+  ]);
+
+  /**
+   * Canonical channelId key for the `channels` collection — same shared normalizer the
+   * activeChannels service and both tg-platform apps use, so one chat is always one document
+   * regardless of whether the caller passed `-100123`, `-123`, `123` or a padded id.
+   */
+  private channelKey(channelId: string | number): string {
+    const raw = String(channelId ?? '').trim();
+    // normalizeTelegramChannelId is a strict VALIDATOR (returns '' for anything not a plain
+    // positive integer). Never blank the key — that would retarget the query at another document.
+    return normalizeTelegramChannelId(raw) || raw.replace(/^-100/, '').replace(/^-/, '');
+  }
+
   constructor(
     @InjectModel(Channel.name) private ChannelModel: Model<ChannelDocument>,
     private readonly channelIntelligenceReadService: ChannelIntelligenceReadService,
@@ -19,7 +46,10 @@ export class ChannelsService {
   }
 
   async create(createChannelDto: CreateChannelDto): Promise<Channel> {
-    const createdChannel = new this.ChannelModel(createChannelDto);
+    const createdChannel = new this.ChannelModel({
+      ...createChannelDto,
+      channelId: this.channelKey(createChannelDto.channelId),
+    });
     return createdChannel.save();
   }
 
@@ -54,7 +84,7 @@ export class ChannelsService {
       }
 
       const defaults: Record<string, unknown> = {
-        channelId: dto.channelId,
+        channelId: this.channelKey(dto.channelId),
         broadcast: false,
         canSendMsgs: false,
         participantsCount: 0,
@@ -71,7 +101,7 @@ export class ChannelsService {
 
       return {
         updateOne: {
-          filter: { channelId: dto.channelId },
+          filter: { channelId: this.channelKey(dto.channelId) },
           update: buildDurableChannelUpsertPipeline(setFields, defaults, dto),
           upsert: true,
         },
@@ -86,13 +116,18 @@ export class ChannelsService {
   }
 
   async findOne(channelId: string): Promise<Channel> {
-    const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
+    const channel = (await this.ChannelModel.findOne({ channelId: this.channelKey(channelId) }).exec())?.toJSON();
     return channel;
   }
 
   /** See ActiveChannelsService.findExistingChannelIds. */
   async findExistingChannelIds(channelIds: string[]): Promise<string[]> {
-    const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+    const ids = [...new Set(
+      channelIds
+        .filter((channelId) => typeof channelId === 'string' && channelId.trim())
+        .map((channelId) => this.channelKey(channelId))
+        .filter(Boolean),
+    )];
     if (!ids.length) return [];
     const rows = await this.ChannelModel
       .find({ channelId: { $in: ids } }, { channelId: 1, _id: 0 })
@@ -102,8 +137,12 @@ export class ChannelsService {
   }
 
   async update(channelId: string, updateChannelDto: UpdateChannelDto): Promise<Channel> {
-    const existing = await this.ChannelModel.findOne({ channelId }).lean().exec();
-    const update = { ...updateChannelDto } as Record<string, unknown>;
+    const existing = await this.ChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
+    // Bound the write to known fields — never let a caller set _id/channelId or unknown keys.
+    const update: Record<string, unknown> = Object.fromEntries(
+      Object.entries(updateChannelDto as Record<string, unknown>)
+        .filter(([key]) => this.writableFields.has(key)),
+    );
     if (
       (existing?.banned === true || existing?.forbidden === true)
       && update.canSendMsgs === true
@@ -116,7 +155,7 @@ export class ChannelsService {
       update.canSendMsgs = false;
     }
     const updatedChannel = await this.ChannelModel.findOneAndUpdate(
-      { channelId },
+      { channelId: this.channelKey(channelId) },
       { $set: update },
       { new: true, upsert: true },
     ).exec();
@@ -132,7 +171,7 @@ export class ChannelsService {
         { parseMode: 'HTML' }
       );
     }
-    const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
+    const result = await this.ChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();
   }
 
   async search(filter: any): Promise<Channel[]> {

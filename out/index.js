@@ -16109,8 +16109,13 @@ const logbots_1 = __webpack_require__(/*! ../../utils/logbots */ "./src/utils/lo
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const durable_channel_upsert_1 = __webpack_require__(/*! ../../utils/telegram-utils/durable-channel-upsert */ "./src/utils/telegram-utils/durable-channel-upsert.ts");
+const channel_live_facts_1 = __webpack_require__(/*! ../../utils/telegram-utils/channel-live-facts */ "./src/utils/telegram-utils/channel-live-facts.ts");
 const channel_intelligence_read_service_1 = __webpack_require__(/*! ./channel-intelligence-read.service */ "./src/components/active-channels/channel-intelligence-read.service.ts");
 let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsService {
+    channelKey(channelId) {
+        const raw = String(channelId ?? '').trim();
+        return (0, channel_live_facts_1.normalizeTelegramChannelId)(raw) || raw.replace(/^-100/, '').replace(/^-/, '');
+    }
     constructor(activeChannelModel, promoteMsgsService, channelIntelligenceReadService) {
         this.activeChannelModel = activeChannelModel;
         this.promoteMsgsService = promoteMsgsService;
@@ -16146,6 +16151,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             const availableMsgs = await this.getAvailableMessages();
             const createdChannel = new this.activeChannelModel({
                 ...createActiveChannelDto,
+                channelId: this.channelKey(createActiveChannelDto.channelId),
                 availableMsgs,
                 createdAt: new Date(),
             });
@@ -16183,8 +16189,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                     setFields.private = dto.private;
                 if (dto.forbidden === true)
                     setFields.forbidden = true;
-                const defaults = {
-                    channelId: dto.channelId,
+                const defaults = { channelId: this.channelKey(dto.channelId),
                     title: '',
                     username: '',
                     broadcast: false,
@@ -16200,7 +16205,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 };
                 return {
                     updateOne: {
-                        filter: { channelId: dto.channelId },
+                        filter: { channelId: this.channelKey(dto.channelId) },
                         update: (0, durable_channel_upsert_1.buildDurableChannelUpsertPipeline)(setFields, defaults, dto),
                         upsert: true,
                     },
@@ -16223,7 +16228,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
     }
     async incrementClientsJoined(channelId) {
         try {
-            await this.activeChannelModel.updateOne({ channelId }, { $inc: { clientsJoined: 1 } });
+            await this.activeChannelModel.updateOne({ channelId: this.channelKey(channelId) }, { $inc: { clientsJoined: 1 } });
         }
         catch (error) {
         }
@@ -16233,14 +16238,17 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             if (!channelId) {
                 throw new common_1.BadRequestException('Channel ID is required');
             }
-            return await this.activeChannelModel.findOne({ channelId }).lean().exec();
+            return await this.activeChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
         }
         catch (error) {
             throw this.handleError(error, 'Failed to fetch channel');
         }
     }
     async findExistingChannelIds(channelIds) {
-        const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+        const ids = [...new Set(channelIds
+                .filter((channelId) => typeof channelId === 'string' && channelId.trim())
+                .map((channelId) => this.channelKey(channelId))
+                .filter(Boolean))];
         if (!ids.length)
             return [];
         const rows = await this.activeChannelModel
@@ -16259,7 +16267,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             if (Object.keys(cleanDto).length === 0) {
                 throw new common_1.BadRequestException('At least one field to update is required');
             }
-            const existing = await this.activeChannelModel.findOne({ channelId }).lean().exec();
+            const existing = await this.activeChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
             if (cleanDto.banned === true) {
                 cleanDto.bannedAt = cleanDto.bannedAt ?? Date.now();
                 cleanDto.canSendMsgs = false;
@@ -16280,7 +16288,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             if (existing?.forbidden === true && cleanDto.forbidden === false)
                 delete cleanDto.forbidden;
             const updatedChannel = await this.activeChannelModel
-                .findOneAndUpdate({ channelId }, {
+                .findOneAndUpdate({ channelId: this.channelKey(channelId) }, {
                 $set: { ...cleanDto, updatedAt: new Date() },
             }, { new: true, upsert: true, lean: true })
                 .exec();
@@ -16296,7 +16304,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 throw new common_1.BadRequestException('Channel ID and message are required');
             }
             return await this.activeChannelModel
-                .findOneAndUpdate({ channelId }, { $pull: { availableMsgs: msg }, $set: { updatedAt: new Date() } }, { new: true, lean: true })
+                .findOneAndUpdate({ channelId: this.channelKey(channelId) }, { $pull: { availableMsgs: msg }, $set: { updatedAt: new Date() } }, { new: true, lean: true })
                 .exec();
         }
         catch (error) {
@@ -16309,7 +16317,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
                 throw new common_1.BadRequestException('Channel ID and message are required');
             }
             return await this.activeChannelModel
-                .findOneAndUpdate({ channelId }, { $addToSet: { availableMsgs: msg }, $set: { updatedAt: new Date() } }, { new: true, lean: true })
+                .findOneAndUpdate({ channelId: this.channelKey(channelId) }, { $addToSet: { availableMsgs: msg }, $set: { updatedAt: new Date() } }, { new: true, lean: true })
                 .exec();
         }
         catch (error) {
@@ -16325,7 +16333,7 @@ let ActiveChannelsService = ActiveChannelsService_1 = class ActiveChannelsServic
             if (botsService) {
                 await botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing Active Channel: ${channelId}`);
             }
-            await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
+            await this.activeChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();
         }
         catch (error) {
             throw this.handleError(error, 'Failed to remove channel');
@@ -23755,14 +23763,27 @@ const channel_schema_1 = __webpack_require__(/*! ./schemas/channel.schema */ "./
 const bots_1 = __webpack_require__(/*! ../bots */ "./src/components/bots/index.ts");
 const utils_1 = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
 const durable_channel_upsert_1 = __webpack_require__(/*! ../../utils/telegram-utils/durable-channel-upsert */ "./src/utils/telegram-utils/durable-channel-upsert.ts");
+const channel_live_facts_1 = __webpack_require__(/*! ../../utils/telegram-utils/channel-live-facts */ "./src/utils/telegram-utils/channel-live-facts.ts");
 const channel_intelligence_read_service_1 = __webpack_require__(/*! ../active-channels/channel-intelligence-read.service */ "./src/components/active-channels/channel-intelligence-read.service.ts");
 let ChannelsService = class ChannelsService {
+    channelKey(channelId) {
+        const raw = String(channelId ?? '').trim();
+        return (0, channel_live_facts_1.normalizeTelegramChannelId)(raw) || raw.replace(/^-100/, '').replace(/^-/, '');
+    }
     constructor(ChannelModel, channelIntelligenceReadService) {
         this.ChannelModel = ChannelModel;
         this.channelIntelligenceReadService = channelIntelligenceReadService;
+        this.writableFields = new Set([
+            'title', 'username', 'participantsCount', 'broadcast', 'canSendMsgs',
+            'megagroup', 'availableMsgs', 'banned', 'bannedAt', 'forbidden',
+            'private', 'reactRestricted', 'reactRestrictedAt',
+        ]);
     }
     async create(createChannelDto) {
-        const createdChannel = new this.ChannelModel(createChannelDto);
+        const createdChannel = new this.ChannelModel({
+            ...createChannelDto,
+            channelId: this.channelKey(createChannelDto.channelId),
+        });
         return createdChannel.save();
     }
     async createMultiple(createChannelDtos) {
@@ -23792,7 +23813,7 @@ let ChannelsService = class ChannelsService {
                 setFields.bannedAt = dto.bannedAt ?? Date.now();
             }
             const defaults = {
-                channelId: dto.channelId,
+                channelId: this.channelKey(dto.channelId),
                 broadcast: false,
                 canSendMsgs: false,
                 participantsCount: 0,
@@ -23804,7 +23825,7 @@ let ChannelsService = class ChannelsService {
             };
             return {
                 updateOne: {
-                    filter: { channelId: dto.channelId },
+                    filter: { channelId: this.channelKey(dto.channelId) },
                     update: (0, durable_channel_upsert_1.buildDurableChannelUpsertPipeline)(setFields, defaults, dto),
                     upsert: true,
                 },
@@ -23817,11 +23838,14 @@ let ChannelsService = class ChannelsService {
         return this.ChannelModel.find().exec();
     }
     async findOne(channelId) {
-        const channel = (await this.ChannelModel.findOne({ channelId }).exec())?.toJSON();
+        const channel = (await this.ChannelModel.findOne({ channelId: this.channelKey(channelId) }).exec())?.toJSON();
         return channel;
     }
     async findExistingChannelIds(channelIds) {
-        const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+        const ids = [...new Set(channelIds
+                .filter((channelId) => typeof channelId === 'string' && channelId.trim())
+                .map((channelId) => this.channelKey(channelId))
+                .filter(Boolean))];
         if (!ids.length)
             return [];
         const rows = await this.ChannelModel
@@ -23831,8 +23855,9 @@ let ChannelsService = class ChannelsService {
         return rows.map((row) => row.channelId).filter((channelId) => Boolean(channelId));
     }
     async update(channelId, updateChannelDto) {
-        const existing = await this.ChannelModel.findOne({ channelId }).lean().exec();
-        const update = { ...updateChannelDto };
+        const existing = await this.ChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
+        const update = Object.fromEntries(Object.entries(updateChannelDto)
+            .filter(([key]) => this.writableFields.has(key)));
         if ((existing?.banned === true || existing?.forbidden === true)
             && update.canSendMsgs === true) {
             update.canSendMsgs = false;
@@ -23844,7 +23869,7 @@ let ChannelsService = class ChannelsService {
         if (update.private === true || update.forbidden === true || update.banned === true) {
             update.canSendMsgs = false;
         }
-        const updatedChannel = await this.ChannelModel.findOneAndUpdate({ channelId }, { $set: update }, { new: true, upsert: true }).exec();
+        const updatedChannel = await this.ChannelModel.findOneAndUpdate({ channelId: this.channelKey(channelId) }, { $set: update }, { new: true, upsert: true }).exec();
         return updatedChannel;
     }
     async remove(channelId) {
@@ -23852,7 +23877,7 @@ let ChannelsService = class ChannelsService {
         if (botsService) {
             botsService.sendMessageByCategory(bots_1.ChannelCategory.PROM_LOGS2, `Removing channel ${channelId}`, { parseMode: 'HTML' });
         }
-        const result = await this.ChannelModel.findOneAndDelete({ channelId }).exec();
+        const result = await this.ChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();
     }
     async search(filter) {
         console.log(filter);

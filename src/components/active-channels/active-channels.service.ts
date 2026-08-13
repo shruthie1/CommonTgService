@@ -11,6 +11,7 @@ import { notifbot } from '../../utils/logbots';
 import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
 import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
+import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from './channel-intelligence-read.service';
 
 @Injectable()
@@ -26,6 +27,28 @@ export class ActiveChannelsService {
     'clientsJoined', 'lastHydrationReason', 'lastHydrationStatus',
     'lastHydratedAt', 'lastLiveCheckedAt',
   ]);
+
+  /**
+   * Canonical channelId key for this collection — delegates to the shared
+   * `normalizeTelegramChannelId` (strip a `-100` channel prefix, then any bare leading `-`, and
+   * trim). Identical to tg-platform's `normalizeChannelId`, which both promote-clients and tg-aut
+   * now use for the SAME activeChannels collection.
+   *
+   * WHY: every channelId-keyed read/write here previously used the caller's raw string. A caller
+   * passing `-100123`, `-123`, `123` or a padded `" 123 "` would key four different documents for
+   * one chat — with independent banned / canSendMsgs / availableMsgs state — and a normalized write
+   * from one service would then be invisible to a raw read from another. All 142,823 existing docs
+   * across activeChannels + channels are ALREADY stored normalized (verified: zero -100-prefixed,
+   * zero bare-negative, zero padded), so applying this is purely defensive and cannot orphan data.
+   */
+  private channelKey(channelId: string | number): string {
+    const raw = String(channelId ?? '').trim();
+    // normalizeTelegramChannelId is a strict VALIDATOR — it returns '' for anything that isn't a
+    // plain positive integer. Blanking the key here would silently retarget the write/read at a
+    // different document, so we only adopt its output when it actually produced an id and
+    // otherwise fall back to the prefix-stripped raw value (identical strip rules).
+    return normalizeTelegramChannelId(raw) || raw.replace(/^-100/, '').replace(/^-/, '');
+  }
 
   constructor(
     @InjectModel(ActiveChannel.name) private activeChannelModel: Model<ActiveChannelDocument>,
@@ -73,6 +96,7 @@ export class ActiveChannelsService {
       const availableMsgs = await this.getAvailableMessages();
       const createdChannel = new this.activeChannelModel({
         ...createActiveChannelDto,
+        channelId: this.channelKey(createActiveChannelDto.channelId),
         availableMsgs,
         createdAt: new Date(),
       });
@@ -114,8 +138,7 @@ export class ActiveChannelsService {
         // `forbidden` remains a durable safety stop until explicitly cleared.
         if (dto.forbidden === true) setFields.forbidden = true;
 
-        const defaults: Record<string, unknown> = {
-          channelId: dto.channelId,
+        const defaults: Record<string, unknown> = { channelId: this.channelKey(dto.channelId),
           title: '',
           username: '',
           broadcast: false,
@@ -139,7 +162,7 @@ export class ActiveChannelsService {
 
         return {
           updateOne: {
-            filter: { channelId: dto.channelId },
+            filter: { channelId: this.channelKey(dto.channelId) },
             update: buildDurableChannelUpsertPipeline(setFields, defaults, dto),
             upsert: true,
           },
@@ -164,7 +187,7 @@ export class ActiveChannelsService {
   async incrementClientsJoined(channelId: string): Promise<void> {
     try {
       await this.activeChannelModel.updateOne(
-        { channelId },
+        { channelId: this.channelKey(channelId) },
         { $inc: { clientsJoined: 1 } }
       );
     } catch (error) {
@@ -177,7 +200,7 @@ export class ActiveChannelsService {
       if (!channelId) {
         throw new BadRequestException('Channel ID is required');
       }
-      return await this.activeChannelModel.findOne({ channelId }).lean().exec();
+      return await this.activeChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
     } catch (error) {
       throw this.handleError(error, 'Failed to fetch channel');
     }
@@ -189,7 +212,12 @@ export class ActiveChannelsService {
    * unsendable, while avoiding creation of brand-new unsendable records.
    */
   async findExistingChannelIds(channelIds: string[]): Promise<string[]> {
-    const ids = [...new Set(channelIds.filter((channelId) => typeof channelId === 'string' && channelId.trim()))];
+    const ids = [...new Set(
+      channelIds
+        .filter((channelId) => typeof channelId === 'string' && channelId.trim())
+        .map((channelId) => this.channelKey(channelId))
+        .filter(Boolean),
+    )];
     if (!ids.length) return [];
     const rows = await this.activeChannelModel
       .find({ channelId: { $in: ids } }, { channelId: 1, _id: 0 })
@@ -215,7 +243,7 @@ export class ActiveChannelsService {
         throw new BadRequestException('At least one field to update is required');
       }
 
-      const existing = await this.activeChannelModel.findOne({ channelId }).lean().exec();
+      const existing = await this.activeChannelModel.findOne({ channelId: this.channelKey(channelId) }).lean().exec();
       if (cleanDto.banned === true) {
         cleanDto.bannedAt = cleanDto.bannedAt ?? Date.now();
         cleanDto.canSendMsgs = false;
@@ -244,7 +272,7 @@ export class ActiveChannelsService {
 
       const updatedChannel = await this.activeChannelModel
         .findOneAndUpdate(
-          { channelId },
+          { channelId: this.channelKey(channelId) },
           {
             $set: { ...cleanDto, updatedAt: new Date() },
           },
@@ -266,7 +294,7 @@ export class ActiveChannelsService {
 
       return await this.activeChannelModel
         .findOneAndUpdate(
-          { channelId },
+          { channelId: this.channelKey(channelId) },
           { $pull: { availableMsgs: msg }, $set: { updatedAt: new Date() } },
           { new: true, lean: true }
         )
@@ -284,7 +312,7 @@ export class ActiveChannelsService {
 
       return await this.activeChannelModel
         .findOneAndUpdate(
-          { channelId },
+          { channelId: this.channelKey(channelId) },
           { $addToSet: { availableMsgs: msg }, $set: { updatedAt: new Date() } },
           { new: true, lean: true }
         )
@@ -308,7 +336,7 @@ export class ActiveChannelsService {
         );
       }
 
-      await this.activeChannelModel.findOneAndDelete({ channelId }).exec();
+      await this.activeChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();
     } catch (error) {
       throw this.handleError(error, 'Failed to remove channel');
     }
