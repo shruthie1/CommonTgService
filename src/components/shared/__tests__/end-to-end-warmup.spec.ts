@@ -113,7 +113,12 @@ function makeDoc(overrides: Record<string, any> = {}): any {
         lastUpdateFailure: null,
         lastUpdateAttempt: null,
         inUse: false,
-        channels: 0,
+        // Provisioned by default. Terminal-phase fixtures in this file model accounts that have
+        // COMPLETED warmup, and a terminal account below its operational floor is now re-entered
+        // into joining rather than left unusable. `0` described a state that does not occur in
+        // production (verified: 0 of 692 terminal accounts have channels <= 0); tests that need an
+        // under-provisioned account still set `channels` explicitly.
+        channels: 250,
         lastUsed: null,
         tgId: 'tg-9990000001',
         ...overrides,
@@ -730,6 +735,7 @@ describe('Warmup phase transitions — jitter & stalled growing', () => {
         const doc = {
             warmupPhase: WarmupPhase.SESSION_ROTATED,
             sessionRotatedAt: daysAgo(1, now),
+            channels: 250, // provisioned: a terminal account below its floor is re-entered into joining
         };
         const result = getWarmupPhaseAction(doc, now);
         expect(result.action).toBe('wait');
@@ -740,6 +746,7 @@ describe('Warmup phase transitions — jitter & stalled growing', () => {
         const doc = {
             warmupPhase: WarmupPhase.READY,
             sessionRotatedAt: undefined,
+            channels: 250, // provisioned: below the floor it would join instead of rotating
         };
         const result = getWarmupPhaseAction(doc, now);
         expect(result.action).toBe('rotate_session');

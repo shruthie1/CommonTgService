@@ -477,16 +477,32 @@ describe('getWarmupPhaseAction', () => {
     // ======= READY & SESSION_ROTATED =======
 
     describe('READY and SESSION_ROTATED phases', () => {
+        // These fixtures now state `channels` explicitly. They always MEANT a fully-provisioned
+        // terminal account, but relied on makeDoc's `channels: 0` default — and a terminal account
+        // below its operational floor is now re-entered into joining rather than left unusable.
+        // Verified against production: 0 of 692 terminal accounts have channels <= 0, so the old
+        // default described a state that does not occur.
         test('ready → rotate_session', () => {
-            const doc = makeDoc({ warmupPhase: WarmupPhase.READY });
+            const doc = makeDoc({ warmupPhase: WarmupPhase.READY, channels: MIN_CHANNELS_FOR_MATURING });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('rotate_session');
         });
 
         test('session_rotated → wait', () => {
-            const doc = makeDoc({ warmupPhase: WarmupPhase.SESSION_ROTATED });
+            const doc = makeDoc({ warmupPhase: WarmupPhase.SESSION_ROTATED, channels: MIN_CHANNELS_FOR_MATURING });
             const result = getWarmupPhaseAction(doc, now);
             expect(result.action).toBe('wait');
+        });
+
+        test('a terminal account BELOW the floor is re-entered into joining, not left unusable', () => {
+            // The stranding this whole change exists to fix: production had 7 READY and 21
+            // session_rotated promote accounts in the 200-229 band, invisible to the warmup loop
+            // (which skips terminal phases) and refused by rotation (which requires 230).
+            for (const phase of [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED]) {
+                const doc = makeDoc({ warmupPhase: phase, channels: 210 });
+                const result = getWarmupPhaseAction(doc, now, { operationalFloor: 230 });
+                expect(result.action).toBe('join_channels');
+            }
         });
     });
 
@@ -885,6 +901,7 @@ describe('Normal phases unaffected by catch-up', () => {
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SESSION_ROTATED,
             enrolledAt: daysAgo(30, now),
+            channels: MIN_CHANNELS_FOR_MATURING, // provisioned terminal account
         });
         const result = getWarmupPhaseAction(doc, now);
         expect(result.action).toBe('wait');

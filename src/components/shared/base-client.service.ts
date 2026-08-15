@@ -408,6 +408,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * A terminal account is eligible for selection or session work only after it
      * meets the consuming pool's runtime channel floor.
      */
+    /**
+     * The pool's operational channel floor — the count at which an account is usable supply.
+     *
+     * Single accessor because this value gates SEVEN separate decisions (join eligibility,
+     * operational eligibility, reconciliation, health, rotation refusal, and now phase
+     * advancement). It was previously re-derived with `?? MIN_CHANNELS_FOR_MATURING` at each site,
+     * which is how the phase machine came to use a different number from the gates.
+     */
+    protected get operationalFloor(): number {
+        return this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING;
+    }
+
     protected getOperationalChannelEligibilityFilter(): MongoQuery {
         return {
             channels: { $gte: this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING },
@@ -1316,7 +1328,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
 
-        const warmupAction = getWarmupPhaseAction(doc, now);
+        const warmupAction = getWarmupPhaseAction(doc, now, { operationalFloor: this.operationalFloor });
         if (warmupAction.action !== 'rotate_session') {
             this.logger.warn(
                 `READY rotation deferred for ${doc.mobile}: resolved action is ${warmupAction.action}`,
@@ -1427,7 +1439,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             return { updateCount: 0 };
         }
 
-        const warmupAction = plannedWarmupAction || getWarmupPhaseAction(doc, now);
+        const warmupAction = plannedWarmupAction || getWarmupPhaseAction(doc, now, { operationalFloor: this.operationalFloor });
         this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
             privacyUpdatedAt: doc.privacyUpdatedAt || null,
             twoFASetAt: doc.twoFASetAt || null,

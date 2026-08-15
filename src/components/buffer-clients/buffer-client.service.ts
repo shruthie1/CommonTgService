@@ -1124,7 +1124,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 }
             }
 
-            const warmupAction = getWarmupPhaseAction(bc, now);
+            const warmupAction = getWarmupPhaseAction(bc, now, { operationalFloor: this.operationalFloor });
             const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
 
             const computedPhase = warmupAction.phase;
@@ -1374,7 +1374,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             // Use the COMPUTED warmup phase for priority so that enrolled accounts
             // whose state machine already says "settling" get the same priority as
             // DB-settling accounts — prevents permanent starvation of newer accounts.
-            const warmupAction = getWarmupPhaseAction(bufferClient, now);
+            const warmupAction = getWarmupPhaseAction(bufferClient, now, { operationalFloor: this.operationalFloor });
             const priority = calculateWarmupPriority(bufferClient, warmupAction, now);
 
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority, warmupAction });

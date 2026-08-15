@@ -1038,7 +1038,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             // maintenance must never re-enter them or perform extra Telegram
             // health/session work on already-consumable accounts.
             if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) continue;
-            const warmupAction = getWarmupPhaseAction(promoteClient, now);
+            const warmupAction = getWarmupPhaseAction(promoteClient, now, { operationalFloor: this.operationalFloor });
             const priority = calculateWarmupPriority(promoteClient, warmupAction, now);
 
             promoteClientsToProcess.push({ promoteClient: promoteClient as PromoteClientDocument, client, clientId: promoteClient.clientId, priority, warmupAction });

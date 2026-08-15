@@ -194,6 +194,19 @@ export function calculateWarmupPriority(
  * @param now - Current time in ms
  * @returns WarmupAction describing what to do
  */
+/**
+ * Per-pool channel thresholds.
+ *
+ * THE INVARIANT: the count that lets an account LEAVE growing must equal the count a later gate
+ * requires to USE it. Promote violated this (advanced at a hard-coded 200, but rotation and
+ * selection demand 230), which stranded accounts in the 200-229 band: invisible to the warmup loop
+ * because they were READY, and refused by rotation because they were under the floor.
+ */
+export interface WarmupChannelThresholds {
+    /** The pool's operational floor — see BaseClientConfig.operationalChannelThreshold. */
+    readonly operationalFloor: number;
+}
+
 export function getWarmupPhaseAction(
     doc: {
         warmupPhase?: WarmupPhaseType;
@@ -212,9 +225,19 @@ export function getWarmupPhaseAction(
         createdAt?: Date;
         twoFA?: boolean;
     },
-    now: number
+    now: number,
+    /**
+     * Pool thresholds. Optional so existing callers keep the previous behaviour exactly; when
+     * omitted the global MIN_CHANNELS_FOR_MATURING is used, which is correct for buffer (floor 200)
+     * and was the only option before this parameter existed.
+     */
+    thresholds?: WarmupChannelThresholds,
 ): WarmupAction {
     const jitter = doc.warmupJitter || 0;
+    const operationalFloor = thresholds?.operationalFloor ?? MIN_CHANNELS_FOR_MATURING;
+    const channelsNow = doc.channels || 0;
+    /** Below the pool's own floor this account is NOT usable supply, whatever phase it is in. */
+    const belowOperationalFloor = channelsNow < operationalFloor;
     const enrolledAt = ClientHelperUtils.getTimestamp(doc.enrolledAt) || ClientHelperUtils.getTimestamp(doc.createdAt);
     const daysSinceEnrolled = enrolledAt > 0 ? (now - enrolledAt) / ONE_DAY_MS : 0;
 
@@ -370,9 +393,19 @@ export function getWarmupPhaseAction(
         const stalledLong = growingDuration > (WARMUP_PHASE_THRESHOLDS.maturing - WARMUP_PHASE_THRESHOLDS.growing) * 2;
         const pastAdvanceDeadline = growingDuration > GROWING_ADVANCE_DEADLINE_DAYS;
         // Full target normally; halved once stalled; no requirement at all past the deadline.
+        // Uses the POOL's floor rather than the global constant: advancing past growing on a count
+        // the pool's own gates will later reject is precisely what created the stranded band.
+        //
+        // The DEADLINE POLICY IS PRESERVED EXACTLY — past GROWING_ADVANCE_DEADLINE_DAYS the target
+        // drops to zero and the account advances with whatever it has. That is deliberate ("age
+        // never retires an account") and is covered by its own tests. An earlier version of this
+        // change blocked that advancement to avoid manufacturing under-qualified READY accounts;
+        // that was the wrong lever. The correct fix is the READY/SESSION_ROTATED re-entry below,
+        // which keeps an under-floor account joining even after it advances — so the salvage and
+        // the floor now coexist instead of contradicting each other.
         const effectiveChannelTarget = pastAdvanceDeadline
             ? 0
-            : (stalledLong ? Math.floor(MIN_CHANNELS_FOR_MATURING / 2) : MIN_CHANNELS_FOR_MATURING);
+            : (stalledLong ? Math.floor(operationalFloor / 2) : operationalFloor);
         if (channels < effectiveChannelTarget) {
             return { phase: WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
@@ -415,6 +448,12 @@ export function getWarmupPhaseAction(
 
     // Phase: READY — all done, eligible for use
     if (phase === WarmupPhase.READY) {
+        // RE-ENTRY: a READY account below its pool's floor is not usable supply — rotation and
+        // selection both refuse it — and the warmup loop skips READY accounts, so nothing would
+        // ever grow it back. Keep it joining instead of leaving it terminal-but-unusable.
+        if (belowOperationalFloor) {
+            return { phase: WarmupPhase.READY, action: 'join_channels', organicIntensity: 'light' };
+        }
         const sessionRotated = ClientHelperUtils.getTimestamp(doc.sessionRotatedAt) > 0;
         if (!sessionRotated) {
             return { phase: WarmupPhase.READY, action: 'rotate_session', organicIntensity: 'light' };
@@ -424,6 +463,12 @@ export function getWarmupPhaseAction(
 
     // Phase: SESSION_ROTATED — fully operational
     if (phase === WarmupPhase.SESSION_ROTATED) {
+        // Same re-entry rule: an account that drops below the floor after rotating (channels left
+        // or purged) reports as done while being unusable. 21 promote accounts sit in exactly this
+        // state. Give it a path back rather than an unconditional `wait`.
+        if (belowOperationalFloor) {
+            return { phase: WarmupPhase.SESSION_ROTATED, action: 'join_channels', organicIntensity: 'light' };
+        }
         return { phase: WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
     }
 

@@ -191,6 +191,7 @@ describe('Service flow reliability', () => {
         const doc = {
             mobile: '919990004444',
             warmupPhase: WarmupPhase.READY,
+            channels: 250, // provisioned terminal account — below the floor it re-enters joining
             enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
             createdAt: new Date('2026-03-01T12:00:00.000Z'),
             failedUpdateAttempts: 3,
@@ -224,6 +225,7 @@ describe('Service flow reliability', () => {
         const doc = {
             mobile: '919990004445',
             warmupPhase: WarmupPhase.READY,
+            channels: 250, // provisioned terminal account — below the floor it re-enters joining
             enrolledAt: new Date('2026-03-01T12:00:00.000Z'),
             createdAt: new Date('2026-03-01T12:00:00.000Z'),
             failedUpdateAttempts: 3,
@@ -1752,7 +1754,10 @@ describe('Service flow reliability', () => {
                 failedUpdateAttempts: 0,
                 lastUpdateAttempt: null,
                 inUse: false,
-                // Genuine terminal account: all security + identity steps proven.
+                // Genuine terminal account: all security + identity steps proven, and PROVISIONED.
+                // Channels matter now — a terminal account below its operational floor is re-entered
+                // into joining instead of rotating, since rotation would refuse it anyway.
+                channels: 250,
                 privacyUpdatedAt: new Date('2026-01-05T12:00:00.000Z'),
                 twoFASetAt: new Date('2026-01-06T12:00:00.000Z'),
                 otherAuthsRemovedAt: new Date('2026-01-06T12:00:00.000Z'),
