@@ -185,6 +185,12 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
             count = (result as Api.messages.ChannelMessages).count || 0;
             messages = result.messages as Api.Message[];
         } else {
+            // KNOWN LIMIT: global search (no chatId) does NOT paginate by offsetId. Telegram's
+            // messages.SearchGlobal pages by `offsetRate` (plus offsetPeer/offsetId as a composite
+            // cursor), so passing offsetId alone returns the SAME first page every time — verified
+            // against production 2026-08-15. Per-chat search pages correctly via offsetId.
+            // The chat explorer always searches within a chat, so this is not currently exercised;
+            // wiring offsetRate through is the fix if global paging is ever needed.
             ctx.logger.info(ctx.phoneNumber, 'Performing global search');
             const result = await ctx.client.invoke(new Api.messages.SearchGlobal({
                 q: query,
