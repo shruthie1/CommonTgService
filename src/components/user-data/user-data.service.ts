@@ -49,11 +49,62 @@ export class UserDataService {
         return this.userDataModel.find().limit(limit).lean().exec();
     }
 
-    async findOne(profile: string, chatId: string): Promise<(UserData & { _id: import('mongoose').Types.ObjectId; count?: number })> {
-        const user = await this.userDataModel.findOne({ profile, chatId }).lean().exec();
+    /**
+     * Resolve a clientId (e.g. "shruthi2") to its persona/dbcoll (e.g. "shruthi").
+     *
+     * Read through the existing mongoose connection rather than injecting ClientService — this
+     * module is imported widely and a service-level dependency here has previously produced a DI
+     * cycle at boot. Cached because clients change rarely and this sits on a hot read path.
+     */
+    private clientIdToProfile = new Map<string, string>();
+    private clientMapLoadedAt = 0;
+    private async resolveProfileForClientId(candidate: string): Promise<string | null> {
+        const key = candidate.trim();
+        if (!key) return null;
+        const FIVE_MIN = 5 * 60 * 1000;
+        if (Date.now() - this.clientMapLoadedAt > FIVE_MIN) {
+            try {
+                const rows = await this.userDataModel.db
+                    .collection('clients')
+                    .find({}, { projection: { clientId: 1, dbcoll: 1, _id: 0 } })
+                    .toArray();
+                this.clientIdToProfile = new Map(
+                    rows
+                        .filter((r: any) => typeof r?.clientId === 'string' && typeof r?.dbcoll === 'string')
+                        .map((r: any) => [r.clientId, r.dbcoll]),
+                );
+                this.clientMapLoadedAt = Date.now();
+            } catch (error) {
+                // Best-effort: a lookup failure must not break the legacy profile path below.
+                this.logger.warn(`clientId->profile map refresh failed: ${parseError(error).message}`);
+            }
+        }
+        return this.clientIdToProfile.get(key) ?? null;
+    }
+
+    /**
+     * Fetch a user row by chatId, accepting EITHER a clientId or a persona/profile in the first
+     * param — deliberately widening, so every existing caller keeps working unchanged.
+     *
+     * Background: `userData` is keyed (chatId, profile) where profile = dbcoll = PERSONA, but each
+     * persona is served by TWO independent Telegram accounts (shruthi1 @ShruGow1364 and shruthi2
+     * @ShruGow2646 — 20 clients, 20 distinct mobiles/usernames). Callers such as vcui hold a real
+     * clientId and today strip its digits (`.replace(/\d/g,'')`) purely to make this lookup resolve.
+     * Accepting the clientId directly removes the need for that workaround; once callers are
+     * updated, a client-owned row is preferred and the persona row remains the fallback.
+     */
+    async findOne(identifier: string, chatId: string): Promise<(UserData & { _id: import('mongoose').Types.ObjectId; count?: number })> {
+        const resolvedProfile = await this.resolveProfileForClientId(identifier);
+
+        // A clientId was supplied: prefer a row this client owns, else fall back to the persona row
+        // (which is what every pre-split row is). A profile was supplied: behave exactly as before.
+        const user = resolvedProfile
+            ? (await this.userDataModel.findOne({ clientId: identifier, chatId }).lean().exec()
+                ?? await this.userDataModel.findOne({ profile: resolvedProfile, chatId }).lean().exec())
+            : await this.userDataModel.findOne({ profile: identifier, chatId }).lean().exec();
 
         if (!user) {
-            throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
+            throw new NotFoundException(`UserData with profile "${identifier}" and chatId "${chatId}" not found`);
         }
 
         const currentCount = this.recordCall(chatId);

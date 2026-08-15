@@ -53,8 +53,15 @@ export class UserDataController {
   }
 
   @Get(':profile/:chatId')
-  @ApiOperation({ summary: 'Get user data by profile and chat ID', description: 'Retrieves a specific user data entry by profile and chat ID.' })
-  @ApiParam({ name: 'profile', description: 'User profile identifier', type: String})
+  @ApiOperation({
+    summary: 'Get user data by profile/clientId and chat ID',
+    description:
+      'Retrieves a user data entry by chat ID. The first path segment accepts EITHER a persona/profile '
+      + '(e.g. "shruthi", the legacy form) OR a clientId (e.g. "shruthi2"). When a clientId is given, a '
+      + 'row owned by that client is preferred and the shared persona row is used as fallback. Callers '
+      + 'that currently strip digits off a clientId to make this resolve no longer need to.',
+  })
+  @ApiParam({ name: 'profile', description: 'Persona/profile (e.g. "shruthi") or clientId (e.g. "shruthi2")', type: String})
   @ApiParam({ name: 'chatId', description: 'Chat ID associated with the user', type: String})
   @ApiResponse({ status: 200, description: 'User data found.', type: UserData })
   @ApiResponse({ status: 404, description: 'User data not found.' })

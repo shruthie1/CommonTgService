@@ -57,8 +57,22 @@ export class UserData {
     @Prop({ required: true, default: 0 })
     fullShow: number;
 
+    /**
+     * PERSONA-level identity (= clients.dbcoll). NOT unique per client: each persona is served by
+     * two independent Telegram accounts (shruthi -> shruthi1 + shruthi2), which is why the unique
+     * index below is (chatId, profile) and why two clients can share one row.
+     */
     @Prop({ required: true })
     profile: string;
+
+    /**
+     * CLIENT-level identity (= clients.clientId, e.g. "shruthi2"). OPTIONAL and additive: stamped
+     * on insert by tg-aut for rows created from 2026-08-15 onward. Absent on historical rows —
+     * absence means "not known", never a value. Reads prefer a client-owned row and fall back to
+     * the persona row, so both eras coexist without a destructive migration.
+     */
+    @Prop({ required: false, index: true })
+    clientId?: string;
 
     @Prop({ required: true, default: 0 })
     picsSent: number;
