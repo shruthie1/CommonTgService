@@ -311,8 +311,17 @@ describe('ClientService coverage', () => {
             // Old mobile returns to the buffer pool as terminal supply.
             expect(bufferClientService.createOrUpdate).toHaveBeenCalledWith('15558880001', expect.objectContaining({
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
-                sessionRotatedAt: null,
+                // sessionRotatedAt is deliberately NOT written on pool return. It records WHEN a
+                // session was rotated — a fact — and nulling it destroyed that history for 274 of
+                // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
+                // returning primary from re-rotating. Asserted absent below.
             }));
+            // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
+            // missing, so removing the old assertion alone would not catch a regression.
+            expect(bufferClientService.createOrUpdate).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ sessionRotatedAt: null }),
+            );
         });
 
         it('swap query accepts a candidate with EXACTLY the graduation channel threshold (200)', async () => {
@@ -754,9 +763,18 @@ describe('ClientService coverage', () => {
                 inUse: false,
                 lastUsed: expect.any(Date),
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
-                sessionRotatedAt: null,
+                // sessionRotatedAt is deliberately NOT written on pool return. It records WHEN a
+                // session was rotated — a fact — and nulling it destroyed that history for 274 of
+                // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
+                // returning primary from re-rotating. Asserted absent below.
                 availableDate: expectedDateStr,
             }));
+            // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
+            // missing, so removing the old assertion alone would not catch a regression.
+            expect(bufferClientService.createOrUpdate).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ sessionRotatedAt: null }),
+            );
             // retireReplacedMobile must NOT fire on a clean pool return.
             expect(usersService.expireAccount).not.toHaveBeenCalled();
         });
@@ -793,8 +811,17 @@ describe('ClientService coverage', () => {
                 channels: 250,
                 lastUsed: expect.any(Date),
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
-                sessionRotatedAt: null,
+                // sessionRotatedAt is deliberately NOT written on pool return. It records WHEN a
+                // session was rotated — a fact — and nulling it destroyed that history for 274 of
+                // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
+                // returning primary from re-rotating. Asserted absent below.
             }));
+            // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
+            // missing, so removing the old assertion alone would not catch a regression.
+            expect(bufferClientService.createOrUpdate).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({ sessionRotatedAt: null }),
+            );
         });
 
         it('marks buffer inactive when the old user document is missing (real cascade)', async () => {

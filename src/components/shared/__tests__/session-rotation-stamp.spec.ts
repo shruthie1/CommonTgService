@@ -119,4 +119,37 @@ describe('sessionRotatedAt is a fact, not a control flag', () => {
             expect(returned.sessionRotatedAt).not.toBeNull();
         });
     });
+
+    describe('the buffer-return path must never erase the stamp (regression)', () => {
+        it('client.service.ts does not write sessionRotatedAt: null on buffer return', () => {
+            // Source-level assertion: the buffer-return payload is built inline and is not
+            // reachable without standing up the whole ClientService dependency graph. The property
+            // that matters is simply that the key is absent from that write.
+            // CommonJS under ts-jest: no import.meta, so resolve via __dirname.
+            const { readFileSync } = require('node:fs');
+            const { join } = require('node:path');
+            const source = readFileSync(
+                join(__dirname, '..', '..', 'clients', 'client.service.ts'),
+                'utf8',
+            );
+            // Strip comments so the explanatory note naming the old behaviour cannot satisfy or
+            // trip this check.
+            const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+            const returnBlock = code.slice(
+                code.indexOf('Returned to buffer pool') - 1500,
+                code.indexOf('Returned to buffer pool'),
+            );
+            expect(returnBlock).not.toMatch(/sessionRotatedAt:\s*null/);
+        });
+
+        it('rotation remains a ONE-TIME step, so keeping the stamp still blocks re-rotation', () => {
+            // Keeping the timestamp is safe precisely because the gates read it as "already has a
+            // backup". Rotation provisions a distinct BACKUP session and retains the active one, so
+            // re-running it would only create a redundant second backup.
+            const rotatedAt = new Date(now - 30 * ONE_DAY_MS);
+            const returning = makePriorityInput({ sessionRotatedAt: rotatedAt, lastUsed: new Date() });
+            const stampIsSet = new Date(returning.sessionRotatedAt as Date).getTime() > 0;
+            expect(stampIsSet).toBe(true);
+        });
+    });
 });

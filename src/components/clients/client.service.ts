@@ -995,7 +995,21 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         // terminal supply; a below-floor verified count is eligible only for capacity
         // recovery, never for a warmup rewind or a new-session flow.
         warmupPhase: WarmupPhase.SESSION_ROTATED,
-        sessionRotatedAt: null,
+        // sessionRotatedAt is deliberately NOT written here.
+        //
+        // It used to be set to null on every buffer return, which destroyed the rotation history:
+        // 274 of 353 buffer accounts in session_rotated (78%) ended up with no stamp, making the
+        // field useless as an audit signal — reading it to answer "was this account rotated?"
+        // gives the wrong answer for most of the pool.
+        //
+        // The erasure was unnecessary. Rotation here means "provision a verified, distinct BACKUP
+        // session" (see rotateSession: "active session retained, users backup verified"), which is
+        // a ONE-TIME step — an account that already has a backup never needs another. The gates at
+        // base-client.service.ts:1323 and :2696 refuse rotation when the stamp is set, and that is
+        // exactly the correct behaviour for a returning primary: it already has its backup, as the
+        // comment above states. Leaving the timestamp intact preserves the fact AND keeps the gate
+        // working. Omitting the key (rather than writing null) also means an account that somehow
+        // has no stamp is left untouched rather than being stamped with a fabricated value.
         message: 'Returned to buffer pool; channel capacity will be verified',
       };
       const updatedBufferClient = await this.bufferClientService.createOrUpdate(
