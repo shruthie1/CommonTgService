@@ -94,14 +94,7 @@ export class UserDataService {
      * updated, a client-owned row is preferred and the persona row remains the fallback.
      */
     async findOne(identifier: string, chatId: string): Promise<(UserData & { _id: import('mongoose').Types.ObjectId; count?: number })> {
-        const resolvedProfile = await this.resolveProfileForClientId(identifier);
-
-        // A clientId was supplied: prefer a row this client owns, else fall back to the persona row
-        // (which is what every pre-split row is). A profile was supplied: behave exactly as before.
-        const user = resolvedProfile
-            ? (await this.userDataModel.findOne({ clientId: identifier, chatId }).lean().exec()
-                ?? await this.userDataModel.findOne({ profile: resolvedProfile, chatId }).lean().exec())
-            : await this.userDataModel.findOne({ profile: identifier, chatId }).lean().exec();
+        const user = await this.userDataModel.findOne(await this.userRowFilter(identifier, chatId)).lean().exec();
 
         if (!user) {
             throw new NotFoundException(`UserData with profile "${identifier}" and chatId "${chatId}" not found`);
@@ -121,6 +114,21 @@ export class UserDataService {
         return 'All counts cleared.';
     }
 
+    /**
+     * Build the row filter for an identifier that may be EITHER a clientId or a persona/profile.
+     *
+     * Shared by findOne/update/remove so the whole userData surface accepts the same identifiers —
+     * a caller that can read a row by clientId must also be able to update and delete it, otherwise
+     * vcui would work for reads and 404 for writes.
+     */
+    private async userRowFilter(identifier: string, chatId: string): Promise<Record<string, unknown>> {
+        const resolvedProfile = await this.resolveProfileForClientId(identifier);
+        if (!resolvedProfile) return { profile: identifier, chatId };
+        // Prefer a row this client owns; fall back to the shared persona row (every pre-split row).
+        const owned = await this.userDataModel.findOne({ clientId: identifier, chatId }).select('_id').lean().exec();
+        return owned ? { clientId: identifier, chatId } : { profile: resolvedProfile, chatId };
+    }
+
     async update(profile: string, chatId: string, updateUserDataDto: UpdateUserDataDto): Promise<UserDataDocument> {
         const sanitizedDto = { ...updateUserDataDto } as Record<string, unknown>;
         delete (sanitizedDto as any)._id;
@@ -128,7 +136,7 @@ export class UserDataService {
         delete (sanitizedDto as any).chatId;
         
         const updatedUser = await this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $set: sanitizedDto }, { new: true, upsert: false })
+            .findOneAndUpdate(await this.userRowFilter(profile, chatId), { $set: sanitizedDto }, { new: true, upsert: false })
             .lean()
             .exec();
 
@@ -156,7 +164,7 @@ export class UserDataService {
                 `Deleting UserData: ${profile} (chat ${chatId})`,
             );
         }
-        const deletedUser = await this.userDataModel.findOneAndDelete({ profile, chatId }).lean().exec();
+        const deletedUser = await this.userDataModel.findOneAndDelete(await this.userRowFilter(profile, chatId)).lean().exec();
         if (!deletedUser) {
             throw new NotFoundException(`UserData with profile "${profile}" and chatId "${chatId}" not found`);
         }
