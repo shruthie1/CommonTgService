@@ -551,7 +551,7 @@ export class TelegramController {
         if (sendMediaDto.url) {
             try {
                 const headResponse = await axios.head(sendMediaDto.url, { timeout: 10000 });
-                const contentLength = parseInt(String(headResponse.headers['content-length'] ?? '0'), 10);
+                const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
                 const maxSize = 100 * 1024 * 1024; // 100MB
                 
                 if (contentLength > maxSize) {
@@ -1529,11 +1529,21 @@ export class TelegramController {
     @ApiOperation({ summary: 'Get chat history with metadata' })
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiQuery({ name: 'chatId', required: true })
-    @ApiQuery({ name: 'offset', required: false, type: Number })
+    @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Message id to anchor on. Returns messages OLDER than this id. 0/omitted starts from the newest message.' })
     @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'addOffset', required: false, type: Number, description: 'Window shift relative to `offset`. 0 (default) returns older messages. A NEGATIVE value returns messages NEWER than `offset` — used to load context above a search hit so a message can be shown with history on both sides.' })
     @ApiResponse({ type: Object })
-    async getChatHistory(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('offset') offset?: number, @Query('limit') limit?: number) {
-        return this.telegramService.getMessagesNew(mobile, chatId, offset, limit);
+    async getChatHistory(@Param('mobile') mobile: string, @Query('chatId') chatId: string, @Query('offset') offset?: number, @Query('limit') limit?: number, @Query('addOffset') addOffset?: number) {
+        // Bare @Query() params arrive as STRINGS — the global ValidationPipe's implicit conversion
+        // applies to DTO classes, not to untyped @Query() args. Passing '-50' straight through would
+        // reach GramJS as a string and produce a malformed TL int, so coerce explicitly here.
+        // `addOffset` must keep its sign: negative is the "load newer messages" direction.
+        const toInt = (v: unknown): number | undefined => {
+            if (v === undefined || v === null || v === '') return undefined;
+            const n = Number(v);
+            return Number.isFinite(n) ? Math.trunc(n) : undefined;
+        };
+        return this.telegramService.getMessagesNew(mobile, chatId, toInt(offset) ?? 0, toInt(limit) ?? 20, toInt(addOffset) ?? 0);
     }
 
     @Post('group/admin/promote/:mobile')

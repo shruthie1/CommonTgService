@@ -93,11 +93,20 @@ export class SearchMessagesDto {
   limit?: number;
 
   @ApiPropertyOptional({
-    description: 'Offset ID for pagination' })
+    description: 'Offset ID for pagination — return messages OLDER than this message id. Pass the '
+      + 'last id of the previous page to fetch the next page. Omit (or 0) for the first page.' })
   @IsInt()
   @Min(0)
   @IsOptional()
   offsetId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Window shift relative to offsetId. 0 (default) returns messages older than '
+      + 'offsetId. A NEGATIVE value returns messages NEWER than offsetId — this is how a client '
+      + 'loads context ABOVE a search hit, so a result can be opened with history on both sides.' })
+  @IsInt()
+  @IsOptional()
+  addOffset?: number;
 
   @ApiPropertyOptional({
     description: 'Offset date as Unix timestamp' })

@@ -10,6 +10,7 @@ import { ChannelsModule } from './components/channels/channels.module';
 import { AppController } from './app.controller';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
 import { BuildModule } from './components/builds/build.module';
+import { TranslateModule } from './components/translate/translate.module';
 import { UpiIdModule } from './components/upi-ids/upi-ids.module';
 import { PromoteMsgModule } from './components/promote-msgs/promote-msgs.module';
 import { StatModule } from './components/stats/stat.module';
@@ -40,6 +41,7 @@ import { AccountMaintenanceService } from './control-plane/maintenance/account-m
   imports: [
     InitModule,
     TelegramModule,
+    TranslateModule,
     BotsModule,
     ActiveChannelsModule,
     ClientModule,

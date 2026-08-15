@@ -184,10 +184,19 @@ function formatReactions(reactions: Api.MessageReactions): { reaction: string; c
     }).filter(x => (x.count ?? 0) > 0);
 }
 
-export async function getMessagesNew(ctx: TgContext, chatId: string, offset: number = 0, limit: number = 20): Promise<PaginatedMessages> {
+/**
+ * @param offset    Message id to anchor on. Telegram walks newest -> oldest, so this returns
+ *                  messages OLDER than `offset`. 0 (default) starts from the newest message.
+ * @param addOffset Window shift relative to the anchor. 0 (default) preserves the original
+ *                  older-than behaviour. A NEGATIVE value returns messages NEWER than `offset`,
+ *                  which is what lets a client open a search hit and scroll ABOVE it as well as
+ *                  below. Without this, a specific message could be located but never shown in
+ *                  context — the whole point of jump-to-message.
+ */
+export async function getMessagesNew(ctx: TgContext, chatId: string, offset: number = 0, limit: number = 20, addOffset: number = 0): Promise<PaginatedMessages> {
     // Request one extra message to determine if there are more pages
     const fetchLimit = limit + 1;
-    const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit: fetchLimit });
+    const messages = await ctx.client.getMessages(chatId, { offsetId: offset, limit: fetchLimit, addOffset });
 
     const hasMore = messages.length > limit;
     const slicedMessages = hasMore ? messages.slice(0, limit) : messages;

@@ -267,7 +267,16 @@ describe('TelegramService — simple delegations', () => {
     test('getMessagesNew delegates', async () => {
         const { svc, fakeManager } = makeService();
         await svc.getMessagesNew('m', 'user', 5, 10);
-        expect(fakeManager.getMessagesNew).toHaveBeenCalledWith('user', 5, 10);
+        // addOffset defaults to 0 => unchanged "older than offset" paging.
+        expect(fakeManager.getMessagesNew).toHaveBeenCalledWith('user', 5, 10, 0);
+    });
+
+    test('getMessagesNew forwards a NEGATIVE addOffset (load messages newer than the anchor)', async () => {
+        // This is the jump-to-message direction: without it a search hit can be located but never
+        // shown with history above it.
+        const { svc, fakeManager } = makeService();
+        await svc.getMessagesNew('m', 'user', 500, 20, -10);
+        expect(fakeManager.getMessagesNew).toHaveBeenCalledWith('user', 500, 20, -10);
     });
 
     test('sendInlineMessage delegates', async () => {

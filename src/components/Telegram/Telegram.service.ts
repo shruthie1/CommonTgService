@@ -114,9 +114,9 @@ export class TelegramService implements OnModuleDestroy {
     }
 
 
-    async getMessagesNew(mobile: string, username: string, offset: number, limit: number) {
+    async getMessagesNew(mobile: string, username: string, offset: number, limit: number, addOffset?: number) {
         const telegramClient = await connectionManager.getClient(mobile)
-        return telegramClient.getMessagesNew(username, offset, limit);
+        return telegramClient.getMessagesNew(username, offset, limit, addOffset ?? 0);
     }
 
     async sendInlineMessage(mobile: string, chatId: string, message: string, url: string) {

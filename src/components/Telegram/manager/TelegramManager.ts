@@ -131,8 +131,8 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return chatOps.getAllChats(this.ctx);
         }
 
-        async getMessagesNew(chatId: string, offset: number = 0, limit: number = 20): Promise<PaginatedMessages> {
-            return chatOps.getMessagesNew(this.ctx, chatId, offset, limit);
+        async getMessagesNew(chatId: string, offset: number = 0, limit: number = 20, addOffset: number = 0): Promise<PaginatedMessages> {
+            return chatOps.getMessagesNew(this.ctx, chatId, offset, limit, addOffset);
         }
 
         async safeGetEntity(entityId: string): Promise<Api.TypeUser | Api.TypeChat | Api.PeerChannel | null> {

@@ -828,7 +828,21 @@ describe('schedule / voice / view-once / history', () => {
 
     test('getChatHistory delegates', async () => {
         await controller.getChatHistory('m', 'c', 0, 10);
-        expect(service.getMessagesNew).toHaveBeenCalledWith('m', 'c', 0, 10);
+        expect(service.getMessagesNew).toHaveBeenCalledWith('m', 'c', 0, 10, 0);
+    });
+
+    test('getChatHistory coerces STRING query params to ints and preserves a negative addOffset', async () => {
+        // Bare @Query() args arrive as strings; the global ValidationPipe's implicit conversion only
+        // applies to DTO classes. Passing '-50' through unconverted would reach GramJS as a string.
+        await controller.getChatHistory('m', 'c', '500' as any, '20' as any, '-50' as any);
+        expect(service.getMessagesNew).toHaveBeenCalledWith('m', 'c', 500, 20, -50);
+    });
+
+    test('getChatHistory falls back to defaults when params are absent or unparseable', async () => {
+        await controller.getChatHistory('m', 'c', undefined, undefined, undefined);
+        expect(service.getMessagesNew).toHaveBeenCalledWith('m', 'c', 0, 20, 0);
+        await controller.getChatHistory('m', 'c', 'abc' as any, 'xyz' as any, 'nope' as any);
+        expect(service.getMessagesNew).toHaveBeenCalledWith('m', 'c', 0, 20, 0);
     });
 });
 

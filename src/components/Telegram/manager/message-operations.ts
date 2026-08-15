@@ -137,6 +137,11 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
         return false;
     }
 
+    // Sender-id -> display-name memo, shared across ALL media types in this request. The loop below
+    // runs once per requested type (up to 8), and the same senders recur across those passes, so a
+    // per-type cache would re-resolve the same handful of people 8 times.
+    const senderNames = new Map<string, string>();
+
     for (const type of types) {
         const filter = getSearchFilter(type);
         const queryFilter = {
@@ -144,6 +149,18 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
             ...(maxId ? { maxId } : {}),
             ...(minId ? { minId } : {}),
         };
+
+        // PAGING: offsetId/addOffset used to be hardcoded to 0 below, which silently discarded the
+        // caller's cursor — every page returned the SAME first N messages while `total` reported the
+        // real match count (e.g. 26,870 matches, 5 reachable). Verified in production 2026-08-15:
+        // requesting page 2 with offsetId returned byte-identical ids to page 1.
+        //
+        // offsetId = "return messages older than this id" (Telegram walks newest -> oldest).
+        // addOffset shifts the window relative to that anchor; a NEGATIVE addOffset returns messages
+        // NEWER than offsetId, which is what makes "scroll above AND below" possible from a search
+        // hit. Both default to 0, preserving the previous first-page behaviour when omitted.
+        const offsetId = params.offsetId ?? 0;
+        const addOffset = params.addOffset ?? 0;
 
         ctx.logger.info(ctx.phoneNumber, type, queryFilter);
         let messages: Api.Message[] = [];
@@ -160,8 +177,8 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
                 hash: bigInt(0),
                 minDate: 0,
                 maxDate: 0,
-                addOffset: 0,
-                offsetId: 0,
+                addOffset,
+                offsetId,
             }));
             if (!('messages' in result)) return finalResult;
             ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${(result as Api.messages.ChannelMessages).count}`);
@@ -175,7 +192,7 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
                 ...queryFilter,
                 offsetRate: 0,
                 offsetPeer: new Api.InputPeerEmpty(),
-                offsetId: 0,
+                offsetId,
             }));
             if (!('messages' in result)) return finalResult;
             ctx.logger.info(ctx.phoneNumber, `Type: ${type}, Length: ${result?.messages?.length}, count: ${(result as Api.messages.ChannelMessages).count}`);
@@ -204,11 +221,47 @@ export async function searchMessages(ctx: TgContext, params: SearchMessagesDto):
         const filteredMsgs = processedMessages.filter((msg): msg is Api.Message => msg !== null);
         const filteredIds = filteredMsgs.map(m => m.id);
 
+        // Resolve sender ids to real display names.
+        //
+        // This used to emit `msg.fromId.userId.toString()` — a raw numeric id — so the UI rendered
+        // result titles like "1982081350". The same resolution already existed in chat-operations
+        // (see the senderEntity handling there); search simply never adopted it.
+        //
+        // Resolution is per UNIQUE sender and memoised for the whole request, because a page of
+        // results is usually dominated by a handful of senders. A failed lookup falls back to the
+        // numeric id rather than throwing — a slightly worse title beats a failed search.
+        const uniqueSenderIds = [...new Set(
+            filteredMsgs
+                .map(m => (m.fromId instanceof Api.PeerUser ? m.fromId.userId.toString() : null))
+                .filter((id): id is string => Boolean(id)),
+        )];
+        const senderNameById = new Map<string, string>();
+        await Promise.all(uniqueSenderIds.map(async (senderId) => {
+            if (senderNames.has(senderId)) {
+                senderNameById.set(senderId, senderNames.get(senderId)!);
+                return;
+            }
+            try {
+                const entity = await safeGetEntityById(ctx, senderId) as any;
+                const resolved = entity
+                    ? (`${entity.firstName || ''} ${entity.lastName || ''}`.trim()
+                        || entity.username
+                        || entity.title
+                        || senderId)
+                    : senderId;
+                senderNames.set(senderId, resolved);
+                senderNameById.set(senderId, resolved);
+            } catch {
+                senderNameById.set(senderId, senderId);
+            }
+        }));
+
         // Build enriched data items
         const enrichedData: SearchMessageItem[] = filteredMsgs.map((msg) => {
             let senderName: string | null = null;
             if (msg.fromId instanceof Api.PeerUser) {
-                senderName = msg.fromId.userId.toString();
+                const senderId = msg.fromId.userId.toString();
+                senderName = senderNameById.get(senderId) ?? senderId;
             }
             let mediaType: string | null = null;
             if (msg.media && !(msg.media instanceof Api.MessageMediaEmpty)) {
