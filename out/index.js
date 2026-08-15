@@ -22004,7 +22004,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
                     processSkipReason = `failed_${failedAttempts}_backoff`;
                 }
             }
-            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bc, now);
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bc, now, { operationalFloor: this.operationalFloor });
             const lastAttemptAge = bc.lastUpdateAttempt ? Math.round((now - new Date(bc.lastUpdateAttempt).getTime()) / (60 * 60 * 1000)) : null;
             const computedPhase = warmupAction.phase;
             const priority = (0, base_client_service_1.calculateWarmupPriority)(bc, warmupAction, now);
@@ -22213,7 +22213,7 @@ let BufferClientService = BufferClientService_1 = class BufferClientService exte
             }
             if (warmupPhase === base_client_service_1.WarmupPhase.READY)
                 continue;
-            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bufferClient, now);
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(bufferClient, now, { operationalFloor: this.operationalFloor });
             const priority = (0, base_client_service_1.calculateWarmupPriority)(bufferClient, warmupAction, now);
             bufferClientsToProcess.push({ bufferClient, client, clientId: bufferClient.clientId, priority, warmupAction });
         }
@@ -34842,7 +34842,7 @@ let PromoteClientService = PromoteClientService_1 = class PromoteClientService e
             }
             if (warmupPhase === base_client_service_1.WarmupPhase.READY || warmupPhase === base_client_service_1.WarmupPhase.SESSION_ROTATED)
                 continue;
-            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now);
+            const warmupAction = (0, base_client_service_1.getWarmupPhaseAction)(promoteClient, now, { operationalFloor: this.operationalFloor });
             const priority = (0, base_client_service_1.calculateWarmupPriority)(promoteClient, warmupAction, now);
             promoteClientsToProcess.push({ promoteClient: promoteClient, client, clientId: promoteClient.clientId, priority, warmupAction });
         }
@@ -38416,6 +38416,9 @@ class BaseClientService {
     getJoinedChannelIdsFromInfo(channels) {
         return [...new Set([...(channels?.ids ?? []), ...(channels?.canSendFalseChats ?? [])].map(String).filter(Boolean))];
     }
+    get operationalFloor() {
+        return this.config.operationalChannelThreshold ?? warmup_phases_1.MIN_CHANNELS_FOR_MATURING;
+    }
     getOperationalChannelEligibilityFilter() {
         return {
             channels: { $gte: this.config.operationalChannelThreshold ?? warmup_phases_1.MIN_CHANNELS_FOR_MATURING },
@@ -39166,7 +39169,7 @@ class BaseClientService {
         if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) {
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
         }
-        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        const warmupAction = (0, warmup_phases_1.getWarmupPhaseAction)(doc, now, { operationalFloor: this.operationalFloor });
         if (warmupAction.action !== 'rotate_session') {
             this.logger.warn(`READY rotation deferred for ${doc.mobile}: resolved action is ${warmupAction.action}`);
             return { updateCount: 0, updateSummary: 'ready_rotation_deferred' };
@@ -39248,7 +39251,7 @@ class BaseClientService {
             this.logger.debug(`Client ${doc.mobile} on cooldown`);
             return { updateCount: 0 };
         }
-        const warmupAction = plannedWarmupAction || (0, warmup_phases_1.getWarmupPhaseAction)(doc, now);
+        const warmupAction = plannedWarmupAction || (0, warmup_phases_1.getWarmupPhaseAction)(doc, now, { operationalFloor: this.operationalFloor });
         this.logger.debug(`Client ${doc.mobile} warmup: storedPhase=${doc.warmupPhase || 'unset'}, resolvedPhase=${warmupAction.phase}, action=${warmupAction.action}`, {
             privacyUpdatedAt: doc.privacyUpdatedAt || null,
             twoFASetAt: doc.twoFASetAt || null,
@@ -41016,8 +41019,11 @@ function calculateWarmupPriority(doc, warmupAction, now) {
         : 0;
     return phaseBoost + actionBonus + fairAgeBonus - failurePenalty;
 }
-function getWarmupPhaseAction(doc, now) {
+function getWarmupPhaseAction(doc, now, thresholds) {
     const jitter = doc.warmupJitter || 0;
+    const operationalFloor = thresholds?.operationalFloor ?? exports.MIN_CHANNELS_FOR_MATURING;
+    const channelsNow = doc.channels || 0;
+    const belowOperationalFloor = channelsNow < operationalFloor;
     const enrolledAt = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.enrolledAt) || client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.createdAt);
     const daysSinceEnrolled = enrolledAt > 0 ? (now - enrolledAt) / ONE_DAY_MS : 0;
     const phase = doc.warmupPhase || exports.WarmupPhase.ENROLLED;
@@ -41136,7 +41142,7 @@ function getWarmupPhaseAction(doc, now) {
         const pastAdvanceDeadline = growingDuration > exports.GROWING_ADVANCE_DEADLINE_DAYS;
         const effectiveChannelTarget = pastAdvanceDeadline
             ? 0
-            : (stalledLong ? Math.floor(exports.MIN_CHANNELS_FOR_MATURING / 2) : exports.MIN_CHANNELS_FOR_MATURING);
+            : (stalledLong ? Math.floor(operationalFloor / 2) : operationalFloor);
         if (channels < effectiveChannelTarget) {
             return { phase: exports.WarmupPhase.GROWING, action: 'join_channels', organicIntensity: 'light' };
         }
@@ -41169,6 +41175,9 @@ function getWarmupPhaseAction(doc, now) {
         return { phase: exports.WarmupPhase.MATURING, action: 'organic_only', organicIntensity: 'light' };
     }
     if (phase === exports.WarmupPhase.READY) {
+        if (belowOperationalFloor) {
+            return { phase: exports.WarmupPhase.READY, action: 'join_channels', organicIntensity: 'light' };
+        }
         const sessionRotated = client_helper_utils_1.ClientHelperUtils.getTimestamp(doc.sessionRotatedAt) > 0;
         if (!sessionRotated) {
             return { phase: exports.WarmupPhase.READY, action: 'rotate_session', organicIntensity: 'light' };
@@ -41176,6 +41185,9 @@ function getWarmupPhaseAction(doc, now) {
         return { phase: exports.WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
     }
     if (phase === exports.WarmupPhase.SESSION_ROTATED) {
+        if (belowOperationalFloor) {
+            return { phase: exports.WarmupPhase.SESSION_ROTATED, action: 'join_channels', organicIntensity: 'light' };
+        }
         return { phase: exports.WarmupPhase.SESSION_ROTATED, action: 'wait', organicIntensity: 'light' };
     }
     return { phase: exports.WarmupPhase.ENROLLED, action: 'wait', organicIntensity: 'light' };
