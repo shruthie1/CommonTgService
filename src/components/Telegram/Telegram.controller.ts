@@ -551,7 +551,17 @@ export class TelegramController {
         if (sendMediaDto.url) {
             try {
                 const headResponse = await axios.head(sendMediaDto.url, { timeout: 10000 });
-                const contentLength = parseInt(headResponse.headers['content-length'] || '0', 10);
+                // axios types headers as `string | number | boolean | string[] | AxiosHeaders`, so
+                // passing the raw value to parseInt does not typecheck under a fresh dependency
+                // install (CI) even though it passed against the older locally-resolved axios.
+                // Normalise to a string first; a header that is absent or non-scalar becomes '0'.
+                const rawContentLength = headResponse.headers['content-length'];
+                const contentLength = parseInt(
+                    typeof rawContentLength === 'string' || typeof rawContentLength === 'number'
+                        ? String(rawContentLength)
+                        : '0',
+                    10,
+                );
                 const maxSize = 100 * 1024 * 1024; // 100MB
                 
                 if (contentLength > maxSize) {
