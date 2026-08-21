@@ -93,6 +93,16 @@ async function notifyInternal(
 
 /**
  * Common network errors that should trigger retries
+ *
+ * ERR_CANCELED is included because the only thing that ever calls `controller.abort()` in this
+ * module is our own per-attempt timeout (see the `setTimeout(() => controller.abort(), ...)`
+ * above) — nothing here exposes the controller to a caller who might cancel for an unrelated
+ * reason. So a canceled request IS a timeout, just reported by axios under a different error
+ * code/message ("canceled"/ERR_CANCELED) than ECONNABORTED. Before this was added, every abort
+ * fell through `shouldRetry` as non-retryable and failed permanently on attempt 0, discarding the
+ * entire point of the retry loop for exactly the failure it exists to survive. Observed in
+ * production (cms, 2026-08): dozens of `host: api.telegram.org ... :: canceled` failures per hour,
+ * every one of them dying at "Attempt 0 failed" with 3 configured retries never used.
  */
 const RETRYABLE_NETWORK_ERRORS = [
   'ETIMEDOUT',
@@ -101,6 +111,7 @@ const RETRYABLE_NETWORK_ERRORS = [
   'ECONNRESET',
   'ERR_NETWORK',
   'ERR_BAD_RESPONSE',
+  'ERR_CANCELED',
   'EHOSTUNREACH',
   'ENETUNREACH',
 ];
@@ -366,7 +377,7 @@ export async function fetchWithTimeout(
       try {
         parsedError = parseError(
           error,
-          `host: ${host}\nendpoint:${endpoint}`,
+          `host: ${host} endpoint: ${endpoint}`,
           false,
         );
       } catch (parseErrorError) {
@@ -386,10 +397,13 @@ export async function fetchWithTimeout(
           ? parsedError.message
           : JSON.stringify(parsedError.message);
 
-      // Check if it's a timeout
+      // Check if it's a timeout. ERR_CANCELED is included for the same reason it is in
+      // RETRYABLE_NETWORK_ERRORS above: the only abort() call in this module is our own
+      // per-attempt timeout, so a cancellation here always means the request timed out.
       const isTimeout =
         axios.isAxiosError(error) &&
         (error.code === 'ECONNABORTED' ||
+          error.code === 'ERR_CANCELED' ||
           message.includes('timeout') ||
           parsedError.status === 408);
 
@@ -410,7 +424,7 @@ export async function fetchWithTimeout(
           try {
             const bypassParsedError = parseError(
               bypassError,
-              `host: ${host}\nendpoint:${endpoint}`,
+              `host: ${host} endpoint: ${endpoint}`,
               false,
             );
             errorDetails = extractMessage(bypassParsedError);
@@ -479,7 +493,7 @@ export async function fetchWithTimeout(
       if (lastError) {
         const parsedLastError = parseError(
           lastError,
-          `${clientId} host: ${host}\nendpoint:${endpoint}`,
+          `${clientId} host: ${host} endpoint: ${endpoint}`,
           false,
         );
         errorData = extractMessage(parsedLastError);

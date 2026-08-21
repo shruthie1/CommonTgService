@@ -169,6 +169,66 @@ describe('retry logic', () => {
     });
 });
 
+describe('ERR_CANCELED (our own abort-on-timeout) is retried like any other timeout', () => {
+    // Regression: axios reports our AbortController firing as code ERR_CANCELED /
+    // message "canceled" — a DIFFERENT code than ECONNABORTED. That code was missing
+    // from RETRYABLE_NETWORK_ERRORS, so shouldRetry() returned false and every abort
+    // failed permanently on attempt 0, discarding the retry loop entirely. Observed in
+    // production (cms, 2026-08): dozens of these per hour against api.telegram.org,
+    // each one dying at "Attempt 0 failed" despite 3 configured retries.
+    test('retries a canceled request up to maxRetries, exactly like ECONNRESET', async () => {
+        const err = axiosError({ code: 'ERR_CANCELED', message: 'canceled' });
+        axiosFn.mockRejectedValue(err);
+        const res = await fetchWithTimeout('https://api.telegram.org/botTOKEN/sendMessage', {}, 2);
+        expect(res).toBeUndefined();
+        // attempts: 0,1,2 -> 3 calls, with 2 backoff sleeps in between — same shape as
+        // the existing ECONNRESET retry test above. Before the fix this was 1 call, 0 sleeps.
+        expect(axiosFn).toHaveBeenCalledTimes(3);
+        expect(sleepMock).toHaveBeenCalledTimes(2);
+    });
+
+    test('a canceled request that succeeds on retry returns the response', async () => {
+        axiosFn
+            .mockRejectedValueOnce(axiosError({ code: 'ERR_CANCELED', message: 'canceled' }))
+            .mockResolvedValueOnce({ status: 200, data: 'recovered' });
+        const res = await fetchWithTimeout('https://api.telegram.org/botTOKEN/sendMessage', {}, 3);
+        expect(res).toEqual({ status: 200, data: 'recovered' });
+        expect(axiosFn).toHaveBeenCalledTimes(2);
+    });
+
+    test('is classified and notified as a timeout, not a generic attempt failure', async () => {
+        axiosFn.mockRejectedValueOnce(axiosError({ code: 'ERR_CANCELED', message: 'canceled' }));
+        await fetchWithTimeout('https://api.telegram.org/botTOKEN/sendMessage', {}, 0);
+        // maxRetries:0 also sends a second "all retries exhausted" notification after the loop —
+        // that is pre-existing, correct behaviour, not part of this regression. Only the FIRST
+        // notification (from inside the retry loop) is the one whose classification this bug
+        // affected: it must read as a timeout, not the generic "Attempt 0 failed" wording that
+        // ERR_CANCELED fell through to before isTimeout recognised it.
+        expect(sendMessageByCategory).toHaveBeenCalled();
+        const firstNotificationText = String(sendMessageByCategory.mock.calls[0][1]);
+        expect(firstNotificationText).toMatch(/timeout/i);
+        expect(firstNotificationText).not.toMatch(/attempt 0 failed/i);
+    });
+});
+
+describe('failure-notification prefix is a single line', () => {
+    // Regression: the host/endpoint prefix embedded a literal \n
+    // ("host: X\nendpoint:Y"). parseError's console.error is suppressed under
+    // NODE_ENV=test (see shouldLogDiagnostics), so this asserts on the SAME text via
+    // the notification sink instead, which carries the identical prefix. In
+    // production the \n meant a naive `grep parsedErr` on the log file silently
+    // missed the endpoint and real error message on the following line — exactly
+    // what made the ERR_CANCELED failures above look like bare, contextless
+    // "host: api.telegram.org" lines.
+    test('the host/endpoint prefix has no embedded newline', async () => {
+        axiosFn.mockRejectedValueOnce(axiosError({ code: 'ECONNRESET' }));
+        await fetchWithTimeout('https://api.telegram.org/botTOKEN/sendMessage?chat_id=-1', {}, 0);
+        const notificationText = String(sendMessageByCategory.mock.calls[0][1]);
+        expect(notificationText).not.toContain('\n\n\nendpoint');
+        expect(notificationText).toContain('host: api.telegram.org endpoint:');
+    });
+});
+
 describe('timeout notification branch', () => {
     test('ECONNABORTED triggers timeout notification', async () => {
         axiosFn.mockRejectedValueOnce(axiosError({ code: 'ECONNABORTED' }));
