@@ -529,6 +529,56 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
     }
 
+    /**
+     * Two-tier join candidate selection (ported from BufferClientService 2026-08-27).
+     *
+     * A single `.find(query).sort({ channels: -1 }).limit(maxMapSize)` strands terminal accounts
+     * that sit BELOW the runtime floor: they compete for the same `maxMapSize` slots as every
+     * warmup-phase account, and the descending channel sort buries the low-channel ones. Measured
+     * on prod 2026-08-27: 49 promote accounts were stuck in READY/SESSION_ROTATED below the 230
+     * floor (channels 3..229, several only 1-16 short) while bufferClients — which already had
+     * this recovery tier — had ZERO stranded accounts.
+     *
+     * Recovery accounts are already terminal but cannot be selected by the runtime until they
+     * reach the promote floor. Put them ahead of new warmup accounts without changing which
+     * accounts are eligible or increasing any Telegram activity limits.
+     */
+    private async findPrioritizedJoinCandidates(query: PromoteClientQuery): Promise<PromoteClientDocument[]> {
+        const limit = this.config.maxMapSize;
+        const operationalFloor = this.config.operationalChannelThreshold ?? 230;
+        const recoveryQuery: PromoteClientQuery = {
+            ...query,
+            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            channels: { $lt: operationalFloor },
+        };
+
+        const recoveryQueryResult = this.promoteClientModel
+            .find(recoveryQuery)
+            .sort({ channels: -1 })
+            .limit(limit);
+        const recoveryCandidates = await this.resolveJoinCandidateQuery(recoveryQueryResult);
+        if (recoveryCandidates.length >= limit) return recoveryCandidates;
+
+        const recoveryMobiles = new Set(recoveryCandidates.map((candidate) => candidate.mobile));
+        const standardQueryResult = this.promoteClientModel
+            .find(query)
+            .sort({ channels: -1 })
+            .limit(limit);
+        const standardCandidates = await this.resolveJoinCandidateQuery(standardQueryResult);
+
+        return [
+            ...recoveryCandidates,
+            ...standardCandidates.filter((candidate) => !recoveryMobiles.has(candidate.mobile)),
+        ].slice(0, limit);
+    }
+
+    private async resolveJoinCandidateQuery(query: unknown): Promise<PromoteClientDocument[]> {
+        const executable = query as { exec?: () => Promise<PromoteClientDocument[]> };
+        return typeof executable.exec === 'function'
+            ? executable.exec()
+            : Promise.resolve(query as PromoteClientDocument[]);
+    }
+
     async refillJoinQueue(clientId?: string | null): Promise<number> {
         if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
         if (this.telegramService.hasActiveClientSetup()) return 0;
@@ -543,13 +593,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         };
         if (clientId) query.clientId = clientId;
 
-        // Sort descending: accounts closest to target go first — finishing
-        // near-complete accounts produces ready accounts faster.
-        const eligible = await this.promoteClientModel
-            .find(query)
-            .sort({ channels: -1 })
-            .limit(this.config.maxMapSize)
-            .exec();
+        // Recovery-first, then descending channels: stranded terminal accounts (below the runtime
+        // floor) are rescued ahead of new warmup accounts; within each tier, accounts closest to
+        // target go first so near-complete accounts finish sooner.
+        const eligible = await this.findPrioritizedJoinCandidates(query);
 
         let added = 0;
         let leaveAdded = 0;
@@ -814,15 +861,14 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
 
             try {
-            const clients = await this.promoteClientModel
-                .find({
-                    channels: { $lt: this.config.channelTarget },
-                    mobile: { $nin: Array.from(preservedMobiles) },
-                    status: 'active',
-                    ...this.getJoinCapacityEligibilityFilter(),
-                })
-                .sort({ channels: -1 })
-                .limit(this.config.maxMapSize);
+            // Recovery-first (see findPrioritizedJoinCandidates): terminal accounts below the
+            // runtime floor must not lose their join slots to warmup accounts with more channels.
+            const clients = await this.findPrioritizedJoinCandidates({
+                channels: { $lt: this.config.channelTarget },
+                mobile: { $nin: Array.from(preservedMobiles) },
+                status: 'active',
+                ...this.getJoinCapacityEligibilityFilter(),
+            });
 
             const joinSet = new Set<string>();
             const leaveSet = new Set<string>();

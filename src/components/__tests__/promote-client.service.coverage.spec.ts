@@ -347,6 +347,29 @@ describe('PromoteClientService coverage', () => {
             expect((service as any).leaveChannelMap.get('15551500017')).toEqual(['leave-1', 'leave-2']);
         });
 
+        it('queues terminal recovery before higher-channel warming accounts', async () => {
+            // Regression for the prod gap found 2026-08-27: a single
+            // .find(query).sort({channels:-1}).limit(maxMapSize) let warmup accounts with MORE
+            // channels crowd out terminal accounts stranded below the 230 runtime floor. 49 promote
+            // accounts were stuck that way (channels 3..229) while bufferClients — which already had
+            // the two-tier recovery query — had zero. The below-floor terminal account must be
+            // processed FIRST even though the warming account has more channels.
+            await service.create(makePromoteClientData({ mobile: '15551500021', channels: 300, status: 'active', clientId: 'test-client-1' }));
+            await service.create(makePromoteClientData({ mobile: '15551500022', channels: 220, status: 'active', clientId: 'test-client-1' }));
+            await PromoteClientModel.collection.updateOne(
+                { mobile: '15551500022' },
+                { $set: { warmupPhase: WarmupPhase.SESSION_ROTATED } },
+            );
+            const getClient = jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: [], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            await service.refillJoinQueue('test-client-1');
+
+            expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500022', '15551500021']);
+        });
+
         it('deactivates on permanent error', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500003', channels: 10, status: 'active', clientId: 'test-client-1' }));
             jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('AUTH_KEY_DUPLICATED'));
