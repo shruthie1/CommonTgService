@@ -28,6 +28,7 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import TelegramManager from '../Telegram/TelegramManager';
 import { SessionService } from '../session-manager';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
 import { Client } from '../clients/schemas/client.schema';
@@ -602,8 +603,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         let leaveAdded = 0;
         for (const doc of eligible) {
             if (this.isMobileDailyCapped(doc.mobile)) continue;
+            // Hoisted so the catch can hand the live client to buildPermanentAccountReason —
+            // freeze metadata (freeze_until_date / appeal_url) can only be read from Telegram
+            // while the connection is still open. See the note on the catch below.
+            let client: TelegramManager | null = null;
             try {
-                const client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+                client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
                 const channels = await channelInfo(client.client, true);
                 await this.update(doc.mobile, { channels: channels.ids.length });
                 if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length)) continue;
@@ -624,7 +629,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             } catch (error) {
                 const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if (isPermanentError(errorDetails)) {
-                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    // Pass the client: without it buildPermanentAccountReason short-circuits and the
+                    // freeze window is lost forever. Measured 2026-09-05: 0 of 433 frozen accounts
+                    // had freeze_until captured, because this join/refill path — where
+                    // channels.JoinChannel freezes actually happen — omitted the client argument.
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
                     await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             } finally {
@@ -877,8 +886,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             for (const document of clients) {
                 const mobile = document.mobile;
+                // Hoisted so the catch can pass it to buildPermanentAccountReason (freeze metadata
+                // is only readable while the connection is open).
+                let client: TelegramManager | null = null;
                 try {
-                    const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                    client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
 
                     await sleep(5000 + Math.random() * 3000);
                     const channels = await channelInfo(client.client, true);
@@ -918,7 +930,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     const errorDetails = parseError(error);
                     if (isPermanentError(errorDetails)) {
                         await sleep(1000);
-                        const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                        // Pass the live client so freeze metadata is captured — see refillJoinQueue.
+                        const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
                         await this.deactivateClient(mobile, reason, { permanent: true });
                     }
                 } finally {

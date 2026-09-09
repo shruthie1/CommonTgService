@@ -370,6 +370,35 @@ describe('PromoteClientService coverage', () => {
             expect(getClient.mock.calls.map(([mobile]) => mobile)).toEqual(['15551500022', '15551500021']);
         });
 
+        it('passes the live client to buildPermanentAccountReason so freeze metadata is captured', async () => {
+            // Regression for the prod gap found 2026-09-05: this catch called
+            // buildPermanentAccountReason WITHOUT the telegram client. That helper short-circuits at
+            // `if (!telegramClient ...) return baseReason`, so the freeze window Telegram reports
+            // (freeze_since_date / freeze_until_date / freeze_appeal_url, read via help.GetAppConfig)
+            // was never recorded. Result: 0 of 433 frozen accounts in prod had any freeze_until,
+            // leaving no way to tell a temporary freeze from a permanent one. The client is only
+            // queryable while the connection is open, so it must be passed from here.
+            await service.create(makePromoteClientData({ mobile: '15551500031', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            const tgClient = { client: {} } as any;
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tgClient);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockRejectedValue(new Error('FROZEN_METHOD_INVALID'));
+            isPermanentError.mockReturnValue(true);
+            const buildReason = jest
+                .spyOn(service as any, 'buildPermanentAccountReason')
+                .mockResolvedValue('FROZEN_METHOD_INVALID (freeze_until=2026-09-12T00:00:00.000Z)');
+
+            await service.refillJoinQueue('test-client-1');
+
+            // parseError prefixes the message; what matters is the SECOND argument — the live client.
+            expect(buildReason).toHaveBeenCalledWith(
+                expect.stringContaining('FROZEN_METHOD_INVALID'),
+                tgClient,
+            );
+            const after = await service.findOne('15551500031');
+            expect(after!.message).toContain('freeze_until=');
+        });
+
         it('deactivates on permanent error', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500003', channels: 10, status: 'active', clientId: 'test-client-1' }));
             jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('AUTH_KEY_DUPLICATED'));

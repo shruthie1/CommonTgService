@@ -30,6 +30,7 @@ import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import TelegramManager from '../Telegram/TelegramManager';
 import { SessionService } from '../session-manager';
 import { SearchBufferClientDto } from './dto/search-buffer-client.dto';
 import { channelInfo } from '../../utils/telegram-utils/channelinfo';
@@ -819,8 +820,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 continue;
             }
             if (this.isMobileDailyCapped(doc.mobile)) continue;
+            // Hoisted so the catch can hand the live client to buildPermanentAccountReason.
+            let client: TelegramManager | null = null;
             try {
-                const client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+                client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
                 const channels = await channelInfo(client.client, true);
                 await this.update(doc.mobile, { channels: channels.ids.length });
                 if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length)) continue;
@@ -841,7 +844,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             } catch (error) {
                 const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
                 if (isPermanentError(errorDetails)) {
-                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    // Pass the live client so freeze metadata (freeze_until_date / appeal_url) is
+                    // captured; without it buildPermanentAccountReason short-circuits. Measured
+                    // 2026-09-05: 0 of 433 frozen accounts had a freeze window recorded.
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
                     await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 }
             } finally {
@@ -1575,9 +1581,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         for (let i = 0; i < clients.length; i++) {
             const document = clients[i];
             const mobile = document.mobile;
+            // Hoisted so the catch can hand the live client to buildPermanentAccountReason.
+            let client: TelegramManager | null = null;
 
             try {
-                const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                 const channels = await channelInfo(client.client, true);
                 await this.update(mobile, { channels: channels.ids.length });
                 if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
@@ -1609,7 +1617,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 failCount++;
                 const errorDetails = parseError(error, `JoinChannelErr: ${mobile}`);
                 if (isPermanentError(errorDetails)) {
-                    const reason = await this.buildPermanentAccountReason(errorDetails.message);
+                    // Pass the live client so the freeze window is captured — see refillJoinQueue.
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
                     await this.deactivateClient(mobile, reason, { permanent: true });
                 }
             } finally {
