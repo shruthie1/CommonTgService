@@ -278,8 +278,24 @@ export class UserDataService {
         const twoMonths = Date.now() - 60 * 24 * 60 * 60 * 1000;
 
         try {
+            // payAmount is a LIVE ENTITLEMENT BALANCE, not a payment history: it decays to 0 as
+            // service is delivered, so `payAmount: 0` alone also matches people who really paid.
+            // Once tg-platform starts populating the lifetime fields, deleting on payAmount alone
+            // would destroy the only record that a past payer ever paid. Measured 2026-10-02: this
+            // filter matches 0 rows today, so adding these guards changes nothing now and prevents
+            // silent loss later. highestPayAmount/paidCount are the pre-existing equivalents.
             const result = await this.userDataModel
-                .deleteMany({ lastMsgTimeStamp: { $lt: twoMonths }, payAmount: 0, canReply: 1 })
+                .deleteMany({
+                    lastMsgTimeStamp: { $lt: twoMonths },
+                    payAmount: 0,
+                    canReply: 1,
+                    $and: [
+                        { $or: [{ lifetimePaid: { $exists: false } }, { lifetimePaid: { $lte: 0 } }] },
+                        { $or: [{ firstPaidAt: { $exists: false } }, { firstPaidAt: null }] },
+                        { $or: [{ highestPayAmount: { $exists: false } }, { highestPayAmount: { $lte: 0 } }] },
+                        { $or: [{ paidCount: { $exists: false } }, { paidCount: { $lte: 0 } }] },
+                    ],
+                })
                 .exec();
 
             return { deletedCount: result.deletedCount ?? 0 };

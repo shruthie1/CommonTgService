@@ -99,6 +99,37 @@ export class UserData {
     @Prop({ required: false })
     lastActiveTime?: Date;
 
+
+    // ---- tg-platform-owned fields (written by tg-aut/tg-db creditPayment; CMS only declares them) ----
+    // Declared (not `strict: false`) so Mongoose keeps them while still dropping arbitrary fields.
+    // All optional with NO defaults: they are absent on legacy rows and tg-platform treats absent as 0/[].
+    // Types per tg-platform apps/tg-aut/src/core/dbservice.ts UserDataDto and
+    // packages/tg-db/src/collections/user-data.repository.ts.
+
+    /** Monotonic lifetime payment peak ($max only). */
+    @Prop({ type: Number, required: false })
+    lifetimePaid?: number;
+
+    /** Count of accepted credits ($inc). */
+    @Prop({ type: Number, required: false })
+    lifetimeCredits?: number;
+
+    /** Idempotency keys of accepted payments (bounded history). default undefined: an array Prop would otherwise default to []. */
+    @Prop({ type: [String], required: false, default: undefined })
+    creditKeys?: string[];
+
+    /** Epoch ms of first accepted payment (Date.now()). */
+    @Prop({ type: Number, required: false })
+    firstPaidAt?: number;
+
+    /** True inbound-message counter ($inc only by tg-aut). */
+    @Prop({ type: Number, required: false })
+    msgCount?: number;
+
+    /** "Treat as established" flag, numeric, $set freely by tg-aut. */
+    @Prop({ type: Number, required: false })
+    windowCount?: number;
+
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
