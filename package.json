@@ -49,7 +49,7 @@
     "https": "^1.0.0",
     "imap": "^0.8.19",
     "ioredis": "^5.9.2",
-    "mongoose": "^9.1.6",
+    "mongoose": "9.1.6",
     "mime": "^3.0.0",
     "mime-types": "^3.0.1",
     "node-cache": "^5.1.2",
@@ -78,7 +78,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
     "jest": "^30.2.0",
-    "mongodb-memory-server": "^11.0.1",
+    "mongodb-memory-server": "11.0.1",
     "prettier": "^3.8.1",
     "rimraf": "^6.1.2",
     "source-map-support": "^0.5.21",
@@ -109,5 +109,8 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage"
+  },
+  "overrides": {
+    "mongodb": "7.0.0"
   }
 }
