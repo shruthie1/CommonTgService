@@ -7,6 +7,7 @@ import {
 import { Request } from 'express';
 import { getBotsServiceInstance, Logger } from '../utils';
 import { ChannelCategory } from '../components';
+import { isAcceptedApiKey } from '../utils/apiKey';
 
 const ALLOWED_IPS = [
     '31.97.59.2',
@@ -106,7 +107,7 @@ export class AuthGuard implements CanActivate {
         let passedReason: string | null = null;
 
         // ✅ Step 2: Priority check — API Key → IP → Origin
-        if (apiKey && apiKey.toLowerCase() === 'santoor') {
+        if (isAcceptedApiKey(apiKey)) {
             passedReason = 'API key valid';
         } else if (ALLOWED_IPS.includes(clientIp)) {
             passedReason = 'IP allowed';

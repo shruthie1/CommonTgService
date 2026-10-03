@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import { Logger } from './utils';
 import { ExceptionsFilter } from './interceptors/Exception-filter';
 import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
+import { getApiKey } from './utils/apiKey';
 
 async function bootstrap() {
   try {
@@ -45,7 +46,7 @@ async function bootstrap() {
             'x-api-key': {
               name: 'x-api-key',
               schema: { type: 'apiKey', in: 'header', name: 'x-api-key' },
-              value: process.env.API_KEY || 'santoor',
+              value: getApiKey(),
             },
           },
         },

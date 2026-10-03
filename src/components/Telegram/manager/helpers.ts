@@ -1,6 +1,7 @@
 import { Api } from 'telegram';
 import axios from 'axios';
 import { MediaMetadataItem, DocumentMediaDetails, SenderInfo, MediaInfo } from './types';
+import { getApiKey } from '../../../utils/apiKey';
 
 // ---- Constants ----
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -303,7 +304,7 @@ export function generateETag(messageId: number, chatId: string, fileId: bigInt.B
 function buildInternalDownloadHeaders(url: string): Record<string, string> {
     try {
         const parsed = new URL(url);
-        const apiKey = process.env.X_API_KEY || process.env.API_KEY || 'santoor';
+        const apiKey = getApiKey();
         const internalHosts = new Set([
             'cms.paidgirls.site',
             'localhost',

@@ -14,6 +14,7 @@ import { AppService, VideoDetails } from './app.service';
 import { CloudflareCacheInterceptor } from './interceptors/cloudflare-cache.interceptor';
 import { NoCache } from './decorators/no-cache.decorator';
 import { renderStatusDashboardDocument } from './dashboard/status-dashboard.view';
+import { getApiKey } from './utils/apiKey';
 
 @ApiTags('App')
 @Controller()
@@ -137,7 +138,7 @@ export class AppController {
         method,
         headers: {
           ...headers,
-          'x-api-key': process.env.X_API_KEY || 'santoor',
+          'x-api-key': getApiKey(),
         },
         data,
         params,

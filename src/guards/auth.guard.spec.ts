@@ -405,3 +405,45 @@ describe('AuthGuard', () => {
         });
     });
 });
+
+describe('AuthGuard — configurable API keys (rotation without lockout)', () => {
+    const saved = { X_API_KEY: process.env.X_API_KEY, API_KEY: process.env.API_KEY, X_API_KEYS: process.env.X_API_KEYS };
+    afterEach(() => {
+        for (const [k, v] of Object.entries(saved)) {
+            if (v === undefined) delete process.env[k];
+            else process.env[k] = v;
+        }
+    });
+    beforeEach(() => {
+        delete process.env.X_API_KEY; delete process.env.API_KEY; delete process.env.X_API_KEYS;
+        sendMessageByCategory.mockReset();
+        botsInstance = { sendMessageByCategory };
+    });
+    // A non-allowlisted IP and no origin, so ONLY the key can grant access.
+    const keyReq = (key: string): Partial<Request> => ({
+        path: '/user/search', url: '/user/search', originalUrl: '/user/search',
+        headers: { 'x-api-key': key }, query: {}, ip: '203.0.113.99', connection: {} as any,
+    });
+    const allows = (key: string) => {
+        try { return new AuthGuard().canActivate(makeContext(keyReq(key))); }
+        catch (e) { if (e instanceof UnauthorizedException) return false; throw e; }
+    };
+
+    it('accepts the legacy key with no configuration (unchanged behaviour)', () => {
+        expect(allows('santoor')).toBe(true);
+        expect(allows('wrong')).toBe(false);
+    });
+
+    it('accepts a new X_API_KEY AND still the legacy key — callers on the old key keep working', () => {
+        process.env.X_API_KEY = 'rotated-key';
+        expect(allows('rotated-key')).toBe(true);
+        expect(allows('santoor')).toBe(true);
+        expect(allows('wrong')).toBe(false);
+    });
+
+    it('retires the legacy key only via an explicit X_API_KEYS list', () => {
+        process.env.X_API_KEYS = 'rotated-key';
+        expect(allows('rotated-key')).toBe(true);
+        expect(allows('santoor')).toBe(false);
+    });
+});

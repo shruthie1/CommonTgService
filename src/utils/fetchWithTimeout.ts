@@ -4,6 +4,7 @@ import { clog } from './ChannelLogger';
 import { sleep } from './common';
 import { ChannelCategory } from '../components/bots/channel-category.enum';
 import { tryGetBotsServiceInstance } from './bot.service.instance';
+import { getApiKey } from './apiKey';
 
 // Configuration types
 interface RetryConfig {
@@ -204,7 +205,7 @@ async function makeBypassRequest(
     {
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.X_API_KEY || 'santoor',
+        'x-api-key': getApiKey(),
         ...options.headers,
       },
     },
@@ -357,7 +358,7 @@ export async function fetchWithTimeout(
         timeout: currentTimeout,
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': process.env.X_API_KEY || 'santoor',
+          'x-api-key': getApiKey(),
           ...options.headers,
         },
       });
