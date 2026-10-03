@@ -641,8 +641,8 @@ export class UsersService {
       return null;
     }
 
-    // mobile, session AND tgId are each independently unique — check all three so we don't
-    // attempt an insert that collides on a key the pre-check didn't cover.
+    // Only session is unique-indexed, but a backfill must never add a second doc for an account
+    // that already exists under any of mobile/tgId/session — check all three before inserting.
     const conflictQuery = { $or: [{ mobile: canonicalMobile }, { tgId }, { session }] };
     try {
       const existing = await this.userModel.findOne(conflictQuery).exec();

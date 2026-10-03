@@ -16,7 +16,9 @@ export type UserDocument = User & Document;
 export class User {
   // --- Identity ---
   @ApiProperty({ description: 'Mobile number' })
-  @Prop({ required: true, unique: true, set: canonicalizeMobile })
+  // Not unique: a number re-registers after expiry/ban (live DB has ~12k mobiles with >1 doc).
+  // `session` is the unique key.
+  @Prop({ required: true, index: true, set: canonicalizeMobile })
   mobile: string;
 
   @ApiProperty({ description: 'Telegram session string' })
@@ -24,7 +26,7 @@ export class User {
   session: string;
 
   @ApiProperty({ description: 'Telegram user ID' })
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, index: true })
   tgId: string;
 
   @ApiProperty({ description: 'First name' })

@@ -49,14 +49,18 @@ export class TgSignupController {
 
             return {
                 status: HttpStatus.CREATED,
-                message: 'Code sent to your Telegram App',
+                message: result.message || 'Code sent to your Telegram App',
                 phoneCodeHash: result.phoneCodeHash,
-                isCodeViaApp: result.isCodeViaApp
+                isCodeViaApp: result.isCodeViaApp,
+                codeType: result.codeType,
+                codeLength: result.codeLength,
+                nextType: result.nextType,
+                resendAfter: result.resendAfter,
             };
         } catch (error) {
             this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
                 error,
-                stack: error.stack
+                stack: error instanceof Error ? error.stack : undefined
             });
 
             throw error;
@@ -99,12 +103,13 @@ export class TgSignupController {
                 status: result.requires2FA ? HttpStatus.BAD_REQUEST : HttpStatus.OK,
                 message: result.message || 'Successfully logged in',
                 session: result.session,
-                requires2FA: result.requires2FA
+                requires2FA: result.requires2FA,
+                passwordHint: result.passwordHint,
             };
         } catch (error) {
             this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
                 error,
-                stack: error.stack
+                stack: error instanceof Error ? error.stack : undefined
             });
 
             throw error;

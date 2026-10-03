@@ -23,7 +23,9 @@ export class VerifyCodeDto {
         description: 'Verification code received'})
     @IsString()
     @IsNotEmpty()
-    @Matches(/^\d{5}$/, { message: 'Code must be exactly 5 digits' })
+    // Telegram codes are usually 5 digits, but email codes are longer and SmsWord/SmsPhrase codes are words.
+    // The service validates against the code type Telegram actually sent.
+    @Matches(/^[\p{L}\p{N}][\p{L}\p{N} -]{2,63}$/u, { message: 'Code must be exactly 5 digits' })
     code: string;
 
     @ApiProperty({
@@ -69,4 +71,19 @@ export class TgSignupResponse {
         required: false
     })
     requires2FA?: boolean;
+
+    @ApiProperty({ description: 'How Telegram delivered the code (app, sms, call, email, ...)', required: false })
+    codeType?: string;
+
+    @ApiProperty({ description: 'Expected code length, when Telegram reports it', required: false })
+    codeLength?: number;
+
+    @ApiProperty({ description: 'Delivery channel a resend will use, if any', required: false })
+    nextType?: string;
+
+    @ApiProperty({ description: 'Seconds until a resend is allowed', required: false })
+    resendAfter?: number;
+
+    @ApiProperty({ description: '2FA password hint set by the account owner', required: false })
+    passwordHint?: string;
 }

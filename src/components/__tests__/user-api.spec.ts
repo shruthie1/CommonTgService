@@ -98,17 +98,24 @@ describe('Users API', () => {
             expect(result.relationships).toEqual({ score: 0, bestScore: 0, computedAt: null, top: [] });
         });
 
-        it('should reject duplicate mobile', async () => {
+        // Live DB: only `session` is unique. A number re-registers after expiry/ban, so the same
+        // mobile (and, on re-login, the same tgId) legitimately appears in several docs.
+        it('should allow a second doc for the same mobile', async () => {
             const data = makeUserData();
             await service.create(data);
-            await expect(service.create({ ...makeUserData(), mobile: data.mobile }))
-                .rejects.toThrow(/duplicate key|E11000/);
+            await expect(service.create({ ...makeUserData(), mobile: data.mobile })).resolves.not.toThrow();
         });
 
-        it('should reject duplicate tgId', async () => {
+        it('should allow a second doc for the same tgId', async () => {
             const data = makeUserData();
             await service.create(data);
-            await expect(service.create({ ...makeUserData(), tgId: data.tgId }))
+            await expect(service.create({ ...makeUserData(), tgId: data.tgId })).resolves.not.toThrow();
+        });
+
+        it('should reject duplicate session', async () => {
+            const data = makeUserData();
+            await service.create(data);
+            await expect(service.create({ ...makeUserData(), session: data.session }))
                 .rejects.toThrow(/duplicate key|E11000/);
         });
 

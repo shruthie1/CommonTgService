@@ -6,6 +6,10 @@ const clientInstances: FakeTelegramClient[] = [];
 
 class SentCodeSuccess {}
 class SentCodeTypeApp {}
+class SentCodeTypeSms {}
+class SentCodeTypeFirebaseSms {}
+class SentCodeTypeSetUpEmailRequired {}
+class CodeTypeSms {}
 class AuthorizationSignUpRequired {}
 class SendCode { constructor(public readonly args: any) {} }
 class ResendCode { constructor(public readonly args: any) {} }
@@ -16,12 +20,17 @@ class GetPassword {}
 class CodeSettings { constructor(public readonly args: any) {} }
 
 class StringSession {
+    public dc?: { dcId: number; ip: string; port: number };
     constructor(public readonly value: string) {}
+    setDC(dcId: number, ip: string, port: number) {
+        this.dc = { dcId, ip, port };
+    }
 }
+class AcceptTermsOfService { constructor(public readonly args: any) {} }
 
 class FakeTelegramClient {
     public connected = false;
-    public readonly session: { save: jest.Mock<string, []> };
+    public readonly session: { save: jest.Mock<string, []>; dcId?: number };
     public readonly invoke: jest.Mock<Promise<any>, [any]>;
     public readonly connect: jest.Mock<Promise<void>, []>;
     public readonly destroy: jest.Mock<Promise<void>, []>;
@@ -41,6 +50,7 @@ class FakeTelegramClient {
             const next = invokeQueue.shift();
             if (next instanceof Error) throw next;
             if (next?.__throw) throw next.__throw;
+            if (typeof next === 'function') return next(this);
             return next;
         });
         this.connect = jest.fn(async () => {
@@ -68,6 +78,9 @@ const sharedApi = {
         CheckPassword,
         SentCodeSuccess,
         SentCodeTypeApp,
+        SentCodeTypeSms,
+        SentCodeTypeFirebaseSms,
+        SentCodeTypeSetUpEmailRequired,
         AuthorizationSignUpRequired,
     },
     account: {
@@ -79,6 +92,7 @@ const sharedApi = {
         CheckUsername: class {},
     },
     CodeSettings,
+    help: { AcceptTermsOfService },
     InputPrivacyKeyPhoneCall: StubPrivacyKey,
     InputPrivacyKeyProfilePhoto: StubPrivacyKey,
     InputPrivacyKeyForwards: StubPrivacyKey,
@@ -161,6 +175,8 @@ describe('TgSignupService practical flows', () => {
         generateTGConfigMock.mockReset();
         computeCheckMock.mockReset();
         getActiveSignupSessions().clear();
+        (TgSignupService as any).rejectCache?.clear();
+        (TgSignupService as any).homeDcByPrefix?.clear();
     });
 
     afterEach(async () => {
@@ -201,6 +217,8 @@ describe('TgSignupService practical flows', () => {
         expect(result).toEqual({
             phoneCodeHash: 'hash-a',
             isCodeViaApp: true,
+            codeType: 'app',
+            message: 'Code sent to your Telegram App',
         });
         expect(generateTGConfigMock).toHaveBeenCalledTimes(1);
         expect(clientInstances).toHaveLength(1);
@@ -217,7 +235,7 @@ describe('TgSignupService practical flows', () => {
     test('sendCode resends through the existing active signup session without regenerating config', async () => {
         mockConfig();
         queueConnectSuccess();
-        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp(), nextType: new CodeTypeSms() });
 
         const service = makeService();
         await service.sendCode('+919999000001');
@@ -255,7 +273,7 @@ describe('TgSignupService practical flows', () => {
     test('sendCode reuses a disconnected signup session by reconnecting and resending', async () => {
         mockConfig();
         queueConnectSuccess();
-        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+        queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp(), nextType: new CodeTypeSms() });
 
         const service = makeService();
         await service.sendCode('+919999000009');
@@ -912,5 +930,706 @@ describe('TgSignupService practical flows', () => {
         expect(result.status).toBe(200);
         // No additional connect call because client was already connected.
         expect(clientInstances[0].connect.mock.calls.length).toBe(connectCallsBefore);
+    });
+    describe('scenario coverage', () => {
+        test('resend with no alternative channel re-requests on the same client instead of rebuilding', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000101');
+
+            queueInvokeResult({ phoneCodeHash: 'hash-b', type: new SentCodeTypeApp() });
+            const resent = await service.sendCode('+919999000101');
+
+            expect(resent.phoneCodeHash).toBe('hash-b');
+            expect(generateTGConfigMock).toHaveBeenCalledTimes(1);
+            expect(clientInstances).toHaveLength(1);
+            expect(clientInstances[0].invoke.mock.calls[1][0]).toBeInstanceOf(SendCode);
+        });
+
+        test('resend inside Telegram cooldown returns the existing code without calling Telegram', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp(), nextType: new CodeTypeSms(), timeout: 60 });
+            const service = makeService();
+            await service.sendCode('+919999000102');
+
+            const again = await service.sendCode('+919999000102');
+
+            expect(again.phoneCodeHash).toBe('hash-a');
+            expect(again.resendAfter).toBeGreaterThan(0);
+            expect(again.resendAfter).toBeLessThanOrEqual(60);
+            expect(clientInstances[0].invoke).toHaveBeenCalledTimes(1);
+        });
+
+        test('concurrent send-code for the same phone shares one Telegram request and one session', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+
+            const [a, b] = await Promise.all([
+                service.sendCode('+919999000103'),
+                service.sendCode('+919999000103'),
+            ]);
+
+            expect(a.phoneCodeHash).toBe('hash-a');
+            expect(b.phoneCodeHash).toBe('hash-a');
+            expect(clientInstances).toHaveLength(1);
+            expect(generateTGConfigMock).toHaveBeenCalledTimes(1);
+        });
+
+        test('an old session timer does not tear down a newer session for the same phone', async () => {
+            jest.useFakeTimers();
+            try {
+                mockConfig();
+                queueConnectSuccess();
+                queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+                const service = makeService();
+                await service.sendCode('+919999000104');
+                const first = getActiveSignupSessions().get('919999000104');
+
+                const replacement = { ...first, timeoutId: undefined };
+                getActiveSignupSessions().set('919999000104', replacement);
+                jest.advanceTimersByTime(300001);
+                await Promise.resolve();
+
+                expect(getActiveSignupSessions().get('919999000104')).toBe(replacement);
+                getActiveSignupSessions().delete('919999000104');
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('FloodWaitError (errorMessage FLOOD + seconds) maps to a real wait and short-circuits the next send', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'FLOOD', seconds: 7200 });
+            const service = makeService();
+
+            await expect(service.sendCode('+919999000105')).rejects.toThrow('Please try again in 2 hours');
+            await expect(service.sendCode('+919999000105')).rejects.toThrow('Please try again in 2 hours');
+            expect(generateTGConfigMock).toHaveBeenCalledTimes(1);
+            expect(clientInstances).toHaveLength(1);
+        });
+
+        test('banned numbers are cached so a retry does not open another Telegram connection', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'PHONE_NUMBER_BANNED' });
+            const service = makeService();
+
+            await expect(service.sendCode('+919999000106')).rejects.toThrow('banned');
+            await expect(service.sendCode('+919999000106')).rejects.toThrow('banned');
+            expect(clientInstances).toHaveLength(1);
+        });
+
+        test('a failed fresh send destroys its Telegram client', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'SOMETHING_WEIRD' });
+            const service = makeService();
+
+            await expect(service.sendCode('+919999000107')).rejects.toThrow('Unable to send OTP');
+            expect(clientInstances[0].destroy).toHaveBeenCalled();
+            expect(getActiveSignupSessions().has('919999000107')).toBe(false);
+        });
+
+        test('PHONE_NUMBER_FLOOD gets its own message', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'PHONE_NUMBER_FLOOD' });
+            const service = makeService();
+            await expect(service.sendCode('+919999000108')).rejects.toThrow('Too many code requests');
+        });
+
+        test('SetUpEmailRequired is rejected with an actionable message', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeSetUpEmailRequired() });
+            const service = makeService();
+            await expect(service.sendCode('+919999000109')).rejects.toThrow('login email');
+        });
+
+        test('firebase_sms delivery is switched to the next channel immediately', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeFirebaseSms(), nextType: new CodeTypeSms() });
+            queueInvokeResult({ phoneCodeHash: 'hash-b', type: new SentCodeTypeSms() });
+            const service = makeService();
+
+            const result = await service.sendCode('+919999000110');
+
+            expect(result.phoneCodeHash).toBe('hash-b');
+            expect(result.codeType).toBe('sms');
+            expect(result.message).toBe('Code sent via SMS');
+            expect(clientInstances[0].invoke.mock.calls[1][0]).toBeInstanceOf(ResendCode);
+        });
+
+        test('phone normalisation accepts spaces, dashes and 00 prefix', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('0091 99990-00111');
+            expect(getActiveSignupSessions().has('919999000111')).toBe(true);
+        });
+
+        test('code length follows what Telegram reported', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            const sms = Object.assign(new SentCodeTypeSms(), { length: 6 });
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: sms });
+            const service = makeService();
+            const sent = await service.sendCode('+919999000112');
+            expect(sent.codeLength).toBe(6);
+
+            await expect(service.verifyCode('+919999000112', '12345')).rejects.toThrow('Code must be exactly 6 digits');
+            expect(clientInstances[0].invoke).toHaveBeenCalledTimes(1);
+        });
+
+        test('expired code drops the session and tells the frontend the session expired', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000113');
+
+            clientInstances[0].invoke.mockImplementationOnce(async () => { throw { errorMessage: 'PHONE_CODE_EXPIRED' }; });
+
+            const error = await service.verifyCode('+919999000113', '12345').catch(e => e);
+            expect(error.message.toLowerCase()).toContain('session expired');
+            expect(getActiveSignupSessions().has('919999000113')).toBe(false);
+        });
+
+        test('invalid code keeps the session so the user can retry', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000114');
+
+            clientInstances[0].invoke.mockImplementationOnce(async () => { throw { errorMessage: 'PHONE_CODE_INVALID' }; });
+            await expect(service.verifyCode('+919999000114', '12345')).rejects.toThrow('Invalid OTP');
+            expect(getActiveSignupSessions().has('919999000114')).toBe(true);
+        });
+
+        test('2FA step: returns the hint, then the password retry skips SignIn', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+            const service = makeService(usersService);
+            await service.sendCode('+919999000115');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'p1', hint: 'pet name' }));
+
+            const first = await service.verifyCode('+919999000115', '12345');
+            expect(first).toEqual({ status: 400, message: 'Two-factor authentication required', requires2FA: true, passwordHint: 'pet name' });
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => ({ srp: 'p2' }))
+                .mockImplementationOnce(async () => ({ user: { phone: '919999000115', id: 'tg-115' } }));
+
+            const second = await service.verifyCode('+919999000115', '12345', 'pw');
+            expect(second.status).toBe(200);
+            const requests = clientInstances[0].invoke.mock.calls.map(c => c[0]);
+            expect(requests.filter(r => r instanceof SignIn)).toHaveLength(1);
+            expect(computeCheckMock).toHaveBeenCalledWith({ srp: 'p2' }, 'pw');
+        });
+
+        test('wrong 2FA password keeps the session for another attempt', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000116');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'p1' }))
+                .mockImplementationOnce(async () => { throw { errorMessage: 'PASSWORD_HASH_INVALID' }; });
+
+            await expect(service.verifyCode('+919999000116', '12345', 'bad')).rejects.toThrow('Incorrect 2FA password');
+            expect(getActiveSignupSessions().get('919999000116')?.stage).toBe('awaiting_password');
+        });
+
+        test('SRP_ID_INVALID refetches password params once and succeeds', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000117');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'stale' }))
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SRP_ID_INVALID' }; })
+                .mockImplementationOnce(async () => ({ srp: 'fresh' }))
+                .mockImplementationOnce(async () => ({ user: { phone: '919999000117', id: 'tg-117' } }));
+
+            const result = await service.verifyCode('+919999000117', '12345', 'pw');
+            expect(result.status).toBe(200);
+            expect(computeCheckMock).toHaveBeenLastCalledWith({ srp: 'fresh' }, 'pw');
+        });
+
+        test('PHONE_PASSWORD_FLOOD is reported as too many attempts, not a wrong password', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000118');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'p1' }))
+                .mockImplementationOnce(async () => { throw { errorMessage: 'PHONE_PASSWORD_FLOOD' }; });
+
+            await expect(service.verifyCode('+919999000118', '12345', 'pw')).rejects.toThrow('Too many password attempts');
+        });
+
+        test('PHONE_NUMBER_UNOCCUPIED on SignIn falls through to SignUp', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const usersService = { create: jest.fn().mockResolvedValue(undefined) };
+            const service = makeService(usersService);
+            await service.sendCode('+919999000119');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'PHONE_NUMBER_UNOCCUPIED' }; })
+                .mockImplementationOnce(async () => ({ user: { phone: '919999000119', id: 'tg-119' } }));
+
+            const result = await service.verifyCode('+919999000119', '12345');
+            expect(result.status).toBe(200);
+            expect(clientInstances[0].invoke.mock.calls[2][0]).toBeInstanceOf(SignUp);
+        });
+
+        test('FIRSTNAME_INVALID on SignUp retries with a plain name', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000120');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => new AuthorizationSignUpRequired())
+                .mockImplementationOnce(async () => { throw { errorMessage: 'FIRSTNAME_INVALID' }; })
+                .mockImplementationOnce(async () => ({ user: { phone: '919999000120', id: 'tg-120' } }));
+
+            const result = await service.verifyCode('+919999000120', '12345');
+            expect(result.status).toBe(200);
+            expect(clientInstances[0].invoke.mock.calls[3][0].args.firstName).toBe('User');
+        });
+
+        test('signup clients never sleep through flood waits inside the HTTP request', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+            const service = makeService();
+            await service.sendCode('+919999000121');
+            expect(clientInstances[0].params.floodSleepThreshold).toBeLessThanOrEqual(3);
+            expect(clientInstances[0].params.deviceModel).toBe('device-a');
+        });
+    });
+    describe('branch coverage', () => {
+        const SENT_APP = () => ({ phoneCodeHash: 'hash-a', type: new SentCodeTypeApp() });
+
+        test('learns the home DC from a send and routes the next fresh connect for that prefix there', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult((client: FakeTelegramClient) => { client.session.dcId = 5; return SENT_APP(); });
+            const service = makeService();
+            await service.sendCode('+919999000201');
+            expect((TgSignupService as any).homeDcByPrefix.get('919')).toBe(5);
+            expect(clientInstances[0].stringSession.dc).toBeUndefined();
+
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            await service.sendCode('+919999000202');
+            expect((clientInstances[1].stringSession as StringSession).dc).toEqual({ dcId: 5, ip: '91.108.56.130', port: 80 });
+        });
+
+        test('DC routing is off when TG_SIGNUP_DC_ROUTING=false', async () => {
+            process.env.TG_SIGNUP_DC_ROUTING = 'false';
+            try {
+                (TgSignupService as any).homeDcByPrefix.set('919', 5);
+                mockConfig();
+                queueConnectSuccess();
+                queueInvokeResult((client: FakeTelegramClient) => { client.session.dcId = 2; return SENT_APP(); });
+                const service = makeService();
+                await service.sendCode('+919999000203');
+                expect(clientInstances[0].stringSession.dc).toBeUndefined();
+                expect((TgSignupService as any).homeDcByPrefix.get('919')).toBe(5);
+            } finally {
+                delete process.env.TG_SIGNUP_DC_ROUTING;
+            }
+        });
+
+        test('an unknown DC id is never learned', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult((client: FakeTelegramClient) => { client.session.dcId = 99; return SENT_APP(); });
+            const service = makeService();
+            await service.sendCode('+919999000204');
+            expect((TgSignupService as any).homeDcByPrefix.size).toBe(0);
+        });
+
+        test('reject cache entries expire, and cleanup prunes expired ones', async () => {
+            const cache: Map<string, any> = (TgSignupService as any).rejectCache;
+            cache.set('919999000205', { until: Date.now() - 1, message: 'old' });
+            cache.set('919999000206', { until: Date.now() - 1, message: 'old' });
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+
+            const sent = await service.sendCode('+919999000205');
+            expect(sent.phoneCodeHash).toBe('hash-a');
+            expect(cache.has('919999000205')).toBe(false);
+
+            await (service as any).cleanupStaleSessions();
+            expect(cache.has('919999000206')).toBe(false);
+        });
+
+        test('reject cache evicts the oldest entry when full, and ignores zero TTLs', () => {
+            const cache: Map<string, any> = (TgSignupService as any).rejectCache;
+            for (let i = 0; i < 5000; i++) cache.set(`p${i}`, { until: Date.now() + 60000, message: 'x' });
+            const service = makeService();
+            (service as any).rememberRejection('newest', 'msg', 1000);
+            expect(cache.size).toBe(5000);
+            expect(cache.has('p0')).toBe(false);
+            expect(cache.has('newest')).toBe(true);
+
+            (service as any).rememberRejection('zero', 'msg', 0);
+            expect(cache.has('zero')).toBe(false);
+        });
+
+        test('SentCodePaymentRequired is rejected with an actionable message', async () => {
+            class SentCodePaymentRequired { phoneCodeHash = 'hash-a'; }
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(new SentCodePaymentRequired());
+            const service = makeService();
+            await expect(service.sendCode('+919999000207')).rejects.toThrow('official Telegram app');
+            expect(clientInstances[0].destroy).toHaveBeenCalled();
+        });
+
+        test('a SentCode without phoneCodeHash is a generic send failure', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ type: new SentCodeTypeApp() });
+            const service = makeService();
+            await expect(service.sendCode('+919999000208')).rejects.toThrow('Unable to send OTP. Please try again');
+            expect(getActiveSignupSessions().has('919999000208')).toBe(false);
+        });
+
+        test('SEND_CODE_UNAVAILABLE gets its own message', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'SEND_CODE_UNAVAILABLE' });
+            const service = makeService();
+            await expect(service.sendCode('+919999000209')).rejects.toThrow('No more ways to resend');
+        });
+
+        test('rejected app credentials fall back to the generic message', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'API_ID_INVALID' });
+            const service = makeService();
+            await expect(service.sendCode('+919999000210')).rejects.toThrow('Unable to send OTP. Please try again');
+        });
+
+        test('a terminal error during resend does not open a fresh connection', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ ...SENT_APP(), nextType: new CodeTypeSms() });
+            const service = makeService();
+            await service.sendCode('+919999000211');
+
+            queueInvokeError({ errorMessage: 'FLOOD', seconds: 30 });
+            await expect(service.sendCode('+919999000211')).rejects.toThrow('Please wait a few minutes before trying again');
+            expect(generateTGConfigMock).toHaveBeenCalledTimes(1);
+            expect(clientInstances).toHaveLength(1);
+            // The code already delivered is still valid, so the session survives a flood on resend.
+            expect(getActiveSignupSessions().has('919999000211')).toBe(true);
+        });
+
+        test('a ban during resend drops the session', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ ...SENT_APP(), nextType: new CodeTypeSms() });
+            const service = makeService();
+            await service.sendCode('+919999000230');
+
+            queueInvokeError({ errorMessage: 'PHONE_NUMBER_BANNED' });
+            await expect(service.sendCode('+919999000230')).rejects.toThrow('banned');
+            expect(getActiveSignupSessions().has('919999000230')).toBe(false);
+        });
+
+        test('a failed connect on a fresh send destroys the client', async () => {
+            mockConfig();
+            queueConnectFailure('dc unreachable');
+            const service = makeService();
+            await expect(service.sendCode('+919999000231')).rejects.toThrow('Unable to send OTP. Please try again');
+            expect(clientInstances[0].destroy).toHaveBeenCalled();
+            expect(getActiveSignupSessions().has('919999000231')).toBe(false);
+        });
+
+        test('DC routing is skipped for IPv6/WSS transports', async () => {
+            (TgSignupService as any).homeDcByPrefix.set('919', 5);
+            generateTGConfigMock.mockResolvedValue({ apiId: 1001, apiHash: 'hash-1', params: { deviceModel: 'device-a', useWSS: true } });
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000232');
+            expect(clientInstances[0].stringSession.dc).toBeUndefined();
+        });
+
+        test('flood wait formatting: minutes band', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'FLOOD_WAIT_900' });
+            const service = makeService();
+            await expect(service.sendCode('+919999000212')).rejects.toThrow('Please try again in 15 minutes');
+        });
+
+        test('flood wait formatting: singular hour', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeError({ errorMessage: 'FLOOD', seconds: 3600 });
+            const service = makeService();
+            await expect(service.sendCode('+919999000213')).rejects.toThrow('Please try again in 1 hour');
+        });
+
+        test('send-code while awaiting the 2FA password starts a fresh signup', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000214');
+            getActiveSignupSessions().get('919999000214').stage = 'awaiting_password';
+
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-new', type: new SentCodeTypeApp() });
+            const sent = await service.sendCode('+919999000214');
+
+            expect(sent.phoneCodeHash).toBe('hash-new');
+            expect(clientInstances).toHaveLength(2);
+            expect(clientInstances[0].destroy).toHaveBeenCalled();
+            expect(getActiveSignupSessions().get('919999000214').stage).toBe('code_sent');
+        });
+
+        test('firebase_sms stays as-is when switching channels fails', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeFirebaseSms(), nextType: new CodeTypeSms() });
+            queueInvokeError({ errorMessage: 'SEND_CODE_UNAVAILABLE' });
+            const service = makeService();
+            const result = await service.sendCode('+919999000215');
+            expect(result.codeType).toBe('firebase_sms');
+            expect(result.phoneCodeHash).toBe('hash-a');
+        });
+
+        test('password step without a password re-asks for it without calling Telegram', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000216');
+            const session = getActiveSignupSessions().get('919999000216');
+            session.stage = 'awaiting_password';
+            session.passwordHint = 'h';
+            session.client.connected = true;
+
+            const result = await service.verifyCode('+919999000216', 'anything');
+            expect(result).toEqual({ status: 400, message: 'Two-factor authentication required', requires2FA: true, passwordHint: 'h' });
+            expect(clientInstances[0].invoke).toHaveBeenCalledTimes(1);
+        });
+
+        test('wrong password message includes the hint when one is set', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000217');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'p1', hint: 'city' }))
+                .mockImplementationOnce(async () => { throw { errorMessage: 'PASSWORD_HASH_INVALID' }; });
+
+            await expect(service.verifyCode('+919999000217', '12345', 'bad')).rejects.toThrow('Incorrect 2FA password (hint: city)');
+        });
+
+        test('GetPassword failure on the 2FA prompt still asks for the password', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000218');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => { throw new Error('getpassword down'); });
+
+            const result = await service.verifyCode('+919999000218', '12345');
+            expect(result.requires2FA).toBe(true);
+            expect(result.passwordHint).toBeUndefined();
+        });
+
+        test('flood during the password check is a wait message', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000219');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'p1' }))
+                .mockImplementationOnce(async () => { throw { errorMessage: 'FLOOD', seconds: 10 }; });
+
+            await expect(service.verifyCode('+919999000219', '12345', 'pw')).rejects.toThrow('Please wait a few minutes before trying again');
+        });
+
+        test('banned number at SignIn drops the session', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000220');
+
+            clientInstances[0].invoke.mockImplementationOnce(async () => { throw { errorMessage: 'PHONE_NUMBER_BANNED' }; });
+            await expect(service.verifyCode('+919999000220', '12345')).rejects.toThrow('banned');
+            expect(getActiveSignupSessions().has('919999000220')).toBe(false);
+        });
+
+        test('flood at SignIn keeps the session and returns a wait message', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000221');
+
+            clientInstances[0].invoke.mockImplementationOnce(async () => { throw { errorMessage: 'FLOOD', seconds: 86400 }; });
+            await expect(service.verifyCode('+919999000221', '12345')).rejects.toThrow('Please try again in 24 hours');
+            expect(getActiveSignupSessions().has('919999000221')).toBe(true);
+        });
+
+        test('AUTH_RESTART at SignIn is reported as an expired session', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000222');
+
+            clientInstances[0].invoke.mockImplementationOnce(async () => { throw { errorMessage: 'AUTH_RESTART' }; });
+            const error = await service.verifyCode('+919999000222', '12345').catch(e => e);
+            expect(error.message.toLowerCase()).toContain('session expired');
+        });
+
+        test('word codes are passed to SignIn verbatim for SmsWord deliveries', async () => {
+            class SentCodeTypeSmsWord {}
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult({ phoneCodeHash: 'hash-a', type: new SentCodeTypeSmsWord() });
+            const service = makeService();
+            const sent = await service.sendCode('+919999000223');
+            expect(sent.codeType).toBe('sms_word');
+
+            queueInvokeResult({ user: { phone: '919999000223', id: 'tg-223' } });
+            const result = await service.verifyCode('+919999000223', '  Apple  ');
+            expect(result.status).toBe(200);
+            expect(clientInstances[0].invoke.mock.calls[1][0].args.phoneCode).toBe('Apple');
+        });
+
+        test('a word code is rejected for a digit-code delivery', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000224');
+            await expect(service.verifyCode('+919999000224', 'apple')).rejects.toThrow('Code must be exactly 5 digits');
+        });
+
+        test('codes typed with spaces or dashes are normalised', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000225');
+            queueInvokeResult({ user: { phone: '919999000225', id: 'tg-225' } });
+            await service.verifyCode('+919999000225', '12-3 45');
+            expect(clientInstances[0].invoke.mock.calls[1][0].args.phoneCode).toBe('12345');
+        });
+
+        test('sign-up accepts the terms of service when Telegram presents them', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            await service.sendCode('+919999000226');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => Object.assign(new AuthorizationSignUpRequired(), { termsOfService: { id: { data: 'tos-1' } } }))
+                .mockImplementationOnce(async () => ({ user: { phone: '919999000226', id: 'tg-226' } }))
+                .mockImplementationOnce(async () => { throw new Error('tos failed'); });
+
+            const result = await service.verifyCode('+919999000226', '12345');
+            expect(result.status).toBe(200);
+            const tos = clientInstances[0].invoke.mock.calls[3][0];
+            expect(tos).toBeInstanceOf(AcceptTermsOfService);
+            expect(tos.args.id).toEqual({ data: 'tos-1' });
+        });
+
+        test('the expiry timer removes the session it was created for', async () => {
+            jest.useFakeTimers();
+            try {
+                mockConfig();
+                queueConnectSuccess();
+                queueInvokeResult(SENT_APP());
+                const service = makeService();
+                await service.sendCode('+919999000227');
+                const client = clientInstances[0];
+
+                jest.advanceTimersByTime(300001);
+                await Promise.resolve();
+                await Promise.resolve();
+
+                expect(getActiveSignupSessions().has('919999000227')).toBe(false);
+                expect(client.destroy).toHaveBeenCalled();
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('a verify waits for an in-flight send for the same phone', async () => {
+            mockConfig();
+            queueConnectSuccess();
+            let release: (value: unknown) => void = () => undefined;
+            const gate = new Promise(resolve => { release = resolve; });
+            queueInvokeResult(async () => { await gate; return SENT_APP(); });
+            const service = makeService();
+
+            const sending = service.sendCode('+919999000228');
+            queueInvokeResult({ user: { phone: '919999000228', id: 'tg-228' } });
+            const verifying = service.verifyCode('+919999000228', '12345');
+            await Promise.resolve();
+            release(undefined);
+
+            await sending;
+            const result = await verifying;
+            expect(result.status).toBe(200);
+        });
     });
 });
