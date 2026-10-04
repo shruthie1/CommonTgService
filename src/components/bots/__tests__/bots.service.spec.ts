@@ -1137,6 +1137,20 @@ describe('BotsService - resolveChannelAdminMobile finds admins beyond the 200-ro
     await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
   });
 
+  test('an EMPTY About from the first viewer falls through to the next viewer', async () => {
+    wire();
+    process.env.channelManagerPrimary = '910000000009';
+    process.env.channelManagerBackup = '910000000008';
+    const tg: any = mockModuleRef.get({ name: 'TelegramService' });
+    tg.getGroupAdmins = jest.fn(async () => [{ userId: '999999', rank: 'creator', permissions: {} }]); // no admin of ours
+    tg.getChannelAbout = jest.fn().mockResolvedValueOnce('').mockResolvedValueOnce(`created by ${ADMIN.mobile}`);
+    try {
+      await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
+    } finally {
+      delete process.env.channelManagerPrimary; delete process.env.channelManagerBackup;
+    }
+  });
+
   test('a creator mobile named in the channel About outside the window is selected', async () => {
     wire(`created by ${ADMIN.mobile}`);
     await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);

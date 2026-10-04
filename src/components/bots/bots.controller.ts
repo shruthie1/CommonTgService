@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { BotsService } from './bots.service';
 import { SendRateLimitGuard } from '../../guards/send-rate-limit.guard';
@@ -65,10 +65,19 @@ export class BotsController {
   @ApiQuery({ name: 'dryRun', required: false })
   @ApiQuery({ name: 'async', required: false })
   async reconcilePending(@Query('limit') limit?: string, @Query('category') category?: string, @Query('dryRun') dryRun?: string, @Query('async') async?: string) {
+    // qs can turn `category[$ne]=x` into an object (Mongo operator injection) — accept only a
+    // known category string; and only a finite integer limit (the service caps it at 10).
+    if (category !== undefined && (typeof category !== 'string' || !(Object.values(ChannelCategory) as string[]).includes(category))) {
+      throw new BadRequestException(`category must be one of: ${Object.values(ChannelCategory).join(', ')}`);
+    }
+    const parsedLimit = limit === undefined ? 1 : Number(limit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+      throw new BadRequestException('limit must be a positive integer (max 10)');
+    }
     const options = {
       dryRun: String(dryRun ?? '').toLowerCase() === 'true' || dryRun === '1',
-      pendingLimit: limit ? Number(limit) : 1,
-      pendingCategory: category || undefined,
+      pendingLimit: parsedLimit,
+      pendingCategory: category,
     };
     if (String(async ?? '').toLowerCase() === 'true' || async === '1') {
       void this.botsService.reconcilePendingAdminBotsNow(options).catch(() => undefined);

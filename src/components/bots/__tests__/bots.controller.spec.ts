@@ -134,3 +134,27 @@ describe('BotsController - media category routes', () => {
     await expect((c as any)[method](ChannelCategory.PROM_LOGS2, 'bid', { photo: 'p', video: 'v', audio: 'a', document: 'd', voice: 'vo', animation: 'an', sticker: 's', media: [] })).rejects.toThrow('does not belong to category');
   });
 });
+
+describe('BotsController - reconcile-pending input validation', () => {
+  const svc = () => makeService({ reconcilePendingAdminBotsNow: jest.fn().mockResolvedValue({ failures: [], proposedActions: [], dryRun: false }) });
+
+  test('rejects a non-numeric or non-positive limit', async () => {
+    const s = svc(); const c = new BotsController(s as any);
+    await expect(c.reconcilePending('abc')).rejects.toThrow(/limit/);
+    await expect(c.reconcilePending('0')).rejects.toThrow(/limit/);
+    expect(s.reconcilePendingAdminBotsNow).not.toHaveBeenCalled();
+  });
+
+  test('rejects an operator object or unknown category (qs `category[$ne]=x`)', async () => {
+    const s = svc(); const c = new BotsController(s as any);
+    await expect(c.reconcilePending('3', { $ne: 'x' } as any)).rejects.toThrow(/category/);
+    await expect(c.reconcilePending('3', 'NOT_A_CATEGORY')).rejects.toThrow(/category/);
+    expect(s.reconcilePendingAdminBotsNow).not.toHaveBeenCalled();
+  });
+
+  test('passes a valid category and limit through', async () => {
+    const s = svc(); const c = new BotsController(s as any);
+    await c.reconcilePending('3', ChannelCategory.VC_NOTIFICATIONS, 'true');
+    expect(s.reconcilePendingAdminBotsNow).toHaveBeenCalledWith({ dryRun: true, pendingLimit: 3, pendingCategory: ChannelCategory.VC_NOTIFICATIONS });
+  });
+});

@@ -9,8 +9,39 @@ import {
   UserStatDaily,
   UserStatDailyDocument,
 } from './schemas/daily-analytics.schema';
+import { AnalyticsPgReader } from './analytics-pg.reader';
 
 export type DailyMetric = 'promote' | 'reaction' | 'user';
+
+/**
+ * userStatsDaily.revenue is $inc'd on every credit event and is measured ~3.31x inflated, so it is
+ * never reported. `revenue` stays in the response (number, same key) but is sourced only from
+ * Postgres payment_event, which has data from this IST day onward. Otherwise it is 0 and
+ * `revenueSource` says so: 'payment_event' | 'payment_event_partial' (window starts before
+ * REVENUE_FROM_DAY) | 'unavailable' (0 means "unknown", not "no revenue").
+ */
+export const REVENUE_FROM_DAY = '2026-10-04';
+export type RevenueSource = 'payment_event' | 'payment_event_partial' | 'unavailable';
+
+/** Mongo field -> daily_client column. Fixed map: column names never come from request input. */
+const PG_COLUMNS: Record<DailyMetric, Record<string, string>> = {
+  promote: { sent: 'sent', success: 'delivered', failed: 'failed', banned: 'banned' },
+  reaction: {
+    success: 'reactions_success',
+    failed: 'reactions_failed',
+    restricted: 'reactions_restricted',
+    floods: 'reactions_floods',
+  },
+  user: { newUsers: 'new_users', active: 'active_users', paid: 'payers' },
+};
+
+/**
+ * Days still inside Mongo's 14-day TTL (daily collections) are read from Mongo; 13 leaves a day of
+ * margin at the TTL edge. Postgres serves only older days.
+ */
+export const MONGO_RETENTION_DAYS = 13;
+
+const num = (v: unknown): number => Number(v) || 0;
 
 /**
  * Read-only access to the TTL-based daily analytics collections that the promote-clients and
@@ -23,6 +54,7 @@ export class DailyAnalyticsService {
     @InjectModel(PromoteStatDaily.name) private promoteModel: Model<PromoteStatDailyDocument>,
     @InjectModel(ReactionStatDaily.name) private reactionModel: Model<ReactionStatDailyDocument>,
     @InjectModel(UserStatDaily.name) private userModel: Model<UserStatDailyDocument>,
+    private readonly pg: AnalyticsPgReader,
   ) {}
 
   private modelFor(metric: DailyMetric): Model<any> {
@@ -33,7 +65,7 @@ export class DailyAnalyticsService {
 
   private numericFields(metric: DailyMetric): string[] {
     if (metric === 'reaction') return ['success', 'failed', 'restricted', 'floods'];
-    if (metric === 'user') return ['newUsers', 'active', 'paid', 'revenue'];
+    if (metric === 'user') return ['newUsers', 'active', 'paid'];
     return ['sent', 'success', 'failed', 'banned'];
   }
 
@@ -55,34 +87,103 @@ export class DailyAnalyticsService {
     if (clientId) filter.clientId = clientId;
     if (namespace) filter.namespace = namespace;
     if (mobile) filter.mobile = mobile;
-    return this.modelFor(metric)
+    const found = await this.modelFor(metric)
       .find(filter, { _id: 0, expireAt: 0, createdAt: 0 })
       .sort({ date: 1, clientId: 1 })
       .lean()
       .exec();
+    // Per-mobile rows have no truthful revenue source (payment_event has no mobile).
+    return metric === 'user'
+      ? found.map((r: any) => ({ ...r, revenue: 0, revenueSource: 'unavailable' as RevenueSource }))
+      : found;
   }
 
-  /** Per-day fleet totals for a metric (summed across all clients), gap-filled with zeroes. */
-  async dailyTotals(metric: DailyMetric, days = 14) {
-    const dates = this.lastNDates(days);
+  // ── Postgres path ────────────────────────────────────────────────────────────────────────────
+
+  private pgSelect(metric: DailyMetric): string {
+    return Object.entries(PG_COLUMNS[metric])
+      .map(([key, col]) => `COALESCE(SUM(${col}), 0)::bigint AS "${key}"`)
+      .join(', ');
+  }
+
+  /** payment_event revenue per (IST day, client). Undefined if PG unavailable. */
+  private async pgRevenue(dates: string[]): Promise<Map<string, Map<string, number>> | undefined> {
+    const from = dates.find((d) => d >= REVENUE_FROM_DAY);
+    const out = new Map<string, Map<string, number>>();
+    if (!from) return out;
+    const rows = await this.pg.query<{ d: string; client_id: string; amt: string }>(
+      `SELECT to_char((ts AT TIME ZONE 'Asia/Kolkata')::date, 'YYYY-MM-DD') AS d, client_id,
+              SUM(amount)::bigint AS amt
+         FROM payment_event
+        WHERE ts >= $1::timestamptz AND NOT is_cheat AND amount > 0
+        GROUP BY 1, 2`,
+      [`${from}T00:00:00+05:30`],
+    );
+    if (!rows) return undefined;
+    const set = new Set(dates);
+    for (const r of rows) {
+      if (!set.has(r.d)) continue;
+      if (!out.has(r.d)) out.set(r.d, new Map());
+      out.get(r.d)!.set(r.client_id, num(r.amt));
+    }
+    return out;
+  }
+
+  private windowRevenueSource(dates: string[]): RevenueSource {
+    if (dates[0] >= REVENUE_FROM_DAY) return 'payment_event';
+    return dates[dates.length - 1] >= REVENUE_FROM_DAY ? 'payment_event_partial' : 'unavailable';
+  }
+
+  /** IST days at or after this are still inside Mongo's 14-day TTL: Mongo is authoritative for them. */
+  private mongoCutoff(): string {
+    return this.lastNDates(MONGO_RETENTION_DAYS)[0];
+  }
+
+  private async pgDailyRows(metric: DailyMetric, dates: string[]) {
+    if (!dates.length) return [] as Record<string, unknown>[];
+    return this.pg.query<Record<string, unknown>>(
+      `SELECT to_char(day, 'YYYY-MM-DD') AS d, ${this.pgSelect(metric)}
+         FROM daily_client WHERE day = ANY($1::date[]) GROUP BY day`,
+      [dates],
+    );
+  }
+
+  private async mongoDailyTotals(metric: DailyMetric, dates: string[]) {
     const fields = this.numericFields(metric);
     const group: Record<string, unknown> = { _id: '$date' };
     for (const f of fields) group[f] = { $sum: `$${f}` };
     const agg = await this.modelFor(metric)
       .aggregate([{ $match: { date: { $in: dates } } }, { $group: group }, { $sort: { _id: 1 } }] as any[])
       .exec();
-    const byDate = new Map(agg.map((d: any) => [d._id, d]));
+    return new Map<string, any>(agg.map((d: any) => [d._id, d]));
+  }
+
+  /** Per-day totals: Mongo for days inside its retention, Postgres only for older days. */
+  private async hybridDailyTotals(metric: DailyMetric, dates: string[]) {
+    const cutoff = this.mongoCutoff();
+    const old = dates.filter((d) => d < cutoff);
+    const recent = dates.filter((d) => d >= cutoff);
+    const pgRows = await this.pgDailyRows(metric, old);
+    if (!pgRows) return undefined;
+    const revenue = metric === 'user' ? await this.pgRevenue(dates) : new Map<string, Map<string, number>>();
+    if (!revenue) return undefined;
+    const pgByDate = new Map(pgRows.map((r) => [String(r.d), r]));
+    const mongoByDate = recent.length ? await this.mongoDailyTotals(metric, recent) : new Map<string, any>();
+    const fields = this.numericFields(metric);
     return dates.map((date) => {
-      const row = byDate.get(date) || {};
+      const row: any = (date < cutoff ? pgByDate : mongoByDate).get(date) || {};
       const out: Record<string, unknown> = { date };
-      for (const f of fields) out[f] = (row as any)[f] || 0;
+      for (const f of fields) out[f] = num(row[f]);
+      if (metric === 'user') {
+        const perClient = revenue.get(date);
+        out.revenue = perClient ? [...perClient.values()].reduce((a, b) => a + b, 0) : 0;
+        out.revenueSource = (date >= REVENUE_FROM_DAY ? 'payment_event' : 'unavailable') as RevenueSource;
+      }
       return out;
     });
   }
 
-  /** Per-client totals for a metric over the last N days (leaderboard/table view). */
-  async byClient(metric: DailyMetric, days = 14, namespace?: string) {
-    const dates = this.lastNDates(days);
+  private async mongoByClientRows(metric: DailyMetric, dates: string[], namespace?: string) {
     const fields = this.numericFields(metric);
     const match: Record<string, unknown> = { date: { $in: dates } };
     if (namespace) match.namespace = namespace;
@@ -91,9 +192,96 @@ export class DailyAnalyticsService {
     const agg = await this.modelFor(metric)
       .aggregate([{ $match: match }, { $group: group }, { $sort: { _id: 1 } }] as any[])
       .exec();
+    return agg.map((d: any) => ({ ...d, client_id: d._id }));
+  }
+
+  /** Per-client totals: Mongo rows for recent days + Postgres rows for older days, summed (no day twice). */
+  private async hybridByClient(metric: DailyMetric, dates: string[], namespace?: string) {
+    const cutoff = this.mongoCutoff();
+    const old = dates.filter((d) => d < cutoff);
+    const recent = dates.filter((d) => d >= cutoff);
+    const fields = this.numericFields(metric);
+    let pgRows: Record<string, unknown>[] = [];
+    if (old.length) {
+      const params: unknown[] = [old];
+      let nsClause = '';
+      if (namespace) {
+        params.push(namespace);
+        nsClause = 'AND namespace = $2';
+      }
+      const r = await this.pg.query<Record<string, unknown>>(
+        `SELECT client_id, ${this.pgSelect(metric)}
+           FROM daily_client WHERE day = ANY($1::date[]) ${nsClause} GROUP BY client_id`,
+        params,
+      );
+      if (!r) return undefined;
+      pgRows = r;
+    }
+    // payment_event carries no namespace; it is tg-aut revenue.
+    const revenueApplies = metric === 'user' && (!namespace || namespace === 'tg-aut');
+    const revenue = revenueApplies ? await this.pgRevenue(dates) : new Map<string, Map<string, number>>();
+    if (!revenue) return undefined;
+    const perClientRevenue = new Map<string, number>();
+    for (const m of revenue.values()) for (const [c, a] of m) perClientRevenue.set(c, (perClientRevenue.get(c) || 0) + a);
+    const mongoRows = recent.length ? await this.mongoByClientRows(metric, recent, namespace) : [];
+
+    const totals = new Map<string, Record<string, number>>();
+    const add = (id: unknown, row: any) => {
+      const key = String(id);
+      const t = totals.get(key) || Object.fromEntries(fields.map((f) => [f, 0]));
+      for (const f of fields) t[f] += num(row?.[f]);
+      totals.set(key, t);
+    };
+    for (const r of pgRows) add(r.client_id, r);
+    for (const r of mongoRows) add(r.client_id, r);
+    // A client with payments but no daily row yet still shows its revenue.
+    for (const c of perClientRevenue.keys()) if (!totals.has(c)) add(c, {});
+    const source: RevenueSource = revenueApplies ? this.windowRevenueSource(dates) : 'unavailable';
+    return [...totals.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([clientId, t]) => {
+        const out: Record<string, unknown> = { clientId, ...t };
+        if (metric === 'user') {
+          out.revenue = perClientRevenue.get(clientId) || 0;
+          out.revenueSource = source;
+        }
+        return out;
+      });
+  }
+
+  /** Per-day fleet totals for a metric (summed across all clients), gap-filled with zeroes. */
+  async dailyTotals(metric: DailyMetric, days = 14) {
+    const dates = this.lastNDates(days);
+    const hybrid = await this.hybridDailyTotals(metric, dates);
+    if (hybrid) return hybrid;
+    const fields = this.numericFields(metric);
+    const byDate = await this.mongoDailyTotals(metric, dates);
+    return dates.map((date) => {
+      const row = byDate.get(date) || {};
+      const out: Record<string, unknown> = { date };
+      for (const f of fields) out[f] = (row as any)[f] || 0;
+      if (metric === 'user') {
+        out.revenue = 0;
+        out.revenueSource = 'unavailable' as RevenueSource;
+      }
+      return out;
+    });
+  }
+
+  /** Per-client totals for a metric over the last N days (leaderboard/table view). */
+  async byClient(metric: DailyMetric, days = 14, namespace?: string) {
+    const dates = this.lastNDates(days);
+    const hybrid = await this.hybridByClient(metric, dates, namespace);
+    if (hybrid) return hybrid;
+    const fields = this.numericFields(metric);
+    const agg = await this.mongoByClientRows(metric, dates, namespace);
     return agg.map((d: any) => {
       const out: Record<string, unknown> = { clientId: d._id };
       for (const f of fields) out[f] = d[f] || 0;
+      if (metric === 'user') {
+        out.revenue = 0;
+        out.revenueSource = 'unavailable' as RevenueSource;
+      }
       return out;
     });
   }
@@ -122,6 +310,10 @@ export class DailyAnalyticsService {
     return agg.map((d: any) => {
       const out: Record<string, unknown> = { clientId: d._id.clientId, mobile: d._id.mobile };
       for (const f of fields) out[f] = d[f] || 0;
+      if (metric === 'user') {
+        out.revenue = 0;
+        out.revenueSource = 'unavailable' as RevenueSource;
+      }
       return out;
     });
   }

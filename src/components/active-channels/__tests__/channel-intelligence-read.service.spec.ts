@@ -189,6 +189,11 @@ describe('ChannelIntelligenceReadService.getOutcomeAnalytics', () => {
 
 // ─── buildConversionAwareSortStages (real Mongo — conversion-aware join-sort pipeline) ──────
 describe('ChannelIntelligenceReadService.buildConversionAwareSortStages', () => {
+  // These cases test SCORING with delete-heavy (0.3–0.5) channels; pin the legacy 0.5 hard gate so
+  // the default 0.3 exclusion (covered in channel-join-scoring-v2.spec) doesn't drop them first.
+  let savedRatio: string | undefined;
+  beforeEach(() => { savedRatio = process.env.CHANNEL_JOIN_MAX_DELETE_RATIO; process.env.CHANNEL_JOIN_MAX_DELETE_RATIO = '0.5'; });
+  afterEach(() => { if (savedRatio === undefined) delete process.env.CHANNEL_JOIN_MAX_DELETE_RATIO; else process.env.CHANNEL_JOIN_MAX_DELETE_RATIO = savedRatio; });
   let mongod: MongoMemoryServer;
   let connection: Connection;
   let ciModel: any;       // channelIntelligence

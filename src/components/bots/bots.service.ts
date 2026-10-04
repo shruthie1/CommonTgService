@@ -1242,7 +1242,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const proposedActions: string[] = [];
         const now = new Date();
         let stopPrivilegedWork = false;
-        const pendingLimit = Math.min(Math.max(1, Math.floor(options.pendingLimit ?? this.maxPendingAdminRepairsPerRun)), 10);
+        const requested = Number(options.pendingLimit ?? this.maxPendingAdminRepairsPerRun);
+        const pendingLimit = Number.isFinite(requested) ? Math.min(Math.max(1, Math.floor(requested)), 10) : this.maxPendingAdminRepairsPerRun;
+        if (options.pendingCategory !== undefined && typeof options.pendingCategory !== 'string') {
+            throw new Error('pendingCategory must be a string');
+        }
         const pending = await this.botModel
             .find({
                 lifecycle: 'pending_admin',
@@ -1761,8 +1765,9 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             let about = '';
             try { about = await this.telegramService.getChannelAbout(viewer, channelId); }
             catch { continue; }
+            if (!about) continue; // empty About (e.g. limited access hash) — try the next viewer
             for (const m of about.match(/\d{10,13}/g) || []) aboutMobiles.add(m);
-            break; // got the about (even if no mobile in it) — no need to re-read via others
+            break; // got a non-empty About — no need to re-read via others
         }
         const adminTgIds = (admins || []).map((a: any) => String(a?.userId ?? a?.id ?? '')).filter(Boolean);
         const healthy = await this.findHealthyAccountsByIdentity([...aboutMobiles], adminTgIds);

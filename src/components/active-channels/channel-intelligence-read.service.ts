@@ -38,6 +38,35 @@ export const PRIOR_TTL_MS = 15 * 60 * 1000; // fleet-prior cache max age
 export const PRIOR_RATE_FALLBACK = 0.03;   // used ONLY when fleet has zero sends
 export const SQ_PRIOR_RATE_FALLBACK = 0.82;// used ONLY when fleet has zero sends
 
+// ─── CHANNEL_JOIN_SCORING_V2 (default OFF; OFF == byte-identical legacy behaviour) ───
+// Two ranking/exclusion corrections for the buffer/promote join query (channelIntelligence only):
+//  1. conversion numerator can never exceed the resolved-send denominator (credited <= attempted;
+//     credited is fanned out to channels with few/no validated sends) and a channel with fewer than
+//     MIN_CONVERSION_EVIDENCE resolved sends cannot earn a conversion weight above neutral (1.0).
+//     The fleet prior uses the same clamp so numerator and prior stay consistent.
+//  (The delete-ratio exclusion is NOT part of this flag — see getJoinDeleteRatioLimit below.)
+export const JOIN_SCORING_V2_ENV = 'CHANNEL_JOIN_SCORING_V2';
+export const MIN_CONVERSION_EVIDENCE = 10;   // resolved sends needed before conversion weight may exceed 1.0
+export const DELETE_RATIO_EXCLUDE_V1 = 0.5;  // legacy CMS exclusion threshold (attempted >= 10)
+export const DELETE_RATIO_EXCLUDE_V2 = 0.3;  // tg-platform block threshold
+
+/**
+ * Hard delete-ratio exclusion for joins, decoupled from the scoring flag. Default 0.3 = tg-platform's
+ * own block threshold (production 2026-10-04: drops 203 activeChannels / 167 channels candidates whose
+ * deleted/attempted is 0.3–0.5, carrying 2.3% of credited DMs). Roll back with
+ * CHANNEL_JOIN_MAX_DELETE_RATIO=0.5 (the legacy CMS value). Only values in (0, 1] are honoured.
+ */
+export const JOIN_MAX_DELETE_RATIO_ENV = 'CHANNEL_JOIN_MAX_DELETE_RATIO';
+export function getJoinDeleteRatioLimit(): number {
+  const raw = Number((process.env[JOIN_MAX_DELETE_RATIO_ENV] ?? '').trim());
+  return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : DELETE_RATIO_EXCLUDE_V2;
+}
+
+export function isJoinScoringV2Enabled(): boolean {
+  const raw = (process.env[JOIN_SCORING_V2_ENV] ?? '').trim().toLowerCase();
+  return raw === 'true' || raw === '1';
+}
+
 export interface FleetPrior {
   PRIOR_RATE: number;
   SQ_PRIOR_RATE: number;
@@ -82,7 +111,7 @@ const EMPTY_OUTCOME_ANALYTICS: ChannelIntelligenceOutcomeAnalytics = {
 @Injectable()
 export class ChannelIntelligenceReadService {
   private readonly logger = new Logger(ChannelIntelligenceReadService.name);
-  private _priorCache: { value: FleetPrior; at: number } | null = null;
+  private _priorCache: { value: FleetPrior; at: number; v2: boolean } | null = null;
 
   constructor(@InjectModel('channelIntelligence') private readonly model: Model<any>) {}
 
@@ -93,7 +122,8 @@ export class ChannelIntelligenceReadService {
    */
   async getFleetPrior(ttlMs: number = PRIOR_TTL_MS): Promise<FleetPrior> {
     const now = Date.now();
-    if (ttlMs > 0 && this._priorCache && now - this._priorCache.at < ttlMs) {
+    const v2 = isJoinScoringV2Enabled();
+    if (ttlMs > 0 && this._priorCache && this._priorCache.v2 === v2 && now - this._priorCache.at < ttlMs) {
       return this._priorCache.value;
     }
     try {
@@ -106,7 +136,11 @@ export class ChannelIntelligenceReadService {
               // doc contributes 0 to BOTH numerator and denominator consistently — avoids a one-sided
               // skew of the live prior. ($sum ignores non-numerics silently, but $convert makes the
               // per-field drop symmetric across credited/attempted/survived.)
-              totalCredited: { $sum: this.numFromCi('$DMs.credited') },
+              totalCredited: {
+                $sum: v2
+                  ? { $min: [this.numFromCi('$DMs.credited'), this.numFromCi('$outcomes.attempted')] }
+                  : this.numFromCi('$DMs.credited'),
+              },
               totalAttempted: { $sum: this.numFromCi('$outcomes.attempted') },
               totalSurvived: { $sum: this.numFromCi('$outcomes.survived') },
             },
@@ -119,7 +153,7 @@ export class ChannelIntelligenceReadService {
         PRIOR_RATE: totalAttempted > 0 ? (row.totalCredited ?? 0) / totalAttempted : PRIOR_RATE_FALLBACK,
         SQ_PRIOR_RATE: totalAttempted > 0 ? (row.totalSurvived ?? 0) / totalAttempted : SQ_PRIOR_RATE_FALLBACK,
       };
-      this._priorCache = { value, at: now };
+      this._priorCache = { value, at: now, v2 };
       // Log the freshly-computed prior (recompute happens at most once per TTL) so an operator can
       // confirm during canary that the live fleet prior is ~0.03/0.82, per the spec's live-validation
       // step. On the cache-hit path (returned above) nothing is logged, keeping the hot path quiet.
@@ -172,7 +206,7 @@ export class ChannelIntelligenceReadService {
 
     const attempted = doc.outcomes?.attempted ?? 0;
     const deleted = doc.outcomes?.deleted ?? 0;
-    if (attempted >= 10 && deleted / attempted > 0.5) return true;
+    if (attempted >= 10 && deleted / attempted > getJoinDeleteRatioLimit()) return true;
 
     return false;
   }
@@ -369,6 +403,7 @@ export class ChannelIntelligenceReadService {
   }
 
   private buildChannelIntelligenceExclusionFlag(): Record<string, unknown> {
+    const deleteRatioLimit = getJoinDeleteRatioLimit();
     return {
       $let: {
         vars: {
@@ -397,7 +432,7 @@ export class ChannelIntelligenceReadService {
                             0,
                           ],
                         },
-                        0.5,
+                        deleteRatioLimit,
                       ],
                     },
                   ],
@@ -413,6 +448,7 @@ export class ChannelIntelligenceReadService {
   buildConversionAwareSortStages(prior: FleetPrior): PipelineStage[] {
     const priorRate = prior?.PRIOR_RATE > 0 ? prior.PRIOR_RATE : PRIOR_RATE_FALLBACK;
     const sqPriorRate = prior?.SQ_PRIOR_RATE > 0 ? prior.SQ_PRIOR_RATE : SQ_PRIOR_RATE_FALLBACK;
+    const v2 = isJoinScoringV2Enabled();
 
     return [
       {
@@ -447,7 +483,9 @@ export class ChannelIntelligenceReadService {
                   // its OWN weight (falls to the neutral prior) instead of poisoning the feature.
                   vars: {
                     attempted: this.numFromCi('$$ci.outcomes.attempted'),
-                    credited: this.numFromCi('$$ci.DMs.credited'),
+                    credited: v2
+                      ? { $min: [this.numFromCi('$$ci.DMs.credited'), this.numFromCi('$$ci.outcomes.attempted')] }
+                      : this.numFromCi('$$ci.DMs.credited'),
                     survived: this.numFromCi('$$ci.outcomes.survived'),
                   },
                   in: {
@@ -455,7 +493,9 @@ export class ChannelIntelligenceReadService {
                       vars: {
                         // conversion shrink toward live PRIOR_RATE, normalized so neutral == 1.0
                         conversionWeight: {
-                          $min: [WEIGHT_MAX, { $max: [WEIGHT_MIN, {
+                          $min: [v2
+                            ? { $cond: [{ $lt: ['$$attempted', MIN_CONVERSION_EVIDENCE] }, 1, WEIGHT_MAX] }
+                            : WEIGHT_MAX, { $max: [WEIGHT_MIN, {
                             $divide: [
                               { $divide: [
                                 { $add: [{ $multiply: [priorRate, PRIOR_STRENGTH] }, '$$credited'] },

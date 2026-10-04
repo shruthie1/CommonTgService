@@ -130,6 +130,14 @@ export class UserData {
     @Prop({ type: Number, required: false })
     windowCount?: number;
 
+    /** Grace-period flag set by tg-aut (boolean in prod: 231 rows on 2026-10-04). */
+    @Prop({ type: Boolean, required: false })
+    graceFlag?: boolean;
+
+    /** Epoch ms of the most recent accepted payment (tg-aut creditPayment). */
+    @Prop({ type: Number, required: false })
+    lastPaidAt?: number;
+
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);

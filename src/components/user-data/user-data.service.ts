@@ -294,6 +294,8 @@ export class UserDataService {
                         { $or: [{ firstPaidAt: { $exists: false } }, { firstPaidAt: null }] },
                         { $or: [{ highestPayAmount: { $exists: false } }, { highestPayAmount: { $lte: 0 } }] },
                         { $or: [{ paidCount: { $exists: false } }, { paidCount: { $lte: 0 } }] },
+                        { $or: [{ lifetimeCredits: { $exists: false } }, { lifetimeCredits: { $lte: 0 } }] },
+                        { $or: [{ lastPaidAt: { $exists: false } }, { lastPaidAt: null }] },
                     ],
                 })
                 .exec();
