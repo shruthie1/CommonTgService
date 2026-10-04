@@ -31,6 +31,10 @@ interface TokenCheckResult {
 interface BotHealthRunOptions {
     /** Reads and validates tokens, but never writes bot state or touches Telegram user accounts. */
     dryRun?: boolean;
+    /** Pending-admin bots to reconcile in this run (default maxPendingAdminRepairsPerRun, hard cap 10). */
+    pendingLimit?: number;
+    /** Only reconcile pending-admin bots of this category. */
+    pendingCategory?: string;
 }
 
 export interface BotHealthRunResult {
@@ -1214,16 +1218,39 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    /**
+     * Promote EXISTING pending-admin bots only: no token sweep, no BotFather creation/top-up. Same
+     * human-paced, flood-aborting, verify-after-add path as the daily job; bounded per call.
+     */
+    async reconcilePendingAdminBotsNow(options: BotHealthRunOptions = {}): Promise<{ failures: string[]; proposedActions: string[]; dryRun: boolean }> {
+        if (this.replaceInProgress) {
+            return { failures: ['already running (this pod)'], proposedActions: [], dryRun: Boolean(options.dryRun) };
+        }
+        this.replaceInProgress = true;
+        try {
+            const res = await this.reconcilePendingAdminBots(options, new Map());
+            console.log(`[BotHealth] reconcile-pending done dryRun=${Boolean(options.dryRun)} actions=${JSON.stringify(res.proposedActions)} failures=${JSON.stringify(res.failures)}`);
+            return { failures: res.failures, proposedActions: res.proposedActions, dryRun: Boolean(options.dryRun) };
+        } finally {
+            this.replaceInProgress = false;
+        }
+    }
+
     /** Reconcile pending bot records without treating a valid token as proof of channel access. */
     private async reconcilePendingAdminBots(options: BotHealthRunOptions, controllability: Map<string, string | null>): Promise<{ failures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean }> {
         const failures: string[] = [];
         const proposedActions: string[] = [];
         const now = new Date();
         let stopPrivilegedWork = false;
+        const pendingLimit = Math.min(Math.max(1, Math.floor(options.pendingLimit ?? this.maxPendingAdminRepairsPerRun)), 10);
         const pending = await this.botModel
-            .find({ lifecycle: 'pending_admin', $or: [{ nextRepairAt: { $exists: false } }, { nextRepairAt: { $lte: now } }] })
+            .find({
+                lifecycle: 'pending_admin',
+                ...(options.pendingCategory ? { category: options.pendingCategory } : {}),
+                $or: [{ nextRepairAt: { $exists: false } }, { nextRepairAt: { $lte: now } }],
+            })
             .sort({ nextRepairAt: 1, createdAt: 1 })
-            .limit(this.maxPendingAdminRepairsPerRun)
+            .limit(pendingLimit)
             .lean()
             .exec();
 

@@ -58,6 +58,25 @@ export class BotsController {
     return this.botsService.validateAndReplaceBots(options);
   }
 
+  @Post('reconcile-pending')
+  @ApiOperation({ summary: 'Promote existing pending-admin bots to channel admin (no BotFather creation)', description: 'Bounded (limit ≤ 10), human-paced, aborts on flood signals. ?category= restricts to one category; ?dryRun=true only lists; ?async=true runs in the background (check CMS logs).' })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'category', required: false })
+  @ApiQuery({ name: 'dryRun', required: false })
+  @ApiQuery({ name: 'async', required: false })
+  async reconcilePending(@Query('limit') limit?: string, @Query('category') category?: string, @Query('dryRun') dryRun?: string, @Query('async') async?: string) {
+    const options = {
+      dryRun: String(dryRun ?? '').toLowerCase() === 'true' || dryRun === '1',
+      pendingLimit: limit ? Number(limit) : 1,
+      pendingCategory: category || undefined,
+    };
+    if (String(async ?? '').toLowerCase() === 'true' || async === '1') {
+      void this.botsService.reconcilePendingAdminBotsNow(options).catch(() => undefined);
+      return { started: true, mode: 'async', ...options };
+    }
+    return this.botsService.reconcilePendingAdminBotsNow(options);
+  }
+
   @Get()
   @ApiOperation({
     summary: 'Get all bots or filter by category',

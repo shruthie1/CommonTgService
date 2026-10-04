@@ -1142,3 +1142,62 @@ describe('BotsService - resolveChannelAdminMobile finds admins beyond the 200-ro
     await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
   });
 });
+
+describe('BotsService - reconcilePendingAdminBotsNow (promote existing pending bots, never create)', () => {
+  const ADMIN = { mobile: '919600000282', username: 'myvcacc', tgId: '5550001', session: 'sess' };
+  let promoted: string[] = [];
+
+  afterEach(() => { delete process.env.channelManagerBackup; });
+
+  function wire() {
+    promoted = [];
+    process.env.channelManagerBackup = ADMIN.mobile; // the viewer that reads the admin list (prod: @myvcacc)
+    const telegramService = {
+      createBot: jest.fn(async () => { throw new Error('must not create bots'); }),
+      getBotInfo: jest.fn(async (token: string) => ({ id: `id_${token}`, username: `u_${token}` })),
+      promoteBotInChannel: jest.fn(async (_m: string, _c: string, botId: string) => { promoted.push(botId); }),
+      getGroupAdmins: jest.fn(async () => [
+        { userId: ADMIN.tgId, rank: 'admin', permissions: { addAdmins: true, postMessages: true } },
+        ...promoted.map(id => ({ userId: id })),
+      ]),
+      getChannelAbout: jest.fn(async () => ''),
+    };
+    const usersService = {
+      search: jest.fn(async (q: any) => (q?.tgId?.$in?.includes(ADMIN.tgId) ? [ADMIN] : [])),
+    };
+    mockModuleRef.get.mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) return telegramService;
+      if (/Users/i.test(name)) return usersService;
+      return {};
+    });
+    (service as any).humanDelay = jest.fn(async () => undefined);
+    (service as any).sleep = jest.fn(async () => undefined);
+    return telegramService;
+  }
+
+  test('promotes up to `limit` pending bots of the requested category and marks them active_verified', async () => {
+    const tg = wire();
+    for (let i = 0; i < 4; i++) await seedBot({ category: ChannelCategory.VC_NOTIFICATIONS, channelId: '-100vc', token: `vc${i}`, lifecycle: 'pending_admin', status: 'inactive' } as any);
+    await seedBot({ category: ChannelCategory.UNAUTH_CALLS, channelId: '-100ua', token: 'ua0', lifecycle: 'pending_admin', status: 'inactive' } as any);
+
+    const res = await service.reconcilePendingAdminBotsNow({ pendingLimit: 3, pendingCategory: ChannelCategory.VC_NOTIFICATIONS });
+
+    expect(res.failures).toEqual([]);
+    expect(tg.createBot).not.toHaveBeenCalled();
+    expect(await model.countDocuments({ category: ChannelCategory.VC_NOTIFICATIONS, lifecycle: 'active_verified', status: 'active' })).toBe(3);
+    expect(await model.countDocuments({ category: ChannelCategory.UNAUTH_CALLS, lifecycle: 'pending_admin' })).toBe(1);
+  });
+
+  test('limit is hard-capped at 10 per call; dryRun writes nothing', async () => {
+    wire();
+    for (let i = 0; i < 12; i++) await seedBot({ category: ChannelCategory.VC_NOTIFICATIONS, channelId: '-100vc', token: `c${i}`, lifecycle: 'pending_admin', status: 'inactive' } as any);
+
+    const dry = await service.reconcilePendingAdminBotsNow({ pendingLimit: 50, dryRun: true });
+    expect(dry.proposedActions).toHaveLength(10);
+    expect(await model.countDocuments({ lifecycle: 'active_verified' })).toBe(0);
+
+    await service.reconcilePendingAdminBotsNow({ pendingLimit: 50 });
+    expect(await model.countDocuments({ lifecycle: 'active_verified' })).toBe(10);
+  });
+});
