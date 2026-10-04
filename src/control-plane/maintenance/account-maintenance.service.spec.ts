@@ -90,9 +90,9 @@ describe('AccountMaintenanceService lifecycle ownership', () => {
       expect.objectContaining({ channelId: '1', canSendMsgs: true, private: false }),
       expect.objectContaining({ channelId: '2', canSendMsgs: false }),
     ]);
+    // '3' (left) and '4' (private) are this account's access only: never written to the shared pool.
     expect(activeChannelsService.createMultiple).toHaveBeenCalledWith([
       expect.objectContaining({ channelId: '1', canSendMsgs: true }),
-      expect.objectContaining({ channelId: '3', canSendMsgs: false }),
     ]);
     const persisted = activeChannelsService.createMultiple.mock.calls[0][0][0];
     expect(persisted).toHaveProperty('private', false);

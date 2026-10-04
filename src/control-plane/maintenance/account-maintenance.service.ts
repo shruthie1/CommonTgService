@@ -226,14 +226,17 @@ export class AccountMaintenanceService {
             { getEntity: async () => channel },
             { channelId: channel.id, entity: channel },
           );
-          if (!facts) {
+          // `private` (only from a ChannelForbidden entity) and `left` are THIS account's access, not
+          // a channel fact: such a dialog must not write the shared doc (it closed the channel for
+          // every account; 2026-10-04: 342 of 1,700 "private" channels were promoted afterwards).
+          if (!facts || facts.private || facts.left) {
             return null;
           }
 
           return {
             channelId: facts.channelId,
             canSendMsgs: facts.canSendMsgs,
-            private: facts.private,
+            private: false,
             forbidden: facts.forbidden,
             lastHydrationStatus: 'success',
             lastHydrationReason: facts.canSendMsgs ? 'live_sendable' : 'live_unsendable',
