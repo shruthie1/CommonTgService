@@ -1099,3 +1099,46 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
   });
 
 });
+
+describe('BotsService - resolveChannelAdminMobile finds admins beyond the 200-row search window', () => {
+  // users.search() returns at most the 200 most-recently-updated accounts (~30k exist in prod).
+  // The channel's real admin is outside that window: a plain list query never returns it, only a
+  // lookup by its identity does. Before the fix every pending bot stayed "no controllable admin".
+  const ADMIN = { mobile: '919600000282', username: 'myvcacc', tgId: '5550001', session: 'sess' };
+  const strangers = Array.from({ length: 200 }, (_, i) => ({ mobile: `91800000${String(i).padStart(4, '0')}`, tgId: `77${i}`, session: 's' }));
+
+  function wire(about = '') {
+    const telegramService = {
+      getGroupAdmins: jest.fn(async () => [
+        { userId: ADMIN.tgId, rank: 'admin', permissions: { addAdmins: true, postMessages: true } },
+        { userId: '999999', rank: 'creator', permissions: {} }, // not one of ours
+      ]),
+      getChannelAbout: jest.fn(async () => about),
+    };
+    const usersService = {
+      search: jest.fn(async (q: any) => {
+        const tgIn = q?.tgId?.$in as string[] | undefined;
+        const mobIn = q?.mobile?.$in as string[] | undefined;
+        if (tgIn) return [ADMIN, ...strangers].filter(u => tgIn.includes(u.tgId));
+        if (mobIn) return [ADMIN, ...strangers].filter(u => mobIn.includes(u.mobile));
+        return strangers; // the capped 200-row list: ADMIN is not in it
+      }),
+    };
+    mockModuleRef.get.mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) return telegramService;
+      if (/Users/i.test(name)) return usersService;
+      return {};
+    });
+  }
+
+  test('an admin with addAdmins outside the window is selected', async () => {
+    wire();
+    await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
+  });
+
+  test('a creator mobile named in the channel About outside the window is selected', async () => {
+    wire(`created by ${ADMIN.mobile}`);
+    await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
+  });
+});

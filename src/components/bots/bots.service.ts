@@ -1724,25 +1724,30 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
         }
 
-        const healthy = await this.getHealthyAccounts();
+        // Look up OUR accounts by exactly the identities this channel exposes (description mobiles,
+        // admin tgIds) instead of getHealthyAccounts(): that goes through users.search(), which is
+        // capped at the 200 most-recently-updated of ~30k healthy accounts, so a real creator/admin
+        // outside that window was invisible and every bot was left "no controllable admin account".
+        // search() still applies its default exclusions (expired, buffer/promote pool mobiles).
+        const aboutMobiles = new Set<string>();
+        for (const viewer of viewers) {
+            let about = '';
+            try { about = await this.telegramService.getChannelAbout(viewer, channelId); }
+            catch { continue; }
+            for (const m of about.match(/\d{10,13}/g) || []) aboutMobiles.add(m);
+            break; // got the about (even if no mobile in it) — no need to re-read via others
+        }
+        const adminTgIds = (admins || []).map((a: any) => String(a?.userId ?? a?.id ?? '')).filter(Boolean);
+        const healthy = await this.findHealthyAccountsByIdentity([...aboutMobiles], adminTgIds);
         const byMobile = new Map(healthy.map(u => [u.mobile, u]));
 
         // DESCRIPTION-FIRST: our channels record the creator's mobile in the channel About
         // (e.g. "917306148704"). If that account is one we control with a live session, it's the
         // creator → the ideal promoter (full rights, incl. post). Try it before the admin scan; it
         // also rescues channels our admin-list scan can't cover.
-        try {
-            for (const viewer of viewers) {
-                let about = '';
-                try { about = await this.telegramService.getChannelAbout(viewer, channelId); }
-                catch { continue; }
-                if (!about) continue;
-                for (const m of about.match(/\d{10,13}/g) || []) {
-                    if (byMobile.has(m)) return m; // controllable creator account named in the description
-                }
-                break; // got the about (even if no controllable mobile) — no need to re-read via others
-            }
-        } catch { /* best-effort — fall through to the admin scan */ }
+        for (const m of aboutMobiles) {
+            if (byMobile.has(m)) return m; // controllable creator account named in the description
+        }
 
         if (!admins) return null;
 
@@ -1814,6 +1819,17 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * (pickHealthyCreatorCandidates → usersService.getBotCreatorAccounts) because search()'s 200-row
      * cap only surfaces the newest (mostly Indian) accounts.
      */
+    /** Healthy accounts (live session) matching the given mobiles or tgIds — uncapped by list size. */
+    private async findHealthyAccountsByIdentity(mobiles: string[], tgIds: string[]): Promise<Array<{ mobile: string; username?: string | null; firstName?: string | null; tgId?: string | null; session?: string | null }>> {
+        const found: any[] = [];
+        try {
+            if (mobiles.length) found.push(...await this.usersService.search({ mobile: { $in: mobiles }, expired: false } as any));
+            if (tgIds.length) found.push(...await this.usersService.search({ tgId: { $in: tgIds }, expired: false } as any));
+        } catch { return []; }
+        const seen = new Set<string>();
+        return found.filter(u => u?.session && String(u.session).trim() && u.mobile && !seen.has(u.mobile) && seen.add(u.mobile));
+    }
+
     private async getHealthyAccounts(): Promise<Array<{ mobile: string; username?: string | null; firstName?: string | null; tgId?: string | null; session?: string | null }>> {
         const users = await this.usersService.search({ expired: false });
         return this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
