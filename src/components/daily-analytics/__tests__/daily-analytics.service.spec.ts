@@ -132,6 +132,60 @@ describe('DailyAnalyticsService', () => {
     });
   });
 
+  describe("DAILY_ANALYTICS_SOURCE=pg (every day from Postgres, Mongo only as fallback)", () => {
+    const pgRows = (sql: string) => {
+      if (sql.includes('FROM payment_event')) return [{ d: '2026-10-05', client_id: 'a', amt: '100' }];
+      if (sql.includes('FROM promotion_send')) {
+        return [{ client_id: 'a', mobile: 'm1', sent: '12', success: '5', failed: '7', banned: '6' }];
+      }
+      if (sql.includes('GROUP BY day')) {
+        return [{ d: '2026-10-05', sent: '50', success: '20', failed: '30', banned: '3', newUsers: '6', active: '7', paid: '2' }];
+      }
+      return [{ client_id: 'a', sent: '50', success: '20', failed: '30', banned: '3', newUsers: '6', active: '7', paid: '2' }];
+    };
+    beforeEach(() => { process.env.DAILY_ANALYTICS_SOURCE = 'pg'; });
+    afterEach(() => { delete process.env.DAILY_ANALYTICS_SOURCE; });
+
+    it('a recent day (inside Mongo retention) comes from Postgres, not Mongo', async () => {
+      const { svc } = build({ pgRows });
+      const rows: any[] = await svc.dailyTotals('promote', 1);
+      expect(rows[0]).toMatchObject({ date: '2026-10-05', sent: 50, success: 20 }); // Mongo has sent 10
+    });
+    it('byClient for a recent day comes from Postgres only (no Mongo add-on)', async () => {
+      const { svc } = build({ pgRows });
+      const rows: any[] = (await svc.byClient('promote', 1)) as any;
+      expect(rows).toEqual([expect.objectContaining({ clientId: 'a', sent: 50 })]);
+    });
+    it('user metric: counters and revenue both from Postgres', async () => {
+      const { svc } = build({ pgRows });
+      const rows: any[] = await svc.dailyTotals('user', 1);
+      expect(rows[0]).toMatchObject({ newUsers: 6, revenue: 100, revenueSource: 'payment_event' });
+    });
+    it('byMobile(promote) comes from promotion_send with failed = banned + failed', async () => {
+      const { svc, queries } = build({ pgRows });
+      const rows: any[] = await svc.byMobile('promote', 1);
+      expect(rows).toEqual([expect.objectContaining({ clientId: 'a', mobile: 'm1', sent: 12, success: 5, failed: 7, banned: 6 })]);
+      const q = queries.find((x) => x.sql.includes('FROM promotion_send'))!;
+      expect(q.sql).toMatch(/outcome IN \('banned', ?'failed'\)/);
+      expect(q.sql).toMatch(/outcome <> 'deleted'/);
+    });
+    it('byMobile for user/reaction stays on Mongo (no per-mobile table by decision)', async () => {
+      const { svc, pg } = build({ pgRows });
+      await svc.byMobile('user', 1);
+      expect(pg.query).not.toHaveBeenCalled();
+    });
+    it('Postgres down => Mongo answers (fallback kept)', async () => {
+      const { svc } = build({ pgRows: () => undefined });
+      expect(((await svc.dailyTotals('promote', 1)) as any[])[0]).toMatchObject({ sent: 10 });
+      expect(((await svc.byMobile('promote', 1)) as any[])[0]).toMatchObject({ mobile: 'm1', sent: 10 });
+    });
+    it('any other value keeps the hybrid default', async () => {
+      process.env.DAILY_ANALYTICS_SOURCE = 'PGX';
+      const { svc } = build({ pgRows });
+      expect(((await svc.dailyTotals('promote', 1)) as any[])[0]).toMatchObject({ sent: 10 });
+    });
+  });
+
   describe('fallback', () => {
     it('PG failure (reader returns undefined) => Mongo answer for every PG-capable method', async () => {
       const { svc } = build({ pgRows: () => undefined });

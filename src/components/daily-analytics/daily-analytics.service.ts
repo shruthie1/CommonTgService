@@ -41,6 +41,20 @@ const PG_COLUMNS: Record<DailyMetric, Record<string, string>> = {
  */
 export const MONGO_RETENTION_DAYS = 13;
 
+/**
+ * DAILY_ANALYTICS_SOURCE: 'hybrid' (default) = the split above; 'pg' = EVERY day from Postgres
+ * (daily_client / payment_event / promotion_send), Mongo only when Postgres is unavailable.
+ * Long-term placement: tg-platform docs/design/2026-10-04-mongo-postgres-data-placement.md.
+ * Flip to 'pg' only once every tg-platform process runs the analytics build and the day+2 repair
+ * backfill has run — before that, recent days in Postgres are partial. Rollback: unset it.
+ */
+export const DAILY_ANALYTICS_SOURCE_ENV = 'DAILY_ANALYTICS_SOURCE';
+export function dailyAnalyticsSource(): 'hybrid' | 'pg' {
+  return (process.env[DAILY_ANALYTICS_SOURCE_ENV] || '').trim().toLowerCase() === 'pg' ? 'pg' : 'hybrid';
+}
+/** Sorts after every 'YYYY-MM-DD', so every date in a window counts as "old" (Postgres). */
+const ALL_DAYS_FROM_PG = '9999-12-31';
+
 const num = (v: unknown): number => Number(v) || 0;
 
 /**
@@ -136,6 +150,7 @@ export class DailyAnalyticsService {
 
   /** IST days at or after this are still inside Mongo's 14-day TTL: Mongo is authoritative for them. */
   private mongoCutoff(): string {
+    if (dailyAnalyticsSource() === 'pg') return ALL_DAYS_FROM_PG;
     return this.lastNDates(MONGO_RETENTION_DAYS)[0];
   }
 
@@ -295,6 +310,13 @@ export class DailyAnalyticsService {
   async byMobile(metric: DailyMetric, days = 14, clientId?: string, namespace?: string) {
     const dates = this.lastNDates(days);
     const fields = this.numericFields(metric);
+    // By decision there is no per-mobile daily table: in 'pg' mode promotion per-mobile numbers come
+    // from promotion_send (mobile on every row, 45-day retention). user/reaction stay on Mongo while
+    // it is still written. promotion_send has no namespace; mobile pools are disjoint per service.
+    if (metric === 'promote' && dailyAnalyticsSource() === 'pg') {
+      const pg = await this.pgPromoteByMobile(dates, clientId);
+      if (pg) return pg;
+    }
     const match: Record<string, unknown> = { date: { $in: dates } };
     if (clientId) match.clientId = clientId;
     if (namespace) match.namespace = namespace;
@@ -316,6 +338,41 @@ export class DailyAnalyticsService {
       }
       return out;
     });
+  }
+
+  /**
+   * Per-mobile promotion totals from promotion_send, mapped to the Mongo field meanings:
+   * sent excludes 'deleted' (a second row about a delivered message), failed = banned + failed
+   * (Mongo's failed counter includes bans). Undefined if Postgres is unavailable.
+   */
+  private async pgPromoteByMobile(dates: string[], clientId?: string) {
+    const params: unknown[] = [`${dates[0]}T00:00:00+05:30`];
+    let clientClause = '';
+    if (clientId) {
+      params.push(clientId);
+      clientClause = 'AND client_id = $2';
+    }
+    const rows = await this.pg.query<Record<string, unknown>>(
+      `SELECT client_id, mobile,
+              count(*) FILTER (WHERE outcome <> 'deleted')              AS sent,
+              count(*) FILTER (WHERE outcome = 'delivered')             AS success,
+              count(*) FILTER (WHERE outcome IN ('banned', 'failed'))   AS failed,
+              count(*) FILTER (WHERE outcome = 'banned')                AS banned
+         FROM promotion_send
+        WHERE ts >= $1::timestamptz ${clientClause}
+        GROUP BY client_id, mobile
+        ORDER BY client_id, mobile`,
+      params,
+    );
+    if (!rows) return undefined;
+    return rows.map((r) => ({
+      clientId: String(r.client_id),
+      mobile: String(r.mobile),
+      sent: num(r.sent),
+      success: num(r.success),
+      failed: num(r.failed),
+      banned: num(r.banned),
+    }));
   }
 
   /** Combined dashboard overview: fleet daily totals for all three metrics in one call. */
