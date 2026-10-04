@@ -10,7 +10,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { notifbot } from '../../utils/logbots';
 import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
-import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
+import { buildDurableChannelUpsertPipeline, isOperatorBan } from '../../utils/telegram-utils/durable-channel-upsert';
 import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from './channel-intelligence-read.service';
 
@@ -135,7 +135,7 @@ export class ActiveChannelsService {
         ]);
         // `private` is a live Telegram fact and is refreshed both ways.
         if (typeof dto.private === 'boolean') setFields.private = dto.private;
-        // `forbidden` remains a durable safety stop until explicitly cleared.
+        // `forbidden` may be asserted but is never durable: a live "can send" observation clears it.
         if (dto.forbidden === true) setFields.forbidden = true;
 
         const defaults: Record<string, unknown> = { channelId: this.channelKey(dto.channelId),
@@ -255,10 +255,8 @@ export class ActiveChannelsService {
         cleanDto.canSendMsgs = false;
         cleanDto.lastHydrationStatus = 'needs_hydration';
         cleanDto.lastHydrationReason = 'operator_unbanned';
-      } else if (
-        (existing?.banned === true || existing?.forbidden === true)
-        && cleanDto.canSendMsgs === true
-      ) {
+      } else if (isOperatorBan(existing) && cleanDto.canSendMsgs === true) {
+        // Only an operator ban is durable; legacy banned/forbidden were one account's view.
         cleanDto.canSendMsgs = false;
       }
 
@@ -266,9 +264,6 @@ export class ActiveChannelsService {
         cleanDto.canSendMsgs = false;
       }
 
-      // A private channel is a live Telegram state and may be cleared on a
-      // later verified refresh. `forbidden` remains durable.
-      if (existing?.forbidden === true && cleanDto.forbidden === false) delete cleanDto.forbidden;
 
       const updatedChannel = await this.activeChannelModel
         .findOneAndUpdate(

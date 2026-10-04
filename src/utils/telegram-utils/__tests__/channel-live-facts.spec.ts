@@ -68,13 +68,13 @@ describe('getTelegramChannelLiveFacts', () => {
         expect(result!.sendPlain).toBe(true);
     });
 
-    test('detects ChannelForbidden by className', async () => {
+    test('a ChannelForbidden entity is an ACCOUNT fact: private + not sendable, never shared-forbidden', async () => {
         const result = await getTelegramChannelLiveFacts(stubClient, {
             channelId: '123456',
             entity: makeEntity({ className: 'ChannelForbidden' }),
         });
 
-        expect(result!.forbidden).toBe(true);
+        expect(result!.forbidden).toBe(false);
         expect(result!.private).toBe(true);
         expect(result!.canSendMsgs).toBe(false);
     });

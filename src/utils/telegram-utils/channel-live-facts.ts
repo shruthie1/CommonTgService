@@ -47,7 +47,9 @@ export async function getTelegramChannelLiveFacts(
         restricted: readBoolean(entity, 'restricted'),
         left: readBoolean(entity, 'left'),
         private: readBoolean(entity, 'private') || forbiddenEntity,
-        forbidden: readBoolean(entity, 'forbidden') || forbiddenEntity,
+        // A Forbidden entity class means THIS ACCOUNT lacks access (account fact): it makes `private`
+        // true (this account will not send) but must not mark the SHARED channel forbidden.
+        forbidden: readBoolean(entity, 'forbidden'),
         megagroup: readBoolean(entity, 'megagroup'),
         sendMessages,
         sendPlain,

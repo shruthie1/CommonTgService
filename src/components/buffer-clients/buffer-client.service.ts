@@ -595,6 +595,10 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     async update(mobile: string, updateClientDto: BaseClientUpdate): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         const updateData: BaseClientUpdate & { mobile?: string } = { ...updateClientDto };
+        // `channels` is a count: never persist a negative or fractional one (a -13 reached prod once).
+        if (typeof updateData.channels === 'number') {
+            updateData.channels = Number.isFinite(updateData.channels) ? Math.max(0, Math.floor(updateData.channels)) : 0;
+        }
         const normalizedSession = this.normalizeSessionForWrite(updateData.session);
         if (normalizedSession) {
             updateData.session = normalizedSession;

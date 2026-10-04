@@ -7,7 +7,7 @@ import { Channel, ChannelDocument } from './schemas/channel.schema';
 import { PipelineStage } from 'mongoose';
 import { ChannelCategory } from '../bots';
 import { getBotsServiceInstance } from '../../utils';
-import { buildDurableChannelUpsertPipeline } from '../../utils/telegram-utils/durable-channel-upsert';
+import { buildDurableChannelUpsertPipeline, isOperatorBan } from '../../utils/telegram-utils/durable-channel-upsert';
 import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from '../active-channels/channel-intelligence-read.service';
 
@@ -76,7 +76,7 @@ export class ChannelsService {
       ]);
       // `private` is a live Telegram fact and is refreshed both ways.
       if (typeof dto.private === 'boolean') setFields.private = dto.private;
-      // `forbidden` remains a durable safety stop until explicitly cleared.
+      // `forbidden` may be asserted but is never durable: a live "can send" observation clears it.
       if (dto.forbidden === true) setFields.forbidden = true;
       if (dto.banned === true) {
         setFields.banned = true;
@@ -143,14 +143,11 @@ export class ChannelsService {
       Object.entries(updateChannelDto as Record<string, unknown>)
         .filter(([key]) => this.writableFields.has(key)),
     );
-    if (
-      (existing?.banned === true || existing?.forbidden === true)
-      && update.canSendMsgs === true
-    ) {
+    // Only an operator ban (banned + bannedAt) is durable; legacy banned/forbidden were one account's view.
+    if (isOperatorBan(existing) && update.canSendMsgs === true) {
       update.canSendMsgs = false;
     }
-    if (existing?.banned === true && update.banned === false) delete update.banned;
-    if (existing?.forbidden === true && update.forbidden === false) delete update.forbidden;
+    if (isOperatorBan(existing) && update.banned === false) delete update.banned;
     if (update.private === true || update.forbidden === true || update.banned === true) {
       update.canSendMsgs = false;
     }

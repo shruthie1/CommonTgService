@@ -322,7 +322,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(unbanned.lastHydrationReason).toBe('operator_unbanned');
     });
 
-    test('live refresh can clear private, but cannot clear forbidden', async () => {
+    test('a live refresh clears a legacy forbidden (one account\'s view) and restores sendability', async () => {
       await seed({
         channelId: 'up-durable-block',
         private: true,
@@ -330,15 +330,24 @@ describe('ActiveChannelsService (real Mongo)', () => {
         canSendMsgs: false,
       });
 
-      const stillBlocked = await service.update('up-durable-block', {
+      const refreshed = await service.update('up-durable-block', {
         private: false,
         forbidden: false,
         canSendMsgs: true,
       } as any);
 
-      expect(stillBlocked.private).toBe(false);
-      expect(stillBlocked.forbidden).toBe(true);
-      expect(stillBlocked.canSendMsgs).toBe(false);
+      expect(refreshed.private).toBe(false);
+      expect(refreshed.forbidden).toBe(false);
+      expect(refreshed.canSendMsgs).toBe(true);
+    });
+
+    test('an operator ban (banned + bannedAt) is the only durable stop: a live refresh cannot make it sendable', async () => {
+      await seed({ channelId: 'up-operator-ban', banned: true, bannedAt: 1700000000000, canSendMsgs: false });
+
+      const refreshed = await service.update('up-operator-ban', { canSendMsgs: true } as any);
+
+      expect(refreshed.banned).toBe(true);
+      expect(refreshed.canSendMsgs).toBe(false);
     });
 
     test('update throws BadRequest with empty channelId', async () => {
@@ -452,26 +461,45 @@ describe('ActiveChannelsService (real Mongo)', () => {
       expect(refreshed.participantsCount).toBe(1500);
     });
 
-    test('createMultiple keeps forbidden channels unsendable while refreshing live identity', async () => {
-      await seedRaw({
-        channelId: 'cm-forbidden',
-        forbidden: true,
-        canSendMsgs: false,
-        title: 'Old title',
-      });
+    test('createMultiple: a live "can send" refresh clears a legacy forbidden/banned (no operator provenance)', async () => {
+      await seedRaw({ channelId: 'cm-forbidden', forbidden: true, canSendMsgs: false, title: 'Old title' });
+      await seedRaw({ channelId: 'cm-legacy-banned', banned: true, canSendMsgs: false, title: 'Old title' });
 
-      await service.createMultiple([{
-        channelId: 'cm-forbidden',
-        title: 'Fresh title',
-        canSendMsgs: true,
-        private: false,
-        broadcast: false,
-      }]);
+      await service.createMultiple([
+        { channelId: 'cm-forbidden', title: 'Fresh title', canSendMsgs: true, private: false, broadcast: false },
+        { channelId: 'cm-legacy-banned', title: 'Fresh title', canSendMsgs: true, private: false, broadcast: false },
+      ]);
 
       const refreshed = await model.collection.findOne({ channelId: 'cm-forbidden' });
-      expect(refreshed.forbidden).toBe(true);
-      expect(refreshed.canSendMsgs).toBe(false);
+      expect(refreshed.forbidden).toBe(false);
+      expect(refreshed.canSendMsgs).toBe(true);
       expect(refreshed.title).toBe('Fresh title');
+      const legacy = await model.collection.findOne({ channelId: 'cm-legacy-banned' });
+      expect(legacy.banned).toBe(false);
+      expect(legacy.canSendMsgs).toBe(true);
+    });
+
+    test('createMultiple: an operator ban survives a live "can send" refresh atomically', async () => {
+      await seedRaw({ channelId: 'cm-operator', banned: true, bannedAt: 1700000000000, canSendMsgs: false });
+
+      await service.createMultiple([
+        { channelId: 'cm-operator', title: 'Fresh', canSendMsgs: true, private: false, broadcast: false },
+      ]);
+
+      const refreshed = await model.collection.findOne({ channelId: 'cm-operator' });
+      expect(refreshed.banned).toBe(true);
+      expect(refreshed.bannedAt).toBe(1700000000000);
+      expect(refreshed.canSendMsgs).toBe(false);
+    });
+
+    test('createMultiple: a non-live write (no canSendMsgs) never clears or invents a flag', async () => {
+      await seedRaw({ channelId: 'cm-keep', forbidden: true, canSendMsgs: false });
+
+      await service.createMultiple([{ channelId: 'cm-keep', title: 'Only title' }]);
+
+      const kept = await model.collection.findOne({ channelId: 'cm-keep' });
+      expect(kept.forbidden).toBe(true);
+      expect(kept.canSendMsgs).toBe(false);
     });
 
     test('createMultiple throws on empty', async () => {

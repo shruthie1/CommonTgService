@@ -94,6 +94,14 @@ describe('PromoteClientService (real Mongo)', () => {
       expect(after?.session).toBe('GOOD');
     });
 
+    test('channels is a count: a negative or fractional value is clamped, never persisted', async () => {
+      await model.create(makePromoteDoc({ mobile: '15551110004', session: 'GOOD', channels: 40 }));
+      await service.update('15551110004', { channels: -13 } as any);
+      expect((await model.findOne({ mobile: '15551110004' }).lean())?.channels).toBe(0);
+      await service.update('15551110004', { channels: 12.9 } as any);
+      expect((await model.findOne({ mobile: '15551110004' }).lean())?.channels).toBe(12);
+    });
+
     test('lastUsed update on active client with stored session succeeds', async () => {
       await model.create(makePromoteDoc({ mobile: '15551110002', session: 'GOOD', status: 'active' }));
       const r = await service.update('15551110002', { lastUsed: new Date() } as any);

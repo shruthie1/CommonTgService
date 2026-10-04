@@ -103,20 +103,25 @@ describe('ChannelsService - CRUD', () => {
     expect(await model.countDocuments({})).toBe(2);
   });
 
-  test('createMultiple atomically preserves banned and forbidden stops during a live refresh', async () => {
-    await seed({ channelId: 'bulk-banned', banned: true, canSendMsgs: false, title: 'Old banned' });
+  test('createMultiple: live refresh clears legacy banned/forbidden but an operator ban survives atomically', async () => {
+    await seed({ channelId: 'bulk-banned', banned: true, bannedAt: 1700000000000, canSendMsgs: false, title: 'Old banned' });
     await seed({ channelId: 'bulk-forbidden', forbidden: true, canSendMsgs: false, title: 'Old forbidden' });
+    await seed({ channelId: 'bulk-legacy-banned', banned: true, canSendMsgs: false, title: 'Old legacy' });
 
     await service.createMultiple([
       { channelId: 'bulk-banned', title: 'Fresh banned', canSendMsgs: true, private: false, broadcast: false } as any,
       { channelId: 'bulk-forbidden', title: 'Fresh forbidden', canSendMsgs: true, private: false, broadcast: false } as any,
+      { channelId: 'bulk-legacy-banned', title: 'Fresh legacy', canSendMsgs: true, private: false, broadcast: false } as any,
     ]);
 
     await expect(model.findOne({ channelId: 'bulk-banned' }).lean().exec()).resolves.toEqual(
       expect.objectContaining({ banned: true, canSendMsgs: false, title: 'Fresh banned' }),
     );
     await expect(model.findOne({ channelId: 'bulk-forbidden' }).lean().exec()).resolves.toEqual(
-      expect.objectContaining({ forbidden: true, canSendMsgs: false, title: 'Fresh forbidden' }),
+      expect.objectContaining({ forbidden: false, canSendMsgs: true, title: 'Fresh forbidden' }),
+    );
+    await expect(model.findOne({ channelId: 'bulk-legacy-banned' }).lean().exec()).resolves.toEqual(
+      expect.objectContaining({ banned: false, canSendMsgs: true, title: 'Fresh legacy' }),
     );
   });
 

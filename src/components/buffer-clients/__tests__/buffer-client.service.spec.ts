@@ -182,6 +182,17 @@ describe('BufferClientService (real Mongo)', () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  describe('update channels count', () => {
+    test('channels is a count: a negative value is clamped to 0, never persisted', async () => {
+      await model.collection.insertOne({
+        tgId: 't', mobile: '15559990002', session: 'S', availableDate: '2026-04-11',
+        channels: 40, clientId: 'u2', status: 'inactive', inUse: false,
+      });
+      await service.update('15559990002', { channels: -13 } as any);
+      expect((await model.findOne({ mobile: '15559990002' }).lean())?.channels).toBe(0);
+    });
+  });
+
   describe('update activation guard', () => {
     test('cannot activate a buffer client that has no stored session', async () => {
       // Insert an inactive doc with an empty session bypassing the create-path guard.
