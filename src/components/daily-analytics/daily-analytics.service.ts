@@ -21,6 +21,13 @@ export type DailyMetric = 'promote' | 'reaction' | 'user';
  * REVENUE_FROM_DAY) | 'unavailable' (0 means "unknown", not "no revenue").
  */
 export const REVENUE_FROM_DAY = '2026-10-04';
+/**
+ * First IST day promotion_send is complete for every process (measured 2026-10-08: per-mobile
+ * totals since 10-05 within 0.2% of Mongo, 10-07 exact; a 14-day window starting 09-25 had only
+ * 31% of Mongo's sends). Per-mobile reads come from promotion_send only for windows starting on or
+ * after this day; earlier windows stay on Mongo, which still holds 14 days.
+ */
+export const PROMOTION_SEND_FROM_DAY = '2026-10-05';
 export type RevenueSource = 'payment_event' | 'payment_event_partial' | 'unavailable';
 
 /** Mongo field -> daily_client column. Fixed map: column names never come from request input. */
@@ -313,7 +320,8 @@ export class DailyAnalyticsService {
     // By decision there is no per-mobile daily table: in 'pg' mode promotion per-mobile numbers come
     // from promotion_send (mobile on every row, 45-day retention). user/reaction stay on Mongo while
     // it is still written. promotion_send has no namespace; mobile pools are disjoint per service.
-    if (metric === 'promote' && dailyAnalyticsSource() === 'pg') {
+    // promotion_send has no namespace column, so a namespace-scoped request also stays on Mongo.
+    if (metric === 'promote' && dailyAnalyticsSource() === 'pg' && !namespace && dates[0] >= PROMOTION_SEND_FROM_DAY) {
       const pg = await this.pgPromoteByMobile(dates, clientId);
       if (pg) return pg;
     }

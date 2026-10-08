@@ -169,6 +169,19 @@ describe('DailyAnalyticsService', () => {
       expect(q.sql).toMatch(/outcome IN \('banned', ?'failed'\)/);
       expect(q.sql).toMatch(/outcome <> 'deleted'/);
     });
+    // 2026-10-08: promotion_send only covers 10-05 onward; a 14-day window read from it held 31%
+    // of Mongo's sends, and it cannot filter by namespace.
+    it('byMobile(promote) stays on Mongo when the window starts before promotion_send coverage', async () => {
+      const { svc, queries } = build({ pgRows });
+      const rows: any[] = await svc.byMobile('promote', 30);
+      expect(queries.some((x) => x.sql.includes('FROM promotion_send'))).toBe(false);
+      expect(rows[0]).toMatchObject({ mobile: 'm1', sent: 10 });
+    });
+    it('byMobile(promote) with a namespace filter stays on Mongo', async () => {
+      const { svc, queries } = build({ pgRows });
+      await svc.byMobile('promote', 1, undefined, 'tg-aut');
+      expect(queries.some((x) => x.sql.includes('FROM promotion_send'))).toBe(false);
+    });
     it('byMobile for user/reaction stays on Mongo (no per-mobile table by decision)', async () => {
       const { svc, pg } = build({ pgRows });
       await svc.byMobile('user', 1);
