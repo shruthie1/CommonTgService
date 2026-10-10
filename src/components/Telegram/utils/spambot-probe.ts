@@ -1,4 +1,7 @@
 import { connectionManager } from './connection-manager';
+import { TelegramLogger } from './telegram-logger';
+
+const logger = new TelegramLogger('SpamBotProbe');
 
 /**
  * Self-contained @SpamBot probe used by the CMS before swapping a buffer account in as a client's
@@ -151,6 +154,7 @@ export async function probeSpamBot(mobile: string, options: ProbeOptions = {}): 
   // ('none', we open and later release it) or one with a healthy client (reused as-is, never released).
   const reuseState = connectionManager.getReuseState(mobile);
   if (reuseState === 'busy') {
+    logger.info(mobile, 'SpamBot probe skipped: connection busy in another flow');
     return { status: 'unknown', limitedUntil: null, busy: true, error: 'connection in use by another flow' };
   }
   const openedByProbe = reuseState === 'none';
@@ -195,7 +199,11 @@ export async function probeSpamBot(mobile: string, options: ProbeOptions = {}): 
       // The connect may still succeed after we gave up. Disconnect it as soon as it lands rather than
       // leaving a live session for idle cleanup. The candidate was rejected, so no swap will use it.
       connecting.then(
-        () => connectionManager.unregisterClient(mobile).catch(() => undefined),
+        () => {
+          // grep "late connection disconnected" for reports on slow connects.
+          logger.warn(mobile, 'SpamBot probe: late connection disconnected after connect timeout', { totalTimeoutMs });
+          return connectionManager.unregisterClient(mobile).catch(() => undefined);
+        },
         () => undefined,
       );
     }

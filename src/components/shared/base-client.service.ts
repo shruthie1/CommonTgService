@@ -2249,6 +2249,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const activeDocs = await this.model.find(
             { clientId, status: 'active' },
             {
+                mobile: 1,
                 availableDate: 1,
                 warmupPhase: 1,
                 warmupJitter: 1,
@@ -2264,6 +2265,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 twoFASetAt: 1,
                 privacyUpdatedAt: 1,
                 channels: 1,
+                spamStatus: 1,
+                limitedUntil: 1,
+                spamCheckedAt: 1,
             },
         ).exec();
 
@@ -2271,8 +2275,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const pipelineOperationalDates: string[] = [];
         const operationalChannelThreshold = this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING;
 
+        const supplyAdjustments: Array<{ mobile?: string; from: string; to: string | null }> = [];
         for (const doc of activeDocs) {
-            const operationalDate = this.getOperationalAvailabilityDateString(doc, today.getTime());
+            const baseDate = this.getOperationalAvailabilityDateString(doc, today.getTime());
+            const operationalDate = this.adjustSupplyDateForPoolState(doc, baseDate, Date.now());
+            if (baseDate && operationalDate !== baseDate) {
+                supplyAdjustments.push({ mobile: (doc as { mobile?: string }).mobile, from: baseDate, to: operationalDate });
+            }
             if (!operationalDate) continue;
 
             const phase = doc.warmupPhase;
@@ -2297,6 +2306,15 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
         }
 
+        if (supplyAdjustments.length) {
+            // Report-friendly: which accounts the pool's state (buffer: spam limits) removed from or
+            // pushed out of supply this run. grep "Supply adjusted for pool state".
+            this.logger.info(`[${clientId}] Supply adjusted for pool state`, {
+                excluded: supplyAdjustments.filter((a) => a.to === null).length,
+                deferred: supplyAdjustments.filter((a) => a.to !== null).length,
+                accounts: supplyAdjustments,
+            });
+        }
         const readyActive = readyOperationalDates.length;
         const warmingPipeline = pipelineOperationalDates.length;
         const totalActive = readyActive + warmingPipeline;
@@ -2419,6 +2437,15 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     /** Hook for pools that must exclude more accounts from live assignment (e.g. spam-limited buffers). */
+    /**
+     * Supply-planning view of an account's availability date. Default: unchanged. A pool whose
+     * live selection excludes some accounts (buffer: spam-limited) overrides this so replenishment
+     * counts exactly what selection can use — null drops the account from supply.
+     */
+    protected adjustSupplyDateForPoolState(_doc: unknown, date: string | null, _now: number): string | null {
+        return date;
+    }
+
     protected getExtraAvailabilityFilter(): Record<string, unknown> {
         return {};
     }

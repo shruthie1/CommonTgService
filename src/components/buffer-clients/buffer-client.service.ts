@@ -18,6 +18,7 @@ import {
     BufferClient,
     BufferClientDocument,
     buildSpamEligibleFilter,
+    HARSH_RECHECK_AFTER_MS,
 } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
@@ -1990,6 +1991,26 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     /** Live-assignment selection must skip harsh / still-limited buffers. */
     protected getExtraAvailabilityFilter(): Record<string, unknown> {
         return buildSpamEligibleFilter();
+    }
+
+    /**
+     * Replenishment must count what a swap can actually use (same rule as buildSpamEligibleFilter):
+     * a harsh account checked within HARSH_RECHECK_AFTER_MS is not supply; a limited one counts only
+     * from the day its limit lifts.
+     */
+    protected adjustSupplyDateForPoolState(doc: unknown, date: string | null, now: number): string | null {
+        if (!date) return date;
+        const spam = doc as { spamStatus?: string; limitedUntil?: Date | string | null; spamCheckedAt?: Date | string | null };
+        if (spam.spamStatus === 'harsh') {
+            const checkedAt = spam.spamCheckedAt ? new Date(spam.spamCheckedAt).getTime() : NaN;
+            if (Number.isFinite(checkedAt) && now - checkedAt < HARSH_RECHECK_AFTER_MS) return null;
+        }
+        const until = spam.limitedUntil ? new Date(spam.limitedUntil).getTime() : NaN;
+        if (Number.isFinite(until) && until > now) {
+            const liftDate = ClientHelperUtils.toDateString(until);
+            return liftDate > date ? liftDate : date;
+        }
+        return date;
     }
 
     async getLeastRecentlyUsedBufferClients(clientId: string, limit: number = 1): Promise<BufferClient[]> {

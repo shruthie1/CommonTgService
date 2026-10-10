@@ -732,6 +732,36 @@ describe('BufferClientService coverage', () => {
 
     // ─── diagnostics ─────────────────────────────────────────────────────────
 
+    describe('supply counting vs spam state', () => {
+        const DAY = 24 * 60 * 60 * 1000;
+        const ready = (o: any) => makeBufferClientData({ status: 'active', clientId: 'spam-supply', warmupPhase: 'session_rotated', channels: 250, availableDate: '2026-01-01', ...o });
+
+        it('harsh (recent) is not supply; limited counts from the lift date; free and stale-harsh count as today', async () => {
+            const now = Date.now();
+            await service.create(ready({ mobile: '15559900001' }));
+            await service.create(ready({ mobile: '15559900002', spamStatus: 'harsh', spamCheckedAt: new Date(now - DAY) }));
+            await service.create(ready({ mobile: '15559900003', spamStatus: 'limited', limitedUntil: new Date(now + 20 * DAY), spamCheckedAt: new Date(now) }));
+            await service.create(ready({ mobile: '15559900004', spamStatus: 'harsh', spamCheckedAt: new Date(now - 31 * DAY) }));
+            await service.create(ready({ mobile: '15559900005', spamStatus: 'limited', limitedUntil: new Date(now - DAY), spamCheckedAt: new Date(now - 2 * DAY) }));
+
+            // create() always enrols; make them terminal (ready) accounts for this scenario.
+            await (service as any).model.updateMany({ clientId: 'spam-supply' }, { $set: { warmupPhase: 'session_rotated' } });
+            const needs = await (service as any).calculateAvailabilityBasedNeedsForCurrentState('spam-supply');
+            // 5 docs: the recent-harsh one is dropped; the other four are ready supply.
+            expect(needs.readyActive).toBe(4);
+            // The shortest window (today-ish) must not count the account still limited for 20 days.
+            const shortest = [...needs.windowNeeds].sort((a: any, b: any) => a.targetDate.localeCompare(b.targetDate))[0];
+            const longest = [...needs.windowNeeds].sort((a: any, b: any) => b.targetDate.localeCompare(a.targetDate))[0];
+            expect(shortest.available).toBe(3);
+            expect(longest.available).toBe(longest.targetDate >= new Date(now + 20 * DAY).toISOString().slice(0, 10) ? 4 : 3);
+        });
+
+        it('promote pools are unaffected (base hook is identity)', () => {
+            const base = Object.getPrototypeOf(Object.getPrototypeOf(service));
+            expect(base.adjustSupplyDateForPoolState.call(service, { spamStatus: 'harsh', spamCheckedAt: new Date() }, '2026-10-10', Date.now())).toBe('2026-10-10');
+        });
+    });
+
     describe('diagnoseEnrollmentDecision()', () => {
         it('produces a per-client decision report', async () => {
             await service.create(makeBufferClientData({ mobile: '15551700001', status: 'active', clientId: 'test-client-1', warmupPhase: 'ready' }));
