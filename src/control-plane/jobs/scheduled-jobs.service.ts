@@ -442,6 +442,13 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
             {
               $set: {
                 totalCount: 10,
+                // D3: totalCount is being split. `windowCount` is the "treat as established"
+                // flag that every tg-platform site pairs with a totalCount of 10 (outhandler.ts,
+                // ExistingUserHandler.ts, utils.ts). Resetting totalCount without it would leave
+                // these rows half-reset once tg-platform's readers move to windowCount.
+                // `msgCount` is deliberately NOT touched here: it is the honest inbound-message
+                // counter and is $inc-only, never $set (dbservice.ts:1935).
+                windowCount: 1,
                 limitTime: now,
                 paidReply: true,
               },

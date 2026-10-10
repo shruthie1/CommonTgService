@@ -149,13 +149,23 @@ describe('probeSpamBot', () => {
     expect(mockUnregister).not.toHaveBeenCalled();
   });
 
-  test('connect timeout -> connectFailed and no delayed unregister when the stalled connect later resolves', async () => {
+  test('connect timeout -> connectFailed, and a connect that lands later is disconnected at once', async () => {
     let resolveConnect!: (v: any) => void;
     mockGetClient.mockReturnValue(new Promise((r) => { resolveConnect = r; }));
     const r = await probeSpamBot('9107', { ...fast, totalTimeoutMs: 20 });
     expect(r).toMatchObject({ status: 'unknown', connectFailed: true });
+    expect(mockUnregister).not.toHaveBeenCalled();
     resolveConnect({ client: tgWith([[]]) });
-    await new Promise((res) => setTimeout(res, 20));
+    await new Promise((res) => setTimeout(res, 5));
+    expect(mockUnregister).toHaveBeenCalledWith('9107'); // never left connected for idle cleanup
+  });
+
+  test('a timed-out connect that later fails needs no disconnect', async () => {
+    let rejectConnect!: (e: any) => void;
+    mockGetClient.mockReturnValue(new Promise((_, rej) => { rejectConnect = rej; }));
+    await probeSpamBot('9114', { ...fast, totalTimeoutMs: 20 });
+    rejectConnect(new Error('SESSION_REVOKED'));
+    await new Promise((res) => setTimeout(res, 5));
     expect(mockUnregister).not.toHaveBeenCalled();
   });
 

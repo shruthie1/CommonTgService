@@ -157,11 +157,11 @@ export async function probeSpamBot(mobile: string, options: ProbeOptions = {}): 
   let acquired = false;
   let lastUsedAtAcquire: number | undefined;
   const release = async () => {
-    // Release only a connection we actually obtained. A connect that failed cleans itself up in the
-    // connection manager; a connect that merely timed out is deliberately NOT released later (a delayed
-    // unregister could tear down the connection the setup flow opens for this mobile) and is left to
-    // the manager's idle cleanup. If another flow reused our connection meanwhile (lastUsed moved),
-    // it is theirs now: leave it to idle cleanup too.
+    // Release only a connection we actually obtained (a failed connect cleans itself up in the
+    // connection manager; a timed-out one is disconnected when it lands, see below). If another flow
+    // in this process reused our connection meanwhile (lastUsed moved), it owns it now and must
+    // disconnect it itself. Never leave an idle session connected: a second live connection of the
+    // same session (another CMS/UMS instance, the VM apps) means AUTH_KEY_DUPLICATED.
     if (!openedByProbe || !acquired) return;
     if (connectionManager.getLastUsed(mobile) !== lastUsedAtAcquire) return;
     try {
@@ -191,6 +191,14 @@ export async function probeSpamBot(mobile: string, options: ProbeOptions = {}): 
   try {
     manager = await withDeadline(connecting, 'connect');
   } catch (error) {
+    if (openedByProbe) {
+      // The connect may still succeed after we gave up. Disconnect it as soon as it lands rather than
+      // leaving a live session for idle cleanup. The candidate was rejected, so no swap will use it.
+      connecting.then(
+        () => connectionManager.unregisterClient(mobile).catch(() => undefined),
+        () => undefined,
+      );
+    }
     return {
       status: 'unknown', limitedUntil: null, connectFailed: true,
       error: error instanceof Error ? error.message : String(error),

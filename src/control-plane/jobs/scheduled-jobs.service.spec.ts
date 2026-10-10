@@ -158,7 +158,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     expect(userData.updateMany).toHaveBeenCalledWith(
       { payAmount: { $gt: 10 }, totalCount: { $gt: 30 } },
       {
-        $set: expect.objectContaining({ totalCount: 10, paidReply: true }),
+        $set: expect.objectContaining({ totalCount: 10, windowCount: 1, paidReply: true }),
       },
     );
     expect(controlPlaneJobRuns.insertOne).toHaveBeenCalledWith(
@@ -275,7 +275,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
 
       expect(await connection.db.collection('stats2').countDocuments()).toBe(0);
       expect(await connection.db.collection('userData').findOne({ profile: 'p1' }))
-        .toEqual(expect.objectContaining({ totalCount: 10, paidReply: true }));
+        .toEqual(expect.objectContaining({ totalCount: 10, windowCount: 1, paidReply: true }));
       expect(await connection.db.collection('userData').findOne({ profile: 'p2' }))
         .toEqual(expect.objectContaining({ totalCount: 99, paidReply: false }));
       const runs = (await connection.db.collection('controlPlaneJobRuns').find({}).toArray())
