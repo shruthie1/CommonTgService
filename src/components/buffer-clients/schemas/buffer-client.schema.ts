@@ -6,6 +6,9 @@ import { ClientStatusType } from '../../shared/base-client.service';
 import { canonicalizeMobile } from '../../shared/mobile-utils';
 import { ClientHelperUtils } from '../../shared/client-helper.utils';
 
+export type SpamStatus = 'free' | 'limited' | 'harsh';
+export type SpamCheckSource = 'tg-aut' | 'cms-probe';
+
 export type BufferClientDocument = BufferClient & Document;
 @Schema({
   collection: 'bufferClients', versionKey: false, autoIndex: true,
@@ -149,6 +152,26 @@ export class BufferClient {
   @Prop({ required: false, type: Date, default: null })
   sessionRotatedAt: Date;
 
+  // ---- Spam-limit state (written by tg-aut and by the CMS SpamBot probe) ----
+  // Deliberately NO defaults: an account that has never been checked must stay without these
+  // fields so the picker treats it as eligible-but-unverified. All writers use $set of only the
+  // fields they own, so unrelated updates never wipe them.
+  @ApiPropertyOptional({ description: 'Last known SpamBot state. harsh = indefinite Telegram limit (never lifted).', enum: ['free', 'limited', 'harsh'] })
+  @Prop({ required: false, type: String, enum: ['free', 'limited', 'harsh'] })
+  spamStatus?: SpamStatus;
+
+  @ApiPropertyOptional({ description: 'Date the Telegram limit is lifted. Date for dated limits, null for free/harsh.', type: Date, nullable: true })
+  @Prop({ required: false, type: Date })
+  limitedUntil?: Date | null;
+
+  @ApiPropertyOptional({ description: 'When spamStatus was last determined.', type: Date })
+  @Prop({ required: false, type: Date })
+  spamCheckedAt?: Date;
+
+  @ApiPropertyOptional({ description: 'Which component wrote the spam state.', enum: ['tg-aut', 'cms-probe'] })
+  @Prop({ required: false, type: String, enum: ['tg-aut', 'cms-probe'] })
+  spamCheckSource?: SpamCheckSource;
+
   // ---- Persona assignment ----
   @ApiProperty({ description: 'Assigned first name from pool', required: false })
   @Prop({ required: false, default: null })
@@ -176,3 +199,30 @@ BufferClientSchema.index(
       clientId: { $type: 'string' },
       inUse: true } },
 );
+
+/** Harsh limits are indefinite on Telegram's side, but we only trust a harsh verdict for this long before re-probing. */
+export const HARSH_RECHECK_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Mongo filter fragment that keeps a buffer account eligible for a live swap/assignment only when
+ * it has no future-dated limit and is not recently harsh-limited. A harsh verdict older than
+ * HARSH_RECHECK_AFTER_MS (or harsh without spamCheckedAt) is eligible again so it can be re-probed.
+ * Accounts without the spam fields match. Composed only through $and so it never clobbers a caller's
+ * own top-level $or.
+ */
+export function buildSpamEligibleFilter(now: Date = new Date()): { $and: Array<Record<string, unknown>> } {
+  const harshCutoff = new Date(now.getTime() - HARSH_RECHECK_AFTER_MS);
+  return {
+    $and: [
+      {
+        $or: [
+          { spamStatus: { $ne: 'harsh' } },
+          { spamCheckedAt: { $exists: false } },
+          { spamCheckedAt: null },
+          { spamCheckedAt: { $lte: harshCutoff } },
+        ],
+      },
+      { $or: [{ limitedUntil: { $exists: false } }, { limitedUntil: null }, { limitedUntil: { $lte: now } }] },
+    ],
+  };
+}

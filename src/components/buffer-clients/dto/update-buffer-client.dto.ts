@@ -1,6 +1,7 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { CreateBufferClientDto } from './create-buffer-client.dto';
 import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
+import type { SpamCheckSource, SpamStatus } from '../schemas/buffer-client.schema';
 import { WarmupPhase, WarmupPhaseType } from '../../shared/warmup-phases';
 
 export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
@@ -69,4 +70,20 @@ export class UpdateBufferClientDto extends PartialType(CreateBufferClientDto) {
     @IsArray()
     @IsString({ each: true })
     assignedProfilePics?: string[];
+
+    @ApiPropertyOptional({ enum: ['free', 'limited', 'harsh'], description: 'Last known SpamBot state.' })
+    @IsOptional()
+    @IsEnum(['free', 'limited', 'harsh'])
+    spamStatus?: SpamStatus;
+
+    @ApiPropertyOptional({ description: 'Date the limit is lifted (null for free/harsh).', nullable: true })
+    limitedUntil?: Date | null;
+
+    @ApiPropertyOptional({ description: 'When spamStatus was last determined.' })
+    spamCheckedAt?: Date;
+
+    @ApiPropertyOptional({ enum: ['tg-aut', 'cms-probe'], description: 'Writer of the spam state.' })
+    @IsOptional()
+    @IsEnum(['tg-aut', 'cms-probe'])
+    spamCheckSource?: SpamCheckSource;
 }

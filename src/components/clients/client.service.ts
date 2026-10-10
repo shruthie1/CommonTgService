@@ -45,6 +45,8 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { ActiveClientSetup } from '../Telegram/manager/types';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { canonicalizeMobile } from '../shared/mobile-utils';
+import { buildSpamEligibleFilter } from '../buffer-clients/schemas/buffer-client.schema';
+import { probeSpamBot, SpamProbeResult, SPAMBOT_TOTAL_TIMEOUT_MS } from '../Telegram/utils/spambot-probe';
 
 // Configuration constants
 const CONFIG = {
@@ -61,6 +63,29 @@ const CONFIG = {
 interface CacheMetadata {
   lastUpdated: number;
   isStale: boolean;
+}
+
+/** A buffer account whose last 'free' verdict is younger than this is not re-probed before a swap. */
+const SPAM_FREE_FRESH_MS = 6 * 60 * 60 * 1000;
+/**
+ * Probe limits per /setupClient request. tg-aut calls /setupClient through fetchWithTimeout
+ * (30s per attempt, +5s per retry, up to 3 retries; retries join the in-flight setup via
+ * setupInFlightMap). One probe is hard-capped at 25s (connect + <=15s reply poll), so we allow at
+ * most 3 probes and stop starting new ones once 45s of probing has been spent.
+ */
+const MAX_SETUP_PROBES = 3;
+const SETUP_PROBE_TIME_BUDGET_MS = 45_000;
+/** Do not start a probe with less than this left of the request budget; it could not finish. */
+const MIN_SETUP_PROBE_MS = 8_000;
+
+interface SetupProbeBudget {
+  clientId: string;
+  remaining: number;
+  spentMs: number;
+  /** Concise probe outcomes of skipped candidates, appended to the swap notifications. */
+  skipped: string[];
+  /** True when an unprobed candidate was passed over only because this budget ran out. */
+  moreCandidatesPending?: boolean;
 }
 
 interface SafeSetupBufferCandidate {
@@ -87,6 +112,8 @@ export interface SetupClientResult {
   cooldownRemainingMs?: number;
   existingRetired?: boolean;
   usedFutureAvailableFallback?: boolean;
+  /** no_candidate only: unprobed candidates remain; the probe budget ran out, so retrying may find one. */
+  moreCandidatesPending?: boolean;
 }
 
 export interface PersonaAssignmentRecord {
@@ -592,7 +619,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       status: 'active',
       inUse: { $ne: true },
       warmupPhase: WarmupPhase.SESSION_ROTATED,
+      // Never swap in a harsh-limited account or one whose Telegram limit has not lifted yet.
+      // Accounts without spam fields stay eligible (they are probed before the swap).
+      ...buildSpamEligibleFilter(),
     };
+    const newProbeBudget = (): SetupProbeBudget => ({ clientId, remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [] });
+    const probeBudget = newProbeBudget();
+    // The permanent-replacement fallback scan gets its own budget so an exhausted due-scan budget
+    // cannot retire the existing account before the fallback has probed anything.
+    let fallbackBudget: SetupProbeBudget | undefined;
     const dueCandidateQuery: ClientMongoQuery = {
       ...baseCandidateQuery,
       availableDate: { $lte: today },
@@ -602,7 +637,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       `[${clientId}] Setup candidate scan completed`,
       { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query: dueCandidateQuery },
     );
-    let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session);
+    let newBufferClient = await this.findSafeSetupBufferCandidate(candidateBufferClients, existingClient.session, probeBudget);
     let usedFutureAvailableFallback = false;
 
     // A permanent Telegram failure means the current main account cannot safely serve users.
@@ -620,7 +655,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         { availableDate: 1, createdAt: 1 },
         10,
       );
-      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session);
+      fallbackBudget = newProbeBudget();
+      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget);
       usedFutureAvailableFallback = !!newBufferClient;
       this.logger.warn(`[${clientId}] Permanent replacement fallback scan completed`, {
         existingMobile: existingClientMobile,
@@ -640,7 +676,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         await this.retireReplacedMobile(existingClientMobile, setupClientQueryDto.reason);
         existingRetired = true;
       }
-      await this.notify(`Buffer not available ${clientId}: no safe buffer clients for swap`);
+      const moreCandidatesPending = !!(probeBudget.moreCandidatesPending || fallbackBudget?.moreCandidatesPending);
+      const pendingNote = moreCandidatesPending
+        ? ' (SpamBot probe budget exhausted; more unprobed candidates remain, retry to check them)'
+        : '';
+      await this.notify(`Buffer not available ${clientId}: no safe buffer clients for swap${pendingNote}${this.formatProbeSkips(probeBudget, fallbackBudget)}`);
       this.logger.log('Buffer Clients not safely available');
       return {
         status: 'no_candidate',
@@ -648,7 +688,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         clientId,
         existingMobile: existingClientMobile,
         existingRetired,
-        message: 'No safe buffer client is currently available',
+        ...(moreCandidatesPending ? { moreCandidatesPending: true } : {}),
+        message: `No safe buffer client is currently available${pendingNote}`,
       };
     }
     // A real swap is proceeding — start the cooldown now so a genuine in-progress setup is not
@@ -664,7 +705,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         },
       );
       await this.notify(
-        `Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}`,
+        `Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}${this.formatProbeSkips(probeBudget, fallbackBudget)}`,
       );
       this.telegramService.setActiveClientSetup({
         ...setupClientQueryDto,
@@ -966,16 +1007,37 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
+  /**
+   * availableDate for a returning account: now + days, but never earlier than a known Telegram
+   * limit expiry (spamStatus 'limited' + limitedUntil written by tg-aut / the probe). The spam
+   * fields themselves are never part of the return write, so they stay intact; a 'harsh' account
+   * keeps spamStatus 'harsh' and is excluded by the picker regardless of availableDate.
+   */
+  private resolveReturnAvailableDate(
+    bufferClient: { spamStatus?: string; limitedUntil?: Date | string | null } | null | undefined,
+    days: number,
+  ): string {
+    const defaultMs = Date.now() + days * 24 * 60 * 60 * 1000;
+    if (bufferClient?.spamStatus === 'limited' && bufferClient.limitedUntil) {
+      const limitedUntilMs = new Date(bufferClient.limitedUntil).getTime();
+      if (Number.isFinite(limitedUntilMs) && limitedUntilMs > defaultMs) {
+        return ClientHelperUtils.toDateString(limitedUntilMs);
+      }
+    }
+    return ClientHelperUtils.toDateString(defaultMs);
+  }
+
   private async returnOldClientToBufferPool(
     existingClient: Client,
     existingClientUser: User,
     existingMobile: string,
     days: number,
   ) {
+    let existingBufferClient: Awaited<ReturnType<BufferClientService['findOne']>> | null = null;
     try {
       await this.assertDistinctUserBackupSession(existingMobile, existingClient.session);
-      const existingBufferClient = await this.bufferClientService.findOne(existingMobile, false);
-      const availableDate = ClientHelperUtils.toDateString(Date.now() + days * 24 * 60 * 60 * 1000);
+      existingBufferClient = await this.bufferClientService.findOne(existingMobile, false);
+      const availableDate = this.resolveReturnAvailableDate(existingBufferClient, days);
       const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
         clientId: existingClient.clientId,
         mobile: existingMobile,
@@ -1030,7 +1092,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         // the live account — but it is still inUse=true/status=active. Release the
         // reservation and push availability forward so it returns to the buffer pool for a
         // later retry instead of being stranded inUse=true (excluded from every selection).
-        const retryAvailableDate = ClientHelperUtils.toDateString(Date.now() + days * 24 * 60 * 60 * 1000);
+        const retryAvailableDate = this.resolveReturnAvailableDate(existingBufferClient, days);
         await this.bufferClientService.update(existingMobile, {
           inUse: false,
           status: 'active',
@@ -1045,8 +1107,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async findSafeSetupBufferCandidate(
-    candidates: Array<{ mobile: string; session?: string }>,
+    candidates: Array<{
+      mobile: string;
+      session?: string;
+      availableDate?: string;
+      spamStatus?: string;
+      spamCheckedAt?: Date | string | null;
+    }>,
     existingClientSession: string,
+    probeBudget: SetupProbeBudget = { clientId: '-', remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [] },
   ): Promise<SafeSetupBufferCandidate | null> {
     for (const candidate of candidates) {
       if (!candidate?.mobile || !candidate?.session) continue;
@@ -1061,6 +1130,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           this.logger.warn(`Skipping setup candidate ${candidate.mobile}: backup session is still duplicated`);
           continue;
         }
+        if (!(await this.isSpamSafeForSwap(candidate, probeBudget))) continue;
         return { mobile: candidate.mobile, session: candidate.session, backupUser };
       } catch (error) {
         this.logger.warn(`Skipping setup candidate ${candidate.mobile}: failed to ensure distinct backup session`);
@@ -1069,6 +1139,95 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
 
     return null;
+  }
+
+  private formatProbeSkips(...budgets: Array<SetupProbeBudget | undefined>): string {
+    const skipped = budgets.flatMap((b) => b?.skipped ?? []);
+    return skipped.length ? `\nSkipped (SpamBot): ${skipped.join('; ')}` : '';
+  }
+
+  /**
+   * Decide whether a candidate may be swapped in, probing @SpamBot unless the account has a fresh
+   * 'free' verdict. limited/harsh, an exhausted probe budget, a connect or send failure, or a
+   * connection busy in another flow => false. 'unknown' (connected, but SpamBot silent or the reply
+   * unrecognized) => true with a warning, so a SpamBot outage never blocks every swap.
+   */
+  private async isSpamSafeForSwap(
+    candidate: { mobile: string; availableDate?: string; spamStatus?: string; spamCheckedAt?: Date | string | null },
+    budget: SetupProbeBudget,
+  ): Promise<boolean> {
+    const checkedAt = candidate.spamCheckedAt ? new Date(candidate.spamCheckedAt).getTime() : 0;
+    if (candidate.spamStatus === 'free' && checkedAt > 0 && Date.now() - checkedAt < SPAM_FREE_FRESH_MS) {
+      return true;
+    }
+    // Each probe is capped to what is left of the request budget, so the request's total probing
+    // stays within SETUP_PROBE_TIME_BUDGET_MS instead of overshooting by a whole probe.
+    const probeTimeoutMs = Math.min(SPAMBOT_TOTAL_TIMEOUT_MS, SETUP_PROBE_TIME_BUDGET_MS - budget.spentMs);
+    if (budget.remaining <= 0 || probeTimeoutMs < MIN_SETUP_PROBE_MS) {
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: per-request SpamBot probe budget exhausted`);
+      budget.moreCandidatesPending = true; // never swap an unprobed account; tell the caller to retry
+      return false;
+    }
+    budget.remaining -= 1;
+    const startedAt = Date.now();
+    let result: SpamProbeResult;
+    try {
+      result = await probeSpamBot(candidate.mobile, { totalTimeoutMs: probeTimeoutMs });
+    } catch (error) {
+      result = { status: 'unknown', limitedUntil: null, error: error instanceof Error ? error.message : String(error) };
+    }
+    budget.spentMs += Date.now() - startedAt;
+
+    if (result.status === 'unknown' && result.busy) {
+      // Another flow is connecting/holding this account; probing would tear its connection down.
+      // Nothing was spent, and a retry can probe it once that flow is done.
+      budget.remaining += 1;
+      budget.moreCandidatesPending = true;
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: connection in use by another flow, not probed`);
+      budget.skipped.push(`${candidate.mobile} busy (not probed)`);
+      return false;
+    }
+    if (result.status === 'unknown' && result.sendFailed) {
+      // Connected but could not even message SpamBot (PEER_FLOOD, FLOOD_WAIT, auth errors): not safe.
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot probe send failed (${result.error || 'unknown error'})`);
+      budget.skipped.push(`${candidate.mobile} probe failed: ${(result.error || 'unknown error').slice(0, 60)}`);
+      return false;
+    }
+    if (result.status === 'unknown' && result.connectFailed) {
+      // Could not even connect the account: treat like unsafe (it could not serve as a live account either).
+      this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot probe could not connect (${result.error || 'unknown error'})`);
+      budget.skipped.push(`${candidate.mobile} connect failed`);
+      return false;
+    }
+    if (result.status === 'unknown') {
+      this.logger.warn(`[${budget.clientId}] SpamBot probe inconclusive for ${candidate.mobile} (${result.error || 'unrecognized reply'}); allowing candidate`);
+      return true;
+    }
+
+    const patch: Mutable<UpdateBufferClientDto> = {
+      spamStatus: result.status,
+      limitedUntil: result.status === 'limited' ? result.limitedUntil : null,
+      spamCheckedAt: new Date(),
+      spamCheckSource: 'cms-probe',
+    };
+    if (result.status === 'limited' && result.limitedUntil) {
+      const limitDate = ClientHelperUtils.toDateString(result.limitedUntil);
+      // Only ever push availability later, never earlier.
+      patch.availableDate = candidate.availableDate && candidate.availableDate > limitDate ? candidate.availableDate : limitDate;
+    }
+    try {
+      await this.bufferClientService.update(candidate.mobile, patch);
+    } catch (error) {
+      this.logger.warn(`[${budget.clientId}] Failed to persist SpamBot result for ${candidate.mobile}: ${parseError(error, '', false).message}`);
+    }
+    if (result.status === 'free') return true;
+
+    const detail = result.status === 'limited' && result.limitedUntil
+      ? `limited until ${result.limitedUntil.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+      : 'harsh limit (indefinite)';
+    this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot ${detail}`);
+    budget.skipped.push(`${candidate.mobile} ${detail}`);
+    return false;
   }
 
   private async assertDistinctUserBackupSession(mobile: string, activeSession: string): Promise<User> {

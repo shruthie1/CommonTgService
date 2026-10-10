@@ -75,6 +75,29 @@ describe('ConnectionManager', () => {
         expect(managerInstances).toHaveLength(1);
     });
 
+    test('getReuseState: none -> busy while building -> healthy -> busy once idle-stale; getLastUsed tracks reuse', async () => {
+        expect(connectionManager.getReuseState('900')).toBe('none');
+        expect(connectionManager.getLastUsed('900')).toBeUndefined();
+        let release!: (v: any) => void;
+        connectionManager.setUsersService(makeUsersService({
+            search: jest.fn(() => new Promise((r) => { release = r; })),
+        }));
+        const building = connectionManager.getClient('900');
+        expect(connectionManager.getReuseState('900')).toBe('busy'); // in flight: getClient would join it
+        release([{ mobile: '900', session: 'sess' }]);
+        await building;
+        expect(connectionManager.getReuseState('900')).toBe('healthy');
+
+        const info = (connectionManager as any).clients.get('900');
+        info.lastUsed = Date.now() - 10 * 60 * 1000; // idle past IDLE_TIMEOUT: getClient would tear it down
+        const before = connectionManager.getLastUsed('900');
+        expect(connectionManager.getReuseState('900')).toBe('busy');
+        info.lastUsed = Date.now();
+        await connectionManager.getClient('900'); // fast-path reuse moves lastUsed
+        expect(connectionManager.getLastUsed('900')).toBeGreaterThan(before!);
+        expect(managerInstances).toHaveLength(1);
+    });
+
     test('throws NotFound when user is missing', async () => {
         connectionManager.setUsersService(makeUsersService({ search: jest.fn().mockResolvedValue([]) }));
         await expect(connectionManager.getClient('901')).rejects.toBeInstanceOf(NotFoundException);

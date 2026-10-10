@@ -21,7 +21,7 @@ import mongoose, { Connection, Model } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { BufferClientService } from '../buffer-client.service';
-import { BufferClient, BufferClientSchema, BufferClientDocument } from '../schemas/buffer-client.schema';
+import { BufferClient, BufferClientSchema, BufferClientDocument, buildSpamEligibleFilter } from '../schemas/buffer-client.schema';
 import { __resetEnrollmentLocks } from '../../shared/enrollment-lock';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -202,6 +202,50 @@ describe('BufferClientService (real Mongo)', () => {
       });
       await expect(service.update('15559990001', { status: 'active' } as any))
         .rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('spam-limit fields', () => {
+    const future = new Date(Date.now() + 5 * 86_400_000);
+    const past = new Date(Date.now() - 86_400_000);
+
+    test('createOrUpdate / update of unrelated fields never wipe the spam fields', async () => {
+      const checkedAt = new Date();
+      await model.create(bufferDoc({
+        mobile: '15557770001', spamStatus: 'limited', limitedUntil: future, spamCheckedAt: checkedAt, spamCheckSource: 'tg-aut',
+      }));
+      await service.createOrUpdate('15557770001', { availableDate: '2026-12-01', inUse: false, message: 'Returned' } as any);
+      await service.update('15557770001', { channels: 300 } as any);
+
+      const doc = await model.findOne({ mobile: '15557770001' }).lean();
+      expect(doc).toMatchObject({ spamStatus: 'limited', spamCheckSource: 'tg-aut', availableDate: '2026-12-01' });
+      expect(doc?.limitedUntil?.getTime()).toBe(future.getTime());
+      expect(doc?.spamCheckedAt?.getTime()).toBe(checkedAt.getTime());
+    });
+
+    test('new documents get no spam fields by default', async () => {
+      await model.create(bufferDoc({ mobile: '15557770002' }));
+      const raw = await model.collection.findOne({ mobile: '15557770002' });
+      for (const k of ['spamStatus', 'limitedUntil', 'spamCheckedAt', 'spamCheckSource']) expect(raw).not.toHaveProperty(k);
+    });
+
+    test('buildSpamEligibleFilter excludes recent harsh and future-limited, keeps unflagged/free/expired/stale-harsh', async () => {
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770010' }));                                                  // no fields
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770011', spamStatus: 'free', limitedUntil: null }));          // free
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770012', spamStatus: 'limited', limitedUntil: past }));       // expired limit
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770013', spamStatus: 'limited', limitedUntil: future }));     // excluded
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770014', spamStatus: 'harsh', limitedUntil: null, spamCheckedAt: new Date(Date.now() - 2 * 86_400_000) })); // recent harsh: excluded
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770015', spamStatus: 'harsh', limitedUntil: null, spamCheckedAt: new Date(Date.now() - 31 * 86_400_000) })); // stale harsh: eligible
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770016', spamStatus: 'harsh', limitedUntil: null }));            // harsh, no spamCheckedAt: eligible
+      await model.create(bufferDoc({ warmupPhase: 'session_rotated', mobile: '15557770017', spamStatus: 'harsh', limitedUntil: future, spamCheckedAt: new Date(Date.now() - 40 * 86_400_000) })); // stale harsh but future limit: excluded
+
+      const eligible = (await model.find(buildSpamEligibleFilter()).lean()).map((d) => d.mobile).sort();
+      expect(eligible).toEqual(['15557770010', '15557770011', '15557770012', '15557770015', '15557770016']);
+
+      // Does not clobber a caller's own top-level $or.
+      const withOr = await model.find({ $or: [{ mobile: '15557770010' }, { mobile: '15557770014' }], ...buildSpamEligibleFilter() }).lean();
+      expect(withOr.map((d) => d.mobile)).toEqual(['15557770010']);
+      expect((await service.getLeastRecentlyUsedBufferClients('main-client-1', 10)).map((d) => d.mobile).sort()).toEqual(eligible);
     });
   });
 });

@@ -2418,6 +2418,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }));
     }
 
+    /** Hook for pools that must exclude more accounts from live assignment (e.g. spam-limited buffers). */
+    protected getExtraAvailabilityFilter(): Record<string, unknown> {
+        return {};
+    }
+
     async getLeastRecentlyUsedClients(clientId: string, limit: number = 1): Promise<TDoc[]> {
         // Inclusive upper bound: '￿' sorts after any same-day ISO datetime, so a
         // legacy stored value like '2026-06-12T18:30:00Z' still matches today.
@@ -2434,6 +2439,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     { availableDate: { $exists: false } },
                     { availableDate: null },
                 ],
+                ...this.getExtraAvailabilityFilter(),
             })
             .sort({ lastUsed: 1, _id: 1 })
             .limit(limit)

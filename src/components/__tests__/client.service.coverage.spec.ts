@@ -26,6 +26,13 @@ jest.mock('telegram/Helpers', () => ({
     ...jest.requireActual('telegram/Helpers'),
     sleep: jest.fn(() => Promise.resolve()),
 }));
+// The swap picker probes candidates with SpamBot (real Telegram). These coverage tests exercise the
+// pre-existing selection/cutover paths, so every candidate probes clean; spam-aware selection is
+// covered by clients/__tests__/client-spam-swap.spec.ts.
+jest.mock('../Telegram/utils/spambot-probe', () => ({
+  ...jest.requireActual('../Telegram/utils/spambot-probe'),
+    probeSpamBot: jest.fn(() => Promise.resolve({ status: 'free', limitedUntil: null })),
+}));
 jest.mock('../../utils/fetchWithTimeout', () => ({
     fetchWithTimeout: jest.fn(() => Promise.resolve({ ok: true })),
 }));

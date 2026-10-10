@@ -17,6 +17,7 @@ import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import {
     BufferClient,
     BufferClientDocument,
+    buildSpamEligibleFilter,
 } from './schemas/buffer-client.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { sleep } from 'telegram/Helpers';
@@ -1984,6 +1985,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     async getBufferClientsWithMessages() {
         return this.bufferClientModel.find({}, { mobile: 1, status: 1, message: 1, clientId: 1, lastUsed: 1 }).exec();
+    }
+
+    /** Live-assignment selection must skip harsh / still-limited buffers. */
+    protected getExtraAvailabilityFilter(): Record<string, unknown> {
+        return buildSpamEligibleFilter();
     }
 
     async getLeastRecentlyUsedBufferClients(clientId: string, limit: number = 1): Promise<BufferClient[]> {

@@ -293,6 +293,24 @@ class ConnectionManager {
         return clientInfo !== undefined && clientInfo.state === 'connected';
     }
 
+    /**
+     * Read-only view for callers that must not disturb another flow's connection:
+     * 'none' = nothing registered or building; 'healthy' = getClient() would reuse it as-is;
+     * 'busy' = a build is in flight or the registered client is unhealthy, so getClient() would
+     * join that build or tear the client down and rebuild it.
+     */
+    public getReuseState(mobile: string): 'none' | 'healthy' | 'busy' {
+        if (this.inFlight.has(mobile)) return 'busy';
+        const clientInfo = this.clients.get(mobile);
+        if (!clientInfo) return 'none';
+        return clientInfo.state === 'connected' && this.isClientHealthy(clientInfo) ? 'healthy' : 'busy';
+    }
+
+    /** Last time any caller used this mobile's client (undefined when not registered). */
+    public getLastUsed(mobile: string): number | undefined {
+        return this.clients.get(mobile)?.lastUsed;
+    }
+
     public getClientState(mobile: string): ConnectionStatusDto | undefined {
         const clientInfo = this.clients.get(mobile);
         if (!clientInfo) return undefined;
