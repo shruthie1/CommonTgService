@@ -639,6 +639,95 @@ describe('BotsService - self-healing around bots that cannot reach their channel
   });
 });
 
+describe('BotsService - channel admin facts via the Bot API (no account activity), 2026-10-17', () => {
+  const CRITICAL = { mobile: '919600000282', tgId: '5817107227', session: 's1' }; // @myvcacc
+  const OTHER = { mobile: '917000007937', tgId: '6100873717', session: 's2' };
+  let telegramService: any;
+
+  beforeEach(() => {
+    process.env.channelManagerBackup = CRITICAL.mobile;
+    telegramService = {
+      getGroupAdmins: jest.fn(async () => { throw new Error('account scan must not run'); }),
+      getChannelAbout: jest.fn(async () => { throw new Error('account About read must not run'); }),
+    };
+    const usersService = {
+      search: jest.fn(async (q: any) => [CRITICAL, OTHER].filter(u => q?.tgId?.$in?.includes(u.tgId) || q?.mobile?.$in?.includes(u.mobile) || q?.mobile === u.mobile)),
+    };
+    mockModuleRef.get.mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) return telegramService;
+      if (/Users/i.test(name)) return usersService;
+      return {};
+    });
+    (service as any).sleep = jest.fn(async () => undefined);
+  });
+  afterEach(() => { delete process.env.channelManagerBackup; });
+
+  test('finds our admin through a channel bot and prefers another account over the critical @myvcacc', async () => {
+    await seedBot({ category: ChannelCategory.ACCOUNT_LOGIN_FAILURES, channelId: '-100alf', token: 'tok-reader', lifecycle: 'active_verified', status: 'active' });
+    mockedAxios.get.mockReset().mockImplementation(async (url: string) => {
+      if (url.includes('/getChatAdministrators')) return { data: { ok: true, result: [
+        { user: { id: 5817107227, is_bot: false }, status: 'creator' },
+        { user: { id: 6100873717, is_bot: false }, status: 'administrator', can_promote_members: true, can_post_messages: true },
+        { user: { id: 111, is_bot: true }, status: 'administrator', can_promote_members: true },
+      ] } } as any;
+      if (url.includes('/getChat')) return { data: { ok: true, result: { description: '' } } } as any;
+      throw new Error(`unexpected ${url}`);
+    });
+
+    expect(await (service as any).resolveChannelAdminMobile('-100alf')).toBe(OTHER.mobile);
+    expect(telegramService.getGroupAdmins).not.toHaveBeenCalled();
+    expect(telegramService.getChannelAbout).not.toHaveBeenCalled();
+  });
+
+  test('uses the critical account when it is the only one of ours that can add bots', async () => {
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100http', token: 'tok-reader2', lifecycle: 'active_verified', status: 'active' });
+    mockedAxios.get.mockReset().mockImplementation(async (url: string) => {
+      if (url.includes('/getChatAdministrators')) return { data: { ok: true, result: [
+        { user: { id: 5817107227, is_bot: false }, status: 'administrator', can_promote_members: true },
+        { user: { id: 6100873717, is_bot: false }, status: 'administrator', can_promote_members: false },
+      ] } } as any;
+      return { data: { ok: true, result: { description: '' } } } as any;
+    });
+
+    expect(await (service as any).resolveChannelAdminMobile('-100http')).toBe(CRITICAL.mobile);
+  });
+
+  test('admin coverage: counts our accounts that can add bots per channel (0 = alert, 1 = single point)', async () => {
+    await seedBot({ category: ChannelCategory.WEB_TELEMETRY, channelId: '-100web', token: 'tok-web', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.ACCOUNT_LOGIN_FAILURES, channelId: '-100alf', token: 'tok-alf', lifecycle: 'active_verified', status: 'active' });
+    mockedAxios.get.mockReset().mockImplementation(async (url: string, cfg?: any) => {
+      if (url.includes('/getChatAdministrators')) {
+        const result = cfg?.params?.chat_id === '-100web'
+          ? [{ user: { id: 999, is_bot: false }, status: 'creator' }] // a human who is not one of ours
+          : [{ user: { id: 5817107227, is_bot: false }, status: 'creator' }, { user: { id: 6100873717, is_bot: false }, status: 'administrator', can_promote_members: true }];
+        return { data: { ok: true, result } } as any;
+      }
+      return { data: { ok: true, result: { description: '' } } } as any;
+    });
+
+    const coverage = await (service as any).auditAdminCoverage();
+
+    expect(coverage).toEqual(expect.arrayContaining([
+      { category: 'WEB_TELEMETRY', channelId: '-100web', repairAdmins: 0 },
+      { category: 'ACCOUNT_LOGIN_FAILURES', channelId: '-100alf', repairAdmins: 2 },
+    ]));
+  });
+
+  test('a newly added bot confirms itself with getChatMember; no account read-back', async () => {
+    mockedAxios.get.mockReset().mockImplementation(async (url: string) => {
+      if (url.includes('bottok-new/getChatMember')) return { data: { ok: true, result: { status: 'administrator' } } } as any;
+      throw new Error(`unexpected ${url}`);
+    });
+    expect(await (service as any).verifyBotIsChannelAdmin('-100x', '42', 'tok-new')).toBe(true);
+    expect(telegramService.getGroupAdmins).not.toHaveBeenCalled();
+
+    mockedAxios.get.mockReset().mockRejectedValue({ response: { status: 400, data: { ok: false, description: 'Bad Request: chat not found' } } });
+    expect(await (service as any).verifyBotIsChannelAdmin('-100x', '42', 'tok-new')).toBe(false);
+    expect(telegramService.getGroupAdmins).not.toHaveBeenCalled();
+  });
+});
+
 describe('BotsService - flushPendingStats', () => {
   test('no pending updates → early return', async () => {
     await expect((service as any).flushPendingStats()).resolves.toBeUndefined();
@@ -1134,6 +1223,7 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     mockedAxios.get.mockImplementation(async (url: string, cfg?: any) => {
       if (url.includes('bottok-dead/getMe')) throw { response: { status: 401, data: { ok: false, description: 'Unauthorized' } } };
       if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      if (url.includes('/getChatAdministrators')) return { data: { ok: false } } as any; // admin-coverage audit: not counted
       getChatCalls.push(String(cfg?.params?.chat_id));
       return { status: 200, data: { ok: true, result: {} } } as any;
     });
@@ -1250,6 +1340,8 @@ describe('BotsService - reconcilePendingAdminBotsNow (promote existing pending b
 
   function wire() {
     promoted = [];
+    // Bot API unreachable here: these tests pin the user-account fallback path.
+    mockedAxios.get.mockReset().mockRejectedValue(new Error('network'));
     process.env.channelManagerBackup = ADMIN.mobile; // the viewer that reads the admin list (prod: @myvcacc)
     const telegramService = {
       createBot: jest.fn(async () => { throw new Error('must not create bots'); }),

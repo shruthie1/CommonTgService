@@ -47,6 +47,8 @@ export interface BotHealthRunResult {
     failures: string[];
     dryRun: boolean;
     proposedActions: string[];
+    /** Per channel: how many of OUR accounts can add bots there (0 = no self-repair, 1 = single point of failure). */
+    adminCoverage?: Array<{ category: string; channelId: string; repairAdmins: number | null }>;
     /**
      * Categories whose CHANNEL is unreachable (getChat "chat not found" / bot not a member).
      * A bot can pass getMe (token alive) and still be unable to post because the channel itself
@@ -1280,10 +1282,17 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
             for (const dc of deadChannels) failures.push(`DEAD CHANNEL: ${dc} — sends silently no-op; repair/rotate the channel`);
 
-            if (!options.dryRun) {
-                await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures });
+            // Admin coverage (Bot API, read-only): can we still repair each channel ourselves?
+            const adminCoverage = await this.auditAdminCoverage();
+            for (const c of adminCoverage) {
+                if (c.repairAdmins === 0) failures.push(`NO REPAIR ADMIN: ${c.category} (channel ${c.channelId}) — none of our accounts can add bots; make a manager account admin with Add Admins`);
             }
-            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions, deadChannels };
+            const singleAdmin = adminCoverage.filter(c => c.repairAdmins === 1).map(c => c.category);
+
+            if (!options.dryRun) {
+                await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures, singleAdmin });
+            }
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions, deadChannels, adminCoverage };
         } finally {
             this.replaceInProgress = false;
         }
@@ -1373,7 +1382,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 const info = await this.telegramService.getBotInfo(bot.token);
                 const botId = String(info?.id || '');
                 if (!botId) throw new Error('could not resolve pending bot id');
-                const alreadyAdmin = await this.verifyBotIsChannelAdmin(bot.channelId, botId);
+                const alreadyAdmin = await this.verifyBotIsChannelAdmin(bot.channelId, botId, bot.token);
                 if (alreadyAdmin) {
                     proposedActions.push(`activate verified pending-admin @${bot.username}`);
                     if (!options.dryRun) {
@@ -1388,7 +1397,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 proposedActions.push(`add/verify pending-admin @${bot.username} in ${bot.channelId}`);
                 if (!options.dryRun) {
                     await this.addBotToChannelAsAdmin(bot.channelId, bot.token, bot.username);
-                    if (!(await this.verifyBotIsChannelAdmin(bot.channelId, botId))) {
+                    if (!(await this.verifyBotIsChannelAdmin(bot.channelId, botId, bot.token))) {
                         throw new Error('post-add verification failed: bot is not listed as a channel admin');
                     }
                     await this.botModel.updateOne({ _id: bot._id, lifecycle: 'pending_admin' }, {
@@ -1508,7 +1517,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         //    do we activate it. On failure it stays inactive (never selected) + we alert.
         try {
             const botId = await this.addBotToChannelAsAdmin(channelId, botToken, username);
-            const verified = await this.verifyBotIsChannelAdmin(channelId, botId);
+            const verified = await this.verifyBotIsChannelAdmin(channelId, botId, botToken);
             if (!verified) {
                 throw new Error('post-add verification failed: bot is not listed as an admin of the channel');
             }
@@ -1597,7 +1606,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 const botId = String(info?.id || '');
                 if (!botId) continue;
                 await this.addBotToChannelAsAdmin(channelId, bot.token, bot.username);
-                if (!(await this.verifyBotIsChannelAdmin(channelId, botId))) continue; // re-add didn't stick; leave as-is
+                if (!(await this.verifyBotIsChannelAdmin(channelId, botId, bot.token))) continue; // re-add didn't stick; leave as-is
                 await this.botModel.updateOne({ _id: bot._id }, {
                     $set: { lifecycle: 'active_verified', lifecycleReason: 'reused: re-added to channel as admin', lifecycleUpdatedAt: new Date(), lastAdminVerifiedAt: new Date(), status: 'active', repairAttempts: 0 },
                     $unset: { deadReason: '', deadAt: '', nextRepairAt: '' },
@@ -1779,9 +1788,23 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * Read back the channel's admin list and confirm the bot id is present. Needed because
      * setupBotInChannel swallows failures — this is the only reliable success signal.
      */
-    private async verifyBotIsChannelAdmin(channelId: string, botId: string): Promise<boolean> {
+    private async verifyBotIsChannelAdmin(channelId: string, botId: string, botToken?: string): Promise<boolean> {
         // Small settle delay: admin membership can take a moment to propagate.
         await this.sleep(3000);
+        // The bot asks about itself (Bot API getChatMember): authoritative, and no account activity.
+        if (botToken) {
+            try {
+                const res = await axios.get(`https://api.telegram.org/bot${botToken}/getChatMember`, {
+                    params: { chat_id: channelId, user_id: botId }, timeout: 12000,
+                });
+                const status = res.data?.ok ? res.data.result?.status : null;
+                if (status) return status === 'administrator' || status === 'creator';
+            } catch (error: any) {
+                const httpStatus = error?.response?.status;
+                if (httpStatus === 400 || httpStatus === 403) return false; // not in the chat
+                // transient: fall through to the account read-back
+            }
+        }
         for (const viewerMobile of [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(10))]) {
             try {
                 const admins = await this.telegramService.getGroupAdmins(viewerMobile, channelId);
@@ -1792,6 +1815,64 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
         }
         return false; // couldn't confirm with any viewer → treat as not-verified (safe)
+    }
+
+    /** For each channel with an active bot: how many of our live accounts can add bots (null = unreadable). */
+    private async auditAdminCoverage(): Promise<Array<{ category: string; channelId: string; repairAdmins: number | null }>> {
+        const bots = await this.botModel.find().lean().exec();
+        const channels = new Map<string, string>();
+        for (const b of bots) if (this.isSelectable(b) && b.channelId && !channels.has(b.channelId)) channels.set(b.channelId, String(b.category));
+        const out: Array<{ category: string; channelId: string; repairAdmins: number | null }> = [];
+        for (const [channelId, category] of channels) {
+            try {
+                const facts = await this.readChannelViaBots(channelId);
+                if (!facts) { out.push({ category, channelId, repairAdmins: null }); continue; }
+                const canAdd = facts.admins.filter(a => a.rank === 'creator' || a.permissions.addAdmins).map(a => a.userId);
+                const ours = canAdd.length ? await this.findHealthyAccountsByIdentity([], canAdd) : [];
+                out.push({ category, channelId, repairAdmins: ours.length });
+            } catch {
+                out.push({ category, channelId, repairAdmins: null });
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Read a channel's admin list (humans, with rights) and About text through one of ITS OWN bots (Bot API
+     * getChatAdministrators + getChat): the same facts the account scan gets, with no user-account activity.
+     * Returns null when no bot of the channel can read it; callers then fall back to the account scan.
+     */
+    private async readChannelViaBots(channelId: string): Promise<{ admins: Array<{ userId: string; rank: string; permissions: Record<string, boolean> }>; about: string } | null> {
+        const bots = await this.botModel.find({ channelId, token: { $exists: true } }).lean().exec();
+        const ordered = [...bots.filter(b => this.isSelectable(b)), ...bots.filter(b => !this.isSelectable(b) && this.lifecycleOf(b) !== 'dead_token')];
+        for (const bot of ordered.slice(0, 5)) {
+            try {
+                const res = await axios.get(`https://api.telegram.org/bot${bot.token}/getChatAdministrators`, { params: { chat_id: channelId }, timeout: 12000 });
+                if (!res?.data?.ok || !Array.isArray(res.data.result)) continue;
+                const admins = res.data.result
+                    .filter((a: any) => a?.user && !a.user.is_bot)
+                    .map((a: any) => ({
+                        userId: String(a.user.id),
+                        rank: a.status === 'creator' ? 'creator' : 'admin',
+                        permissions: {
+                            changeInfo: Boolean(a.can_change_info), postMessages: Boolean(a.can_post_messages),
+                            editMessages: Boolean(a.can_edit_messages), deleteMessages: Boolean(a.can_delete_messages),
+                            banUsers: Boolean(a.can_restrict_members), inviteUsers: Boolean(a.can_invite_users),
+                            pinMessages: Boolean(a.can_pin_messages), addAdmins: Boolean(a.can_promote_members),
+                            anonymous: Boolean(a.is_anonymous), manageCall: Boolean(a.can_manage_video_chats),
+                        },
+                    }));
+                let about = '';
+                try {
+                    const chat = await axios.get(`https://api.telegram.org/bot${bot.token}/getChat`, { params: { chat_id: channelId }, timeout: 12000 });
+                    about = String(chat?.data?.result?.description || '');
+                } catch { /* About is optional */ }
+                return { admins, about };
+            } catch {
+                continue; // this bot cannot read the channel; try the next
+            }
+        }
+        return null;
     }
 
     /**
@@ -1826,8 +1907,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         // preferring one that has `addAdmins` (required to promote a bot) AND `postMessages` (so the
         // bot can be granted post). This avoids RIGHT_FORBIDDEN and naturally selects a
         // full-rights/creator account (e.g. @Saurabh) over a limited manager.
-        const viewers = [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(15))];
-        let admins: any[] | null = null;
+        // Bot API first (no account activity); the account scan only when no bot of the channel can read it.
+        const viaBots = await this.readChannelViaBots(channelId);
+        const viewers = viaBots ? [] : [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(15))];
+        let admins: any[] | null = viaBots && viaBots.admins.length > 0 ? viaBots.admins : null;
         for (const viewer of viewers) {
             try {
                 const res = await this.telegramService.getGroupAdmins(viewer, channelId);
@@ -1843,7 +1926,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         // outside that window was invisible and every bot was left "no controllable admin account".
         // search() still applies its default exclusions (expired, buffer/promote pool mobiles).
         const aboutMobiles = new Set<string>();
-        for (const viewer of viewers) {
+        for (const m of (viaBots?.about || '').match(/\d{10,13}/g) || []) aboutMobiles.add(m);
+        for (const viewer of aboutMobiles.size > 0 ? [] : viewers) {
             let about = '';
             try { about = await this.telegramService.getChannelAbout(viewer, channelId); }
             catch { continue; }
@@ -1855,22 +1939,18 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const healthy = await this.findHealthyAccountsByIdentity([...aboutMobiles], adminTgIds);
         const byMobile = new Map(healthy.map(u => [u.mobile, u]));
 
-        // DESCRIPTION-FIRST: our channels record the creator's mobile in the channel About
-        // (e.g. "917306148704"). If that account is one we control with a live session, it's the
-        // creator → the ideal promoter (full rights, incl. post). Try it before the admin scan; it
-        // also rescues channels our admin-list scan can't cover.
+        // Candidates scored by usefulness for promoting a bot with full rights. DESCRIPTION: our channels record
+        // the creator's mobile in the About (e.g. "917306148704"); a controllable one is a creator (score 3) and
+        // rescues channels the admin list cannot cover.
+        const scored: Array<{ mobile: string; score: number }> = [];
         for (const m of aboutMobiles) {
-            if (byMobile.has(m)) return m; // controllable creator account named in the description
+            if (byMobile.has(m)) scored.push({ mobile: m, score: 3 });
         }
-
-        if (!admins) return null;
 
         // Map admin tgId → our controllable account (has a live session).
         const byTgId = new Map(healthy.filter(u => u.tgId).map(u => [String(u.tgId), u]));
 
-        // Score OUR admins by usefulness for promoting a bot with full rights.
-        const scored: Array<{ mobile: string; score: number }> = [];
-        for (const a of admins) {
+        for (const a of admins || []) {
             const tgId = String(a?.userId ?? a?.id ?? '');
             const ours = byTgId.get(tgId);
             if (!ours) continue;
@@ -1882,7 +1962,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             scored.push({ mobile: ours.mobile, score });
         }
         if (scored.length === 0) return null;
-        scored.sort((x, y) => y.score - x.score);
+        // channelManagerBackup is the critical service account (@myvcacc): last resort, used only when no other
+        // account of ours can add bots in this channel (documented intent; the score alone often picked it).
+        const critical = (process.env.channelManagerBackup || '').trim();
+        const rank = (c: { mobile: string; score: number }) => c.score - (critical && c.mobile === critical ? 10 : 0);
+        scored.sort((x, y) => rank(y) - rank(x));
         return scored[0].mobile;
     }
 
@@ -1901,7 +1985,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             const promoterUser = (await this.usersService.search({ mobile: promoterMobile }))[0];
             const promoterTgId = promoterUser?.tgId ? String(promoterUser.tgId) : null;
             if (!promoterTgId) return desired;
-            const admins = await this.telegramService.getGroupAdmins(promoterMobile, channelId);
+            const viaBots = await this.readChannelViaBots(channelId);
+            const admins = viaBots?.admins.length ? viaBots.admins : await this.telegramService.getGroupAdmins(promoterMobile, channelId);
             const me = (Array.isArray(admins) ? admins : []).find((a: any) => String(a?.userId ?? a?.id) === promoterTgId);
             // Creator (rank 'creator' or all-perms) → keep desired as-is.
             const perms = (me as any)?.permissions;
@@ -1992,12 +2077,15 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[] }): Promise<void> {
+    private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[]; singleAdmin?: string[] }): Promise<void> {
         const lines = [
             '<b>Bot Health Check</b>',
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
             `Replaced: ${s.replaced} | Topped up: ${s.toppedUp} | Dead remaining: ${s.deadRemaining}`,
         ];
+        if (s.singleAdmin?.length) {
+            lines.push(`Only one of our accounts can add bots in: ${s.singleAdmin.join(', ')}`);
+        }
         if (s.failures.length) {
             const shown = s.failures.slice(0, 10).map(f => `• ${f}`);
             if (s.failures.length > 10) shown.push(`(+${s.failures.length - 10} more)`);
