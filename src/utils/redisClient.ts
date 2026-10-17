@@ -45,7 +45,15 @@ export class RedisClient {
             };
 
             try {
-                RedisClient.instance = new Redis(config);
+                // REDIS_URI (e.g. rediss://user:pass@host:port for a managed TLS Redis/Valkey) wins over
+                // REDIS_HOST/PORT/PASSWORD; ioredis enables TLS for rediss://.
+                const uri = process.env.REDIS_URI?.trim();
+                if (uri) {
+                    try { const u = new URL(uri); config.host = `${u.protocol}//${u.hostname}`; config.port = Number(u.port) || config.port; } catch { config.host = 'REDIS_URI'; }
+                    RedisClient.instance = new Redis(uri, { retryStrategy: config.retryStrategy });
+                } else {
+                    RedisClient.instance = new Redis(config);
+                }
 
                 RedisClient.instance.on("connect", () => {
                     logger.log(`Connected to Redis at ${config.host}:${config.port}, DB: ${config.db}`);

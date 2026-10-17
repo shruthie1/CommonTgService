@@ -65,6 +65,26 @@ beforeEach(async () => {
     delete process.env.REDIS_DB;
 });
 
+
+describe('RedisClient REDIS_URI (managed TLS Valkey)', () => {
+    afterEach(() => { delete process.env.REDIS_URI; delete process.env.REDIS_HOST; });
+
+    test('REDIS_URI wins over REDIS_HOST and is passed to ioredis as the connection string', () => {
+        process.env.REDIS_HOST = '187.127.137.163';
+        process.env.REDIS_URI = ' rediss://default:pw@valkey.example.aivencloud.com:16275 ';
+        RedisClient.getClient();
+        expect(RedisCtor).toHaveBeenCalledTimes(1);
+        expect(RedisCtor.mock.calls[0][0]).toBe('rediss://default:pw@valkey.example.aivencloud.com:16275');
+        expect(typeof RedisCtor.mock.calls[0][1].retryStrategy).toBe('function');
+    });
+
+    test('without REDIS_URI the host/port config is used as before', () => {
+        process.env.REDIS_HOST = '10.0.0.5';
+        RedisClient.getClient();
+        expect(RedisCtor.mock.calls[0][0]).toMatchObject({ host: '10.0.0.5', port: 6379 });
+    });
+});
+
 describe('RedisClient.getClient (singleton + config)', () => {
     test('constructs a Redis instance once and reuses it (singleton)', () => {
         const a = RedisClient.getClient();
