@@ -14,6 +14,27 @@
 
 const fs = require('fs');
 
+// Build metadata lives in the Mongo `builds` doc, which both UMS (VM1) and CMS (VM2) write.
+// Try each in turn so a deploy still registers when one VM is down (2026-10-17 outage).
+const BUILD_METADATA_URLS = (process.env.BUILD_METADATA_URLS || 'https://ums.paidgirls.site/builds,https://cms.paidgirls.site/builds')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+async function patchBuildMetadata(options) {
+  let last;
+  for (const url of BUILD_METADATA_URLS) {
+    try {
+      const resp = await fetch(url, { ...options, signal: AbortSignal.timeout(20000) });
+      if (resp.ok) return resp;
+      last = resp;
+      console.warn(`[upload-build] build metadata PATCH ${url} -> ${resp.status}; trying next`);
+    } catch (err) {
+      console.warn(`[upload-build] build metadata PATCH ${url} failed: ${(err && err.message) || err}; trying next`);
+      last = { ok: false, status: 0, statusText: String((err && err.message) || err), text: async () => '' };
+    }
+  }
+  return last;
+}
+
+
 const REPO_OWNER = process.env.BUILDS_REPO_OWNER || 'shruthie1';
 const REPO_NAME = process.env.BUILDS_REPO_NAME || 'builds';
 const REPO_BRANCH = process.env.BUILDS_REPO_BRANCH || 'main';
@@ -114,10 +135,9 @@ async function overwriteFile(branch, keyPrefix) {
 
     const rawUrl = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}/${fileName}`;
 
-    const url = `https://ums.paidgirls.site/builds`;
     const bodyData = { [buildKey]: rawUrl };
 
-    const resp = await fetch(url, {
+    const resp = await patchBuildMetadata({
       method: 'PATCH',
       body: JSON.stringify(bodyData),
       headers: {
