@@ -1,6 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { extractMessage, parseError } from './parseError';
-import { clog } from './ChannelLogger';
 import { sleep } from './common';
 import { ChannelCategory } from '../components/bots/channel-category.enum';
 import { tryGetBotsServiceInstance } from './bot.service.instance';
