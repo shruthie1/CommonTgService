@@ -4,6 +4,11 @@
  * Mocks ONLY axios (true external Telegram HTTP) and form-data is real.
  */
 jest.mock('axios');
+const mockProbeSpamBot = jest.fn(async (_mobile: string, _opts?: any): Promise<any> => ({ status: 'free', limitedUntil: null }));
+jest.mock('../../Telegram/utils/spambot-probe', () => ({
+  probeSpamBot: (mobile: string, opts?: any) => mockProbeSpamBot(mobile, opts),
+  SPAMBOT_TOTAL_TIMEOUT_MS: 25000,
+}));
 import axios from 'axios';
 import { Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
@@ -58,6 +63,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockProbeSpamBot.mockImplementation(async () => ({ status: 'free', limitedUntil: null }));
   await model.deleteMany({});
   service = new BotsService(model, mockModuleRef as any);
 });
@@ -790,7 +796,7 @@ describe('BotsService - main manager coverage (channelManagerPrimary main, @myvc
     expect(botApiCalls.map(c => c.method)).toEqual(['createChatInviteLink', 'promoteChatMember', 'revokeChatInviteLink']);
     expect(botApiCalls[1].params).toMatchObject({ chat_id: '-100http', user_id: MAIN.tgId, can_promote_members: true });
     expect(telegramService.promoteBotInChannel).not.toHaveBeenCalled();
-    expect(res.coverage).toBe('Main manager …4125 can add bots in 0/1 chats (next: HTTP_FAILURES)');
+    expect(res.coverage).toBe('Main manager …4125 (configured) can add bots in 0/1 chats (next: HTTP_FAILURES)');
   });
 
   test('one chat per run; already-covered chats are counted, not touched', async () => {
@@ -834,15 +840,18 @@ describe('BotsService - main manager coverage (channelManagerPrimary main, @myvc
     expect(telegramService.joinByInviteLink).not.toHaveBeenCalled();
   });
 
-  test('an unusable main manager (expired / no session) only reports', async () => {
-    wire([CRITICAL]); // main not found as a healthy account
+  test('no usable main manager at all (configured one expired, no other candidate) only reports', async () => {
+    wire([CRITICAL]); // main not found as a healthy account; the only other admin is the critical backup
     await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100http', token: 'tok-p', lifecycle: 'active_verified', status: 'active' });
-    admins = { '-100http': [] };
+    admins = { '-100http': [{ user: { id: 5817107227, is_bot: false }, status: 'creator' }] };
     botApi({ 'tok-p': { can_promote_members: true, can_invite_users: true } });
 
     const res = await (service as any).ensureManagerCoverage(false);
 
-    expect(res.failures).toEqual(['channelManagerPrimary …4125 is not usable (expired, no session, in a pool, or no tgId): set a healthy account']);
+    expect(res.failures).toEqual([
+      'channelManagerPrimary …4125 is not usable (expired, no session, in a pool, or no tgId); picking another main manager',
+      'no usable main manager: every candidate account is limited, busy or unhealthy; repairs fall back to @myvcacc',
+    ]);
     expect(botApiCalls).toEqual([]);
     expect(telegramService.joinByInviteLink).not.toHaveBeenCalled();
   });
@@ -858,6 +867,46 @@ describe('BotsService - main manager coverage (channelManagerPrimary main, @myvc
 
     expect(res.stopPrivilegedWork).toBe(true);
     expect(botApiCalls.map(c => c.method)).toEqual(['createChatInviteLink', 'revokeChatInviteLink']);
+  });
+
+  test('owner 2026-10-17: a spam-limited configured main is replaced by our account that covers the most chats (never @myvcacc)', async () => {
+    const OTHER = { mobile: '917000007937', tgId: '6100873717', session: 's-o' };
+    wire([MAIN, CRITICAL, OTHER]);
+    mockProbeSpamBot.mockImplementation(async (mobile: string) => mobile === MAIN.mobile
+      ? { status: 'limited', limitedUntil: new Date(Date.now() + 3 * 864e5) }
+      : { status: 'free', limitedUntil: null });
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100a', token: 'tok-a', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100b', token: 'tok-b', lifecycle: 'active_verified', status: 'active' });
+    admins = {
+      '-100a': [{ user: { id: 6100873717, is_bot: false }, status: 'creator' }, { user: { id: 5817107227, is_bot: false }, status: 'creator' }],
+      '-100b': [{ user: { id: 5817107227, is_bot: false }, status: 'creator' }],
+    };
+    botApi({ 'tok-b': { can_promote_members: true, can_invite_users: true } });
+
+    const res = await (service as any).ensureManagerCoverage(false);
+
+    expect(res.failures[0]).toMatch(/channelManagerPrimary …4125 is not usable \(spam-limited until \d{4}-\d{2}-\d{2}\)/);
+    expect(res.coverage).toBe('Main manager …7937 (auto) can add bots in 1/2 chats (next: UNVDS)');
+    expect(telegramService.joinByInviteLink).toHaveBeenCalledWith(OTHER.mobile, 'https://t.me/+abcHASH');
+  });
+
+  test('a repair skips a spam-limited account and uses the next one in rank order', async () => {
+    const OTHER = { mobile: '917000007937', tgId: '6100873717', session: 's-o' };
+    wire([MAIN, CRITICAL, OTHER]);
+    mockProbeSpamBot.mockImplementation(async (mobile: string) => mobile === MAIN.mobile ? { status: 'harsh', limitedUntil: null } : { status: 'free', limitedUntil: null });
+    await seedBot({ category: ChannelCategory.ACCOUNT_LOGIN_FAILURES, channelId: '-100alf', token: 'tok-r', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100alf': [
+      { user: { id: 5817107227, is_bot: false }, status: 'creator' },
+      { user: { id: 6100873717, is_bot: false }, status: 'creator' },
+      { user: { id: 8026902408, is_bot: false }, status: 'creator' },
+    ] };
+    botApi({});
+
+    expect(await (service as any).resolveChannelAdminMobile('-100alf')).toBe(OTHER.mobile);
+    // cached: a second lookup does not probe again
+    const probes = mockProbeSpamBot.mock.calls.length;
+    await (service as any).resolveChannelAdminMobile('-100alf');
+    expect(mockProbeSpamBot.mock.calls.length).toBe(probes);
   });
 
   test('repairs use the main manager first, then others, @myvcacc last', async () => {
