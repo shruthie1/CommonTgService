@@ -6,7 +6,7 @@ import { Client } from './schemas/client.schema';
 import { SearchClientDto } from './dto/search-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
-import { CloudflareCache } from '../../decorators';
+import { CloudflareCache, NoCache } from '../../decorators';
 import { CloudflareCacheInterceptor } from '../../interceptors';
 
 @ApiTags('Clients')
@@ -64,7 +64,7 @@ export class ClientController {
 
   @Get()
   @UseInterceptors(CloudflareCacheInterceptor)
-  @CloudflareCache(3600, 60)
+  @NoCache() // full client docs carry sessions/passwords: never let a CDN or browser cache them
   @ApiOperation({ summary: 'Get all clients' })
   @ApiOkResponse({ type: [Client] })
   async findAll() {

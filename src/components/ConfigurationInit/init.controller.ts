@@ -1,7 +1,7 @@
 import { Controller, Get, Body, Param, Patch, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { ConfigurationService } from './init.service';
-import { CloudflareCache } from '../../decorators';
+import { NoCache } from '../../decorators';
 import { CloudflareCacheInterceptor } from '../../interceptors';
 
 @ApiTags('Configuration')
@@ -11,7 +11,7 @@ export class ConfigurationController {
 
   @Get()
   @UseInterceptors(CloudflareCacheInterceptor)
-  @CloudflareCache(3600, 60)
+  @NoCache() // contains every secret: never cacheable
   @ApiOperation({ summary: 'Get configuration data' })
   async findOne(): Promise<any> {
     return this.configurationService.findOne();

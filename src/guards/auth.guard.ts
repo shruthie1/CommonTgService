@@ -26,6 +26,21 @@ const ALLOWED_ORIGINS = [
 ].map((origin) => origin.toLowerCase());
 
 /**
+ * An allowed Origin (or the Host/X-Forwarded-Host it is derived from) is client-controlled and
+ * trivially forged with curl, so it may only open the browser-facing endpoints the frontends call
+ * (vcui / payment-local), never admin data such as sessions in /clients or secrets in
+ * /configuration. Everything else needs an API key or an allowlisted IP. (2026-10-17: a forged
+ * `Origin: https://paidgirls.site` returned every live session.)
+ */
+const ORIGIN_ONLY_PATHS: RegExp[] = [
+    /^\/clients\/maskedcls(?:$|[/?])/i,
+    /^\/upi-ids(?:$|[/?])/i,
+    /^\/timestamps(?:$|[/?])/i,
+    /^\/folders(?:$|[/?])/i,
+    /^\/tgsignup(?:$|[/?])/i,
+];
+
+/**
  * Ignored paths are evaluated in priority order:
  * 1. Exact paths first (fast)
  * 2. Regex patterns for broader matches
@@ -111,7 +126,7 @@ export class AuthGuard implements CanActivate {
             passedReason = 'API key valid';
         } else if (ALLOWED_IPS.includes(clientIp)) {
             passedReason = 'IP allowed';
-        } else if (origin && this.isOriginAllowed(origin)) {
+        } else if (origin && this.isOriginAllowed(origin) && this.isOriginOnlyPath(path, url, originalUrl)) {
             passedReason = 'Origin allowed';
         }
 
@@ -216,6 +231,13 @@ export class AuthGuard implements CanActivate {
             }
         }
         return false;
+    }
+
+    private isOriginOnlyPath(...urls: string[]): boolean {
+        const candidates = urls.filter(Boolean);
+        // Every representation must be a browser-facing path, so a crafted url/originalUrl mismatch
+        // cannot smuggle an admin route through.
+        return candidates.length > 0 && candidates.every((u) => ORIGIN_ONLY_PATHS.some((re) => re.test(u)));
     }
 
     private isOriginAllowed(origin: string): boolean {

@@ -64,9 +64,9 @@ describe('AuthGuard', () => {
     it('removes api key aliases from origin-authorized requests', () => {
         const guard = new AuthGuard();
         const request = {
-            path: '/promoteclients/search',
-            url: '/promoteclients/search?mobile=919064405198&apikey=ignored&api_key=ignored',
-            originalUrl: '/promoteclients/search?mobile=919064405198&apikey=ignored&api_key=ignored',
+            path: '/clients/maskedcls/abc',
+            url: '/clients/maskedcls/abc?mobile=919064405198&apikey=ignored&api_key=ignored',
+            originalUrl: '/clients/maskedcls/abc?mobile=919064405198&apikey=ignored&api_key=ignored',
             headers: {
                 origin: 'https://paidgirls.site',
             },
@@ -136,6 +136,10 @@ describe('AuthGuard', () => {
             connection: {} as any,
             ...overrides,
         });
+
+        // Origin-derived access only opens browser-facing routes (see ORIGIN_ONLY_PATHS in the guard).
+        const browserReq = (overrides: Partial<Request> = {}): Partial<Request> =>
+            baseReq({ path: '/upi-ids', url: '/upi-ids', originalUrl: '/upi-ids', ...overrides });
 
         it('grants access via x-api-key header (case-insensitive)', () => {
             const guard = new AuthGuard();
@@ -244,25 +248,25 @@ describe('AuthGuard', () => {
 
         it('grants access via origin whitelist', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { origin: 'https://paidgirls.site' } });
+            const req = browserReq({ headers: { origin: 'https://paidgirls.site' } });
             expect(guard.canActivate(makeContext(req))).toBe(true);
         });
 
         it('denies disallowed origin', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { origin: 'https://evil.example.com' } });
+            const req = browserReq({ headers: { origin: 'https://evil.example.com' } });
             expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
         });
 
         it('treats invalid origin URL as not allowed', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { origin: 'not-a-url' } });
+            const req = browserReq({ headers: { origin: 'not-a-url' } });
             expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
         });
 
         it('derives origin from x-original-host header', () => {
             const guard = new AuthGuard();
-            const req = baseReq({
+            const req = browserReq({
                 headers: { 'x-original-host': 'paidgirls.site', 'x-forwarded-proto': 'https' },
             });
             expect(guard.canActivate(makeContext(req))).toBe(true);
@@ -270,7 +274,7 @@ describe('AuthGuard', () => {
 
         it('derives origin from x-forwarded-host header', () => {
             const guard = new AuthGuard();
-            const req = baseReq({
+            const req = browserReq({
                 headers: { 'x-forwarded-host': 'paidgirls.site', 'x-forwarded-proto': 'https' },
             });
             expect(guard.canActivate(makeContext(req))).toBe(true);
@@ -278,7 +282,7 @@ describe('AuthGuard', () => {
 
         it('derives origin from host header', () => {
             const guard = new AuthGuard();
-            const req = baseReq({
+            const req = browserReq({
                 headers: { host: 'paidgirls.site', 'x-forwarded-proto': 'https' },
             });
             expect(guard.canActivate(makeContext(req))).toBe(true);
@@ -286,19 +290,19 @@ describe('AuthGuard', () => {
 
         it('derives origin from referer header', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { referer: 'https://paidgirls.site/some/page' } });
+            const req = browserReq({ headers: { referer: 'https://paidgirls.site/some/page' } });
             expect(guard.canActivate(makeContext(req))).toBe(true);
         });
 
         it('handles invalid referer gracefully and denies', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { referer: 'http://[invalid' } });
+            const req = browserReq({ headers: { referer: 'http://[invalid' } });
             expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
         });
 
         it('uses cf-visitor scheme for protocol when present', () => {
             const guard = new AuthGuard();
-            const req = baseReq({
+            const req = browserReq({
                 headers: { host: 'paidgirls.site', 'cf-visitor': '{"scheme":"https"}' },
             });
             expect(guard.canActivate(makeContext(req))).toBe(true);
@@ -306,20 +310,20 @@ describe('AuthGuard', () => {
 
         it('handles malformed cf-visitor JSON gracefully (falls back to http -> denied)', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { host: 'paidgirls.site', 'cf-visitor': '{bad json' } });
+            const req = browserReq({ headers: { host: 'paidgirls.site', 'cf-visitor': '{bad json' } });
             // protocol falls back to http (not production) -> http://paidgirls.site not in allowed -> denied
             expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
         });
 
         it('uses request.secure for https protocol', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { host: 'paidgirls.site' }, secure: true } as any);
+            const req = browserReq({ headers: { host: 'paidgirls.site' }, secure: true } as any);
             expect(guard.canActivate(makeContext(req))).toBe(true);
         });
 
         it('uses x-forwarded-ssl=on for https protocol', () => {
             const guard = new AuthGuard();
-            const req = baseReq({ headers: { host: 'paidgirls.site', 'x-forwarded-ssl': 'on' } });
+            const req = browserReq({ headers: { host: 'paidgirls.site', 'x-forwarded-ssl': 'on' } });
             expect(guard.canActivate(makeContext(req))).toBe(true);
         });
 
@@ -328,11 +332,55 @@ describe('AuthGuard', () => {
             const prev = process.env.NODE_ENV;
             process.env.NODE_ENV = 'production';
             try {
-                const req = baseReq({ headers: { host: 'paidgirls.site' } });
+                const req = browserReq({ headers: { host: 'paidgirls.site' } });
                 expect(guard.canActivate(makeContext(req))).toBe(true);
             } finally {
                 process.env.NODE_ENV = prev;
             }
+        });
+
+        describe('forged Origin / Host cannot open admin data (2026-10-17 incident)', () => {
+            const adminRoutes = ['/clients', '/clients/sowmya1', '/configuration', '/user/search', '/promoteclients/search', '/bots'];
+            for (const route of adminRoutes) {
+                it(`denies Origin: https://paidgirls.site on ${route}`, () => {
+                    const guard = new AuthGuard();
+                    const req = baseReq({ path: route, url: route, originalUrl: route, headers: { origin: 'https://paidgirls.site' } });
+                    expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
+                });
+            }
+            it('denies a forged X-Forwarded-Host / Host / Referer on /clients', () => {
+                const guard = new AuthGuard();
+                for (const headers of [
+                    { 'x-forwarded-host': 'paidgirls.site', 'x-forwarded-proto': 'https' },
+                    { host: 'paidgirls.site', 'x-forwarded-proto': 'https' },
+                    { referer: 'https://paidgirls.site/x' },
+                ]) {
+                    const req = baseReq({ path: '/clients', url: '/clients', originalUrl: '/clients', headers });
+                    expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
+                }
+            });
+            it('denies when path and originalUrl disagree (cannot smuggle an admin route)', () => {
+                const guard = new AuthGuard();
+                const req = baseReq({ path: '/clients', url: '/clients/maskedcls/x', originalUrl: '/clients/maskedcls/x', headers: { origin: 'https://paidgirls.site' } });
+                expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
+            });
+            for (const route of ['/clients/maskedcls/sowmya', '/clients/maskedcls', '/upi-ids', '/timestamps/stalled', '/folders/x/files/y/download', '/tgsignup/send-code']) {
+                it(`still allows the frontend route ${route} by Origin`, () => {
+                    const guard = new AuthGuard();
+                    const req = baseReq({ path: route.split('?')[0], url: route, originalUrl: route, headers: { origin: 'https://paidgirls.site' } });
+                    expect(guard.canActivate(makeContext(req))).toBe(true);
+                });
+            }
+            it('a valid API key still opens /clients', () => {
+                const guard = new AuthGuard();
+                const req = baseReq({ path: '/clients', url: '/clients', originalUrl: '/clients', headers: { 'x-api-key': 'santoor' } });
+                expect(guard.canActivate(makeContext(req))).toBe(true);
+            });
+            it('an allowlisted IP still opens /configuration', () => {
+                const guard = new AuthGuard();
+                const req = baseReq({ path: '/configuration', url: '/configuration', originalUrl: '/configuration', headers: { 'cf-connecting-ip': '31.97.59.2' } });
+                expect(guard.canActivate(makeContext(req))).toBe(true);
+            });
         });
 
         it('matches ignored path via regex pattern', () => {
