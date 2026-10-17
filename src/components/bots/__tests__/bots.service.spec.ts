@@ -575,6 +575,70 @@ describe('BotsService - sendByCategoryWithFailover', () => {
   });
 });
 
+describe('BotsService - self-healing around bots that cannot reach their channel (2026-10-17)', () => {
+  const chatNotFound = () => Object.assign(new Error('Request failed with status code 400'), {
+    response: { status: 400, data: { ok: false, description: 'Bad Request: chat not found' } },
+  });
+
+  test('a send failing with "chat not found" is benched (not retried first, no error notice) and demoted after getChat confirms', async () => {
+    (service as any).sleep = jest.fn(async () => undefined);
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, token: 'tok-gone', lastUsed: new Date(1000), lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, token: 'tok-ok', lastUsed: new Date(2000), lifecycle: 'active_verified', status: 'active' });
+    mockedAxios.post.mockImplementation(async (url: string) => {
+      if (url.includes('bottok-gone/')) throw chatNotFound();
+      return axiosOk({ ok: true }) as any;
+    });
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('bottok-gone/getChat')) throw chatNotFound();
+      return { status: 200, data: { ok: true, result: {} } } as any;
+    });
+    const parseErrorSpy = jest.spyOn(require('../../../utils/parseError'), 'parseError');
+
+    expect(await service.sendMessageByCategory(ChannelCategory.CLIENT_UPDATES, 'one')).toBe(true);
+    expect(await service.sendMessageByCategory(ChannelCategory.CLIENT_UPDATES, 'two')).toBe(true);
+
+    const tried = mockedAxios.post.mock.calls.map(([url]) => String(url).includes('bottok-gone/') ? 'gone' : 'ok');
+    expect(tried).toEqual(['gone', 'ok', 'ok']);
+    expect(parseErrorSpy.mock.calls.some(([, prefix]) => /tok-gone|Failed to execute sendMessage/.test(String(prefix)) )).toBe(false);
+    // The getChat confirm runs in the background: poll (bounded) instead of a fixed sleep.
+    for (let i = 0; i < 100 && (await model.findOne({ token: 'tok-gone' })).lifecycle !== 'pending_admin'; i++) {
+      await new Promise(r => setTimeout(r, 20));
+    }
+    expect((await model.findOne({ token: 'tok-gone' })).lifecycle).toBe('pending_admin');
+    expect((await model.findOne({ token: 'tok-ok' })).lifecycle).toBe('active_verified');
+    parseErrorSpy.mockRestore();
+  });
+
+  test('the 3-hourly reach sweep demotes an active bot that cannot reach its channel, using only getChat', async () => {
+    (service as any).sleep = jest.fn(async () => undefined);
+    await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, token: 'tok-gone', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, token: 'tok-ok', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.CHANNEL_NOTIFICATIONS, token: 'tok-pending', lifecycle: 'pending_admin', status: 'inactive' });
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('/getMe')) throw new Error('sweep must not call getMe');
+      if (url.includes('bottok-gone/getChat')) throw chatNotFound();
+      return { status: 200, data: { ok: true, result: {} } } as any;
+    });
+
+    expect(await service.sweepChannelReach()).toEqual({ probed: 2, demoted: 1 });
+    expect((await model.findOne({ token: 'tok-gone' })).lifecycle).toBe('pending_admin');
+    expect((await model.findOne({ token: 'tok-ok' })).lifecycle).toBe('active_verified');
+    expect(mockModuleRef.get).not.toHaveBeenCalled(); // no Telegram account service touched
+  });
+
+  test('pending-admin repair takes the neediest category first, not the oldest bot', async () => {
+    (service as any).sleep = jest.fn(async () => undefined);
+    // UNAUTH_CALLS has 3 senders and an OLDER pending bot; CLIENT_UPDATES has none and a newer pending bot.
+    for (let i = 0; i < 3; i++) await seedBot({ category: ChannelCategory.UNAUTH_CALLS, channelId: '-100u', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.UNAUTH_CALLS, channelId: '-100u', username: 'spare_bot', lifecycle: 'pending_admin', status: 'inactive', nextRepairAt: new Date(1) });
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100c', username: 'needed_bot', lifecycle: 'pending_admin', status: 'inactive', nextRepairAt: new Date(2) });
+
+    const res = await service.reconcilePendingAdminBotsNow({ dryRun: true, pendingLimit: 1 });
+
+    expect(res.proposedActions).toEqual(['reconcile pending-admin @needed_bot in -100c']);
+  });
+});
+
 describe('BotsService - flushPendingStats', () => {
   test('no pending updates → early return', async () => {
     await expect((service as any).flushPendingStats()).resolves.toBeUndefined();

@@ -147,6 +147,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private static readonly HEALTH_JOB_NAME = 'bot-health-check';
     private static readonly HEALTH_JOB_CRON = '30 3 * * *'; // daily 03:30, off-peak
     private static readonly HEALTH_JOB_TZ = 'Asia/Kolkata';
+    // Bot-API-only (getChat) channel-access sweep between daily runs: no account activity.
+    private static readonly REACH_SWEEP_JOB_NAME = 'bot-reach-sweep';
+    private static readonly REACH_SWEEP_CRON = '15 */3 * * *';
+    // A bot whose send failed because it cannot reach its channel is skipped for this long.
+    private static readonly UNREACHABLE_BENCH_S = 30 * 60;
     // Every category should keep at least this many HEALTHY (active + admin-verified) bots so a
     // single dead bot never leaves a channel dark. After the dead-replacement pass, the health run
     // tops up any category below this floor by provisioning fresh bots (random creator → BotFather
@@ -155,9 +160,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     // Replacement and redundancy top-up share one BotFather creation budget. A run can never
     // turn one dead token plus two low categories into a burst of privileged Telegram actions.
     private readonly maxBotCreationsPerRun = 1;
-    private readonly maxPendingAdminRepairsPerRun = 1;
+    private readonly maxPendingAdminRepairsPerRun = 3;
     private readonly maxPendingAdminRepairAttempts = 3;
     private healthCheckJob: schedule.Job | null = null;
+    private reachSweepJob: schedule.Job | null = null;
     private flushTimer: ReturnType<typeof setInterval> | null = null;
     private destroyed = false;
     private replaceInProgress = false;
@@ -224,12 +230,27 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             },
         );
         console.log(`[BotHealth] daily bot health-check scheduled (cron '${BotsService.HEALTH_JOB_CRON}' ${BotsService.HEALTH_JOB_TZ})`);
+        this.reachSweepJob = schedule.scheduleJob(
+            BotsService.REACH_SWEEP_JOB_NAME,
+            BotsService.REACH_SWEEP_CRON,
+            BotsService.HEALTH_JOB_TZ,
+            async () => {
+                if (this.destroyed) return;
+                try {
+                    await this.sweepChannelReach();
+                } catch (err) {
+                    parseError(err, '[BotHealth] channel-reach sweep failed', false);
+                }
+            },
+        );
     }
 
     onModuleDestroy(): void {
         this.destroyed = true;
         try { this.healthCheckJob?.cancel?.(); } catch { /* noop */ }
         this.healthCheckJob = null;
+        try { this.reachSweepJob?.cancel?.(); } catch { /* noop */ }
+        this.reachSweepJob = null;
         if (this.flushTimer) { clearInterval(this.flushTimer); this.flushTimer = null; }
     }
 
@@ -559,7 +580,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
         // Do not ever fall back to inactive, pending-admin, or manual-attention records. A
         // valid token is not enough to send: only a separately verified channel admin is safe.
-        availableBots = availableBots.filter(bot => this.isSelectable(bot));
+        availableBots = availableBots.filter(bot => this.isSelectable(bot) && !this.cache.get(`bench:${bot._id}`));
 
         if (availableBots.length === 0) {
             await this.alertCategoryUnhealthy(category);
@@ -587,6 +608,68 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
         console.error(`Failed to send for category ${category} after trying all ${availableBots.length} available bot(s).`);
         return false;
+    }
+
+    /**
+     * A send that failed because the bot cannot reach its channel (removed, not admin, channel gone): bench the bot
+     * for UNREACHABLE_BENCH_S so failover stops trying it first (a failing bot never gets lastUsed bumped, so it was
+     * retried on every send, each posting an error notice), then confirm with getChat and demote it to pending_admin
+     * so reconcile re-adds it. Returns false for any other error (the caller logs it as before).
+     */
+    private noteUnreachableSend(bot: BotDocument, error: unknown): boolean {
+        const err = error as { response?: { data?: { description?: string } }; message?: string };
+        const description = String(err?.response?.data?.description || err?.message || '');
+        if (!/chat not found|bot is not a member|bot was kicked|not enough rights|need administrator rights|CHAT_WRITE_FORBIDDEN/i.test(description)) return false;
+        const benchKey = `bench:${bot._id}`;
+        if (this.cache.get(benchKey)) return true;
+        this.cache.set(benchKey, true, BotsService.UNREACHABLE_BENCH_S);
+        this.evictBotFromSendCache(bot);
+        console.warn(`[BotHealth] @${bot.username} (${bot.category}) cannot post to ${bot.channelId}: ${description.slice(0, 120)}; benched`);
+        void this.probeReachAndDemote(bot, false).catch(probeError => parseError(probeError, `[BotHealth] reach confirm @${bot.username}`, false));
+        return true;
+    }
+
+    /**
+     * getChat this active bot against its channel; when it cannot reach it, demote to pending_admin (unless dryRun)
+     * so reconcile re-adds it as admin. Returns the verdict for the caller's dead-channel tally.
+     */
+    private async probeReachAndDemote(bot: Partial<Bot> & { _id?: any }, dryRun: boolean, proposedActions?: string[]): Promise<'alive' | 'dead' | 'unknown'> {
+        if (!bot.token || !bot.channelId) return 'unknown';
+        const reach = await this.probeChannelAlive(bot.token, bot.channelId);
+        if (reach !== 'dead') return reach;
+        proposedActions?.push(`demote @${bot.username} to pending_admin (getChat: cannot reach ${bot.channelId})`);
+        if (!dryRun) {
+            await this.botModel.updateOne({ _id: bot._id, lifecycle: { $nin: ['pending_admin', 'manual_attention'] } }, {
+                $set: { lifecycle: 'pending_admin', lifecycleReason: 'getChat: bot cannot reach its channel', lifecycleUpdatedAt: new Date(), status: 'inactive' },
+            }).exec();
+            this.evictBotFromSendCache(bot);
+        }
+        console.warn(`[BotHealth] cannot reach channel: @${bot.username} (${bot.category} ${bot.channelId})`);
+        return reach;
+    }
+
+    /**
+     * Between daily runs: getChat every active bot (Bot API only, no account activity) and demote the ones that
+     * cannot reach their channel, so CMS stops selecting them within hours and reconcile repairs them.
+     */
+    async sweepChannelReach(): Promise<{ probed: number; demoted: number; skipped?: string }> {
+        if (this.replaceInProgress) return { probed: 0, demoted: 0, skipped: 'health run in progress' };
+        this.replaceInProgress = true;
+        let probed = 0, demoted = 0;
+        try {
+            const bots = await this.botModel.find().lean().exec();
+            for (const bot of bots) {
+                if (!this.isSelectable(bot) || !bot.channelId) continue;
+                probed++;
+                if ((await this.probeReachAndDemote(bot, false)) === 'dead') demoted++;
+                await this.sleep(1200);
+            }
+            if (demoted > 0) await this.refreshBotCache();
+            console.log(`[BotHealth] channel-reach sweep: probed=${probed} demoted=${demoted}`);
+            return { probed, demoted };
+        } finally {
+            this.replaceInProgress = false;
+        }
     }
 
     private async alertCategoryUnhealthy(category: ChannelCategory): Promise<void> {
@@ -743,6 +826,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
             return response.data?.ok === true;
         } catch (error) {
+            if (this.noteUnreachableSend(bot, error)) return false;
             parseError(error, `Failed to execute sendMessage for bot ${bot.username}`);
             return false;
         }
@@ -786,6 +870,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
             return response.data?.ok === true;
         } catch (error) {
+            if (this.noteUnreachableSend(bot, error)) return false;
             parseError(error, `Failed to execute ${method} for bot ${bot.username}`);
             return false;
         }
@@ -848,6 +933,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             }
             return response.data?.ok === true;
         } catch (error) {
+            if (this.noteUnreachableSend(bot, error)) return false;
             parseError(error, `Failed to execute sendMediaGroup for bot ${bot.username}`);
             return false;
         }
@@ -1097,22 +1183,12 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     const sendsNow = lifecycle === 'active_verified' || lifecycle === 'dead_token';
                     if (sendsNow && bot.channelId) {
                         await this.sleep(1200);
-                        const reach = await this.probeChannelAlive(bot.token, bot.channelId);
+                        const reach = await this.probeReachAndDemote(bot, Boolean(options.dryRun), proposedActions);
                         const key = `${bot.category}::${bot.channelId}`;
                         const tally = channelReach.get(key) ?? { category: String(bot.category), channelId: bot.channelId, alive: 0, dead: 0 };
                         if (reach === 'alive') tally.alive++;
                         if (reach === 'dead') tally.dead++;
                         channelReach.set(key, tally);
-                        if (reach === 'dead') {
-                            proposedActions.push(`demote @${bot.username} to pending_admin (getChat: cannot reach ${bot.channelId})`);
-                            if (!options.dryRun) {
-                                await this.botModel.updateOne({ _id: bot._id }, {
-                                    $set: { lifecycle: 'pending_admin', lifecycleReason: 'getChat: bot cannot reach its channel', lifecycleUpdatedAt: new Date(), status: 'inactive' },
-                                }).exec();
-                                this.evictBotFromSendCache(bot);
-                            }
-                            console.warn(`[BotHealth] cannot reach channel: @${bot.username} (${bot.category} ${bot.channelId})`);
-                        }
                     }
                 } else if (check.verdict === 'dead') {
                     dead++;
@@ -1242,16 +1318,27 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         if (options.pendingCategory !== undefined && typeof options.pendingCategory !== 'string') {
             throw new Error('pendingCategory must be a string');
         }
-        const pending = await this.botModel
+        const due = await this.botModel
             .find({
                 lifecycle: 'pending_admin',
                 ...(options.pendingCategory ? { category: options.pendingCategory } : {}),
                 $or: [{ nextRepairAt: { $exists: false } }, { nextRepairAt: { $lte: now } }],
             })
             .sort({ nextRepairAt: 1, createdAt: 1 })
-            .limit(pendingLimit)
+            .limit(500)
             .lean()
             .exec();
+        // Neediest category first (fewest bots able to send), then the longest-waiting bot: a category down to
+        // its last bot is repaired before spare capacity elsewhere.
+        const liveByCategory = new Map<string, number>();
+        for (const b of await this.botModel.find({}, { category: 1, lifecycle: 1, status: 1 }).lean().exec()) {
+            if (this.isSelectable(b)) liveByCategory.set(String(b.category), (liveByCategory.get(String(b.category)) || 0) + 1);
+        }
+        const pending = due
+            .map((bot, order) => ({ bot, order, live: liveByCategory.get(String(bot.category)) || 0 }))
+            .sort((a, b) => a.live - b.live || a.order - b.order)
+            .slice(0, pendingLimit)
+            .map(entry => entry.bot);
 
         for (const bot of pending) {
             const attempts = bot.repairAttempts || 0;
