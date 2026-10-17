@@ -322,6 +322,19 @@ export class TelegramService implements OnModuleDestroy {
         return await telegramClient.joinChannel(channelId);
     }
 
+    /** Join a (private) chat through an invite link (t.me/+HASH or t.me/joinchat/HASH). Already a member = success. */
+    async joinByInviteLink(mobile: string, inviteLink: string): Promise<void> {
+        const hash = String(inviteLink).trim().replace(/^https?:\/\/t\.me\//, '').replace(/^joinchat\//, '').replace(/^\+/, '');
+        if (!hash || hash.includes('/')) throw new BadRequestException(`not an invite link: ${inviteLink}`);
+        const telegramClient = await connectionManager.getClient(mobile);
+        try {
+            await telegramClient.client.invoke(new Api.messages.ImportChatInvite({ hash }));
+        } catch (error: any) {
+            if (/USER_ALREADY_PARTICIPANT/.test(String(error?.errorMessage || error?.message || ''))) return;
+            throw error;
+        }
+    }
+
     async getCallLog(mobile: string, maxCalls?: number) {
         const telegramClient = await connectionManager.getClient(mobile);
         try {

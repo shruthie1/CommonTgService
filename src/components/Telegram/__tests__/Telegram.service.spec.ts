@@ -314,6 +314,21 @@ describe('TelegramService — simple delegations', () => {
         expect(fakeManager.joinChannel).toHaveBeenCalledWith('ch');
     });
 
+    test('joinByInviteLink imports the invite hash from t.me/+HASH and joinchat links; already a member is success', async () => {
+        const { svc, fakeManager } = makeService();
+        fakeManager.client.invoke.mockResolvedValue(undefined);
+        await svc.joinByInviteLink('m', 'https://t.me/+abcHASH');
+        await svc.joinByInviteLink('m', 'https://t.me/joinchat/xyzHASH');
+        const hashes = fakeManager.client.invoke.mock.calls.map(([req]: any[]) => req?.hash);
+        expect(hashes).toEqual(['abcHASH', 'xyzHASH']);
+
+        fakeManager.client.invoke.mockRejectedValueOnce(Object.assign(new Error('USER_ALREADY_PARTICIPANT'), { errorMessage: 'USER_ALREADY_PARTICIPANT' }));
+        await expect(svc.joinByInviteLink('m', 'https://t.me/+abcHASH')).resolves.toBeUndefined();
+        fakeManager.client.invoke.mockRejectedValueOnce(Object.assign(new Error('INVITE_HASH_EXPIRED'), { errorMessage: 'INVITE_HASH_EXPIRED' }));
+        await expect(svc.joinByInviteLink('m', 'https://t.me/+abcHASH')).rejects.toThrow('INVITE_HASH_EXPIRED');
+        await expect(svc.joinByInviteLink('m', 'https://t.me/somechannel/12')).rejects.toThrow('not an invite link');
+    });
+
     test('updatePrivacyforDeletedAccount, deleteProfilePhotos delegate', async () => {
         const { svc, fakeManager } = makeService();
         await svc.updatePrivacyforDeletedAccount('m');

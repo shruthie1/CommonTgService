@@ -728,6 +728,152 @@ describe('BotsService - channel admin facts via the Bot API (no account activity
   });
 });
 
+describe('BotsService - main manager coverage (channelManagerPrimary main, @myvcacc backup), 2026-10-17', () => {
+  const MAIN = { mobile: '917000004125', tgId: '8026902408', session: 's-main' };
+  const CRITICAL = { mobile: '919600000282', tgId: '5817107227', session: 's-crit' };
+  let telegramService: any;
+  let admins: Record<string, any[]>;
+  let botApiCalls: Array<{ method: string; params: any }>;
+
+  function wire(users: any[] = [MAIN, CRITICAL]) {
+    process.env.channelManagerPrimary = MAIN.mobile;
+    process.env.channelManagerBackup = CRITICAL.mobile;
+    botApiCalls = [];
+    telegramService = {
+      joinByInviteLink: jest.fn(async () => undefined),
+      promoteBotInChannel: jest.fn(async () => undefined),
+      getGroupAdmins: jest.fn(async () => { throw new Error('account scan must not run'); }),
+      getChannelAbout: jest.fn(async () => ''),
+    };
+    const usersService = {
+      search: jest.fn(async (q: any) => users.filter(u => q?.tgId?.$in?.includes(u.tgId) || q?.mobile?.$in?.includes(u.mobile) || q?.mobile === u.mobile)),
+    };
+    mockModuleRef.get.mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) return telegramService;
+      if (/Users/i.test(name)) return usersService;
+      return {};
+    });
+    (service as any).sleep = jest.fn(async () => undefined);
+    (service as any).humanDelay = jest.fn(async () => undefined);
+  }
+  function botApi(rights: Record<string, Record<string, boolean>>) {
+    mockedAxios.get.mockReset().mockImplementation(async (url: string, cfg?: any) => {
+      const method = String(url).split('/').pop() as string;
+      const token = String(url).match(/bot([^/]+)\//)?.[1] || '';
+      const p = cfg?.params || {};
+      if (method === 'getChatAdministrators') return { data: { ok: true, result: admins[p.chat_id] || [] } } as any;
+      if (method === 'getChat') return { data: { ok: true, result: { description: '' } } } as any;
+      if (method === 'getChatMember') return rights[token] ? { data: { ok: true, result: { status: 'administrator', ...rights[token] } } } as any : { data: { ok: false } } as any;
+      botApiCalls.push({ method, params: p });
+      if (method === 'createChatInviteLink') return { data: { ok: true, result: { invite_link: 'https://t.me/+abcHASH' } } } as any;
+      if (method === 'promoteChatMember') {
+        admins[p.chat_id] = [...(admins[p.chat_id] || []), { user: { id: Number(p.user_id), is_bot: false }, status: 'administrator', can_promote_members: true }];
+        return { data: { ok: true, result: true } } as any;
+      }
+      if (method === 'revokeChatInviteLink') return { data: { ok: true, result: {} } } as any;
+      throw new Error(`unexpected ${method}`);
+    });
+  }
+  afterEach(() => { delete process.env.channelManagerPrimary; delete process.env.channelManagerBackup; });
+
+  test('adds the main manager through a bot (invite link, join, bot promotes); @myvcacc untouched', async () => {
+    wire();
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100http', token: 'tok-p', username: 'promoter_bot', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100http': [{ user: { id: 5817107227, is_bot: false }, status: 'administrator', can_promote_members: true }] };
+    botApi({ 'tok-p': { can_promote_members: true, can_invite_users: true, can_post_messages: true } });
+
+    const res = await (service as any).ensureManagerCoverage(false);
+
+    expect(res.failures).toEqual([]);
+    expect(telegramService.joinByInviteLink).toHaveBeenCalledWith(MAIN.mobile, 'https://t.me/+abcHASH');
+    expect(botApiCalls.map(c => c.method)).toEqual(['createChatInviteLink', 'promoteChatMember', 'revokeChatInviteLink']);
+    expect(botApiCalls[1].params).toMatchObject({ chat_id: '-100http', user_id: MAIN.tgId, can_promote_members: true });
+    expect(telegramService.promoteBotInChannel).not.toHaveBeenCalled();
+    expect(res.coverage).toBe('Main manager …4125 can add bots in 0/1 chats (next: HTTP_FAILURES)');
+  });
+
+  test('one chat per run; already-covered chats are counted, not touched', async () => {
+    wire();
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100a', token: 'tok-a', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100b', token: 'tok-b', lifecycle: 'active_verified', status: 'active' });
+    await seedBot({ category: ChannelCategory.PROM_LOGS1, channelId: '-100c', token: 'tok-c', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100a': [{ user: { id: 8026902408, is_bot: false }, status: 'creator' }], '-100b': [], '-100c': [] };
+    botApi({ 'tok-b': { can_promote_members: true, can_invite_users: true }, 'tok-c': { can_promote_members: true, can_invite_users: true } });
+
+    const res = await (service as any).ensureManagerCoverage(false);
+
+    expect(telegramService.joinByInviteLink).toHaveBeenCalledTimes(1);
+    expect(botApiCalls.filter(c => c.method === 'promoteChatMember')).toHaveLength(1);
+    expect(res.coverage).toMatch(/can add bots in 1\/3 chats/);
+  });
+
+  test('no bot can promote there: one admin account (not the main) grants a bot add-admins; nothing else this run', async () => {
+    wire();
+    await seedBot({ category: ChannelCategory.CLIENT_UPDATES, channelId: '-100cu', token: 'tok-cu', username: 'cu_bot', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100cu': [{ user: { id: 5817107227, is_bot: false }, status: 'creator' }] };
+    botApi({ 'tok-cu': { can_promote_members: false, can_invite_users: true } });
+
+    const res = await (service as any).ensureManagerCoverage(false);
+
+    expect(telegramService.promoteBotInChannel).toHaveBeenCalledWith(CRITICAL.mobile, '-100cu', 'tok-cu', 'cu_bot', expect.objectContaining({ addAdmins: true }));
+    expect(telegramService.joinByInviteLink).not.toHaveBeenCalled();
+    expect(res.failures).toEqual([]);
+  });
+
+  test('dry run proposes without any write or account action', async () => {
+    wire();
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100http', token: 'tok-p', username: 'promoter_bot', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100http': [] };
+    botApi({ 'tok-p': { can_promote_members: true, can_invite_users: true } });
+
+    const res = await (service as any).ensureManagerCoverage(true);
+
+    expect(res.proposedActions).toEqual(['add main manager …4125 as admin in HTTP_FAILURES (join by one-use invite link, promoted by @promoter_bot)']);
+    expect(botApiCalls).toEqual([]);
+    expect(telegramService.joinByInviteLink).not.toHaveBeenCalled();
+  });
+
+  test('an unusable main manager (expired / no session) only reports', async () => {
+    wire([CRITICAL]); // main not found as a healthy account
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100http', token: 'tok-p', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100http': [] };
+    botApi({ 'tok-p': { can_promote_members: true, can_invite_users: true } });
+
+    const res = await (service as any).ensureManagerCoverage(false);
+
+    expect(res.failures).toEqual(['channelManagerPrimary …4125 is not usable (expired, no session, in a pool, or no tgId): set a healthy account']);
+    expect(botApiCalls).toEqual([]);
+    expect(telegramService.joinByInviteLink).not.toHaveBeenCalled();
+  });
+
+  test('a flood signal while joining stops all privileged work for the run', async () => {
+    wire();
+    await seedBot({ category: ChannelCategory.HTTP_FAILURES, channelId: '-100http', token: 'tok-p', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100http': [] };
+    botApi({ 'tok-p': { can_promote_members: true, can_invite_users: true } });
+    telegramService.joinByInviteLink.mockRejectedValue(Object.assign(new Error('A wait of 300 seconds is required'), { errorMessage: 'FLOOD_WAIT_300' }));
+
+    const res = await (service as any).ensureManagerCoverage(false);
+
+    expect(res.stopPrivilegedWork).toBe(true);
+    expect(botApiCalls.map(c => c.method)).toEqual(['createChatInviteLink', 'revokeChatInviteLink']);
+  });
+
+  test('repairs use the main manager first, then others, @myvcacc last', async () => {
+    wire([MAIN, CRITICAL, { mobile: '917000007937', tgId: '6100873717', session: 's-o' }]);
+    await seedBot({ category: ChannelCategory.ACCOUNT_LOGIN_FAILURES, channelId: '-100alf', token: 'tok-r', lifecycle: 'active_verified', status: 'active' });
+    admins = { '-100alf': [
+      { user: { id: 5817107227, is_bot: false }, status: 'creator' },
+      { user: { id: 6100873717, is_bot: false }, status: 'creator' },
+      { user: { id: 8026902408, is_bot: false }, status: 'administrator', can_promote_members: true },
+    ] };
+    botApi({});
+
+    expect(await (service as any).resolveChannelAdminMobile('-100alf')).toBe(MAIN.mobile);
+  });
+});
+
 describe('BotsService - flushPendingStats', () => {
   test('no pending updates → early return', async () => {
     await expect((service as any).flushPendingStats()).resolves.toBeUndefined();

@@ -47,6 +47,8 @@ export interface BotHealthRunResult {
     failures: string[];
     dryRun: boolean;
     proposedActions: string[];
+    /** "Main manager …XXXX can add bots in N/M chats" (channelManagerPrimary coverage), when known. */
+    managerCoverage?: string;
     /** Per channel: how many of OUR accounts can add bots there (0 = no self-repair, 1 = single point of failure). */
     adminCoverage?: Array<{ category: string; channelId: string; repairAdmins: number | null }>;
     /**
@@ -1270,6 +1272,22 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 }
             }
 
+            // Main manager coverage: at most ONE account action per run, never on a flood signal.
+            let managerCoverage: string | undefined;
+            if (!stopPrivilegedWork) {
+                try {
+                    const mgr = await this.ensureManagerCoverage(Boolean(options.dryRun));
+                    failures.push(...mgr.failures);
+                    proposedActions.push(...mgr.proposedActions);
+                    stopPrivilegedWork = mgr.stopPrivilegedWork;
+                    managerCoverage = mgr.coverage;
+                } catch (err: any) {
+                    const msg = `manager coverage step failed: ${err?.message || err}`;
+                    failures.push(msg);
+                    parseError(err, `[BotHealth] ${msg}`, false);
+                }
+            }
+
             // Canary: a channel none of its active bots can reach is dead (deleted, or every bot removed).
             // A single unreachable bot is a bot problem (demoted above), not a dead channel.
             const deadChannels: string[] = [];
@@ -1290,9 +1308,9 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             const singleAdmin = adminCoverage.filter(c => c.repairAdmins === 1).map(c => c.category);
 
             if (!options.dryRun) {
-                await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures, singleAdmin });
+                await this.sendHealthSummary({ checked: bots.length, alive, dead, unknown, replaced, toppedUp, deadRemaining: deadBots.length - replaced, failures, singleAdmin, managerCoverage });
             }
-            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions, deadChannels, adminCoverage };
+            return { checked: bots.length, alive, dead, unknown, replaced, toppedUp, failures, dryRun: Boolean(options.dryRun), proposedActions, deadChannels, adminCoverage, managerCoverage };
         } finally {
             this.replaceInProgress = false;
         }
@@ -1817,6 +1835,149 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return false; // couldn't confirm with any viewer → treat as not-verified (safe)
     }
 
+    /** A channel bot's own admin rights (Bot API getChatMember on itself); null when it is not an admin there. */
+    private async botOwnRights(bot: Partial<Bot>): Promise<Record<string, boolean> | null> {
+        try {
+            const botId = String(bot.token).split(':')[0];
+            const res = await axios.get(`https://api.telegram.org/bot${bot.token}/getChatMember`, { params: { chat_id: bot.channelId, user_id: botId }, timeout: 12000 });
+            const m = res?.data?.ok ? res.data.result : null;
+            if (!m || (m.status !== 'administrator' && m.status !== 'creator')) return null;
+            const keys = ['can_manage_chat', 'can_change_info', 'can_post_messages', 'can_edit_messages', 'can_delete_messages', 'can_invite_users',
+                'can_restrict_members', 'can_pin_messages', 'can_promote_members', 'can_manage_video_chats'];
+            return Object.fromEntries(keys.map(k => [k, Boolean(m[k])]));
+        } catch {
+            return null;
+        }
+    }
+
+    private async botApi(token: string, method: string, params: Record<string, unknown>): Promise<any> {
+        const res = await axios.get(`https://api.telegram.org/bot${token}/${method}`, { params, timeout: 15000 });
+        if (!res?.data?.ok) throw new Error(`${method}: ${res?.data?.description || 'not ok'}`);
+        return res.data.result;
+    }
+
+    /**
+     * Keep the main manager (channelManagerPrimary) an admin with Add Admins in every channel, so repairs never
+     * need the critical @myvcacc (channelManagerBackup). At most ONE account action per run:
+     *  - a channel bot that can promote: bot makes a one-use invite link, the manager joins, the bot promotes it
+     *    (rights capped to the bot's own), link revoked. @myvcacc is not touched;
+     *  - no bot can promote there: an admin account of ours (never the manager) grants add-admins to one active bot;
+     *    the next run then continues through the bot.
+     * Bots cannot add a non-member (POC 2026-10-17), hence the join step.
+     */
+    private async ensureManagerCoverage(dryRun: boolean): Promise<{ failures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean; coverage?: string }> {
+        const failures: string[] = [];
+        const proposedActions: string[] = [];
+        const primaryMobile = (process.env.channelManagerPrimary || '').trim();
+        if (!primaryMobile) return { failures: ['channelManagerPrimary is not set: no main manager, repairs fall back to other accounts / @myvcacc'], proposedActions, stopPrivilegedWork: false };
+        const tail = primaryMobile.slice(-4);
+        const [primary] = await this.findHealthyAccountsByIdentity([primaryMobile], []);
+        if (!primary?.tgId) {
+            return { failures: [`channelManagerPrimary …${tail} is not usable (expired, no session, in a pool, or no tgId): set a healthy account`], proposedActions, stopPrivilegedWork: false };
+        }
+
+        const bots = await this.botModel.find().lean().exec();
+        const channels = new Map<string, { category: string; bots: BotDocument[] }>();
+        for (const b of bots) {
+            if (!this.isSelectable(b) || !b.channelId || !b.token) continue;
+            const entry = channels.get(b.channelId) ?? { category: String(b.category), bots: [] };
+            entry.bots.push(b as BotDocument);
+            channels.set(b.channelId, entry);
+        }
+        let covered = 0;
+        let readable = 0;
+        const missing: Array<{ channelId: string; category: string; bots: BotDocument[]; isMember: boolean }> = [];
+        for (const [channelId, { category, bots: channelBots }] of channels) {
+            const facts = await this.readChannelViaBots(channelId);
+            if (!facts) continue;
+            readable++;
+            const me = facts.admins.find(a => a.userId === String(primary.tgId));
+            if (me && (me.rank === 'creator' || me.permissions.addAdmins)) covered++;
+            else missing.push({ channelId, category, bots: channelBots, isMember: Boolean(me) });
+        }
+        const coverage = `Main manager …${tail} can add bots in ${covered}/${readable} chats${missing.length ? ` (next: ${missing[0].category})` : ''}`;
+        if (missing.length === 0) return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+
+        const target = missing[0];
+        const caps: Array<{ bot: BotDocument; rights: Record<string, boolean> }> = [];
+        for (const bot of target.bots.slice(0, 10)) {
+            const rights = await this.botOwnRights(bot);
+            if (rights) caps.push({ bot, rights });
+        }
+        const promoter = caps.find(c => c.rights.can_promote_members && c.rights.can_invite_users) ?? caps.find(c => c.rights.can_promote_members);
+        const inviter = caps.find(c => c.rights.can_invite_users);
+
+        if (!promoter) {
+            // One account action: give an active bot the add-admins right, so bots can do the rest.
+            const bot = caps[0]?.bot;
+            if (!bot) return { failures: [`${target.category}: no active bot is admin there; cannot add the main manager`], proposedActions, stopPrivilegedWork: false, coverage };
+            proposedActions.push(`grant add-admins to @${bot.username} in ${target.category} via an admin account (step 1 of adding main manager …${tail})`);
+            if (dryRun) return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+            const adminMobile = await this.resolveChannelAdminMobile(target.channelId);
+            if (!adminMobile || adminMobile === primaryMobile) {
+                return { failures: [`${target.category}: no admin account of ours can give a bot add-admins`], proposedActions, stopPrivilegedWork: false, coverage };
+            }
+            const desired = {
+                changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
+                banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: true, anonymous: false, manageCall: true,
+            };
+            const granted = await this.intersectWithPromoterRights(adminMobile, target.channelId, desired);
+            if (!granted.addAdmins) return { failures: [`${target.category}: promoter …${adminMobile.slice(-4)} lacks add-admins`], proposedActions, stopPrivilegedWork: false, coverage };
+            try {
+                await this.humanDelay();
+                const botId = String(bot.token).split(':')[0];
+                await this.telegramService.promoteBotInChannel(adminMobile, target.channelId, botId, bot.username, granted);
+                console.log(`[BotHealth] granted add-admins to @${bot.username} in ${target.category} via …${adminMobile.slice(-4)}`);
+            } catch (err: any) {
+                failures.push(`${target.category}: granting add-admins to @${bot.username} failed: ${err?.message || err}`);
+                if (this.isFloodSignal(err)) return { failures, proposedActions, stopPrivilegedWork: true, coverage };
+            }
+            return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+        }
+
+        if (!target.isMember && !inviter) {
+            return { failures: [`${target.category}: no bot can create an invite link for the main manager`], proposedActions, stopPrivilegedWork: false, coverage };
+        }
+        proposedActions.push(`add main manager …${tail} as admin in ${target.category} (${target.isMember ? 'already a member' : 'join by one-use invite link'}, promoted by @${promoter.bot.username})`);
+        if (dryRun) return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+
+        let link: string | null = null;
+        try {
+            if (!target.isMember && inviter) {
+                const invite = await this.botApi(inviter.bot.token, 'createChatInviteLink', {
+                    chat_id: target.channelId, member_limit: 1, expire_date: Math.floor(Date.now() / 1000) + 3600, name: 'main manager',
+                });
+                link = String(invite?.invite_link || '');
+                await this.humanDelay();
+                await this.telegramService.joinByInviteLink(primary.mobile, link);
+                await this.humanDelay();
+            }
+            const r = promoter.rights;
+            await this.botApi(promoter.bot.token, 'promoteChatMember', {
+                chat_id: target.channelId, user_id: String(primary.tgId),
+                can_manage_chat: true, can_promote_members: true,
+                can_post_messages: r.can_post_messages, can_edit_messages: r.can_edit_messages, can_delete_messages: r.can_delete_messages,
+                can_invite_users: r.can_invite_users, can_restrict_members: r.can_restrict_members, can_pin_messages: r.can_pin_messages,
+                can_change_info: r.can_change_info, can_manage_video_chats: r.can_manage_video_chats,
+            });
+            const after = await this.readChannelViaBots(target.channelId);
+            const me = after?.admins.find(a => a.userId === String(primary.tgId));
+            if (me && (me.rank === 'creator' || me.permissions.addAdmins)) {
+                console.log(`[BotHealth] main manager …${tail} is now admin with add-admins in ${target.category}`);
+            } else {
+                failures.push(`${target.category}: main manager …${tail} promotion not visible in the admin list`);
+            }
+        } catch (err: any) {
+            failures.push(`${target.category}: adding main manager …${tail} failed: ${err?.message || err}`);
+            if (this.isFloodSignal(err)) return { failures, proposedActions, stopPrivilegedWork: true, coverage };
+        } finally {
+            if (link && inviter) {
+                await this.botApi(inviter.bot.token, 'revokeChatInviteLink', { chat_id: target.channelId, invite_link: link }).catch(() => undefined);
+            }
+        }
+        return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+    }
+
     /** For each channel with an active bot: how many of our live accounts can add bots (null = unreadable). */
     private async auditAdminCoverage(): Promise<Array<{ category: string; channelId: string; repairAdmins: number | null }>> {
         const bots = await this.botModel.find().lean().exec();
@@ -1964,8 +2125,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         if (scored.length === 0) return null;
         // channelManagerBackup is the critical service account (@myvcacc): last resort, used only when no other
         // account of ours can add bots in this channel (documented intent; the score alone often picked it).
+        // channelManagerPrimary (the dedicated main manager) goes first whenever it can add bots here.
         const critical = (process.env.channelManagerBackup || '').trim();
-        const rank = (c: { mobile: string; score: number }) => c.score - (critical && c.mobile === critical ? 10 : 0);
+        const main = (process.env.channelManagerPrimary || '').trim();
+        const rank = (c: { mobile: string; score: number }) => c.score - (critical && c.mobile === critical ? 10 : 0) + (main && c.mobile === main ? 10 : 0);
         scored.sort((x, y) => rank(y) - rank(x));
         return scored[0].mobile;
     }
@@ -2077,12 +2240,13 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[]; singleAdmin?: string[] }): Promise<void> {
+    private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[]; singleAdmin?: string[]; managerCoverage?: string }): Promise<void> {
         const lines = [
             '<b>Bot Health Check</b>',
             `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
             `Replaced: ${s.replaced} | Topped up: ${s.toppedUp} | Dead remaining: ${s.deadRemaining}`,
         ];
+        if (s.managerCoverage) lines.push(s.managerCoverage);
         if (s.singleAdmin?.length) {
             lines.push(`Only one of our accounts can add bots in: ${s.singleAdmin.join(', ')}`);
         }
