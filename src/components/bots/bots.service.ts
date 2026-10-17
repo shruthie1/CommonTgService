@@ -10,7 +10,6 @@ import { parseError } from '../../utils';
 import { Bot, BotDocument, BotLifecycle } from './schemas/bot.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
 import { UsersService } from '../users/users.service';
-import { probeSpamBot, SpamProbeResult, SPAMBOT_TOTAL_TIMEOUT_MS } from '../Telegram/utils/spambot-probe';
 
 // ChannelCategory lives in ./channel-category.enum to break a circular import
 // (create-bot.dto -> bots.service -> TelegramService -> ... -> create-bot.dto).
@@ -48,7 +47,7 @@ export interface BotHealthRunResult {
     failures: string[];
     dryRun: boolean;
     proposedActions: string[];
-    /** "Main manager …XXXX can add bots in N/M chats" (channelManagerPrimary coverage), when known. */
+    /** "Own repair admin (besides @myvcacc) in N/M chats", when known. */
     managerCoverage?: string;
     /** Per channel: how many of OUR accounts can add bots there (0 = no self-repair, 1 = single point of failure). */
     adminCoverage?: Array<{ category: string; channelId: string; repairAdmins: number | null }>;
@@ -169,10 +168,10 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private readonly maxPendingAdminRepairAttempts = 3;
     private healthCheckJob: schedule.Job | null = null;
     private reachSweepJob: schedule.Job | null = null;
-    // @SpamBot verdict per account before it performs admin actions (limited accounts fail EditAdmin).
-    private readonly adminActionReadiness = new Map<string, { usable: boolean; reason: string; until: number }>();
-    // Main manager chosen by the last coverage run (configured primary, or auto-picked when that is unusable).
-    private mainManagerMobile: string | null = null;
+    // Accounts whose last admin action (join / promote) failed: skipped until `until`, then tried again.
+    private readonly adminActionBlocks = new Map<string, { reason: string; until: number }>();
+    // Accounts tried per admin repair before giving up for the run (try-and-fail, next account on failure).
+    private readonly maxRepairAdminTries = 2;
     private flushTimer: ReturnType<typeof setInterval> | null = null;
     private destroyed = false;
     private replaceInProgress = false;
@@ -1277,7 +1276,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 }
             }
 
-            // Main manager coverage: at most ONE account action per run, never on a flood signal.
+            // Per-channel repair admins: at most ONE channel per run, never after a flood signal.
             let managerCoverage: string | undefined;
             if (!stopPrivilegedWork) {
                 try {
@@ -1777,9 +1776,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const botId = String(botInfo?.id ?? '');
         if (!botId) throw new Error('could not resolve new bot id from getBotInfo');
 
-        const adminMobile = await this.resolveChannelAdminMobile(channelId);
-        if (!adminMobile) throw new Error(`no controllable admin account found for channel ${channelId}`);
-
         // Only request rights the PROMOTER actually holds. Telegram's EditAdmin returns
         // RIGHT_FORBIDDEN if you try to grant a right you don't have yourself — e.g. our channel
         // manager has addAdmins but NOT postMessages in some channels, so a blanket postMessages:true
@@ -1789,22 +1785,31 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: false,
             anonymous: true, manageCall: true,
         };
-        const granted = await this.intersectWithPromoterRights(adminMobile, channelId, desired);
-
-        // Human-paced: wait a randomized gap BEFORE the privileged promote so the manager
-        // account's admin actions don't cluster into a scripted burst (ban risk).
-        await this.humanDelay();
-        try {
-            await this.telegramService.promoteBotInChannel(adminMobile, channelId, botId, botUsername, granted);
-        } catch (err) {
-            if (this.isFloodSignal(err)) {
-                // Do NOT retry — a flood/spam signal on the manager account means back off entirely.
-                throw new Error(`FLOOD/spam signal promoting via ${adminMobile} in ${channelId} — aborting to protect the manager account: ${(err as any)?.message || err}`);
+        // Try-and-fail: an account whose promote fails is skipped for a while and the next admin account is tried.
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < this.maxRepairAdminTries; attempt++) {
+            const adminMobile = await this.resolveChannelAdminMobile(channelId);
+            if (!adminMobile) break;
+            const granted = await this.intersectWithPromoterRights(adminMobile, channelId, desired);
+            // Human-paced: wait a randomized gap BEFORE the privileged promote so the manager
+            // account's admin actions don't cluster into a scripted burst (ban risk).
+            await this.humanDelay();
+            try {
+                await this.telegramService.promoteBotInChannel(adminMobile, channelId, botId, botUsername, granted);
+                console.log(`[BotHealth] attempted add of @${botUsername} to channel ${channelId} via ${adminMobile}`);
+                return botId;
+            } catch (err) {
+                lastErr = err;
+                if (this.isTargetSideError(err)) throw err;
+                this.noteAdminActionFailure(adminMobile, err);
             }
-            throw err;
         }
-        console.log(`[BotHealth] attempted add of @${botUsername} to channel ${channelId} via ${adminMobile}`);
-        return botId;
+        if (!lastErr) throw new Error(`no controllable admin account found for channel ${channelId}`);
+        if (this.isFloodSignal(lastErr)) {
+            // Keep the run-level stop: callers end privileged work on this message.
+            throw new Error(`FLOOD/spam signal promoting in ${channelId} (accounts tried: ${this.maxRepairAdminTries}): ${lastErr?.message || lastErr}`);
+        }
+        throw lastErr;
     }
 
     /**
@@ -1862,12 +1867,16 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
-     * Keep the main manager (channelManagerPrimary) an admin with Add Admins in every channel, so repairs never
-     * need the critical @myvcacc (channelManagerBackup). At most ONE account action per run:
-     *  - a channel bot that can promote: bot makes a one-use invite link, the manager joins, the bot promotes it
-     *    (rights capped to the bot's own), link revoked. @myvcacc is not touched;
-     *  - no bot can promote there: an admin account of ours (never the manager) grants add-admins to one active bot;
-     *    the next run then continues through the bot.
+     * Give every channel its OWN repair admin besides @myvcacc (channelManagerBackup, the critical account), so
+     * repairs never need @myvcacc and no single account manages every channel. A channel is covered when one of
+     * our live, non-pool accounts other than @myvcacc can add admins there (read from the admin list each run, so
+     * a manager that expires or is pulled into a pool is noticed and replaced; nothing is stored).
+     * At most ONE channel per run:
+     *  - a channel bot that can promote: a random dormant account (foreign first) joins through a one-use bot
+     *    invite link and the bot promotes it (rights capped to the bot's own). Try-and-fail: a candidate whose
+     *    join or promotion fails is skipped for a while and the next one is tried (max `maxRepairAdminTries`);
+     *  - no bot can promote there: an admin account of ours grants add-admins to one active bot; the next run
+     *    continues through the bot.
      * Bots cannot add a non-member (POC 2026-10-17), hence the join step.
      */
     private async ensureManagerCoverage(dryRun: boolean): Promise<{ failures: string[]; proposedActions: string[]; stopPrivilegedWork: boolean; coverage?: string }> {
@@ -1887,48 +1896,22 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             const f = await this.readChannelViaBots(channelId);
             if (f) facts.set(channelId, f);
         }
-
-        // Main manager: the configured primary when healthy and not limited; otherwise our account that can already
-        // add bots in the most chats (never the critical backup). Re-chosen every run, so a limited main is replaced.
-        const configured = (process.env.channelManagerPrimary || '').trim();
-        let primary: { mobile: string; tgId?: string | null } | undefined;
-        let how = 'configured';
-        if (configured) {
-            const [p] = await this.findHealthyAccountsByIdentity([configured], []);
-            const ready = p?.tgId ? await this.accountReadyForAdminActions(p.mobile, !dryRun) : { usable: false, reason: 'expired, no session, in a pool, or no tgId' };
-            if (p?.tgId && ready.usable) primary = p;
-            else failures.push(`channelManagerPrimary …${configured.slice(-4)} is not usable (${ready.reason}); picking another main manager`);
-        }
-        if (!primary) {
-            const reach = new Map<string, number>();
-            for (const f of facts.values()) for (const a of f.admins) if (a.rank === 'creator' || a.permissions.addAdmins) reach.set(a.userId, (reach.get(a.userId) || 0) + 1);
-            const ours = reach.size ? await this.findHealthyAccountsByIdentity([], [...reach.keys()]) : [];
-            const ranked = ours.filter(u => u.tgId && u.mobile !== critical).sort((x, y) => (reach.get(String(y.tgId)) || 0) - (reach.get(String(x.tgId)) || 0));
-            for (const u of ranked) {
-                if ((await this.accountReadyForAdminActions(u.mobile, !dryRun)).usable) { primary = u; how = 'auto'; break; }
-            }
-        }
-        if (!primary?.tgId) {
-            this.mainManagerMobile = null;
-            failures.push('no usable main manager: every candidate account is limited, busy or unhealthy; repairs fall back to @myvcacc');
-            return { failures, proposedActions, stopPrivilegedWork: false };
-        }
-        if (!dryRun) this.mainManagerMobile = primary.mobile;
-        const primaryMobile = primary.mobile;
-        const tail = primaryMobile.slice(-4);
+        const canAddIds = new Set<string>();
+        for (const f of facts.values()) for (const a of f.admins) if (a.rank === 'creator' || a.permissions.addAdmins) canAddIds.add(a.userId);
+        const ours = canAddIds.size ? await this.findHealthyAccountsByIdentity([], [...canAddIds]) : [];
+        const repairIds = new Set(ours.filter(u => u.tgId && u.mobile !== critical).map(u => String(u.tgId)));
+        // Accounts already managing a channel: never picked again, so each channel gets a different one.
+        const managing = new Set(ours.map(u => u.mobile));
 
         let covered = 0;
-        let readable = 0;
-        const missing: Array<{ channelId: string; category: string; bots: BotDocument[]; isMember: boolean }> = [];
+        const missing: Array<{ channelId: string; category: string; bots: BotDocument[] }> = [];
         for (const [channelId, { category, bots: channelBots }] of channels) {
             const f = facts.get(channelId);
             if (!f) continue;
-            readable++;
-            const me = f.admins.find(a => a.userId === String(primary.tgId));
-            if (me && (me.rank === 'creator' || me.permissions.addAdmins)) covered++;
-            else missing.push({ channelId, category, bots: channelBots, isMember: Boolean(me) });
+            if (f.admins.some(a => (a.rank === 'creator' || a.permissions.addAdmins) && repairIds.has(a.userId))) covered++;
+            else missing.push({ channelId, category, bots: channelBots });
         }
-        const coverage = `Main manager …${tail} (${how}) can add bots in ${covered}/${readable} chats${missing.length ? ` (next: ${missing[0].category})` : ''}`;
+        const coverage = `Own repair admin (besides @myvcacc) in ${covered}/${facts.size} chats${missing.length ? ` (next: ${missing[0].category})` : ''}`;
         if (missing.length === 0) return { failures, proposedActions, stopPrivilegedWork: false, coverage };
 
         const target = missing[0];
@@ -1943,69 +1926,84 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         if (!promoter) {
             // One account action: give an active bot the add-admins right, so bots can do the rest.
             const bot = caps[0]?.bot;
-            if (!bot) { failures.push(`${target.category}: no active bot is admin there; cannot add the main manager`); return { failures, proposedActions, stopPrivilegedWork: false, coverage }; }
-            proposedActions.push(`grant add-admins to @${bot.username} in ${target.category} via an admin account (step 1 of adding main manager …${tail})`);
+            if (!bot) { failures.push(`${target.category}: no active bot is admin there; cannot add a repair admin`); return { failures, proposedActions, stopPrivilegedWork: false, coverage }; }
+            proposedActions.push(`grant add-admins to @${bot.username} in ${target.category} via an admin account (step 1 of adding a repair admin)`);
             if (dryRun) return { failures, proposedActions, stopPrivilegedWork: false, coverage };
-            const adminMobile = await this.resolveChannelAdminMobile(target.channelId);
-            if (!adminMobile || adminMobile === primaryMobile) {
-                failures.push(`${target.category}: no admin account of ours can give a bot add-admins`); return { failures, proposedActions, stopPrivilegedWork: false, coverage };
-            }
             const desired = {
                 changeInfo: true, postMessages: true, editMessages: true, deleteMessages: true,
                 banUsers: true, inviteUsers: true, pinMessages: true, addAdmins: true, anonymous: false, manageCall: true,
             };
-            const granted = await this.intersectWithPromoterRights(adminMobile, target.channelId, desired);
-            if (!granted.addAdmins) { failures.push(`${target.category}: promoter …${adminMobile.slice(-4)} lacks add-admins`); return { failures, proposedActions, stopPrivilegedWork: false, coverage }; }
-            try {
-                await this.humanDelay();
-                const botId = String(bot.token).split(':')[0];
-                await this.telegramService.promoteBotInChannel(adminMobile, target.channelId, botId, bot.username, granted);
-                console.log(`[BotHealth] granted add-admins to @${bot.username} in ${target.category} via …${adminMobile.slice(-4)}`);
-            } catch (err: any) {
-                failures.push(`${target.category}: granting add-admins to @${bot.username} failed: ${err?.message || err}`);
-                if (this.isFloodSignal(err)) return { failures, proposedActions, stopPrivilegedWork: true, coverage };
+            const botId = String(bot.token).split(':')[0];
+            for (let attempt = 0; attempt < this.maxRepairAdminTries; attempt++) {
+                const adminMobile = await this.resolveChannelAdminMobile(target.channelId);
+                if (!adminMobile) { failures.push(`${target.category}: no usable admin account of ours can give a bot add-admins`); break; }
+                const granted = await this.intersectWithPromoterRights(adminMobile, target.channelId, desired);
+                if (!granted.addAdmins) { failures.push(`${target.category}: promoter …${adminMobile.slice(-4)} lacks add-admins`); break; }
+                try {
+                    await this.humanDelay();
+                    await this.telegramService.promoteBotInChannel(adminMobile, target.channelId, botId, bot.username, granted);
+                    console.log(`[BotHealth] granted add-admins to @${bot.username} in ${target.category} via …${adminMobile.slice(-4)}`);
+                    break;
+                } catch (err: any) {
+                    failures.push(`${target.category}: granting add-admins to @${bot.username} via …${adminMobile.slice(-4)} failed: ${err?.message || err}`);
+                    if (this.isTargetSideError(err)) break;
+                    this.noteAdminActionFailure(adminMobile, err);
+                }
             }
             return { failures, proposedActions, stopPrivilegedWork: false, coverage };
         }
 
-        if (!target.isMember && !inviter) {
-            failures.push(`${target.category}: no bot can create an invite link for the main manager`); return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+        if (!inviter) {
+            failures.push(`${target.category}: no bot can create an invite link for a repair admin`); return { failures, proposedActions, stopPrivilegedWork: false, coverage };
         }
-        proposedActions.push(`add main manager …${tail} as admin in ${target.category} (${target.isMember ? 'already a member' : 'join by one-use invite link'}, promoted by @${promoter.bot.username})`);
+        proposedActions.push(`add a random dormant account as repair admin in ${target.category} (join by one-use invite link, promoted by @${promoter.bot.username})`);
         if (dryRun) return { failures, proposedActions, stopPrivilegedWork: false, coverage };
 
-        let link: string | null = null;
-        try {
-            if (!target.isMember && inviter) {
+        const pool = await this.usersService.getDormantAccounts(this.maxRepairAdminTries * 4).catch(() => []);
+        const managers = new Set(this.getChannelManagerMobiles());
+        const candidates = pool.filter(u => u?.mobile && u.tgId && !managers.has(u.mobile) && !managing.has(u.mobile) && !this.adminActionBlocked(u.mobile));
+        if (candidates.length === 0) { failures.push(`${target.category}: no dormant account available to become repair admin`); return { failures, proposedActions, stopPrivilegedWork: false, coverage }; }
+
+        for (const cand of candidates.slice(0, this.maxRepairAdminTries)) {
+            const tail = cand.mobile.slice(-4);
+            let link: string | null = null;
+            let step = 'invite';
+            try {
                 const invite = await this.botApi(inviter.bot.token, 'createChatInviteLink', {
-                    chat_id: target.channelId, member_limit: 1, expire_date: Math.floor(Date.now() / 1000) + 3600, name: 'main manager',
+                    chat_id: target.channelId, member_limit: 1, expire_date: Math.floor(Date.now() / 1000) + 3600, name: 'repair admin',
                 });
                 link = String(invite?.invite_link || '');
                 await this.humanDelay();
-                await this.telegramService.joinByInviteLink(primary.mobile, link);
+                step = 'join';
+                await this.telegramService.joinByInviteLink(cand.mobile, link);
                 await this.humanDelay();
-            }
-            const r = promoter.rights;
-            await this.botApi(promoter.bot.token, 'promoteChatMember', {
-                chat_id: target.channelId, user_id: String(primary.tgId),
-                can_manage_chat: true, can_promote_members: true,
-                can_post_messages: r.can_post_messages, can_edit_messages: r.can_edit_messages, can_delete_messages: r.can_delete_messages,
-                can_invite_users: r.can_invite_users, can_restrict_members: r.can_restrict_members, can_pin_messages: r.can_pin_messages,
-                can_change_info: r.can_change_info, can_manage_video_chats: r.can_manage_video_chats,
-            });
-            const after = await this.readChannelViaBots(target.channelId);
-            const me = after?.admins.find(a => a.userId === String(primary.tgId));
-            if (me && (me.rank === 'creator' || me.permissions.addAdmins)) {
-                console.log(`[BotHealth] main manager …${tail} is now admin with add-admins in ${target.category}`);
-            } else {
-                failures.push(`${target.category}: main manager …${tail} promotion not visible in the admin list`);
-            }
-        } catch (err: any) {
-            failures.push(`${target.category}: adding main manager …${tail} failed: ${err?.message || err}`);
-            if (this.isFloodSignal(err)) return { failures, proposedActions, stopPrivilegedWork: true, coverage };
-        } finally {
-            if (link && inviter) {
-                await this.botApi(inviter.bot.token, 'revokeChatInviteLink', { chat_id: target.channelId, invite_link: link }).catch(() => undefined);
+                step = 'promote';
+                const r = promoter.rights;
+                await this.botApi(promoter.bot.token, 'promoteChatMember', {
+                    chat_id: target.channelId, user_id: String(cand.tgId),
+                    can_manage_chat: true, can_promote_members: true,
+                    can_post_messages: r.can_post_messages, can_edit_messages: r.can_edit_messages, can_delete_messages: r.can_delete_messages,
+                    can_invite_users: r.can_invite_users, can_restrict_members: r.can_restrict_members, can_pin_messages: r.can_pin_messages,
+                    can_change_info: r.can_change_info, can_manage_video_chats: r.can_manage_video_chats,
+                });
+                const after = await this.readChannelViaBots(target.channelId);
+                const me = after?.admins.find(a => a.userId === String(cand.tgId));
+                if (me && (me.rank === 'creator' || me.permissions.addAdmins)) {
+                    console.log(`[BotHealth] …${tail} is now repair admin with add-admins in ${target.category}`);
+                } else {
+                    failures.push(`${target.category}: repair admin …${tail} promotion not visible in the admin list`);
+                }
+                return { failures, proposedActions, stopPrivilegedWork: false, coverage };
+            } catch (err: any) {
+                failures.push(`${target.category}: ${step} for repair admin …${tail} failed: ${err?.message || err}`);
+                // Bot-side failures (invite link, bot lacks rights, Bot API rate limit) are not the account's fault:
+                // another account would fail the same way, so stop here; a bot rate limit stops the run.
+                if (step === 'invite' || (step === 'promote' && this.isTargetSideError(err))) {
+                    return { failures, proposedActions, stopPrivilegedWork: this.isFloodSignal(err), coverage };
+                }
+                this.noteAdminActionFailure(cand.mobile, err);
+            } finally {
+                if (link) await this.botApi(inviter.bot.token, 'revokeChatInviteLink', { chat_id: target.channelId, invite_link: link }).catch(() => undefined);
             }
         }
         return { failures, proposedActions, stopPrivilegedWork: false, coverage };
@@ -2032,34 +2030,30 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
-     * Can this account perform admin actions now? Asks @SpamBot (a limited account fails EditAdmin: owner report
-     * 2026-10-17, …4125). Cached 24 h; a "limited until" verdict is kept until that date (max 7 d); busy (another
-     * flow holds its connection) or unverifiable accounts are skipped for a short while.
+     * Try-and-fail instead of an @SpamBot pre-check (owner 2026-10-17): an account is used until an admin action
+     * of its fails, then skipped for a while and the next account is tried. Flood / spam-limit failures skip it
+     * 24 h, anything else 6 h.
      */
-    private async accountReadyForAdminActions(mobile: string, probe = true): Promise<{ usable: boolean; reason: string }> {
-        const now = Date.now();
-        const cached = this.adminActionReadiness.get(mobile);
-        if (cached && now < cached.until) return cached;
-        if (!probe) return { usable: true, reason: 'not checked (dry run)' }; // dry runs never message @SpamBot
-        let r: SpamProbeResult;
-        try {
-            r = await probeSpamBot(mobile, { totalTimeoutMs: SPAMBOT_TOTAL_TIMEOUT_MS });
-        } catch (error: any) {
-            r = { status: 'unknown', limitedUntil: null, error: error?.message || String(error) };
-        }
-        const day = 24 * 60 * 60 * 1000;
-        let verdict: { usable: boolean; reason: string; until: number };
-        if (r.status === 'free') verdict = { usable: true, reason: 'free', until: now + day };
-        else if (r.status === 'limited') {
-            const limitEnd = r.limitedUntil ? r.limitedUntil.getTime() : now + day;
-            verdict = { usable: false, reason: `spam-limited until ${r.limitedUntil ? r.limitedUntil.toISOString().slice(0, 10) : 'unknown'}`, until: Math.min(Math.max(limitEnd, now + 60 * 60 * 1000), now + 7 * day) };
-        } else if (r.status === 'harsh') verdict = { usable: false, reason: 'harsh spam limit', until: now + 7 * day };
-        else if (r.busy) verdict = { usable: false, reason: 'busy in another flow', until: now + 10 * 60 * 1000 };
-        else if (r.sendFailed || r.connectFailed) verdict = { usable: false, reason: `SpamBot check failed: ${(r.error || 'unknown').slice(0, 80)}`, until: now + 6 * 60 * 60 * 1000 };
-        else verdict = { usable: true, reason: 'SpamBot inconclusive', until: now + 6 * 60 * 60 * 1000 };
-        this.adminActionReadiness.set(mobile, verdict);
-        if (!verdict.usable) console.warn(`[BotHealth] …${mobile.slice(-4)} not used for admin actions: ${verdict.reason}`);
-        return verdict;
+    private adminActionBlocked(mobile: string): boolean {
+        const b = this.adminActionBlocks.get(mobile);
+        if (!b) return false;
+        if (Date.now() < b.until) return true;
+        this.adminActionBlocks.delete(mobile);
+        return false;
+    }
+
+    private noteAdminActionFailure(mobile: string, err: any): void {
+        const hour = 60 * 60 * 1000;
+        const limited = this.isFloodSignal(err) || /restricted|limited|USER_CHANNELS_TOO_MUCH|CHANNELS_TOO_MUCH/i.test(String(err?.errorMessage || err?.message || err));
+        const reason = String(err?.errorMessage || err?.message || err).slice(0, 80);
+        this.adminActionBlocks.set(mobile, { reason, until: Date.now() + (limited ? 24 : 6) * hour });
+        console.warn(`[BotHealth] …${mobile.slice(-4)} skipped for admin actions for ${limited ? 24 : 6}h: ${reason}`);
+    }
+
+    /** Failures caused by the chat or the bot, not the acting account: another account would fail the same way. */
+    private isTargetSideError(err: any): boolean {
+        const m = String(err?.errorMessage || err?.message || err);
+        return /not enough rights|CHAT_ADMIN_REQUIRED|RIGHT_FORBIDDEN|ADMINS_TOO_MUCH|can't (promote|demote)|BOT_|chat not found|Too Many Requests|retry after/i.test(m);
     }
 
     /**
@@ -2101,16 +2095,14 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
-     * Channel-operator accounts used to promote a freshly-created bot to admin, in priority
-     * order. Configured in the `configuration` collection (loaded into process.env at boot):
-     *   channelManagerPrimary  — the DEDICATED backup/operator account, tried FIRST so day-to-day
-     *                            bot management never touches the critical service account.
-     *   channelManagerBackup   — the critical service account (@myvcacc); LAST resort only, used
-     *                            solely for channels where the primary operator isn't yet admin.
+     * Configured operator accounts (the `configuration` collection, loaded into process.env at boot), used as
+     * channel viewers for the account-scan fallback and never picked as bot creators or new repair admins:
+     *   channelManagerPrimary  — optional dedicated operator account.
+     *   channelManagerBackup   — the critical service account (@myvcacc); last resort for repairs, used only
+     *                            where no other account of ours can add admins (each channel gets its own
+     *                            repair admin, see ensureManagerCoverage).
      * We only ever ACT through an account verified to be admin in the specific target channel
-     * (see resolveChannelAdminMobile), so a configured-but-not-yet-admin primary simply gets
-     * skipped for that channel rather than failing. Editable in DB without a redeploy; falls
-     * back to a live admin scan if neither is set/usable.
+     * (see resolveChannelAdminMobile).
      */
     private getChannelManagerMobiles(): string[] {
         return [process.env.channelManagerPrimary, process.env.channelManagerBackup]
@@ -2189,17 +2181,12 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         if (scored.length === 0) return null;
         // channelManagerBackup is the critical service account (@myvcacc): last resort, used only when no other
         // account of ours can add bots in this channel (documented intent; the score alone often picked it).
-        // channelManagerPrimary (the dedicated main manager) goes first whenever it can add bots here.
         const critical = (process.env.channelManagerBackup || '').trim();
-        const main = this.mainManagerMobile || (process.env.channelManagerPrimary || '').trim();
-        const rank = (c: { mobile: string; score: number }) => c.score - (critical && c.mobile === critical ? 10 : 0) + (main && c.mobile === main ? 10 : 0);
+        const rank = (c: { mobile: string; score: number }) => c.score - (critical && c.mobile === critical ? 10 : 0);
         scored.sort((x, y) => rank(y) - rank(x));
-        // Skip accounts that are spam-limited (or busy / unverifiable) right now; try the next in rank order.
-        const seen = new Set<string>();
+        // Skip accounts whose last admin action failed (try-and-fail, no @SpamBot pre-check); next in rank order.
         for (const candidate of scored) {
-            if (seen.has(candidate.mobile)) continue;
-            seen.add(candidate.mobile);
-            if ((await this.accountReadyForAdminActions(candidate.mobile)).usable) return candidate.mobile;
+            if (!this.adminActionBlocked(candidate.mobile)) return candidate.mobile;
         }
         return null;
     }

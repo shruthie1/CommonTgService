@@ -271,6 +271,25 @@ describe('UsersService (real Mongo)', () => {
     });
 
     // ── leaderboard ───────────────────────────────────────────────────────────
+    describe('getDormantAccounts', () => {
+        test('idle, healthy, non-pool accounts only; foreign (non +91) before Indian', async () => {
+            const old = '2026-01-01';
+            telegramService.getOwnAccountMobiles.mockResolvedValue(['923000000009']);
+            clientsService.findAll = jest.fn(async () => [{ mobile: '923000000008' }]);
+            await seedUser({ mobile: '923000000001', lastActive: old });                     // foreign, idle -> first
+            await seedUser({ mobile: '923000000001', lastActive: old });                     // second session doc: once only
+            await seedUser({ mobile: '923000000008', lastActive: old });                     // live client account
+            await seedUser({ mobile: '919999000001', lastActive: old });                     // Indian, idle -> fill
+            await seedUser({ mobile: '923000000002', lastActive: new Date().toISOString() }); // active recently
+            await seedUser({ mobile: '923000000003', lastActive: old, expired: true });
+            await seedUser({ mobile: '923000000009', lastActive: old });                     // in a pool / live client
+
+            const r = await service.getDormantAccounts(5, 30);
+            expect(r.map((u: any) => u.mobile)).toEqual(['923000000001', '919999000001']);
+            expect((await service.getDormantAccounts(1, 30)).map((u: any) => u.mobile)).toEqual(['923000000001']);
+        });
+    });
+
     describe('leaderboard', () => {
         test('field aspect (msgs) with stats rounding', async () => {
             await seedUser({ msgs: 100 });

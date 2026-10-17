@@ -368,6 +368,37 @@ export class UsersService {
     return [...foreign, ...fill].slice(0, limit);
   }
 
+  /**
+   * Random healthy accounts that have been idle for `idleDays` (lastActive is an ISO string), outside the
+   * buffer/promote pools and live clients. Foreign (non +91, mostly +92) first, like getBotCreatorAccounts:
+   * they are limited less often. Used to give each notification channel its own repair admin.
+   */
+  async getDormantAccounts(limit: number = 10, idleDays: number = 30): Promise<User[]> {
+    const cutoff = new Date(Date.now() - idleDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // Pool accounts AND live client accounts (the clients collection is not in getOwnAccountMobiles).
+    const excluded: string[] = [];
+    try { excluded.push(...await this.telegramService.getOwnAccountMobiles()); } catch { }
+    try { excluded.push(...(await this.clientsService.findAll()).map(c => c?.mobile).filter(Boolean)); } catch { }
+    const sample = (mobile: Record<string, unknown>, n: number): Promise<User[]> => this.userModel.aggregate([
+      {
+        $match: {
+          expired: { $ne: true },
+          session: { $exists: true, $nin: [null, ''] },
+          tgId: { $exists: true, $nin: [null, ''] },
+          mobile: { $exists: true, $nin: [null, '', ...excluded], ...mobile },
+          lastActive: { $lt: cutoff },
+        },
+      },
+      { $sample: { size: Math.max(1, n) } },
+    ]).exec() as unknown as Promise<User[]>;
+    // users holds one doc per session: keep one per mobile / tgId so "the next account" is a different one.
+    const seen = new Set<string>();
+    const unique = (docs: User[]) => docs.filter(u => !seen.has(u.mobile) && !seen.has(`tg:${u.tgId}`) && seen.add(u.mobile) && seen.add(`tg:${u.tgId}`));
+    const foreign = unique(await sample({ $not: /^\+?91/ }, limit));
+    if (foreign.length >= limit) return foreign.slice(0, limit);
+    return [...foreign, ...unique(await sample({}, limit))].slice(0, limit);
+  }
+
   private hasQueryConstraint(query: any, field: string): boolean {
     if (!query || typeof query !== 'object') return false;
     if (Object.prototype.hasOwnProperty.call(query, field)) return true;
