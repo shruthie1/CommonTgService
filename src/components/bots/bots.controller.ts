@@ -52,7 +52,9 @@ export class BotsController {
     if (runInBackground) {
       // Fire-and-forget: the run can take minutes (human-paced promotes) — don't hold the HTTP
       // client open. Errors are already caught + reported inside validateAndReplaceBots.
-      void this.botsService.validateAndReplaceBots(options).catch(() => undefined);
+      void this.botsService.validateAndReplaceBots(options)
+        .then(res => console.log(`[BotHealth] run done dryRun=${options.dryRun} ${JSON.stringify(res)}`))
+        .catch(() => undefined);
       return { started: true, mode: 'async', dryRun: options.dryRun, note: 'running in background; inspect CMS logs for the summary' };
     }
     return this.botsService.validateAndReplaceBots(options);

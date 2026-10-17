@@ -47,6 +47,17 @@ describe('BotsController - management', () => {
     expect(svc.validateAndReplaceBots).toHaveBeenCalledWith({ dryRun: true });
   });
 
+  test('async validate-and-replace logs the run result (the reply says to read the logs)', async () => {
+    const result = { checked: 3, dryRun: true, proposedActions: ['add a repair admin'], managerCoverage: 'Own repair admin (besides @myvcacc) in 1/2 chats' };
+    const svc = makeService({ validateAndReplaceBots: jest.fn().mockResolvedValue(result) });
+    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const c = new BotsController(svc as any);
+    expect(await c.validateAndReplace('true', 'true')).toMatchObject({ started: true, mode: 'async', dryRun: true });
+    await new Promise(r => setImmediate(r));
+    expect(log).toHaveBeenCalledWith(`[BotHealth] run done dryRun=true ${JSON.stringify(result)}`);
+    log.mockRestore();
+  });
+
   test('getBotById', async () => {
     const svc = makeService();
     const c = new BotsController(svc as any);
