@@ -3,15 +3,16 @@ import { Logger } from "./logger";
 
 const logger = new Logger(__filename);
 
-/**
- * Configuration options for Redis connection.
- */
-interface RedisConfig {
-    host: string;
-    port: number;
-    password?: string;
-    db: number;
-    retryStrategy?: (times: number) => number | null;
+const DEFAULT_REDIS_URI = "redis://127.0.0.1:6379";
+
+/** protocol//hostname:port only; never credentials. */
+function describeRedisUri(uri: string): string {
+    try {
+        const u = new URL(uri);
+        return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ""}`;
+    } catch {
+        return "REDIS_URI(unparseable)";
+    }
 }
 
 /**
@@ -31,32 +32,21 @@ export class RedisClient {
      */
     static getClient(): Redis {
         if (!RedisClient.instance) {
-            const isRemote = process.env.REDIS_MODE === "remote";
-            const config: RedisConfig = {
-                host: process.env.REDIS_HOST || (isRemote ? "0.0.0.0" : "127.0.0.1"),
-                port: Number(process.env.REDIS_PORT) || 6379,
-                password: process.env.REDIS_PASSWORD?.trim() || undefined,
-                db: Number(process.env.REDIS_DB) || 0,
-                retryStrategy: (times: number) => {
-                    const delay = Math.min(times * 100, 3000); // Exponential backoff, max 3s
-                    logger.warn(`Retrying Redis connection (${times}) after ${delay}ms`);
-                    return delay;
-                },
+            // REDIS_URI is the only config source (e.g. rediss://user:pass@host:port for the managed
+            // TLS Valkey); ioredis enables TLS for rediss://. Local-dev default otherwise.
+            const uri = process.env.REDIS_URI?.trim() || DEFAULT_REDIS_URI;
+            const target = describeRedisUri(uri);
+            const retryStrategy = (times: number) => {
+                const delay = Math.min(times * 100, 3000); // Exponential backoff, max 3s
+                logger.warn(`Retrying Redis connection (${times}) after ${delay}ms`);
+                return delay;
             };
 
             try {
-                // REDIS_URI (e.g. rediss://user:pass@host:port for a managed TLS Redis/Valkey) wins over
-                // REDIS_HOST/PORT/PASSWORD; ioredis enables TLS for rediss://.
-                const uri = process.env.REDIS_URI?.trim();
-                if (uri) {
-                    try { const u = new URL(uri); config.host = `${u.protocol}//${u.hostname}`; config.port = Number(u.port) || config.port; } catch { config.host = 'REDIS_URI'; }
-                    RedisClient.instance = new Redis(uri, { retryStrategy: config.retryStrategy });
-                } else {
-                    RedisClient.instance = new Redis(config);
-                }
+                RedisClient.instance = new Redis(uri, { retryStrategy });
 
                 RedisClient.instance.on("connect", () => {
-                    logger.log(`Connected to Redis at ${config.host}:${config.port}, DB: ${config.db}`);
+                    logger.log(`Connected to Redis at ${target}`);
                 });
 
                 RedisClient.instance.on("error", (err) => {

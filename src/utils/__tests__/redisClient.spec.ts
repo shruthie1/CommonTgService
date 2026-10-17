@@ -36,7 +36,7 @@ const fakeRedis = {
 };
 
 let constructorConfig: any;
-const RedisCtor = jest.fn().mockImplementation((config: any) => {
+const RedisCtor = jest.fn().mockImplementation((_uri: any, config: any) => {
     constructorConfig = config;
     return fakeRedis;
 });
@@ -58,6 +58,7 @@ async function resetSingleton() {
 
 beforeEach(async () => {
     await resetSingleton();
+    delete process.env.REDIS_URI;
     delete process.env.REDIS_MODE;
     delete process.env.REDIS_HOST;
     delete process.env.REDIS_PORT;
@@ -67,21 +68,43 @@ beforeEach(async () => {
 
 
 describe('RedisClient REDIS_URI (managed TLS Valkey)', () => {
-    afterEach(() => { delete process.env.REDIS_URI; delete process.env.REDIS_HOST; });
+    afterEach(() => {
+        delete process.env.REDIS_URI;
+        delete process.env.REDIS_HOST;
+        delete process.env.REDIS_PASSWORD;
+    });
 
-    test('REDIS_URI wins over REDIS_HOST and is passed to ioredis as the connection string', () => {
+    test('REDIS_URI is passed to ioredis as the connection string; legacy REDIS_HOST/REDIS_PASSWORD are ignored', () => {
         process.env.REDIS_HOST = '187.127.137.163';
+        process.env.REDIS_PASSWORD = 'old-secret';
         process.env.REDIS_URI = ' rediss://default:pw@valkey.example.aivencloud.com:16275 ';
         RedisClient.getClient();
         expect(RedisCtor).toHaveBeenCalledTimes(1);
         expect(RedisCtor.mock.calls[0][0]).toBe('rediss://default:pw@valkey.example.aivencloud.com:16275');
-        expect(typeof RedisCtor.mock.calls[0][1].retryStrategy).toBe('function');
+        const opts = RedisCtor.mock.calls[0][1];
+        expect(typeof opts.retryStrategy).toBe('function');
+        expect(opts.host).toBeUndefined();
+        expect(opts.password).toBeUndefined();
     });
 
-    test('without REDIS_URI the host/port config is used as before', () => {
+    test('without REDIS_URI the local-dev default is used and legacy REDIS_HOST/REDIS_PASSWORD are ignored', () => {
         process.env.REDIS_HOST = '10.0.0.5';
+        process.env.REDIS_PASSWORD = 'legacy-secret';
         RedisClient.getClient();
-        expect(RedisCtor.mock.calls[0][0]).toMatchObject({ host: '10.0.0.5', port: 6379 });
+        expect(RedisCtor.mock.calls[0][0]).toBe('redis://127.0.0.1:6379');
+        expect(RedisCtor.mock.calls[0][1].password).toBeUndefined();
+    });
+
+    test('connect log shows only protocol//host:port, never credentials', () => {
+        process.env.REDIS_URI = 'rediss://default:supersecret@valkey.example.com:16275';
+        RedisClient.getClient();
+        const spy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        eventHandlers['connect']();
+        const out = JSON.stringify(spy.mock.calls);
+        spy.mockRestore();
+        warn.mockRestore();
+        expect(out).not.toContain('supersecret');
     });
 });
 
@@ -102,32 +125,6 @@ describe('RedisClient.getClient (singleton + config)', () => {
         eventHandlers['connect']();
         eventHandlers['error']({ message: 'boom' });
         eventHandlers['close']();
-    });
-
-    test('local default config when REDIS_MODE is not remote', () => {
-        RedisClient.getClient();
-        expect(constructorConfig.host).toBe('127.0.0.1');
-        expect(constructorConfig.port).toBe(6379);
-        expect(constructorConfig.db).toBe(0);
-        expect(constructorConfig.password).toBeUndefined();
-    });
-
-    test('remote default host when REDIS_MODE=remote', () => {
-        process.env.REDIS_MODE = 'remote';
-        RedisClient.getClient();
-        expect(constructorConfig.host).toBe('0.0.0.0');
-    });
-
-    test('honours explicit env overrides incl. trimmed password', () => {
-        process.env.REDIS_HOST = 'cache.example.com';
-        process.env.REDIS_PORT = '6380';
-        process.env.REDIS_PASSWORD = '  secret  ';
-        process.env.REDIS_DB = '3';
-        RedisClient.getClient();
-        expect(constructorConfig.host).toBe('cache.example.com');
-        expect(constructorConfig.port).toBe(6380);
-        expect(constructorConfig.password).toBe('secret');
-        expect(constructorConfig.db).toBe(3);
     });
 
     test('retryStrategy backs off linearly and caps at 3000ms', () => {

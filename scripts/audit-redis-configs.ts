@@ -16,12 +16,11 @@ import Redis from 'ioredis';
 
 const VALID_API_IDS = new Set([27919939, 25328268, 12777557, 27565391, 27586636, 29210552]);
 
-const REDIS_CONFIG = {
-    host: process.env.REDIS_HOST || '187.127.137.163',
-    port: Number(process.env.REDIS_PORT) || 6379,
-    password: process.env.REDIS_PASSWORD || 'Ajtdmwajt12!',
-    db: Number(process.env.REDIS_DB) || 0,
-};
+const REDIS_URI = process.env.REDIS_URI?.trim();
+if (!REDIS_URI) {
+    console.error('REDIS_URI is not set (e.g. rediss://user:pass@host:port). Refusing to guess a Redis target.');
+    process.exit(1);
+}
 
 const args = process.argv.slice(2);
 const shouldExecute = args.includes('--execute');
@@ -30,8 +29,9 @@ const verbose = args.includes('--verbose');
 function log(msg: string) { console.log(`[${new Date().toISOString()}] ${msg}`); }
 
 async function main() {
-    log(`Connecting to Redis at ${REDIS_CONFIG.host}:${REDIS_CONFIG.port}...`);
-    const redis = new Redis(REDIS_CONFIG);
+    const target = (() => { try { const u = new URL(REDIS_URI); return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`; } catch { return 'REDIS_URI'; } })();
+    log(`Connecting to Redis at ${target}...`);
+    const redis = new Redis(REDIS_URI);
 
     try {
         await redis.ping();
