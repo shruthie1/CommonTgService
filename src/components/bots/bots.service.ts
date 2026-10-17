@@ -1046,43 +1046,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
-     * Category-channel canary: for every category that has at least one live bot, verify the
-     * category's CHANNEL is actually reachable (getChat). Returns the list of categories whose
-     * channel is dead. This is the check missing from getMe + admin-reconcile: those confirm the
-     * token is alive and (for pending bots) that the bot is a channel admin, but NEVER that the
-     * channel itself still exists / is postable. A dead channel (e.g. deleted, or the bot removed)
-     * therefore fails every send as a swallowed log line, indefinitely, with no operator signal.
-     *
-     * One getChat per distinct (category, channelId) using that category's own live bot token, so
-     * the probe uses a token that SHOULD be a member. Alerting is folded into the health summary,
-     * and additionally emitted to stderr (console.error) — an independent, non-Telegram trace, so a
-     * dead ACCOUNT_NOTIFICATIONS channel (the alert channel itself) still leaves a footprint.
-     */
-    private async probeCategoryChannels(bots: Array<Partial<Bot>>): Promise<string[]> {
-        // One representative live bot per (category → channelId). Skip dead-token / no-channel bots.
-        const probes = new Map<string, { category: string; channelId: string; token: string }>();
-        for (const bot of bots) {
-            if (!bot.channelId || !bot.token) continue;
-            if (this.lifecycleOf(bot) === 'dead_token') continue;
-            const key = `${bot.category}::${bot.channelId}`;
-            if (!probes.has(key)) probes.set(key, { category: String(bot.category), channelId: bot.channelId, token: bot.token });
-        }
-
-        const deadChannels: string[] = [];
-        for (const { category, channelId, token } of probes.values()) {
-            const verdict = await this.probeChannelAlive(token, channelId);
-            if (verdict === 'dead') {
-                deadChannels.push(`${category} (channel ${channelId})`);
-                // Independent-of-Telegram trace: if the dead channel IS the alert channel, the
-                // health-summary send will also fail — this stderr line is the only surviving signal.
-                console.error(JSON.stringify({ event: 'dead_channel_detected', category, channelId }));
-            }
-            await this.sleep(1200); // space getChat calls, same pacing as getMe
-        }
-        return deadChannels;
-    }
-
-    /**
      * Daily job: validate every bot, mark 401s inactive, and conservatively replace
      * dead bots via BotFather using a random healthy user account. Title = category,
      * description = "<creatorMobile> @<creatorUsername>". New bot is added to the dead
@@ -1103,6 +1066,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const proposedActions: string[] = [];
         let alive = 0, dead = 0, unknown = 0, replaced = 0;
         const deadBots: DeadBotInfo[] = [];
+        // category::channelId -> getChat verdicts of its active bots, for the dead-channel canary.
+        const channelReach = new Map<string, { category: string; channelId: string; alive: number; dead: number }>();
         let creationBudget = this.maxBotCreationsPerRun;
         let stopPrivilegedWork = false;
         try {
@@ -1125,6 +1090,29 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                         }
                     } else if (!options.dryRun) {
                         await this.botModel.updateOne({ _id: bot._id }, { $set: { lastValidatedAt: new Date() } }).exec();
+                    }
+                    // getMe proves the token, not channel access. Every active bot is probed (2026-10-17: 8 bots
+                    // were active_verified but removed from their channel, e.g. SAVED_MESSAGES 3/3), and one that
+                    // cannot reach its channel goes back to pending_admin so reconcile re-adds it as admin.
+                    const sendsNow = lifecycle === 'active_verified' || lifecycle === 'dead_token';
+                    if (sendsNow && bot.channelId) {
+                        await this.sleep(1200);
+                        const reach = await this.probeChannelAlive(bot.token, bot.channelId);
+                        const key = `${bot.category}::${bot.channelId}`;
+                        const tally = channelReach.get(key) ?? { category: String(bot.category), channelId: bot.channelId, alive: 0, dead: 0 };
+                        if (reach === 'alive') tally.alive++;
+                        if (reach === 'dead') tally.dead++;
+                        channelReach.set(key, tally);
+                        if (reach === 'dead') {
+                            proposedActions.push(`demote @${bot.username} to pending_admin (getChat: cannot reach ${bot.channelId})`);
+                            if (!options.dryRun) {
+                                await this.botModel.updateOne({ _id: bot._id }, {
+                                    $set: { lifecycle: 'pending_admin', lifecycleReason: 'getChat: bot cannot reach its channel', lifecycleUpdatedAt: new Date(), status: 'inactive' },
+                                }).exec();
+                                this.evictBotFromSendCache(bot);
+                            }
+                            console.warn(`[BotHealth] cannot reach channel: @${bot.username} (${bot.category} ${bot.channelId})`);
+                        }
                     }
                 } else if (check.verdict === 'dead') {
                     dead++;
@@ -1204,9 +1192,16 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 }
             }
 
-            // Canary: verify each configured category's CHANNEL is still reachable (getChat), not
-            // just that the tokens are alive. Runs in dry-run too — it's read-only (no mutations).
-            const deadChannels = await this.probeCategoryChannels(bots);
+            // Canary: a channel none of its active bots can reach is dead (deleted, or every bot removed).
+            // A single unreachable bot is a bot problem (demoted above), not a dead channel.
+            const deadChannels: string[] = [];
+            for (const { category, channelId, alive, dead } of channelReach.values()) {
+                if (alive > 0 || dead === 0) continue;
+                deadChannels.push(`${category} (channel ${channelId})`);
+                // Independent-of-Telegram trace: if the dead channel IS the alert channel, the
+                // health-summary send will also fail — this stderr line is the only surviving signal.
+                console.error(JSON.stringify({ event: 'dead_channel_detected', category, channelId }));
+            }
             for (const dc of deadChannels) failures.push(`DEAD CHANNEL: ${dc} — sends silently no-op; repair/rotate the channel`);
 
             if (!options.dryRun) {

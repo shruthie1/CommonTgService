@@ -1027,9 +1027,10 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
 
     const res = await service.validateAndReplaceBots();
 
-    // Token was alive, so NOT retired as dead_token…
+    // Token was alive, so NOT retired as dead_token; it cannot reach its channel, so it is no longer
+    // a sender (pending_admin) until reconcile proves channel admin again…
     const bot = await model.findOne({ category: ChannelCategory.FAILED_PAYMENTS });
-    expect(bot.lifecycle).toBe('active_verified');
+    expect(bot.lifecycle).toBe('pending_admin');
     // …but the dead CHANNEL is surfaced.
     expect(res.deadChannels.some(d => /FAILED_PAYMENTS/.test(d) && /-100deadchan/.test(d))).toBe(true);
     expect(res.failures.some(f => /DEAD CHANNEL/i.test(f) && /FAILED_PAYMENTS/.test(f))).toBe(true);
@@ -1062,11 +1063,12 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     expect(res.deadChannels).toEqual([]);
   });
 
-  test('CANARY: probes each distinct channel once, skips dead_token bots', async () => {
+  test('CANARY: probes every active bot (not one per channel), skips dead_token bots', async () => {
     mockModuleRef.get.mockReset().mockReturnValue({});
     (service as any).sleep = jest.fn(async () => undefined);
     const getChatCalls: string[] = [];
     mockedAxios.get.mockImplementation(async (url: string, cfg?: any) => {
+      if (url.includes('bottok-dead/getMe')) throw { response: { status: 401, data: { ok: false, description: 'Unauthorized' } } };
       if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
       getChatCalls.push(String(cfg?.params?.chat_id));
       return { status: 200, data: { ok: true, result: {} } } as any;
@@ -1074,13 +1076,32 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     // Two live bots on the SAME channel (probe once) + one dead_token bot (skip probe entirely).
     await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100shared', status: 'active' });
     await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100shared', status: 'active' });
-    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100deadtok', status: 'inactive', lifecycle: 'dead_token' });
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100deadtok', status: 'inactive', lifecycle: 'dead_token', token: 'tok-dead' });
 
     await service.validateAndReplaceBots();
 
-    // -100shared probed exactly once; the dead_token channel never probed.
-    expect(getChatCalls.filter(c => c === '-100shared')).toHaveLength(1);
+    // Each active bot on -100shared is probed; the dead_token channel never probed.
+    expect(getChatCalls.filter(c => c === '-100shared')).toHaveLength(2);
     expect(getChatCalls).not.toContain('-100deadtok');
+  });
+
+  test('2026-10-17: an active bot removed from a live channel is demoted to pending_admin; no dead-channel alert', async () => {
+    mockModuleRef.get.mockReset().mockReturnValue({});
+    (service as any).sleep = jest.fn(async () => undefined);
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('/getMe')) return { status: 200, data: { ok: true, result: { username: 'gm_bot' } } } as any;
+      if (url.includes('bottoken-gone')) throw { response: { status: 400, data: { ok: false, description: 'Bad Request: chat not found' } } };
+      return { status: 200, data: { ok: true, result: {} } } as any;
+    });
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100saved', status: 'active', token: 'token-gone' });
+    await seedBot({ category: ChannelCategory.SAVED_MESSAGES, channelId: '-100saved', status: 'active', token: 'token-ok' });
+
+    const res = await service.validateAndReplaceBots();
+
+    expect((await model.findOne({ token: 'token-gone' })).lifecycle).toBe('pending_admin');
+    expect((await model.findOne({ token: 'token-ok' })).lifecycle).toBe('active_verified');
+    expect(res.deadChannels).toEqual([]);
+    expect(res.proposedActions.some(a => /demote .*pending_admin/.test(a))).toBe(true);
   });
 
   test('CANARY: runs in dry-run (read-only) and still reports dead channels', async () => {
