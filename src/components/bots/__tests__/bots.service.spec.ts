@@ -837,6 +837,7 @@ describe('BotsService - main manager coverage (channelManagerPrimary main, @myvc
 
     expect(res.proposedActions).toEqual(['add main manager …4125 as admin in HTTP_FAILURES (join by one-use invite link, promoted by @promoter_bot)']);
     expect(botApiCalls).toEqual([]);
+    expect(mockProbeSpamBot).not.toHaveBeenCalled(); // a dry run never messages @SpamBot
     expect(telegramService.joinByInviteLink).not.toHaveBeenCalled();
   });
 

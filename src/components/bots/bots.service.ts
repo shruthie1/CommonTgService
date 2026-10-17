@@ -1895,7 +1895,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         let how = 'configured';
         if (configured) {
             const [p] = await this.findHealthyAccountsByIdentity([configured], []);
-            const ready = p?.tgId ? await this.accountReadyForAdminActions(p.mobile) : { usable: false, reason: 'expired, no session, in a pool, or no tgId' };
+            const ready = p?.tgId ? await this.accountReadyForAdminActions(p.mobile, !dryRun) : { usable: false, reason: 'expired, no session, in a pool, or no tgId' };
             if (p?.tgId && ready.usable) primary = p;
             else failures.push(`channelManagerPrimary …${configured.slice(-4)} is not usable (${ready.reason}); picking another main manager`);
         }
@@ -1905,7 +1905,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             const ours = reach.size ? await this.findHealthyAccountsByIdentity([], [...reach.keys()]) : [];
             const ranked = ours.filter(u => u.tgId && u.mobile !== critical).sort((x, y) => (reach.get(String(y.tgId)) || 0) - (reach.get(String(x.tgId)) || 0));
             for (const u of ranked) {
-                if ((await this.accountReadyForAdminActions(u.mobile)).usable) { primary = u; how = 'auto'; break; }
+                if ((await this.accountReadyForAdminActions(u.mobile, !dryRun)).usable) { primary = u; how = 'auto'; break; }
             }
         }
         if (!primary?.tgId) {
@@ -1913,7 +1913,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             failures.push('no usable main manager: every candidate account is limited, busy or unhealthy; repairs fall back to @myvcacc');
             return { failures, proposedActions, stopPrivilegedWork: false };
         }
-        this.mainManagerMobile = primary.mobile;
+        if (!dryRun) this.mainManagerMobile = primary.mobile;
         const primaryMobile = primary.mobile;
         const tail = primaryMobile.slice(-4);
 
@@ -2036,10 +2036,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * 2026-10-17, …4125). Cached 24 h; a "limited until" verdict is kept until that date (max 7 d); busy (another
      * flow holds its connection) or unverifiable accounts are skipped for a short while.
      */
-    private async accountReadyForAdminActions(mobile: string): Promise<{ usable: boolean; reason: string }> {
+    private async accountReadyForAdminActions(mobile: string, probe = true): Promise<{ usable: boolean; reason: string }> {
         const now = Date.now();
         const cached = this.adminActionReadiness.get(mobile);
         if (cached && now < cached.until) return cached;
+        if (!probe) return { usable: true, reason: 'not checked (dry run)' }; // dry runs never message @SpamBot
         let r: SpamProbeResult;
         try {
             r = await probeSpamBot(mobile, { totalTimeoutMs: SPAMBOT_TOTAL_TIMEOUT_MS });
