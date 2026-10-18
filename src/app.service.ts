@@ -34,7 +34,7 @@ import { sendNoticeBatched } from './utils/notice-batch';
 import { joinRowFromResponse } from './utils/channel-cycle';
 import { mergeByClient, NoticeDigestFlusher, pushDigestEntries } from './utils/notice-digest';
 import { RedisClient } from './utils/redisClient';
-import { textToRichInput } from './utils/rich-message';
+import { telemetryToRichInput, textToRichInput } from './utils/rich-message';
 import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
 import { AccountMaintenanceService } from './control-plane/maintenance/account-maintenance.service';
 
@@ -623,10 +623,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const normalized = String(message ?? '').trim();
     if (!normalized) return { ok: false };
     const bounded = normalized.slice(0, 3500);
-    // Free-form HTML posted by the payment site: structure it.
+    // HTML posted by the payment site; user/IP heading without the "UMS ·" prefix.
     const sent = await this.botsService.sendMessageByCategory(
       ChannelCategory.WEB_TELEMETRY,
-      textToRichInput(bounded, { html: true }),
+      telemetryToRichInput(bounded),
+      undefined,
+      false,
     );
     return { ok: Boolean(sent) };
   }
