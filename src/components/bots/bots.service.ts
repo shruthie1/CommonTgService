@@ -702,6 +702,11 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options, allowServiceName);
     }
 
+    /** One classic HTML message (parse_mode HTML, no rich card, no client prefix): compact one-liners. */
+    async sendHtmlByCategory(category: ChannelCategory, html: string, options?: SendMessageOptions): Promise<boolean> {
+        return this.sendByCategoryWithFailover(category, this.sendHtmlByBotId, html, options);
+    }
+
     async sendPhotoByCategory(category: ChannelCategory, photo: string | Buffer, options?: PhotoOptions): Promise<boolean> {
         return this.sendByCategoryWithFailover(category, this.sendPhotoByBotId, photo, options);
     }
@@ -741,6 +746,34 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             await this.updateBotStats(botId, 'messagesSent', bot);
         }
         return success;
+    }
+
+    async sendHtmlByBotId(botId: string, html: string, options?: SendMessageOptions): Promise<boolean> {
+        const bot = await this.getBotById(botId);
+        if (!this.isSelectable(bot)) {
+            console.warn(`[BotHealth] refused direct send through non-verified bot @${bot.username}`);
+            return false;
+        }
+        try {
+            const response = await axios.post(`https://api.telegram.org/bot${bot.token}/sendMessage`, {
+                chat_id: bot.channelId,
+                text: html.slice(0, 4096),
+                parse_mode: 'HTML',
+                link_preview_options: { is_disabled: true },
+                disable_notification: options?.disableNotification,
+                protect_content: options?.protectContent,
+            }, { timeout: 15000 });
+            if (response.data?.ok !== true) {
+                console.error(`Telegram API error for sendMessage with bot ${bot.username}:`, response.data?.description);
+                return false;
+            }
+            await this.updateBotStats(botId, 'messagesSent', bot);
+            return true;
+        } catch (error) {
+            if (this.noteUnreachableSend(bot, error)) return false;
+            parseError(error, `Failed to execute sendMessage (html) for bot ${bot.username}`);
+            return false;
+        }
     }
 
     async sendPhotoByBotId(botId: string, photo: string | Buffer, options?: PhotoOptions): Promise<boolean> {

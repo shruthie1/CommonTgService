@@ -229,10 +229,12 @@ describe('handleIncomingEvent', () => {
         };
         await handleIncomingEvent(makeCtx(), event as any);
         expect(sendBotNotice).toHaveBeenCalledWith('notif', expect.objectContaining({
-            title: 'Login Code Received',
+            title: expect.stringMatching(/^Login code · /),
+            houseStyle: true,
             quote: 'Login code: 12345',
-            quoteLabel: 'Message',
+            quoteLabel: '',
         }));
+        expect((sendBotNotice as jest.Mock).mock.calls[0][1].fields).toBeUndefined();
     });
 
     test('ignores private messages from other chats', async () => {

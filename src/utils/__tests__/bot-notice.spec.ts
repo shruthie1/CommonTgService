@@ -29,7 +29,7 @@ describe('sendBotNotice', () => {
     const [url, body] = ax.post.mock.calls[0] as any[];
     expect(url).toBe('https://api.telegram.org/bottok1/sendRichMessage');
     expect(body.chat_id).toBe('-1001801844217');
-    expect(body.rich_message.html).toContain('<h3>ℹ️ Hello</h3>');
+    expect(body.rich_message.html).toContain('<p><b>ℹ️ Hello</b></p>');
     expect(body.rich_message.html).toContain('<code>91123</code>');
     await sendBotNotice('notif', { title: 'again' });
     expect((ax.post.mock.calls[1] as any[])[0]).toContain('bottok2');

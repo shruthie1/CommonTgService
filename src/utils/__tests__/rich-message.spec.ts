@@ -1,12 +1,22 @@
 import { buttonsFromReplyMarkup, formatClassicNotificationHtml, formatRichMessageHtml, RICH_MESSAGE_MAX_CHARS, textToRichInput } from '../rich-message';
 
 describe('formatRichMessageHtml', () => {
-  test('heading with prefix + icon, summary, fields table (ids as code)', () => {
+  test('heading with prefix + icon, summary, up to 3 short fields inline (ids as code)', () => {
     const html = formatRichMessageHtml({ title: 'Done', severity: 'success', summary: 'all good', fields: [{ label: 'Mobile', value: '91123' }, { label: 'Note', value: 'two words' }] }, { prefix: 'CMS' });
-    expect(html).toContain('<h3>✅ CMS · Done</h3>');
+    expect(html).toContain('<p><b>✅ CMS · Done</b></p>');
+    expect(html).not.toContain('<h3>');
     expect(html).toContain('<p>all good</p>');
-    expect(html).toContain('<tr><td><b>Mobile</b></td><td><code>91123</code></td></tr>');
-    expect(html).toContain('<td>two words</td>');
+    expect(html).toContain('<p>Mobile <code>91123</code> · Note two words</p>');
+    expect(html).not.toContain('<table');
+  });
+
+  test('more than 3 fields, a long value, or fieldLayout table keeps the table', () => {
+    const four = formatRichMessageHtml({ title: 'T', fields: [1, 2, 3, 4].map((n) => ({ label: `F${n}`, value: `v${n}` })) });
+    expect(four).toContain('<tr><td><b>F1</b></td><td><code>v1</code></td></tr>');
+    const long = formatRichMessageHtml({ title: 'T', fields: [{ label: 'Note', value: 'x'.repeat(41) }] });
+    expect(long).toContain('<table');
+    const forced = formatRichMessageHtml({ title: 'T', fields: [{ label: 'Survived', value: '2h 5m' }], fieldLayout: 'table' });
+    expect(forced).toContain('<tr><td><b>Survived</b></td><td>2h 5m</td></tr>');
   });
 
   test('drops redundant client/username fields and empty values; escapes html', () => {

@@ -137,13 +137,10 @@ export async function handleIncomingEvent(ctx: TgContext, event: NewMessageEvent
             ctx.logger.info(ctx.phoneNumber, `Login Code received for - ${ctx.phoneNumber}\nActiveClientSetup - TelegramManager.activeClientSetup`);
             ctx.logger.info(ctx.phoneNumber, 'Date :', new Date(event.message.date * 1000));
             await sendBotNotice('notif', {
-                title: 'Login Code Received',
-                fields: [
-                    { label: 'Client ID', value: process.env.clientId || 'unknown' },
-                    { label: 'Mobile', value: ctx.phoneNumber },
-                ],
+                title: `Login code · ${ctx.phoneNumber}`,
+                houseStyle: true,
                 quote: event.message.text?.substring(0, 100),
-                quoteLabel: 'Message',
+                quoteLabel: '',
             });
         }
     }

@@ -52,8 +52,10 @@ export interface RichNotificationInput {
     tables?: NotificationTable[];
     /** Message content (text sent to / received from a user): label paragraph + quote block under the tables. */
     quote?: string;
-    /** Label of `quote` (default "Message"). */
+    /** Label of `quote` (default "Message"; "" = no label). */
     quoteLabel?: string;
+    /** 'table' keeps fields in a table even when few and short (default: up to 3 short fields render inline). */
+    fieldLayout?: 'table' | 'auto';
     /** Several labelled quotes, rendered after `quote`. */
     quotes?: Array<{ label: string; text: string }>;
     /** Heading of the collapsible details block (default "Details"). */
@@ -131,7 +133,7 @@ function preBlock(code: { text: string; language?: string }, max: number): strin
 
 function allQuotes(input: RichNotificationInput): Array<{ label: string; text: string }> {
     const out: Array<{ label: string; text: string }> = [];
-    if (input.quote && input.quote.trim()) out.push({ label: input.quoteLabel || 'Message', text: input.quote });
+    if (input.quote && input.quote.trim()) out.push({ label: input.quoteLabel ?? 'Message', text: input.quote });
     for (const q of input.quotes ?? []) if (q && q.text && q.text.trim()) out.push({ label: q.label || 'Message', text: q.text });
     return out;
 }
@@ -143,7 +145,8 @@ function spoilerTag(value: string | undefined): string {
 function renderQuote(label: string, text: string, spoiler?: string): string {
     const clipped = text.length > QUOTE_MAX_CHARS ? `${text.slice(0, QUOTE_MAX_CHARS)}\n… (${text.length - QUOTE_MAX_CHARS} more chars)` : text;
     const tag = clipped.length > QUOTE_EXPANDABLE_OVER ? 'blockquote expandable' : 'blockquote';
-    return `<p><b>${escapeTelegramHtml(label)}</b>${spoilerTag(spoiler)}</p><${tag}>${multiline(clipped)}</${tag.split(' ')[0]}>`;
+    const head = label || spoiler ? `<p>${label ? `<b>${escapeTelegramHtml(label)}</b>` : ''}${spoilerTag(spoiler)}</p>` : '';
+    return `${head}<${tag}>${multiline(clipped)}</${tag.split(' ')[0]}>`;
 }
 
 function visibleFields(input: RichNotificationInput): RichNotificationField[] {
@@ -188,6 +191,10 @@ function detailLines(input: RichNotificationInput): string[] {
     return (Array.isArray(input.details) ? input.details : [input.details]).map((d) => String(d ?? '')).filter((d) => d.trim());
 }
 
+/** Up to this many short fields render as one "Label value · Label value" line instead of a table. */
+const INLINE_FIELDS_MAX = 3;
+const INLINE_FIELD_CHARS = 40;
+
 /**
  * Rich HTML for sendRichMessage. `prefix` (the clientId) leads the heading because the sender no
  * longer prepends it to the text.
@@ -199,12 +206,15 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
     const quotes = allQuotes(input);
     const hasSummary = Boolean(input.summary && input.summary !== title);
     const spoilerAt = !input.spoiler ? '' : quotes.length ? 'quote' : hasSummary ? 'summary' : 'heading';
-    const parts: string[] = [`<h3>${icon}${prefix}${escapeTelegramHtml(title)}${spoilerAt === 'heading' ? spoilerTag(input.spoiler) : ''}</h3>`];
+    // A bold line, not <h3>: the big heading made every card tall (owner, 2026-10-18).
+    const parts: string[] = [`<p><b>${icon}${prefix}${escapeTelegramHtml(title)}</b>${spoilerAt === 'heading' ? spoilerTag(input.spoiler) : ''}</p>`];
 
     if (hasSummary) parts.push(`<p>${multiline(input.summary)}${spoilerAt === 'summary' ? spoilerTag(input.spoiler) : ''}</p>`);
 
     const fields = visibleFields(input);
-    if (fields.length) {
+    if (fields.length && input.fieldLayout !== 'table' && fields.length <= INLINE_FIELDS_MAX && fields.every((f) => String(f.value ?? '').length <= INLINE_FIELD_CHARS)) {
+        parts.push(`<p>${fields.map((f) => `${escapeTelegramHtml(f.label)} ${cellValue(f)}`).join(' · ')}</p>`);
+    } else if (fields.length) {
         const rows = fields.map((f) => `<tr><td><b>${escapeTelegramHtml(f.label)}</b></td><td>${cellValue(f)}</td></tr>`);
         parts.push(`<table bordered striped compact>${rows.join('')}</table>`);
     }
@@ -290,29 +300,32 @@ export function textToRichInput(text: string, opts: { html?: boolean; houseStyle
 const TELEMETRY_LABEL = /^([^:\n]{1,40}?)\s*:\s+([\s\S]+)$/;
 
 /**
- * Payment-site telemetry (HTML: "<b>user</b> · <code>ip</code>" then the event text). User = title,
- * IP = tap-to-reveal spoiler on the first line; a short one-line event ("LOGIN TAB") = summary; form JSON = pretty-printed code block; chat
- * text = quote block ("Name: text" → label + quote). Never table fields or collapsed details.
+ * Compact classic-HTML rendering of payment-site telemetry: "<b>user</b>" then the event. The IP is
+ * dropped. Chat text = one quote "<b>Name:</b> text" (line breaks kept; long = expandable); a short
+ * event = "<b>user</b> · event"; form JSON = "key: value" lines (empty values dropped).
  */
-export function telemetryToRichInput(text: string): RichNotificationInput {
+export function telemetryToHtml(text: string): string {
     const plain = String(text ?? '').replace(/<br\s*\/?>/gi, '\n').replace(HTML_TAG, '').replace(/&(lt|gt|quot|#39|amp);/g, (m) => ENTITIES[m] ?? m);
     const lines = plain.split('\n');
     const first = lines.findIndex((l) => l.trim());
-    if (first < 0) return { title: 'Telemetry' };
-    // "user · ip": the client name is the title, the IP a spoiler (no extra line).
-    const [user, ...rest] = lines[first].trim().split(' · ');
-    const ip = rest.join(' · ').trim();
-    const head: RichNotificationInput = { title: user.trim() || 'Telemetry', ...(ip ? { spoiler: ip } : {}) };
+    if (first < 0) return '<b>Telemetry</b>';
+    const user = `<b>${escapeTelegramHtml(lines[first].trim().split(' · ')[0].trim() || 'Telemetry')}</b>`;
     const body = lines.slice(first + 1).join('\n').trim();
-    if (!body) return head;
+    if (!body) return user;
     try {
         const parsed = JSON.parse(body);
-        if (parsed && typeof parsed === 'object') return { ...head, code: { text: JSON.stringify(parsed, null, 2), language: 'json' } };
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const rows = Object.entries(parsed)
+                .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+                .map(([k, v]) => `${escapeTelegramHtml(k)}: <code>${escapeTelegramHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</code>`);
+            return rows.length ? `${user}\n${rows.join('\n')}` : user;
+        }
     } catch { /* not JSON */ }
+    if (!body.includes('\n') && body.length <= 60 && !TELEMETRY_LABEL.test(body)) return `${user} · ${escapeTelegramHtml(body)}`;
     const m = TELEMETRY_LABEL.exec(body);
-    if (m && !/^https?$/i.test(m[1]) && !/\/\//.test(m[1])) return { ...head, quoteLabel: m[1].trim(), quote: m[2].trim() };
-    if (!body.includes('\n') && body.length <= 60) return { ...head, summary: body };
-    return { ...head, quote: body };
+    const labelled = m && !/^https?$/i.test(m[1]) && !/\/\//.test(m[1]);
+    const quote = labelled ? `<b>${escapeTelegramHtml(m![1].trim())}:</b> ${escapeTelegramHtml(m![2].trim().slice(0, 3000))}` : escapeTelegramHtml(body.slice(0, 3000));
+    return `${user}\n<blockquote${quote.length > 800 ? ' expandable' : ''}>${quote}</blockquote>`;
 }
 
 /** URL buttons from a Bot API inline_keyboard (callback buttons are not used by our notices). */
@@ -344,7 +357,7 @@ export function formatClassicNotificationHtml(input: RichNotificationInput, pref
     if (input.summary && input.summary !== title) blocks.push([escapeTelegramHtml(input.summary)]);
     const fields = visibleFields(input);
     if (fields.length) blocks.push(fields.map((f) => `<b>${escapeTelegramHtml(f.label)}:</b> ${escapeTelegramHtml(f.value)}`));
-    for (const q of allQuotes(input)) blocks.push([`<b>${escapeTelegramHtml(q.label)}</b>`, `<i>${escapeTelegramHtml(q.text.trim().slice(0, 1500))}</i>`]);
+    for (const q of allQuotes(input)) blocks.push([...(q.label ? [`<b>${escapeTelegramHtml(q.label)}</b>`] : []), `<blockquote>${escapeTelegramHtml(q.text.trim().slice(0, 1500))}</blockquote>`]);
     if (input.code?.text) blocks.push([...(input.code.label ? [`<b>${escapeTelegramHtml(input.code.label)}</b>`] : []), preBlock(input.code, 2500)]);
     for (const table of input.tables ?? []) {
         const lines: string[] = [];

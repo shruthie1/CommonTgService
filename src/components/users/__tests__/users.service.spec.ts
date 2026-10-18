@@ -48,6 +48,7 @@ describe('UsersService', () => {
         };
         const botsService = {
             sendMessageByCategory: jest.fn().mockResolvedValue(undefined),
+            sendHtmlByCategory: jest.fn().mockResolvedValue(true),
         };
 
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
@@ -161,7 +162,7 @@ describe('UsersService (real Mongo)', () => {
             createNewSession: jest.fn(),
         };
         clientsService = { updateClientSession: jest.fn() };
-        botsService = { sendMessageByCategory: jest.fn().mockResolvedValue(undefined) };
+        botsService = { sendMessageByCategory: jest.fn().mockResolvedValue(undefined), sendHtmlByCategory: jest.fn().mockResolvedValue(true) };
         bufferClientService = { markAsInactive: jest.fn().mockResolvedValue(null) };
         promoteClientService = { markAsInactive: jest.fn().mockResolvedValue(null) };
 
@@ -226,7 +227,8 @@ describe('UsersService (real Mongo)', () => {
                 mobile, session: 'sess-y', tgId: 'tg-y', username: 'uu', firstName: 'F', password: 'pw',
             } as any);
             expect(saved).toBeTruthy();
-            expect(botsService.sendMessageByCategory).toHaveBeenCalled();
+            expect(botsService.sendHtmlByCategory).toHaveBeenCalledWith('ACCOUNT_LOGINS',
+                '🔐 <a href="https://t.me/uu">@uu</a> · <code>919999000011</code> · 🔑 <code>pw</code>');
             const doc = await model.findOne({ mobile });
             expect(doc).toBeTruthy();
             scoreSpy.mockRestore();
@@ -1124,10 +1126,7 @@ describe('UsersService (real Mongo)', () => {
             const scoreSpy = jest.spyOn(service, 'computeRelationshipScore').mockResolvedValue(undefined);
             const mobile = '919999000210';
             await service.create({ mobile, session: 's', tgId: 'tg-np', firstName: 'OnlyFirst' } as any);
-            const msg = botsService.sendMessageByCategory.mock.calls[0][1];
-            expect(msg.title).toBe('Account Login');
-            expect(msg.fields).toEqual(expect.arrayContaining([{ label: 'Account', value: 'OnlyFirst' }, { label: 'Mobile', value: mobile }]));
-            expect(msg.fields.find((f: any) => f.label === 'Password')?.value).toBeUndefined();
+            expect(botsService.sendHtmlByCategory.mock.calls[0][1]).toBe(`🔐 OnlyFirst · <code>${mobile}</code>`);
             scoreSpy.mockRestore();
         });
     });
