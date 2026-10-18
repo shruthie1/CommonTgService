@@ -1,4 +1,4 @@
-import { notifbot } from "./logbots";
+import { sendBotNotice } from "./bot-notice";
 import axios, { AxiosError, AxiosResponse } from "axios";
 
 /**
@@ -336,10 +336,18 @@ export function parseError(
 
         if (!ignoreError) {
           const notificationMessage = (err.errorMessage ? err.errorMessage : extractedMessage)?.slice(0, 500);
-          const notifUrl = `${notifbot()}&text=${encodeURIComponent(prefixStr)} :: ${encodeURIComponent(notificationMessage)}`;
-
-          // Use Promise but don't await to avoid delaying the response
-          sendNotification(notifUrl, fullConfig.notificationTimeout, false).catch(() => undefined);
+          // Rich message (falls back to the classic GET on 400/404). Not awaited to avoid delaying the response.
+          sendBotNotice('notif', {
+            severity: 'error',
+            title: 'Application error',
+            summary: prefix ? String(prefix).slice(0, 200) : undefined,
+            fields: [
+              { label: 'Status', value: status },
+              { label: 'Error', value: error, code: false },
+            ],
+            details: notificationMessage,
+            detailsTitle: 'Error message',
+          }, { prefix: clientId ? String(clientId).toUpperCase() : undefined, timeout: fullConfig.notificationTimeout }).catch(() => undefined);
         }
       } catch (notificationError) {
         console.error('Failed to prepare error notification:', notificationError);

@@ -2,7 +2,7 @@ import { ClientService } from '../client.service';
 import { buildSpamEligibleFilter } from '../../buffer-clients/schemas/buffer-client.schema';
 
 jest.mock('../../../utils/fetchWithTimeout', () => ({ fetchWithTimeout: jest.fn(() => Promise.resolve({ ok: true })) }));
-jest.mock('../../../utils/logbots', () => ({ notifbot: jest.fn(() => 'https://example.test/mock-bot') }));
+jest.mock('../../../utils/bot-notice', () => ({ sendBotNotice: jest.fn(() => Promise.resolve({ sent: true })) }));
 jest.mock('../../Telegram/utils/connection-manager', () => ({
   connectionManager: { getClient: jest.fn(), unregisterClient: jest.fn(), hasClient: jest.fn(), getClientState: jest.fn() },
 }));
@@ -218,7 +218,7 @@ describe('spam-aware setupClient swap', () => {
     });
 
     test('skipped candidates are reported in the Swap started notification', async () => {
-      const { fetchWithTimeout } = jest.requireMock('../../../utils/fetchWithTimeout');
+      const { sendBotNotice } = jest.requireMock('../../../utils/bot-notice');
       bufferClientService.executeQuery.mockResolvedValue([cand('907'), cand('908')]);
       mockProbe
         .mockResolvedValueOnce({ status: 'limited', limitedUntil: new Date('2099-01-02T10:00:00Z') })
@@ -231,8 +231,11 @@ describe('spam-aware setupClient swap', () => {
       const res = await svc.handleSetupClient('c1', { days: 0, archiveOld: false, formalities: false, reason: 'x' });
 
       expect(res).toMatchObject({ status: 'swapped', newMobile: '908' });
-      const texts = (fetchWithTimeout as jest.Mock).mock.calls.map((c) => decodeURIComponent(c[0]));
-      expect(texts.some((t) => t.includes('Swap started c1') && t.includes('Skipped (SpamBot): 907 limited until 2099-01-02 10:00 UTC'))).toBe(true);
+      const started = (sendBotNotice as jest.Mock).mock.calls.map((c) => c[1]).find((n) => n.title === 'Swap started');
+      expect(started.fields).toEqual(expect.arrayContaining([{ label: 'Client ID', value: 'c1' }, { label: 'New mobile', value: '908' }]));
+      expect(started.tables).toEqual([
+        { title: 'Skipped (SpamBot)', columns: ['Mobile', 'Reason'], rows: [['907', 'limited until 2099-01-02 10:00 UTC']] },
+      ]);
     });
   });
 

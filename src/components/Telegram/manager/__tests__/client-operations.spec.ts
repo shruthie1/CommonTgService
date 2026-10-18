@@ -1,5 +1,5 @@
 jest.mock('../../../../utils/fetchWithTimeout', () => ({ fetchWithTimeout: jest.fn().mockResolvedValue(undefined) }));
-jest.mock('../../../../utils/logbots', () => ({ notifbot: jest.fn().mockReturnValue('http://bot') }));
+jest.mock('../../../../utils/bot-notice', () => ({ sendBotNotice: jest.fn().mockResolvedValue({ sent: true }) }));
 jest.mock('../../utils/generateTGConfig', () => ({
     generateTGConfig: jest.fn().mockResolvedValue({ apiId: 1, apiHash: 'h', params: {} }),
 }));
@@ -40,6 +40,7 @@ import { createClient, destroyClient, handleClientError, handleIncomingEvent } f
 import { withTimeout } from '../../../../utils/withTimeout';
 import { unregisterClient } from '../../utils/connection-manager';
 import { fetchWithTimeout } from '../../../../utils/fetchWithTimeout';
+import { sendBotNotice } from '../../../../utils/bot-notice';
 
 function makeCtx(client: any = null) {
     return {
@@ -227,7 +228,11 @@ describe('handleIncomingEvent', () => {
             message: { chatId: { toString: () => '777000' }, text: 'Login code: 12345', date: 1000 },
         };
         await handleIncomingEvent(makeCtx(), event as any);
-        expect(fetchWithTimeout).toHaveBeenCalled();
+        expect(sendBotNotice).toHaveBeenCalledWith('notif', expect.objectContaining({
+            title: 'Login Code Received',
+            quote: 'Login code: 12345',
+            quoteLabel: 'Message',
+        }));
     });
 
     test('ignores private messages from other chats', async () => {

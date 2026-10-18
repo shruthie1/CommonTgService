@@ -164,8 +164,7 @@ export class ChannelsService {
     if (botsService) {
       botsService.sendMessageByCategory(
         ChannelCategory.PROM_LOGS2,
-        `Removing channel ${channelId}`,
-        { parseMode: 'HTML' }
+        { title: 'Removing Channel', fields: [{ label: 'Channel', value: channelId }] },
       );
     }
     const result = await this.ChannelModel.findOneAndDelete({ channelId: this.channelKey(channelId) }).exec();

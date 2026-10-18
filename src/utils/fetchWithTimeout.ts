@@ -4,6 +4,7 @@ import { sleep } from './common';
 import { ChannelCategory } from '../components/bots/channel-category.enum';
 import { tryGetBotsServiceInstance } from './bot.service.instance';
 import { getApiKey } from './apiKey';
+import type { RichNotificationInput } from './rich-message';
 
 // Configuration types
 interface RetryConfig {
@@ -47,6 +48,7 @@ async function notifyInternal(
   config: NotificationConfig = DEFAULT_NOTIFICATION_CONFIG,
 ): Promise<void> {
   if (!config.enabled) return;
+  const originalPrefix = prefix;
   prefix = `${prefix} ${process.env.clientId}`;
   try {
     /* istanbul ignore next -- callers normalize message to a string before calling; non-string is a defensive fallback */
@@ -63,7 +65,13 @@ async function notifyInternal(
 
     console.error(`${prefix}\n${formattedMessage}`);
     if (errorDetails.status === 429) return;
-    const notificationText = `<b>${prefix}</b>\n\n<b>Error:</b> ${formattedMessage}`;
+    const notification: RichNotificationInput = {
+      severity: /^successfully/i.test(originalPrefix) ? 'success' : 'error',
+      title: originalPrefix,
+      fields: [{ label: 'Status', value: errorDetails.status, code: false }],
+      details: formattedMessage,
+      detailsTitle: 'Error message',
+    };
 
     try {
       // Best-effort: if BotsService isn't wired yet (e.g. early startup, before
@@ -72,8 +80,7 @@ async function notifyInternal(
       if (!botsService) return;
       await botsService.sendMessageByCategory(
         ChannelCategory.HTTP_FAILURES,
-        notificationText,
-        { parseMode: 'HTML' }
+        notification,
       );
     } catch (error) {
       /* istanbul ignore next -- error-shape fallback chain for the notification-send failure log */

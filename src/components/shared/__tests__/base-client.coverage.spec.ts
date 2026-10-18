@@ -2047,7 +2047,7 @@ describe('processClient orchestration branches', () => {
         const res = await service.processClient(doc, { clientId: 'client-1' } as Client);
         expect(res.updateSummary).toBeNull();
         const failNotice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => typeof body === 'string' && body.includes('WARMUP FAILED') && body.includes('set_2fa'),
+            ([, body]: any[]) => body?.title?.includes('Warmup failed') && JSON.stringify(body.fields).includes('set_2fa'),
         );
         expect(failNotice).toBeDefined();
     });
@@ -2083,7 +2083,7 @@ describe('processClient orchestration branches', () => {
         }));
         expect(service.updateStatusMock).not.toHaveBeenCalled();
         const warmupErrorNotice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => typeof body === 'string' && body.includes('WARMUP ERROR'),
+            ([, body]: any[]) => body?.title?.includes('Warmup error'),
         );
         expect(warmupErrorNotice).toBeDefined();
     });
@@ -2114,7 +2114,7 @@ describe('processClient orchestration branches', () => {
         expect(res.updateCount).toBe(0);
         expect(service.updateStatusMock).toHaveBeenCalledWith('919990000223', 'inactive', expect.any(String));
         const permanentNotice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => typeof body === 'string' && body.includes('WARMUP PERMANENT ERROR'),
+            ([, body]: any[]) => body?.title?.includes('Warmup permanent error'),
         );
         expect(permanentNotice).toBeDefined();
     });
@@ -2443,7 +2443,7 @@ describe('helper fallback branches', () => {
         const n = await service.pub.set2fa(doc, 0);
         expect(n).toBe(0);
         const notice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => typeof body === 'string' && body.includes('FOREIGN 2FA') && body.includes('inactivate FAILED'),
+            ([, body]: any[]) => body?.title?.includes('Foreign 2FA') && JSON.stringify(body.fields).includes('inactivate FAILED'),
         );
         expect(notice).toBeDefined();
     });
@@ -2550,7 +2550,7 @@ describe('processClient warmup action success paths', () => {
         const res = await service.processClient(doc, { clientId: 'client-1' } as Client);
         expect(res.updateSummary).toBe('advance_to_ready');
         const readyNotice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => typeof body === 'string' && body.includes('WARMUP READY'),
+            ([, body]: any[]) => body?.title?.includes('Warmup ready'),
         );
         expect(readyNotice).toBeDefined();
     });

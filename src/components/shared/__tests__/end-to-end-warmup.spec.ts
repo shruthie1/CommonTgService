@@ -397,8 +397,7 @@ describe('processClient — all exit paths', () => {
         expect(result.updateSummary).toBeNull();
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
             expect.anything(),
-            expect.stringContaining('WARMUP FAILED'),
-            expect.anything(),
+            expect.objectContaining({ severity: 'warning', title: expect.stringContaining('Warmup failed') }),
         );
     });
 
@@ -948,8 +947,7 @@ describe('removeOtherAuths branches', () => {
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
             expect.anything(),
-            expect.stringContaining('CRITICAL SESSION LOSS'),
-            expect.anything(),
+            expect.objectContaining({ severity: 'critical', title: expect.stringContaining('Session lost') }),
         );
     });
 

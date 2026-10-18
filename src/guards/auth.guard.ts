@@ -360,8 +360,15 @@ export class AuthGuard implements CanActivate {
             }else{
                 botsService.sendMessageByCategory(
                     ChannelCategory.UNAUTH_CALLS,
-                    `<b>Unauthorized Attempt</b>\n\n<b>IP:</b> ${clientIp || 'unknown'}\n<b>Origin:</b> ${origin || 'unknown'}\n<b>Path:</b> ${originalUrl || 'unknown'}`,
-                    { parseMode: 'HTML' }
+                    {
+                        severity: 'warning',
+                        title: 'Unauthorized Attempt',
+                        fields: [
+                            { label: 'IP', value: clientIp || 'unknown' },
+                            { label: 'Origin', value: origin || 'unknown', code: false },
+                            { label: 'Path', value: originalUrl || 'unknown', code: false },
+                        ],
+                    }
                 );
                 return;
             }

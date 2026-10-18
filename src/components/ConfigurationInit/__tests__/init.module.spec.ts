@@ -6,20 +6,17 @@
  * validation + retry, event-handler registration, health-check timer, startup/shutdown
  * notifications, and the static initialization-status state machine.
  *
- * Only true externals are mocked: fetchWithTimeout/notifbot (network) and the timer.
+ * Only true externals are mocked: sendBotNotice (network) and the timer.
  * The Mongoose Connection is a thin fake exposing the fields the class actually touches.
  */
-jest.mock('../../../utils/fetchWithTimeout', () => ({
-    fetchWithTimeout: jest.fn(() => Promise.resolve({ ok: true })),
-}));
-jest.mock('../../../utils/logbots', () => ({
-    notifbot: jest.fn(() => 'https://example.test/bot?chat_id=1'),
+jest.mock('../../../utils/bot-notice', () => ({
+    sendBotNotice: jest.fn(() => Promise.resolve({ sent: true })),
 }));
 
 import { InitModule } from '../init.module';
-import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
+import { sendBotNotice } from '../../../utils/bot-notice';
 
-const mockedFetch = fetchWithTimeout as jest.Mock;
+const mockedFetch = sendBotNotice as jest.Mock;
 
 // Reset the private static state machine between tests so each test starts clean.
 function resetStaticStatus() {
@@ -98,6 +95,7 @@ describe('InitModule', () => {
             expect(conn.on).toHaveBeenCalledWith('close', expect.any(Function));
             // Startup notification sent
             expect(mockedFetch).toHaveBeenCalledTimes(1);
+            expect(mockedFetch).toHaveBeenCalledWith('notif', expect.objectContaining({ severity: 'success', title: 'Service Started' }), { timeout: 5000 });
             expect(InitModule.isReady()).toBe(true);
 
             await mod.onModuleDestroy();

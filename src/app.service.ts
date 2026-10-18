@@ -28,7 +28,9 @@ import {
   EventManagerService,
 } from './components';
 import type { SetupClientQueryDto } from './components/clients/dto/setup-client.dto';
-import { fetchWithTimeout, parseError, ppplbot } from './utils';
+import { fetchWithTimeout, parseError } from './utils';
+import { sendBotNotice } from './utils/bot-notice';
+import { textToRichInput } from './utils/rich-message';
 import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
 import { AccountMaintenanceService } from './control-plane/maintenance/account-maintenance.service';
 
@@ -97,9 +99,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           async () => {
             this.logger.log('Starting UMS primary-client channel join/leave cycle');
             try {
-              await fetchWithTimeout(
-                `${ppplbot()}&text=ExecutingjoinchannelForClients-${process.env.clientId}`,
-              );
+              await sendBotNotice('pppl', {
+                title: 'Channel join cycle started',
+                fields: [{ label: 'Service', value: process.env.clientId }],
+              });
             } catch (error) {
               parseError(error, 'UMS scheduled join notification failed');
             }
@@ -164,8 +167,6 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       //       await this.activeChannelsService.updateDefaultReactions();
       //     }, 30000);
       //   }
-
-      //   await fetchWithTimeout(`${ppplbot()}&text=${encodeURIComponent(await this.getPromotionStatsPlain())}`);
       //   await this.userDataService.resetPaidUsers();
       //   await this.statService.deleteAll();
       //   await this.stat2Service.deleteAll();
@@ -199,7 +200,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async updateBufferClientInfo(): Promise<void> {
     try {
-      await fetchWithTimeout(`${ppplbot()}&text=Updating Buffer Clients Info`);
+      await sendBotNotice('pppl', { title: 'Updating Buffer Clients Info' });
     } catch (error) {
       this.logger.error('CMS buffer-info notification failed; continuing update', error);
     }
@@ -511,9 +512,15 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             resp.videos.push(...doc.videos);
           } else {
             if (doc.lastMsgTimeStamp < twentyDays) {
-              await fetchWithTimeout(
-                `${ppplbot()}&text=${encodeURIComponent(`ReSetting UserData for Profile: ${doc.profile} | ChatId: ${doc.chatId}\n\n LastMsg: ${getReadableTimeDifference(doc.lastMsgTimeStamp, Date.now())} `)}`,
-              );
+              await sendBotNotice('pppl', {
+                severity: 'warning',
+                title: 'Resetting UserData',
+                fields: [
+                  { label: 'Profile', value: doc.profile },
+                  { label: 'Chat', value: doc.chatId },
+                  { label: 'Last message', value: getReadableTimeDifference(doc.lastMsgTimeStamp, Date.now()), code: false },
+                ],
+              });
               await this.userDataService.update(doc.profile, doc.chatId, {
                 payAmount: 0,
                 demoGiven: false,
@@ -534,7 +541,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   // Known channels that have dedicated bot categories in the bots collection. Routing through
   // the category (BotsService) picks a bot that is ACTUALLY an admin in the channel and applies
-  // the correct MarkdownV2 escaping — the raw ppplbot rotator below just cycles BOT_TOKENS, which
+  // the rich-message formatting — the raw BOT_TOKENS rotator below just cycles tokens, which
   // aren't members of these channels (Telegram then 400s "chat not found").
   private static readonly CHANNEL_CATEGORY_MAP: Record<
     string,
@@ -552,21 +559,15 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         return str;
       }
     }
-    function escapeMarkdownV2(text: string): string {
-      // NOTE: `*` must be escaped for MarkdownV2 (it opens/closes bold); the old regex omitted it,
-      // which 400s "can't parse entities" on any message containing `*`.
-      text = text.replace(/([\\_*`\[\]()~>#+\-=|{}.!])/g, '\\$1');
-      return text;
-    }
     const decodedMessage = decodeIfEncoded(message);
     console.log('Message:', decodedMessage);
+    // Free-form text posted by external frontends: structure it (the one text-to-rich conversion).
+    const notice = textToRichInput(decodedMessage);
 
     // Prefer the native category-routed bot service for known channels (no explicit token given).
     // BotsService.sendMessageByCategory selects a bot that is actually an admin in the channel.
-    // Send as PLAIN TEXT (no parseMode): these are arbitrary status strings ("Opened VcUI ✅✅",
-    // "Video Data Fetch Error", etc.) with punctuation/emoji, not Markdown. executeSendMessage
-    // does NOT escape, so passing MarkdownV2 with unescaped `.`/`-`/`!`/`*` would 400
-    // "can't parse entities". Plain text renders reliably.
+    // Plain text in (no parseMode): these are arbitrary status strings ("Opened VcUI ✅✅",
+    // "Video Data Fetch Error", etc.), not Markdown; the sender structures and escapes them.
     const category = !token
       ? AppService.CHANNEL_CATEGORY_MAP[chatId]
       : undefined;
@@ -574,25 +575,21 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       try {
         const sent = await this.botsService.sendMessageByCategory(
           category,
-          decodedMessage,
+          notice,
         );
         if (sent) return { ok: true };
         console.warn(
-          `sendToChannel: category ${category} send returned falsy; falling back to ppplbot`,
+          `sendToChannel: category ${category} send returned falsy; falling back to the raw-token sender`,
         );
       } catch (error) {
         parseError(error, `sendToChannel category ${category}`, false);
-        // fall through to the legacy path below
+        // fall through to the raw-token sender below
       }
     }
 
-    const escapedMessage = escapeMarkdownV2(decodedMessage);
-    const encodedMessage = encodeURIComponent(escapedMessage).replace(
-      /%5Cn/g,
-      '%0A',
-    );
-    const url = `${ppplbot(chatId, token)}&parse_mode=MarkdownV2&text=${encodedMessage}`;
-    return (await fetchWithTimeout(url, {}, 0))?.data;
+    // Rich message to the same chat with the same token (a 400/404 resends once as a classic sendMessage).
+    const rich = await sendBotNotice('pppl', notice, { chatId, token: token || undefined });
+    return rich.data;
   }
 
   /**
@@ -603,10 +600,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     const normalized = String(message ?? '').trim();
     if (!normalized) return { ok: false };
     const bounded = normalized.slice(0, 3500);
+    // Free-form HTML posted by the payment site: structure it.
     const sent = await this.botsService.sendMessageByCategory(
       ChannelCategory.WEB_TELEMETRY,
-      bounded,
-      { parseMode: 'HTML' },
+      textToRichInput(bounded, { html: true }),
     );
     return { ok: Boolean(sent) };
   }
@@ -631,9 +628,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             { timeout: 200000 },
             1,
           );
-          await fetchWithTimeout(
-            `${ppplbot()}&text=Channel SendTrue :: ${document.clientId}: ${resp.data.canSendTrueCount}`,
-          );
+          await sendBotNotice('pppl', {
+            title: 'Channel SendTrue',
+            fields: [
+              { label: 'Client ID', value: document.clientId },
+              { label: 'Can send', value: resp.data.canSendTrueCount },
+            ],
+          });
           if (
             resp?.data?.canSendTrueCount &&
             resp?.data?.canSendTrueCount < 350
@@ -644,9 +645,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
               0,
               excludedIds,
             );
-            await fetchWithTimeout(
-              `${ppplbot()}&text=Started Joining Channels for ${document.clientId}: ${result.length}`,
-            );
+            await sendBotNotice('pppl', {
+              title: 'Started joining channels',
+              fields: [
+                { label: 'Client ID', value: document.clientId },
+                { label: 'Channels', value: result.length },
+              ],
+            });
             this.joinChannelMap.set(document.repl, result);
           }
         } catch (error) {

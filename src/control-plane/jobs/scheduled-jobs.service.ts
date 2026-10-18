@@ -12,7 +12,7 @@ import {
   ClientService,
   Stat1Service,
 } from '../../components';
-import { fetchWithTimeout, ppplbot } from '../../utils';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { AppService } from '../../app.service';
 import { RuntimeConfigService } from '../config/runtime-config.service';
 import { AccountMaintenanceService } from '../maintenance/account-maintenance.service';
@@ -133,7 +133,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       // Original UMS-test used the UTC calendar day with an IST schedule.
       if (new Date().getUTCDate() % 4 === 0) {
         try {
-          await fetchWithTimeout(`${ppplbot()}&text=Updating Promote Clients Info`);
+          await sendBotNotice('pppl', { title: 'Updating Promote Clients Info' });
         } catch (error) {
           this.logger.error(
             'UMS promote-info notification failed; continuing update',
@@ -190,7 +190,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         const utcDay = new Date().getUTCDate();
         if (utcDay % 7 === 0) {
           this.logger.log('UMS-test maintenance branch=day-mod-7');
-          await fetchWithTimeout(`${ppplbot()}&text=Resetting Banned Channels`);
+          await sendBotNotice('pppl', { title: 'Resetting Banned Channels' });
           setTimeout(async () => {
             // await this.activeChannelsService.resetAvailableMsgs();
             // await this.activeChannelsService.updateBannedChannels();
@@ -286,7 +286,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    let notification = '';
+    let resetRows: Array<[string, number]> = [];
     try {
       const stats = await db
         .collection<any>('promoteStats')
@@ -295,12 +295,12 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
           { projection: { client: 1, totalCount: 1, lastUpdatedTimeStamp: 1 } },
         )
         .toArray();
-      notification = stats
-        .map(
-          (stat) =>
-            `${String(stat.client || 'unknown').toUpperCase()}: ${stat.totalCount || 0}`,
-        )
-        .join('\n');
+      resetRows = stats.map(
+        (stat): [string, number] => [
+          String(stat.client || 'unknown').toUpperCase(),
+          Number(stat.totalCount || 0),
+        ],
+      );
       const result = await this.resetPromoteStatsWithRetries(
         db.collection<any>('promoteStats'),
       );
@@ -332,9 +332,12 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      await fetchWithTimeout(
-        `${ppplbot()}&text=${encodeURIComponent(notification)}`,
-      );
+      await sendBotNotice('pppl', {
+        severity: 'success',
+        title: 'Daily promote stats reset',
+        summary: `${resetRows.length} clients, ${resetRows.reduce((sum, [, n]) => sum + n, 0)} promotions before reset`,
+        tables: [{ columns: ['Client', 'Promotions'], rows: resetRows, numeric: [1] }],
+      });
     } catch (error) {
       this.logger.error(
         'Daily promoteStats reset completed, but its notification failed',

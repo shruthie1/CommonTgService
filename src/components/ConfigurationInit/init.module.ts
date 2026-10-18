@@ -5,8 +5,8 @@ import { ConfigurationService } from './init.service';
 import { ConfigurationSchema } from './configuration.schema';
 import { ConfigurationController } from './init.controller';
 import { Connection } from 'mongoose';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { sendBotNotice } from '../../utils/bot-notice';
+import type { RichNotificationInput } from '../../utils/rich-message';
 import path from 'path';
 
 @Global()
@@ -85,9 +85,10 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
 
       console.log(`Started :: ${process.env.clientId}`);
 
+      // Optional: Send notification on successful startup
       // Local smoke/dev instances must not emit external Telegram notifications.
       if (!process.env.LOCAL_SERVER) {
-        await this.sendNotification(`Service Started\n\nClient: ${process.env.clientId}`);
+        await this.sendNotification({ severity: 'success', title: 'Service Started', fields: [{ label: 'Client ID', value: process.env.clientId }] });
       }
 
     } catch (error) {
@@ -167,16 +168,11 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  private async sendNotification(message: string): Promise<void> {
+  private async sendNotification(message: RichNotificationInput): Promise<void> {
     try {
-      const url = `${notifbot()}&text=${encodeURIComponent(message)}`;
       // Best-effort startup ping: no retries / no failure-channel notification so
       // a cancelled or failed send doesn't loop 3x or spam the failures channel.
-      await fetchWithTimeout(url, {
-        timeout: 5000,
-        retryConfig: { maxRetries: 0 },
-        notificationConfig: { enabled: false },
-      });
+      await sendBotNotice('notif', message, { timeout: 5000 });
     } catch (error) {
       console.warn('Failed to send notification:', error);
       // Don't throw - notification failure shouldn't break initialization
@@ -199,7 +195,7 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
 
       this.stopHealthCheck();
       if (!process.env.LOCAL_SERVER) {
-        await this.sendNotification(`Service Stopped\n\nClient: ${process.env.clientId}`);
+        await this.sendNotification({ severity: 'warning', title: 'Service Stopped', fields: [{ label: 'Client ID', value: process.env.clientId }] });
       }
 
       if (this.connection && this.connection.readyState !== 0) {

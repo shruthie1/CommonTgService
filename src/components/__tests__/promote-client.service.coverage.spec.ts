@@ -27,8 +27,8 @@ jest.mock('telegram/Helpers', () => ({
 jest.mock('../../utils/fetchWithTimeout', () => ({
     fetchWithTimeout: jest.fn(() => Promise.resolve({ ok: true })),
 }));
-jest.mock('../../utils/logbots', () => ({
-    notifbot: jest.fn(() => 'https://example.test/mock-bot'),
+jest.mock('../../utils/bot-notice', () => ({
+    sendBotNotice: jest.fn(() => Promise.resolve({ sent: true })),
 }));
 jest.mock('../../utils/isPermanentError', () => ({
     __esModule: true,
@@ -678,7 +678,7 @@ describe('PromoteClientService coverage', () => {
             expect(after!.warmupPhase).toBe(WarmupPhase.READY);
             expect(after!.sessionRotatedAt ?? null).toBeNull();
             const summaryCall = botsService.sendMessageByCategory.mock.calls
-                .find((c) => typeof c[1] === 'string' && c[1].includes('Promote Client Check Summary'));
+                .find((c) => c[1]?.title === 'Promote Client Check Summary');
             expect(summaryCall).toBeDefined();
             expect((service as any).checkingPromoteClientsSince).toBe(0);
         });
@@ -793,7 +793,9 @@ describe('PromoteClientService coverage', () => {
             await service.create(makePromoteClientData({ mobile: '15552000010', status: 'active', clientId: 'test-client-1' }));
             await (service as any).sendPromoteCheckSummaryNotification(1, 1, 1, ['a | b'], ['c | d']);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1]).toContain('Promote Client Check Summary');
+            expect(lastCall[1].title).toBe('Promote Client Check Summary');
+            expect(lastCall[1].tables[0].columns).toEqual(['Client', 'Active', 'Assigned', 'Inactive', 'Needed', 'Never used', 'Used 24h']);
+            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Updated this run', 'Created this run']));
         });
     });
 
@@ -820,7 +822,7 @@ describe('PromoteClientService coverage', () => {
         it('updateStatus rethrows and notifies on failure', async () => {
             await expect(service.updateStatus('15559990001', 'inactive', 'x')).rejects.toThrow();
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
-                'ACCOUNT_NOTIFICATIONS', expect.stringContaining('Failed'), expect.anything(),
+                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ severity: 'error', title: expect.stringContaining('Failed') }),
             );
         });
 
@@ -965,10 +967,10 @@ describe('PromoteClientService coverage', () => {
             await service.create(makePromoteClientData({ mobile: '15553200013', status: 'active', clientId: 'alpha' }));
             await (service as any).sendPromoteCheckSummaryNotification(0, 0, 0, [], []);
             const summary = botsService.sendMessageByCategory.mock.calls.pop()[1];
-            expect(summary).toContain('alpha:');
-            expect(summary).toContain('zeta:');
             // alpha should be listed before zeta after sorting
-            expect(summary.indexOf('alpha:')).toBeLessThan(summary.indexOf('zeta:'));
+            expect(summary.tables[0].rows.map((r: unknown[]) => r[0])).toEqual(expect.arrayContaining(['alpha', 'zeta']));
+            const names = summary.tables[0].rows.map((r: unknown[]) => r[0]);
+            expect(names.indexOf('alpha')).toBeLessThan(names.indexOf('zeta'));
         });
     });
 
@@ -1209,7 +1211,7 @@ describe('PromoteClientService coverage', () => {
             const doc = await service.findOne('15554500001');
             expect(doc).not.toBeNull();
             const msg = botsService.sendMessageByCategory.mock.calls.pop()[1];
-            expect(msg).toContain('<b>Client ID:</b> -');
+            expect(msg.fields).toEqual(expect.arrayContaining([{ label: 'Client ID', value: '-' }]));
         });
 
         it('executeQuery applies skip and no-sort path (660,663)', async () => {
@@ -1537,8 +1539,8 @@ describe('PromoteClientService coverage', () => {
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
             });
             await service.checkPromoteClients();
-            const summary = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]).find((m: any) => typeof m === 'string' && m.includes('Check Summary'));
-            expect(summary).toContain('| updated | count=1');
+            const summary = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]).find((m: any) => m?.title?.includes('Check Summary'));
+            expect(JSON.stringify(summary)).toContain('| updated | count=1');
         });
 
         it('skips an unhealthy assigned account in the cap tally (919) and caps need message (1035)', async () => {

@@ -29,7 +29,8 @@ import { SearchClientDto } from './dto/search-client.dto';
 import { ExecuteClientQueryDto } from './dto/execute-client-query.dto';
 import { parseError } from '../../utils/parseError';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { sendBotNotice } from '../../utils/bot-notice';
+import type { NotificationTable, RichNotificationInput } from '../../utils/rich-message';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SortOrder } from 'mongoose';
 import path from 'path';
@@ -435,14 +436,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async notifyClientUpdate(clientId: string): Promise<void> {
-    await this.notify(`Updating client ${clientId}`);
+    await this.notify({ title: 'Updating client', fields: [{ label: 'Client ID', value: clientId }] });
   }
 
-  private async notify(message: string): Promise<void> {
+  private async notify(message: RichNotificationInput): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(message)}`, {
-        timeout: 5000,
-      });
+      await sendBotNotice('notif', message, { timeout: 5000 });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.warn('Failed to send notification', errorMessage);
@@ -680,7 +679,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const pendingNote = moreCandidatesPending
         ? ' (SpamBot probe budget exhausted; more unprobed candidates remain, retry to check them)'
         : '';
-      await this.notify(`Buffer not available ${clientId}: no safe buffer clients for swap${pendingNote}${this.formatProbeSkips(probeBudget, fallbackBudget)}`);
+      await this.notify({
+        severity: 'warning',
+        title: 'Buffer not available',
+        summary: `No safe buffer clients for swap${pendingNote}`,
+        fields: [{ label: 'Client ID', value: clientId }],
+        tables: this.probeSkipTables(probeBudget, fallbackBudget),
+      });
       this.logger.log('Buffer Clients not safely available');
       return {
         status: 'no_candidate',
@@ -704,9 +709,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           usedFutureAvailableFallback,
         },
       );
-      await this.notify(
-        `Swap started ${clientId}: ${existingClient.mobile} (@${existingClient.username}) → ${newBufferClient.mobile}${this.formatProbeSkips(probeBudget, fallbackBudget)}`,
-      );
+      await this.notify({
+        title: 'Swap started',
+        fields: [
+          { label: 'Client ID', value: clientId },
+          { label: 'Old mobile', value: existingClient.mobile },
+          { label: 'Old username', value: existingClient.username ? `@${existingClient.username}` : undefined },
+          { label: 'New mobile', value: newBufferClient.mobile },
+        ],
+        tables: this.probeSkipTables(probeBudget, fallbackBudget),
+      });
       this.telegramService.setActiveClientSetup({
         ...setupClientQueryDto,
         clientId,
@@ -734,9 +746,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorDetails = parseError(error, `setupClient failed for ${newBufferClient.mobile}`);
       const permanent = isPermanentError(errorDetails);
-      await this.notify(
-        `Swap FAILED ${clientId}: ${existingClient.mobile} → ${newBufferClient.mobile}\n${errorMessage.substring(0, 120)}${permanent ? ' — buffer inactivated (permanent error)' : ''}`,
-      );
+      await this.notify({
+        severity: 'error',
+        title: 'Swap failed',
+        summary: permanent ? 'Buffer inactivated (permanent error)' : undefined,
+        fields: [
+          { label: 'Client ID', value: clientId },
+          { label: 'Old mobile', value: existingClient.mobile },
+          { label: 'New mobile', value: newBufferClient.mobile },
+        ],
+        details: errorMessage.substring(0, 500),
+        detailsTitle: 'Error message',
+      });
       if (permanent) {
         // Account is permanently dead — retire it everywhere (user + pools), don't recycle
         await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
@@ -806,7 +827,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // Use the username already set during warmup — no Telegram API call needed
       const updatedUsername = bufferDoc?.username || me.username;
       this.logger.info(`[${clientId}] Using pre-set buffer username: @${updatedUsername} (current TG: @${me.username})`);
-      await this.notify(`Cutover username ${clientId}: ${newMobile} @${updatedUsername}`);
+      await this.notify({ title: 'Cutover username', fields: [{ label: 'Client ID', value: clientId }, { label: 'New mobile', value: newMobile }, { label: 'Username', value: updatedUsername ? `@${updatedUsername}` : undefined }] });
       if (!newSession?.trim()) {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
@@ -838,7 +859,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       } catch (deployError) {
         const deployMessage = deployError instanceof Error ? deployError.message : String(deployError);
         parseError(deployError, `[${clientId}] deployKey restart failed after cutover`);
-        await this.notify(`Deploy restart FAILED ${clientId}: ${newMobile} (cutover done)\n${deployMessage?.substring(0, 120)}`);
+        await this.notify({ severity: 'error', title: 'Deploy restart failed', summary: 'Cutover is done', fields: [{ label: 'Client ID', value: clientId }, { label: 'New mobile', value: newMobile }], details: deployMessage?.substring(0, 500), detailsTitle: 'Error message' });
       }
       this.logger.info(`[${clientId}] Starting replaced-client pool-return handling`, {
         existingMobile,
@@ -848,7 +869,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       });
       await this.handleReplacedClient(existingClient, existingMobile, formalities, returnOldToPool, days, reason);
       this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
-      await this.notify(`Swap complete ${clientId}: ${existingMobile} → ${newMobile}`);
+      await this.notify({ severity: 'success', title: 'Swap complete', fields: [{ label: 'Client ID', value: clientId }, { label: 'Old mobile', value: existingMobile }, { label: 'New mobile', value: newMobile }] });
     } catch (error) {
       const errorDetails = parseError(error, `[New: ${newMobile}] Error in updating client session`, true);
       // Retire the new mobile on permanent failure (before cutover committed) so it's
@@ -942,7 +963,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         const reasonMessage = `Pool return failed: user document missing for replaced mobile ${existingMobile}`;
         this.logger.warn(reasonMessage);
         await this.retireReplacedMobile(existingMobile, reasonMessage);
-        await this.notify(`Pool return ${existingMobile}: user doc missing — buffer inactivated`);
+        await this.notify({ severity: 'warning', title: 'Pool return', summary: 'User doc missing, buffer inactivated', fields: [{ label: 'Mobile', value: existingMobile }] });
         return;
       }
       if (formalities) {
@@ -960,7 +981,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           message: reason || 'Deactivated during client swap (pool return skipped)',
         });
         this.logger.log('Replaced-client pool return skipped');
-        await this.notify(`Pool return skipped ${existingMobile}: inactivated`);
+        await this.notify({ title: 'Pool return skipped', summary: 'Account is inactivated', fields: [{ label: 'Mobile', value: existingMobile }] });
       }
     } catch (e) {
       const errorDetails = parseError(e, `Error returning replaced client to buffer pool: ${existingMobile}`, false);
@@ -968,7 +989,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (isPermanentError(errorDetails)) {
         await this.retireReplacedMobile(existingMobile, errorMessage);
       }
-      await this.notify(`Pool return FAILED ${existingMobile}\n${errorMessage?.substring(0, 120)}`);
+      await this.notify({ severity: 'error', title: 'Pool return failed', fields: [{ label: 'Mobile', value: existingMobile }], details: errorMessage?.substring(0, 500), detailsTitle: 'Error message' });
     }
   }
 
@@ -989,11 +1010,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     try {
       await this.usersService.expireAccount(mobile, reason);
       this.logger.warn(`Replaced account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
-      await this.notify(`Buffer inactivated ${mobile}: ${reason.substring(0, 120)}`);
+      await this.notify({ severity: 'warning', title: 'Buffer inactivated', fields: [{ label: 'Mobile', value: mobile }, { label: 'Reason', value: reason.substring(0, 120), code: false }] });
     } catch (error) {
       const errorDetails = parseError(error, `Failed to retire replaced account: ${mobile}`, false);
       this.logger.error(`Failed to retire replaced account ${mobile}: ${errorDetails.message}`);
-      await this.notify(`Buffer inactivate FAILED ${mobile}: ${reason.substring(0, 100)}\n${errorDetails.message.substring(0, 120)}`);
+      await this.notify({ severity: 'error', title: 'Buffer inactivate failed', fields: [{ label: 'Mobile', value: mobile }, { label: 'Reason', value: reason.substring(0, 100), code: false }], details: errorDetails.message.substring(0, 500), detailsTitle: 'Error message' });
     }
   }
 
@@ -1001,7 +1022,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     try {
       await this.telegramService.updatePrivacyforDeletedAccount(mobile);
       this.logger.log('Formalities finished');
-      await this.notify(`Formalities complete ${mobile}: privacy updated`);
+      await this.notify({ severity: 'success', title: 'Formalities complete', summary: 'Privacy updated', fields: [{ label: 'Mobile', value: mobile }] });
     } finally {
       await connectionManager.unregisterClient(mobile);
     }
@@ -1079,10 +1100,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         bufferClientDto,
       );
       this.logger.log('Client returned to buffer pool:', updatedBufferClient);
-      await this.notify(`Returned ${existingMobile} → buffer pool, available ${availableDate}`);
+      await this.notify({ title: 'Returned to buffer pool', fields: [{ label: 'Mobile', value: existingMobile }, { label: 'Available date', value: availableDate, code: false }] });
     } catch (error) {
       const errorDetails = parseError(error, `Error returning old client to buffer pool: ${existingMobile}`, true);
-      await this.notify(`Pool return error ${existingMobile}\n${errorDetails.message?.substring(0, 120)}`);
+      await this.notify({ severity: 'error', title: 'Pool return error', fields: [{ label: 'Mobile', value: existingMobile }], details: errorDetails.message?.substring(0, 500), detailsTitle: 'Error message' });
       if (isPermanentError(errorDetails)) {
         this.logger.log('Marking replaced buffer inactive:', existingMobile);
         await this.retireReplacedMobile(existingMobile, errorDetails.message);
@@ -1141,9 +1162,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return null;
   }
 
-  private formatProbeSkips(...budgets: Array<SetupProbeBudget | undefined>): string {
-    const skipped = budgets.flatMap((b) => b?.skipped ?? []);
-    return skipped.length ? `\nSkipped (SpamBot): ${skipped.join('; ')}` : '';
+  /** SpamBot-skipped swap candidates as a Mobile / Reason table (empty when none). */
+  private probeSkipTables(...budgets: Array<SetupProbeBudget | undefined>): NotificationTable[] {
+    const rows = budgets.flatMap((b) => b?.skipped ?? []).map((entry) => {
+      const i = entry.indexOf(' ');
+      return i < 0 ? [entry, ''] : [entry.slice(0, i), entry.slice(i + 1)];
+    });
+    return rows.length ? [{ title: 'Skipped (SpamBot)', columns: ['Mobile', 'Reason'], rows }] : [];
   }
 
   /**
@@ -1289,14 +1314,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         ...(privacyReady ? { privacyUpdatedAt: new Date() } : {}),
         ...(photosReady ? { profilePicsUpdatedAt: new Date() } : {}),
       });
-      await this.notify(`Client updated ${clientId}: ${client.mobile} — ${message}`);
+      await this.notify({ severity: 'success', title: 'Client updated', fields: [{ label: 'Client ID', value: clientId }, { label: 'Mobile', value: client.mobile }, { label: 'Reason', value: message, code: false }] });
       if (!skipDeploy && client.deployKey) await fetchWithTimeout(client.deployKey);
       return true;
     } catch (error) {
       this.lastUpdateMap.delete(clientId);
       const errorDetails = parseError(error, `[${clientId}] [${client.mobile}] updateClient failed`);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.notify(`Client update FAILED ${clientId}: ${client.mobile} — ${message}\n${errorMessage?.substring(0, 120)}`);
+      await this.notify({ severity: 'error', title: 'Client update failed', fields: [{ label: 'Client ID', value: clientId }, { label: 'Mobile', value: client.mobile }, { label: 'Reason', value: message, code: false }], details: errorMessage?.substring(0, 500), detailsTitle: 'Error message' });
       if (isPermanentError(errorDetails)) {
         this.logger.warn(`Permanent error while updating active client ${clientId}; manual review required for ${client.mobile}`);
       }

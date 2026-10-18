@@ -46,6 +46,9 @@ jest.mock('../../../cloudinary', () => ({
     },
 }));
 
+jest.mock('../../../utils/bot-notice', () => ({
+    sendBotNotice: jest.fn().mockResolvedValue({ sent: true }),
+}));
 jest.mock('../../../utils/fetchWithTimeout', () => ({
     fetchWithTimeout: jest.fn().mockResolvedValue({ data: { ok: true, result: { id: 'botid', username: 'botuser' } } }),
 }));
@@ -69,6 +72,7 @@ import * as fs from 'fs';
 import { TelegramService } from '../Telegram.service';
 import { CloudinaryService } from '../../../cloudinary';
 import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
+import { sendBotNotice } from '../../../utils/bot-notice';
 import { channelInfo } from '../../../utils/telegram-utils/channelinfo';
 import { getTelegramChannelLiveFacts } from '../../../utils/telegram-utils/channel-live-facts';
 import { HttpException, BadRequestException } from '@nestjs/common';
@@ -797,13 +801,21 @@ describe('TelegramService — getAuths / removeOtherAuths', () => {
     test('removeOtherAuths sends success notification', async () => {
         const { svc } = makeService();
         expect(await svc.removeOtherAuths('m')).toBe('Removed other authorizations');
-        expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('text='), { timeout: 5000 });
+        expect(sendBotNotice).toHaveBeenCalledWith(
+            'notif',
+            expect.objectContaining({ severity: 'success', title: 'Remove Other Auths', fields: expect.arrayContaining([{ label: 'Mobile', value: 'm' }]) }),
+            { timeout: 5000 },
+        );
     });
 
     test('removeOtherAuths sends failure notification and rethrows', async () => {
         const { svc } = makeService({ removeOtherAuths: jest.fn().mockRejectedValue(new Error('auth fail')) });
         await expect(svc.removeOtherAuths('m')).rejects.toThrow('auth fail');
-        expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('Failed'), { timeout: 5000 });
+        expect(sendBotNotice).toHaveBeenCalledWith(
+            'notif',
+            expect.objectContaining({ severity: 'error', title: 'Remove Other Auths failed', details: 'auth fail' }),
+            { timeout: 5000 },
+        );
     });
 
     test('removeOtherAuths handles non-Error rejection', async () => {

@@ -7,12 +7,12 @@ jest.mock('axios', () => {
     isAxiosError: jest.fn(() => false),
   };
 });
-jest.mock('../logbots', () => ({
-  notifbot: jest.fn(() => 'https://api.telegram.org/bottok/sendMessage?chat_id=-1'),
+jest.mock('../bot-notice', () => ({
+  sendBotNotice: jest.fn(() => Promise.resolve({ sent: true })),
 }));
 
 import axios from 'axios';
-import { notifbot } from '../logbots';
+import { sendBotNotice } from '../bot-notice';
 import {
   parseError,
   extractMessage,
@@ -21,7 +21,8 @@ import {
   ErrorUtils,
 } from '../parseError';
 
-const mockedNotifbot = notifbot as jest.Mock;
+const mockedNotice = sendBotNotice as jest.Mock;
+beforeEach(() => mockedNotice.mockClear());
 
 const mockedAxiosGet = (axios as any).get as jest.Mock;
 
@@ -271,28 +272,38 @@ describe('parseError', () => {
     // notification is fired-and-forgotten; allow the microtask queue to flush
     await Promise.resolve();
     await Promise.resolve();
-    expect(mockedAxiosGet).toHaveBeenCalled();
-    const calledUrl = mockedAxiosGet.mock.calls[0][0];
-    expect(calledUrl).toContain('https://api.telegram.org');
+    expect(mockedNotice).toHaveBeenCalledTimes(1);
+    const [target, notice] = mockedNotice.mock.calls[0];
+    expect(target).toBe('notif');
+    expect(notice).toEqual(expect.objectContaining({
+      severity: 'error',
+      title: 'Application error',
+      summary: 'pfx',
+      detailsTitle: 'Error message',
+      details: expect.stringContaining('a fresh failure'),
+    }));
+    expect(notice.fields.map((f: any) => f.label)).toEqual(['Status', 'Error']);
   });
 
   test('does not send a notification for ignored patterns (e.g. ECONNREFUSED)', () => {
     process.env.NODE_ENV = 'production';
     parseError({ message: 'ECONNREFUSED at host' }, 'pfx', true);
     expect(mockedAxiosGet).not.toHaveBeenCalled();
+    expect(mockedNotice).not.toHaveBeenCalled();
   });
 
   test('does not send a notification for 429 status', () => {
     process.env.NODE_ENV = 'production';
     parseError({ response: { status: 429, data: { message: 'rate limited' } } }, 'pfx', true);
     expect(mockedAxiosGet).not.toHaveBeenCalled();
+    expect(mockedNotice).not.toHaveBeenCalled();
   });
 
   test('catches errors thrown while preparing the notification', () => {
     process.env.NODE_ENV = 'production';
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    mockedNotifbot.mockImplementationOnce(() => { throw new Error('notifbot boom'); });
-    // Should not throw despite notifbot blowing up.
+    mockedNotice.mockImplementationOnce(() => { throw new Error('notice boom'); });
+    // Should not throw despite the sender blowing up.
     const res = parseError(new Error('a notify-prep failure'), 'pfx', true);
     expect(res.message).toContain('a notify-prep failure');
     expect(errSpy).toHaveBeenCalledWith('Failed to prepare error notification:', expect.any(Error));

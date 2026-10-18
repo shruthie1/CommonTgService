@@ -2,6 +2,10 @@ jest.mock('node-schedule-tz', () => ({
   scheduleJob: jest.fn(() => ({ cancel: jest.fn() })),
 }));
 
+jest.mock('../../utils/bot-notice', () => ({
+  sendBotNotice: jest.fn().mockResolvedValue({ sent: true }),
+}));
+
 jest.mock('../../utils', () => ({
   ...jest.requireActual('../../utils'),
   fetchWithTimeout: jest.fn().mockResolvedValue({ data: { ok: true } }),
@@ -11,6 +15,7 @@ import * as schedule from 'node-schedule-tz';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { fetchWithTimeout } from '../../utils';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 
 const scheduleJob = schedule.scheduleJob as jest.Mock;
@@ -22,6 +27,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     process.env.LOCAL_SERVER = 'true';
     scheduleJob.mockClear();
     (fetchWithTimeout as jest.Mock).mockClear();
+    (sendBotNotice as jest.Mock).mockClear();
   });
 
   afterAll(() => {
@@ -211,7 +217,13 @@ describe('ScheduledJobsService scheduler ownership', () => {
         _id: expect.stringMatching(/^daily-promote-stats-reset:/),
       }),
     );
-    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+    expect(sendBotNotice).toHaveBeenCalledTimes(1);
+    const [target, notice] = (sendBotNotice as jest.Mock).mock.calls[0];
+    expect(target).toBe('pppl');
+    expect(notice.title).toBe('Daily promote stats reset');
+    expect(notice.tables[0].columns).toEqual(['Client', 'Promotions']);
+    expect(notice.tables[0].rows).toEqual([['UMS', 7]]);
+    expect(notice.tables[0].numeric).toEqual([1]);
   });
 
   it('executes the reset through a real Mongoose Connection.db', async () => {

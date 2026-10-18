@@ -161,7 +161,11 @@ export class UserDataService {
         if (botsService) {
             botsService.sendMessageByCategory(
                 ChannelCategory.PROM_LOGS2,
-                `Deleting UserData: ${profile} (chat ${chatId})`,
+                {
+                    severity: 'warning',
+                    title: 'Deleting UserData',
+                    fields: [{ label: 'Profile', value: profile }, { label: 'Chat', value: chatId }],
+                },
             );
         }
         const deletedUser = await this.userDataModel.findOneAndDelete(await this.userRowFilter(profile, chatId)).lean().exec();

@@ -4,8 +4,7 @@ import { Model, isValidObjectId } from 'mongoose';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { Transaction, TransactionDocument } from './schemas/transaction.schema';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { Logger } from '../../utils';
 
 @Injectable()
@@ -184,14 +183,16 @@ export class TransactionService {
   // Helper method to send notification
   private async sendNotification(filters: any, total: number): Promise<void> {
     try {
-      const parts = [
-        filters.ip && `ip=${filters.ip}`,
-        filters.chatId && `chat=${filters.chatId}`,
-        filters.transactionId && `txn=${filters.transactionId}`,
-        filters.profile && `profile=${filters.profile}`,
-      ].filter(Boolean);
-      const summary = `Txn search: ${total} results${parts.length ? ` — ${parts.join(', ')}` : ''}`;
-      await fetchWithTimeout(`${notifbot(process.env.accountsChannel)}&text=${encodeURIComponent(summary)}`);
+      await sendBotNotice('notif', {
+        title: 'Transaction search',
+        summary: `${total} results`,
+        fields: [
+          { label: 'IP', value: filters.ip },
+          { label: 'Chat', value: filters.chatId },
+          { label: 'Transaction', value: filters.transactionId },
+          { label: 'Profile', value: filters.profile },
+        ],
+      }, { chatId: process.env.accountsChannel || undefined });
     } catch (error) {
       this.logger.error(`Failed to send notification: ${error.message}`);
     }

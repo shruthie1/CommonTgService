@@ -1125,8 +1125,9 @@ describe('UsersService (real Mongo)', () => {
             const mobile = '919999000210';
             await service.create({ mobile, session: 's', tgId: 'tg-np', firstName: 'OnlyFirst' } as any);
             const msg = botsService.sendMessageByCategory.mock.calls[0][1];
-            expect(msg).toContain('OnlyFirst');
-            expect(msg).not.toContain('Password');
+            expect(msg.title).toBe('Account Login');
+            expect(msg.fields).toEqual(expect.arrayContaining([{ label: 'Account', value: 'OnlyFirst' }, { label: 'Mobile', value: mobile }]));
+            expect(msg.fields.find((f: any) => f.label === 'Password')?.value).toBeUndefined();
             scoreSpy.mockRestore();
         });
     });

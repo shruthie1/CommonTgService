@@ -121,9 +121,9 @@ describe('Promote Client API', () => {
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
             const [category, message] = botsService.sendMessageByCategory.mock.calls[0];
             expect(category).toBe('ACCOUNT_NOTIFICATIONS');
-            expect(message).toContain('Promote Client Created');
-            expect(message).toContain('15550100002');
-            expect(message).toContain('notif-test');
+            expect(message.title).toBe('Promote Client Created');
+            expect(JSON.stringify(message.fields)).toContain('15550100002');
+            expect(JSON.stringify(message.fields)).toContain('notif-test');
         });
 
         it('rejects duplicate mobile with MongoServerError 11000', async () => {
@@ -465,12 +465,11 @@ describe('Promote Client API', () => {
             // Notification sent with correct details
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
                 'ACCOUNT_NOTIFICATIONS',
-                expect.stringContaining('15550600001'),
-                expect.anything(),
+                expect.objectContaining({ fields: expect.arrayContaining([{ label: 'Mobile', value: '15550600001' }]) }),
             );
             const notifMsg = botsService.sendMessageByCategory.mock.calls[0][1];
-            expect(notifMsg).toContain('inactive');
-            expect(notifMsg).toContain('banned by TG');
+            expect(JSON.stringify(notifMsg)).toContain('inactive');
+            expect(JSON.stringify(notifMsg)).toContain('banned by TG');
         });
 
         it('active: sets status, does NOT touch inUse', async () => {

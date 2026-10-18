@@ -21,26 +21,21 @@ export function getBotToken() {
     return initializeBotTokens()[currentTokenIndex];
 }
 
-export function notifbot(chatId: string = process.env.accountsChannel || "-1001801844217", botToken?: string): string {
+function nextTarget(chatId: string, botToken?: string): { token: string; chatId: string } {
     const tokens = initializeBotTokens();
     const token = botToken || tokens[currentTokenIndex];
-    const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
-
     if (!botToken) {
         currentTokenIndex = (currentTokenIndex + 1) % tokens.length;
     }
-
-    return apiUrl;
+    return { token, chatId };
 }
 
-export function ppplbot(chatId: string = process.env.updatesChannel || '-1001972065816', botToken?: string): string {
-    const tokens = initializeBotTokens();
-    const token = botToken || tokens[currentTokenIndex];
-    const apiUrl = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}`;
+/** Token (round-robin unless given) + chat for the accounts channel; used by the rich legacy sender. */
+export function notifTarget(chatId: string = process.env.accountsChannel || "-1001801844217", botToken?: string) {
+    return nextTarget(chatId, botToken);
+}
 
-    if (!botToken) {
-        currentTokenIndex = (currentTokenIndex + 1) % tokens.length;
-    }
-
-    return apiUrl;
+/** Token (round-robin unless given) + chat for the updates channel; used by the rich legacy sender. */
+export function ppplTarget(chatId: string = process.env.updatesChannel || '-1001972065816', botToken?: string) {
+    return nextTarget(chatId, botToken);
 }

@@ -124,9 +124,13 @@ describe('LoggerMiddleware', () => {
             jest.fn() as unknown as NextFunction,
         );
         res.emit('finish');
-        const msg = sendMessageByCategory.mock.calls[0][1] as string;
+        const notice = sendMessageByCategory.mock.calls[0][1] as { title: string; severity: string; fields: Array<{ label: string; value: unknown }> };
+        const msg = JSON.stringify(notice);
         expect(msg).not.toContain('secret');
         expect(msg).toContain('[redacted]');
+        expect(notice.title).toBe('HTTP 500');
+        expect(notice.severity).toBe('error');
+        expect(notice.fields.map((f) => f.label)).toEqual(['Path', 'Method', 'Status', 'IP', 'Duration']);
     });
 
     it('does not register finish handler for excluded endpoints', () => {

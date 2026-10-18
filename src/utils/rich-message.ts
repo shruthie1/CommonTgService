@@ -1,0 +1,313 @@
+/**
+ * Bot API rich messages (sendRichMessage, Bot API 10.1+). Ported from tg-platform
+ * packages/tg-core/src/utils/{rich-message,notification-format}.ts (CMS cannot import tg-platform):
+ * heading, one-line summary, bordered key/value table, multi-column tables, collapsible details,
+ * URL buttons. Old Telegram clients (incl. GramJS 2.26) see a rich message as an unsupported media
+ * message with empty text, so never send one that an account parses by text.
+ */
+
+export const NotificationSeverity = Object.freeze({
+    INFO: 'info',
+    SUCCESS: 'success',
+    WARNING: 'warning',
+    ERROR: 'error',
+    CRITICAL: 'critical',
+} as const);
+export type NotificationSeverity = typeof NotificationSeverity[keyof typeof NotificationSeverity];
+
+export interface RichNotificationField {
+    label: string;
+    value: unknown;
+    code?: boolean;
+}
+
+/** An action under a notification: open a URL, or copy a value (opt-in; ids in tables already copy on tap). */
+export interface NotificationButton {
+    text: string;
+    url?: string;
+    copy?: string;
+}
+
+/** A multi-column table (summaries, per-client lists). */
+export interface NotificationTable {
+    title?: string;
+    columns: string[];
+    rows: unknown[][];
+    /** Column indexes rendered right-aligned (numbers). */
+    numeric?: number[];
+}
+
+export interface RichNotificationInput {
+    title?: string;
+    severity?: NotificationSeverity;
+    summary?: string;
+    fields?: RichNotificationField[];
+    details?: string | string[];
+    tags?: string[];
+    footer?: string;
+    timestamp?: Date | string | number | boolean;
+    /** Who the notice is about, shown first in the heading (default: the sender's prefix). */
+    source?: string;
+    buttons?: NotificationButton[];
+    tables?: NotificationTable[];
+    /** Message content (text sent to / received from a user): label paragraph + quote block under the tables. */
+    quote?: string;
+    /** Label of `quote` (default "Message"). */
+    quoteLabel?: string;
+    /** Several labelled quotes, rendered after `quote`. */
+    quotes?: Array<{ label: string; text: string }>;
+    /** Heading of the collapsible details block (default "Details"). */
+    detailsTitle?: string;
+    /** Plain house style: no severity icon. */
+    houseStyle?: boolean;
+}
+
+export function escapeTelegramHtml(value: unknown): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+const SEVERITY_ICONS: Record<NotificationSeverity, string> = {
+    info: 'ℹ️',
+    success: '✅',
+    warning: '⚠️',
+    error: '❌',
+    critical: '🚨',
+};
+
+/** Rich messages allow 32768 characters; keep headroom for markup added after truncation. */
+export const RICH_MESSAGE_MAX_CHARS = 30000;
+const MAX_BUTTONS = 6;
+const BUTTONS_PER_ROW = 3;
+const REDUNDANT_FIELD_LABELS = new Set(['client', 'clientid', 'username']);
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+
+function attr(value: unknown): string {
+    return escapeTelegramHtml(value).replace(/"/g, '&quot;');
+}
+
+function toUnixSeconds(value: unknown): number | null {
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : Math.floor(value.getTime() / 1000);
+    if (typeof value === 'string' && ISO_TIME.test(value.trim())) {
+        const ms = Date.parse(value.trim());
+        return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+    }
+    return null;
+}
+
+function timeTag(unix: number, fallback: string): string {
+    return `<tg-time unix="${unix}" format="wDT">${escapeTelegramHtml(fallback)}</tg-time>`;
+}
+
+function cellValue(field: RichNotificationField): string {
+    const unix = toUnixSeconds(field.value);
+    if (unix !== null) return timeTag(unix, field.value instanceof Date ? field.value.toISOString() : String(field.value));
+    const text = String(field.value ?? '');
+    if (field.code === false || text.length > 60 || /\s/.test(text.trim())) return escapeTelegramHtml(text);
+    return `<code>${escapeTelegramHtml(text)}</code>`;
+}
+
+/** HTML-escape, keep runs of 2+ spaces as &nbsp; and newlines as <br/> (layout preserved exactly). */
+function multiline(text: unknown): string {
+    return escapeTelegramHtml(text)
+        .replace(/ {2,}/g, (run) => '&nbsp;'.repeat(run.length))
+        .replace(/\r?\n/g, '<br/>');
+}
+
+const QUOTE_EXPANDABLE_OVER = 800;
+const QUOTE_MAX_CHARS = 6000;
+
+function allQuotes(input: RichNotificationInput): Array<{ label: string; text: string }> {
+    const out: Array<{ label: string; text: string }> = [];
+    if (input.quote && input.quote.trim()) out.push({ label: input.quoteLabel || 'Message', text: input.quote });
+    for (const q of input.quotes ?? []) if (q && q.text && q.text.trim()) out.push({ label: q.label || 'Message', text: q.text });
+    return out;
+}
+
+function renderQuote(label: string, text: string): string {
+    const clipped = text.length > QUOTE_MAX_CHARS ? `${text.slice(0, QUOTE_MAX_CHARS)}\n… (${text.length - QUOTE_MAX_CHARS} more chars)` : text;
+    const tag = clipped.length > QUOTE_EXPANDABLE_OVER ? 'blockquote expandable' : 'blockquote';
+    return `<p><b>${escapeTelegramHtml(label)}</b></p><${tag}>${multiline(clipped)}</${tag.split(' ')[0]}>`;
+}
+
+function visibleFields(input: RichNotificationInput): RichNotificationField[] {
+    return (input.fields ?? []).filter(
+        (f) => !REDUNDANT_FIELD_LABELS.has(String(f.label ?? '').trim().toLowerCase())
+            && f.value !== undefined && f.value !== null && String(f.value) !== '',
+    );
+}
+
+/** Only explicit actions: ids are already in the table (tap-to-copy), so no automatic copy buttons. */
+export function notificationButtons(input: RichNotificationInput): NotificationButton[] {
+    return (input.buttons ?? []).filter((b) => b && b.text && (b.url || b.copy)).slice(0, MAX_BUTTONS);
+}
+
+/** Button labels are plain words (owner, 2026-10-18): emoji are stripped. */
+function buttonLabel(text: string): string {
+    return escapeTelegramHtml(String(text).replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim() || 'Open');
+}
+
+function buttonTag(button: NotificationButton, index: number): string {
+    const style = index === 0 && button.url ? ' style="primary"' : '';
+    if (button.url) return `<tg-button type="url"${style} url="${attr(button.url)}">${buttonLabel(button.text)}</tg-button>`;
+    return `<tg-button type="copy_text" text="${attr(button.copy)}">${buttonLabel(button.text)}</tg-button>`;
+}
+
+function renderTable(table: NotificationTable): string {
+    const numeric = new Set(table.numeric ?? []);
+    const cell = (v: unknown, i: number, tag: 'td' | 'th') => {
+        const align = numeric.has(i) ? ' align="right"' : '';
+        const unix = toUnixSeconds(v);
+        const body = unix !== null ? timeTag(unix, String(v)) : escapeTelegramHtml(v ?? '');
+        return `<${tag}${align}>${body}</${tag}>`;
+    };
+    const head = `<tr>${table.columns.map((c, i) => cell(c, i, 'th')).join('')}</tr>`;
+    const rows = table.rows.map((r) => `<tr>${table.columns.map((_, i) => cell(r[i], i, 'td')).join('')}</tr>`).join('');
+    const caption = table.title ? `<caption>${escapeTelegramHtml(table.title)}</caption>` : '';
+    return `<table bordered striped compact>${caption}${head}${rows}</table>`;
+}
+
+function detailLines(input: RichNotificationInput): string[] {
+    if (!input.details) return [];
+    return (Array.isArray(input.details) ? input.details : [input.details]).map((d) => String(d ?? '')).filter((d) => d.trim());
+}
+
+/**
+ * Rich HTML for sendRichMessage. `prefix` (the clientId) leads the heading because the sender no
+ * longer prepends it to the text.
+ */
+export function formatRichMessageHtml(input: RichNotificationInput & { showTags?: boolean }, opts: { prefix?: string } = {}): string {
+    const title = input.title || input.summary || 'Notification';
+    const icon = input.houseStyle ? '' : `${SEVERITY_ICONS[input.severity ?? NotificationSeverity.INFO]} `;
+    const prefix = opts.prefix ? `${escapeTelegramHtml(opts.prefix)} · ` : '';
+    const parts: string[] = [`<h3>${icon}${prefix}${escapeTelegramHtml(title)}</h3>`];
+
+    if (input.summary && input.summary !== title) parts.push(`<p>${multiline(input.summary)}</p>`);
+
+    const fields = visibleFields(input);
+    if (fields.length) {
+        const rows = fields.map((f) => `<tr><td><b>${escapeTelegramHtml(f.label)}</b></td><td>${cellValue(f)}</td></tr>`);
+        parts.push(`<table bordered striped compact>${rows.join('')}</table>`);
+    }
+
+    for (const table of input.tables ?? []) parts.push(renderTable(table));
+
+    // Message content never goes in a table cell or <code>: label paragraph + quote block under the tables.
+    for (const q of allQuotes(input)) parts.push(renderQuote(q.label, q.text));
+
+    const details = detailLines(input);
+    if (details.length) {
+        const body = details.join('\n');
+        const budget = Math.max(500, RICH_MESSAGE_MAX_CHARS - parts.join('').length - 2000);
+        const clipped = body.length > budget ? `${body.slice(0, budget)}\n… (${body.length - budget} more chars)` : body;
+        parts.push(`<details><summary>${escapeTelegramHtml(input.detailsTitle || 'Details')}</summary><pre>${escapeTelegramHtml(clipped)}</pre></details>`);
+    }
+
+    if (input.showTags && input.tags?.length) parts.push(`<p>${input.tags.map((t) => `<code>${escapeTelegramHtml(t)}</code>`).join(' ')}</p>`);
+
+    const footer: string[] = [];
+    if (input.footer) footer.push(`<i>${escapeTelegramHtml(input.footer)}</i>`);
+    if (input.timestamp && input.timestamp !== true) {
+        const unix = toUnixSeconds(typeof input.timestamp === 'number' ? new Date(input.timestamp) : input.timestamp);
+        footer.push(unix !== null ? timeTag(unix, String(input.timestamp)) : `<i>${escapeTelegramHtml(input.timestamp)}</i>`);
+    }
+    if (footer.length) parts.push(`<p>${footer.join(' · ')}</p>`);
+
+    const buttons = notificationButtons(input);
+    for (let i = 0; i < buttons.length; i += BUTTONS_PER_ROW) {
+        parts.push(`<tg-button-row>${buttons.slice(i, i + BUTTONS_PER_ROW).map((b, j) => buttonTag(b, i + j)).join('')}</tg-button-row>`);
+    }
+    return parts.join('\n');
+}
+
+const HTML_TAG = /<\/?[a-z][^>]*>/gi;
+const FIELD_LINE = /^([^:\n]{1,40}?)\s*:\s+(.+)$/;
+const ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&amp;': '&' };
+
+function stripMarkup(text: string, html: boolean): string {
+    const noTags = html ? text.replace(/<br\s*\/?>/gi, '\n').replace(HTML_TAG, '') : text;
+    const decoded = html ? noTags.replace(/&(lt|gt|quot|#39|amp);/g, (m) => ENTITIES[m] ?? m) : noTags;
+    // MarkdownV2 escapes and emphasis markers.
+    // Paired **bold** / __italic__ markers are dropped; a stray ** too. A lone __ stays: it is part of
+    // values like @a__b or v__1.mp4.
+    return decoded.replace(/\\([_*\[\]()~`>#+\-=|{}.!\\])/g, '$1').replace(/(\*\*|__)(.+?)\1/g, '$2').replace(/\*\*/g, '').replace(/\*([^*\n]+)\*/g, '$1');
+}
+
+/**
+ * Structure a free-form notice (plain, HTML or MarkdownV2 text): first line = title,
+ * "Key: value" / "Key : value" lines = table fields, remaining lines = summary (short) or
+ * collapsible details (long).
+ */
+export function textToRichInput(text: string, opts: { html?: boolean; houseStyle?: boolean } = {}): RichNotificationInput {
+    const lines = stripMarkup(String(text ?? ''), opts.html === true).split('\n').map((l) => l.trim()).filter(Boolean);
+    const input: RichNotificationInput = { houseStyle: opts.houseStyle };
+    if (!lines.length) return { ...input, title: 'Notification' };
+    const first = lines[0];
+    // The first line is the title unless it is itself a spaced "Key : value" line ("sowmya2: In-house ..." is a title).
+    const firstField = /^[^:\n]{1,40}?\s+:\s+.+$/.test(first) ? FIELD_LINE.exec(first) : null;
+    const rest = firstField && !/^https?$/i.test(firstField[1]) ? lines : lines.slice(1);
+    input.title = firstField && rest === lines ? 'Notification' : first;
+    const fields: RichNotificationField[] = [];
+    const other: string[] = [];
+    for (const line of rest) {
+        const m = FIELD_LINE.exec(line);
+        if (m && !/^https?$/i.test(m[1]) && !/\/\//.test(m[1])) fields.push({ label: m[1].trim(), value: m[2].trim(), code: false });
+        else other.push(line);
+    }
+    if (fields.length) input.fields = fields;
+    if (other.length) {
+        const joined = other.join('\n');
+        if (other.length <= 2 && joined.length <= 200) input.summary = joined;
+        else input.details = other;
+    }
+    return input;
+}
+
+/** URL buttons from a Bot API inline_keyboard (callback buttons are not used by our notices). */
+export function buttonsFromReplyMarkup(markup: unknown): NotificationButton[] {
+    let parsed: any = markup;
+    if (typeof markup === 'string') {
+        try { parsed = JSON.parse(markup); } catch { return []; }
+    }
+    const rows: any[] = Array.isArray(parsed?.inline_keyboard) ? parsed.inline_keyboard : [];
+    const buttons: NotificationButton[] = [];
+    for (const row of rows) {
+        for (const b of Array.isArray(row) ? row : []) {
+            if (b?.text && typeof b.url === 'string') buttons.push({ text: String(b.text), url: b.url });
+            else if (b?.text && typeof b.copy_text?.text === 'string') buttons.push({ text: String(b.text), copy: b.copy_text.text });
+        }
+    }
+    return buttons;
+}
+
+/**
+ * Classic (sendMessage, parse_mode HTML) rendering of a structured notice: the fallback when
+ * Telegram refuses the rich payload. Tables degrade to "a | b | c" lines.
+ */
+export function formatClassicNotificationHtml(input: RichNotificationInput, prefix?: string): string {
+    const title = input.title || input.summary || 'Notification';
+    const icon = input.houseStyle ? '' : `${SEVERITY_ICONS[input.severity ?? NotificationSeverity.INFO]} `;
+    const head = `${prefix ? `${escapeTelegramHtml(prefix)} · ` : ''}${escapeTelegramHtml(title)}`;
+    const blocks: string[][] = [[`<b>${icon}${head}</b>`]];
+    if (input.summary && input.summary !== title) blocks.push([escapeTelegramHtml(input.summary)]);
+    const fields = visibleFields(input);
+    if (fields.length) blocks.push(fields.map((f) => `<b>${escapeTelegramHtml(f.label)}:</b> ${escapeTelegramHtml(f.value)}`));
+    for (const q of allQuotes(input)) blocks.push([`<b>${escapeTelegramHtml(q.label)}</b>`, `<i>${escapeTelegramHtml(q.text.trim().slice(0, 1500))}</i>`]);
+    for (const table of input.tables ?? []) {
+        const lines: string[] = [];
+        if (table.title) lines.push(`<b>${escapeTelegramHtml(table.title)}</b>`);
+        lines.push(`<b>${table.columns.map((c) => escapeTelegramHtml(c)).join(' | ')}</b>`);
+        for (const r of table.rows) lines.push(table.columns.map((_, i) => escapeTelegramHtml(r[i] ?? '')).join(' | '));
+        blocks.push(lines);
+    }
+    const details = detailLines(input);
+    if (details.length) {
+        const body = details.join('\n');
+        const clipped = body.length > 2500 ? `${body.slice(0, 2500)}\n… (${body.length - 2500} more chars)` : body;
+        blocks.push([...(input.detailsTitle ? [`<b>${escapeTelegramHtml(input.detailsTitle)}</b>`] : []), escapeTelegramHtml(clipped)]);
+    }
+    if (input.footer) blocks.push([`<i>${escapeTelegramHtml(input.footer)}</i>`]);
+    return blocks.map((b) => b.join('\n')).join('\n\n').slice(0, 4096);
+}

@@ -1,8 +1,5 @@
-jest.mock('../../../utils/fetchWithTimeout', () => ({
-  fetchWithTimeout: jest.fn().mockResolvedValue({}),
-}));
-jest.mock('../../../utils/logbots', () => ({
-  notifbot: jest.fn(() => 'https://api.telegram.org/botX/sendMessage?chat_id=-100'),
+jest.mock('../../../utils/bot-notice', () => ({
+  sendBotNotice: jest.fn().mockResolvedValue({ sent: true }),
 }));
 
 import mongoose, { Connection, Model } from 'mongoose';
@@ -11,9 +8,9 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TransactionService } from '../transaction.service';
 import { Transaction, TransactionDocument, TransactionSchema } from '../schemas/transaction.schema';
 import { TransactionStatus } from '../dto/create-transaction.dto';
-import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
+import { sendBotNotice } from '../../../utils/bot-notice';
 
-const mockedFetch = fetchWithTimeout as jest.Mock;
+const mockedFetch = sendBotNotice as jest.Mock;
 
 const makeDto = (overrides: any = {}) => ({
   transactionId: 'txn12345',

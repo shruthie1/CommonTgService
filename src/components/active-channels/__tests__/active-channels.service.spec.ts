@@ -5,11 +5,9 @@ jest.mock('../../../utils', () => ({
   getBotsServiceInstance: () => mockBotsInstance,
 }));
 const mockFetchWithTimeout = jest.fn();
-jest.mock('../../../utils/fetchWithTimeout', () => ({
-  fetchWithTimeout: (...args: any[]) => mockFetchWithTimeout(...args),
-}));
-jest.mock('../../../utils/logbots', () => ({
-  notifbot: () => 'https://api.telegram.org/botX/sendMessage?chat_id=1',
+// Maintenance pings go through sendBotNotice (rich message to the accounts chat).
+jest.mock('../../../utils/bot-notice', () => ({
+  sendBotNotice: (...args: any[]) => mockFetchWithTimeout(...args),
 }));
 
 import mongoose, { Connection } from 'mongoose';
@@ -651,7 +649,7 @@ describe('ActiveChannelsService (real Mongo)', () => {
     });
   });
 
-  describe('maintenance ops (fetchWithTimeout mocked)', () => {
+  describe('maintenance ops (sendBotNotice mocked)', () => {
     // freeformDeletedCount/followUpDeletedCount were dropped from the schema (moved to
     // channelIntelligence) — the job is now a no-op ping (notification + updatedAt touch only).
     test('resetMessageDeletionCounters', async () => {

@@ -92,7 +92,8 @@ describe('BotsController - send message routes', () => {
     const svc = makeService();
     const c = new BotsController(svc as any);
     await c.sendMessageByCategory(ChannelCategory.PROM_LOGS2, 'bid', { message: 'hi', options: undefined } as any);
-    expect(svc.sendMessageByBotId).toHaveBeenCalledWith('bid', 'hi', undefined);
+    // The HTTP body is free-form text: the controller structures it before the (structured-only) service.
+    expect(svc.sendMessageByBotId).toHaveBeenCalledWith('bid', expect.objectContaining({ title: 'hi' }), undefined);
   });
 
   test('sendMessageByCategory with botId category mismatch → throws', async () => {
@@ -108,6 +109,15 @@ describe('BotsController - send message routes', () => {
     const c = new BotsController(svc as any);
     await c.sendMessageByCategory(ChannelCategory.PROM_LOGS2, undefined as any, { message: 'hi' } as any);
     expect(svc.sendMessageByCategory).toHaveBeenCalled();
+  });
+
+  test('free-form HTTP text is structured: first line title, Key: value lines become fields, HTML decoded', async () => {
+    const svc = makeService();
+    const c = new BotsController(svc as any);
+    await c.sendMessageByCategory(ChannelCategory.PROM_LOGS2, undefined as any, { message: '<b>Paid</b>\nAmount: 100', options: { parseMode: 'HTML' } } as any);
+    const notice = (svc.sendMessageByCategory as jest.Mock).mock.calls[0][1];
+    expect(notice.title).toBe('Paid');
+    expect(notice.fields).toEqual([{ label: 'Amount', value: '100', code: false }]);
   });
 });
 

@@ -6,8 +6,7 @@ import { CreateActiveChannelDto } from './dto/create-active-channel.dto';
 import { UpdateActiveChannelDto } from './dto/update-active-channel.dto';
 import { ActiveChannel, ActiveChannelDocument } from './schemas/active-channel.schema';
 import { parseError } from '../../utils/parseError';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { getBotsServiceInstance } from '../../utils';
 import { ChannelCategory } from '../bots';
 import { buildDurableChannelUpsertPipeline, isOperatorBan } from '../../utils/telegram-utils/durable-channel-upsert';
@@ -327,7 +326,7 @@ export class ActiveChannelsService {
       if (botsService) {
         await botsService.sendMessageByCategory(
           ChannelCategory.PROM_LOGS2,
-          `Removing Active Channel: ${channelId}`
+          { title: 'Removing Active Channel', fields: [{ label: 'Channel', value: channelId }] },
         );
       }
 
@@ -739,7 +738,7 @@ export class ActiveChannelsService {
   // call site are undisturbed.
   async resetMessageDeletionCounters(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: reset message deletion counters`)}`);
+      await sendBotNotice('notif', { title: 'Channel maintenance', summary: 'Reset message deletion counters' });
       await this.activeChannelModel.updateMany(
         { banned: false },
         { $set: { updatedAt: new Date() } }
@@ -751,7 +750,7 @@ export class ActiveChannelsService {
 
   async resetAvailableMsgs(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: reset available messages`)}`);
+      await sendBotNotice('notif', { title: 'Channel maintenance', summary: 'Reset available messages' });
       const availableMsgs = await this.getAvailableMessages();
 
       await this.activeChannelModel.updateMany(
@@ -774,7 +773,7 @@ export class ActiveChannelsService {
 
   async updateBannedChannels(): Promise<void> {
     try {
-      await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Channel maint: update banned channels`)}`);
+      await sendBotNotice('notif', { title: 'Channel maintenance', summary: 'Update banned channels' });
       await this.activeChannelModel.updateMany(
         { $or: [{ banned: true }, { private: true }] },
         {

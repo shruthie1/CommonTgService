@@ -25,8 +25,8 @@ import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { parseError } from '../../utils/parseError';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { buildCheckSummaryNotification } from '../shared/check-summary-notification';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import TelegramManager from '../Telegram/TelegramManager';
 import { SessionService } from '../session-manager';
@@ -443,17 +443,18 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         });
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            [
-                '<b>Promote Client Created</b>',
-                '',
-                `<b>Mobile:</b> ${canonicalMobile}`,
-                `<b>Client ID:</b> ${promoteClient.clientId || '-'}`,
-                `<b>Status:</b> ${result.status}`,
-                `<b>Available Date:</b> ${promoteClient.availableDate || '-'}`,
-                `<b>Channels:</b> ${promoteClient.channels ?? '-'}`,
-                `<b>Message:</b> ${promoteClient.message || '-'}`,
-            ].join('\n'),
-            { parseMode: 'HTML' }
+            {
+                severity: 'success',
+                title: 'Promote Client Created',
+                fields: [
+                    { label: 'Mobile', value: canonicalMobile },
+                    { label: 'Client ID', value: promoteClient.clientId || '-' },
+                    { label: 'Status', value: result.status, code: false },
+                    { label: 'Available date', value: promoteClient.availableDate || '-', code: false },
+                    { label: 'Channels', value: promoteClient.channels ?? '-', code: false },
+                    { label: 'Note', value: promoteClient.message || '-', code: false },
+                ],
+            }
         );
         return result;
     }
@@ -518,8 +519,14 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.log(`Promote client ${mobile} status updated to ${status}`);
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                `<b>Promote Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
-                { parseMode: 'HTML' }
+                {
+                    title: 'Promote Client Status Update',
+                    fields: [
+                        { label: 'Mobile', value: mobile },
+                        { label: 'New status', value: status, code: false },
+                        { label: 'Reason', value: message || '-', code: false },
+                    ],
+                }
             ).catch((error) => this.logger.error(`Failed to send promote status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
             return updated;
         } catch (error) {
@@ -527,8 +534,16 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.error(`Failed to update promote client ${mobile} status to ${status}: ${errorMessage}`);
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                `<b>Promote Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage.substring(0, 120)}`,
-                { parseMode: 'HTML' }
+                {
+                    severity: 'error',
+                    title: 'Promote Client Status Update Failed',
+                    fields: [
+                        { label: 'Mobile', value: mobile },
+                        { label: 'Attempted status', value: status, code: false },
+                        { label: 'Reason', value: message || '-', code: false },
+                        { label: 'Error', value: errorMessage.substring(0, 120), code: false },
+                    ],
+                },
             ).catch((notifyError) => this.logger.error(`Failed to send promote status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
             throw error;
         }
@@ -710,7 +725,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             if (deleteResult.deletedCount === 0) {
                 throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
-            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Promote Client\n\nService: ${process.env.serviceName || process.env.clientId || 'unknown'}\nMobile: ${mobile}\nReason: ${message || 'manual removal'}`)}`);
+            await sendBotNotice('notif', {
+                severity: 'warning',
+                title: 'Deleting Promote Client',
+                fields: [
+                    { label: 'Service', value: process.env.serviceName || process.env.clientId || 'unknown' },
+                    { label: 'Mobile', value: mobile },
+                    { label: 'Reason', value: message || 'manual removal', code: false },
+                ],
+            });
         } catch (error) {
             if (error instanceof NotFoundException) throw error;
             const errorDetails = parseError(error);
@@ -985,7 +1008,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         } catch (error) {
             const errMsg = parseError(error, 'checkPromoteClients').message;
             this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
-            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkPromoteClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'checkPromoteClients crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
         } finally {
             this.isWarmupCheckProcessing = false;
         }
@@ -1040,7 +1063,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         } catch (error) {
             const errMsg = parseError(error, 'rotateReadyPromoteClients').message;
             this.logger.error(`Ready promote rotation sweep crashed: ${errMsg}`);
-            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ READY Promote Rotation CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'READY Promote Rotation crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             return false;
         } finally {
             this.readyRotationInProgress = false;
@@ -1211,7 +1234,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             } catch (error) {
                 const errMsg = parseError(error, 'addNewUserstoPromoteClientsDynamic').message;
                 this.logger.error(`Dynamic promote enrollment failed: ${errMsg}`);
-                try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ Promote Enrollment Failed\n\n${errMsg}`)}`); } catch { /* best effort */ }
+                try { await sendBotNotice('notif', { severity: 'warning', title: 'Promote Enrollment failed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             }
         }
 
@@ -1316,17 +1339,18 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                [
-                    '<b>Promote Client Enrolled</b>',
-                    '',
-                    `<b>Client ID:</b> ${targetClientId}`,
-                    `<b>Mobile:</b> ${document.mobile}`,
-                    `<b>Available Date:</b> ${targetAvailableDate}`,
-                    `<b>Channels:</b> ${channels.ids.length}`,
-                    `<b>Warmup Phase:</b> ${WarmupPhase.ENROLLED}`,
-                    `<b>Source TG ID:</b> ${document.tgId}`,
-                ].join('\n'),
-                { parseMode: 'HTML' }
+                {
+                    severity: 'success',
+                    title: 'Promote Client Enrolled',
+                    fields: [
+                        { label: 'Client ID', value: targetClientId },
+                        { label: 'Mobile', value: document.mobile },
+                        { label: 'Available date', value: targetAvailableDate, code: false },
+                        { label: 'Channels', value: channels.ids.length, code: false },
+                        { label: 'Warmup phase', value: WarmupPhase.ENROLLED, code: false },
+                        { label: 'Source TG ID', value: document.tgId },
+                    ],
+                }
             );
             return true;
         } catch (error: unknown) {
@@ -1577,43 +1601,22 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         createdEntries: string[],
     ): Promise<void> {
         const distribution = await this.getPromoteClientDistribution();
-        const lines = distribution.distributionPerClient
-            .sort((a, b) => a.clientId.localeCompare(b.clientId))
-            .map((item) =>
-                `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
-            );
-        const capLines = (entries: string[]): string[] => {
-            const capped = entries.slice(0, 10);
-            if (entries.length > 10) capped.push(`(+${entries.length - 10} more)`);
-            return capped;
-        };
-        const updatedLines = updatedEntries.length > 0
-            ? ['UpdatedThisRun:', ...capLines(updatedEntries.map((entry) => `- ${entry}`)), '']
-            : ['UpdatedThisRun: none', ''];
-        const createdLines = createdEntries.length > 0
-            ? ['CreatedThisRunDetails:', ...capLines(createdEntries.map((entry) => `- ${entry}`)), '']
-            : ['CreatedThisRunDetails: none', ''];
-
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            [
-                '<b>Promote Client Check Summary</b>',
-                '',
-                `<b>Active:</b> ${distribution.activePromoteClients}`,
-                `<b>Inactive:</b> ${distribution.inactivePromoteClients}`,
-                `<b>Unassigned:</b> ${distribution.unassignedPromoteClients}`,
-                `<b>Updates Applied:</b> ${totalUpdates}`,
-                `<b>Created This Run:</b> ${createdCount}`,
-                `<b>Attempted Creates:</b> ${attemptedCount}`,
-                `<b>Total Needed:</b> ${distribution.summary.totalPromoteClientsNeeded}`,
-                `<b>Clients Needing More:</b> ${distribution.summary.clientsNeedingPromoteClients}`,
-                '',
-                ...updatedLines,
-                ...createdLines,
-                '<b>Per Client Summary:</b>',
-                ...lines,
-            ].join('\n'),
-            { parseMode: 'HTML' }
+            buildCheckSummaryNotification({
+                kind: 'Promote',
+                active: distribution.activePromoteClients,
+                inactive: distribution.inactivePromoteClients,
+                unassigned: distribution.unassignedPromoteClients,
+                totalUpdates,
+                createdCount,
+                attemptedCount,
+                totalNeeded: distribution.summary.totalPromoteClientsNeeded,
+                clientsNeedingMore: distribution.summary.clientsNeedingPromoteClients,
+                perClient: distribution.distributionPerClient,
+                updatedEntries,
+                createdEntries,
+            }),
         );
     }
 

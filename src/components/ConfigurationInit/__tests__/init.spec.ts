@@ -3,11 +3,11 @@ import { Connection, Model } from 'mongoose';
 import { startMongo, stopMongo, MongoTestContext } from '../../__tests__/api-test-helpers';
 
 // Mock the network helper (true external) before importing the service.
-jest.mock('../../../utils/fetchWithTimeout', () => ({
-    fetchWithTimeout: jest.fn().mockResolvedValue(undefined),
+jest.mock('../../../utils/bot-notice', () => ({
+    sendBotNotice: jest.fn().mockResolvedValue({ sent: true }),
 }));
 
-import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
+import { sendBotNotice as fetchWithTimeout } from '../../../utils/bot-notice';
 import { ConfigurationService } from '../init.service';
 import { ConfigurationController } from '../init.controller';
 import { ConfigurationSchema, Configuration } from '../configuration.schema';

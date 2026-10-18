@@ -364,7 +364,7 @@ describe('BotsService - send by botId (executeSend* paths)', () => {
   test('sendMessageByBotId success → stats incremented', async () => {
     const bot = await seedBot();
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
-    const ok = await service.sendMessageByBotId(bot._id.toString(), 'hello', { parseMode: 'HTML' });
+    const ok = await service.sendMessageByBotId(bot._id.toString(), { title: 'hello' });
     expect(ok).toBe(true);
     expect(mockedAxios.post).toHaveBeenCalled();
   });
@@ -372,21 +372,21 @@ describe('BotsService - send by botId (executeSend* paths)', () => {
   test('sendMessageByBotId with allowServiceName=false', async () => {
     const bot = await seedBot();
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
-    const ok = await service.sendMessageByBotId(bot._id.toString(), 'plain', undefined, false);
+    const ok = await service.sendMessageByBotId(bot._id.toString(), { title: 'plain' }, undefined, false);
     expect(ok).toBe(true);
   });
 
   test('executeSendMessage returns false when ok=false (logs description)', async () => {
     const bot = await seedBot();
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: false, description: 'bad chat' }));
-    const ok = await service.sendMessageByBotId(bot._id.toString(), 'hi');
+    const ok = await service.sendMessageByBotId(bot._id.toString(), { title: 'hi' });
     expect(ok).toBe(false);
   });
 
   test('executeSendMessage returns false when axios throws', async () => {
     const bot = await seedBot();
     mockedAxios.post.mockRejectedValue(new Error('boom'));
-    const ok = await service.sendMessageByBotId(bot._id.toString(), 'hi');
+    const ok = await service.sendMessageByBotId(bot._id.toString(), { title: 'hi' });
     expect(ok).toBe(false);
   });
 
@@ -474,7 +474,7 @@ describe('BotsService - send by botId (executeSend* paths)', () => {
     expect(await service.sendVoiceByBotId(id, 'http://x/voice.ogg')).toBe(false);
     expect(await service.sendAnimationByBotId(id, 'http://x/anim.gif')).toBe(false);
     expect(await service.sendStickerByBotId(id, 'http://x/s.webp')).toBe(false);
-    expect(await service.sendMessageByBotId(id, 'hi')).toBe(false);
+    expect(await service.sendMessageByBotId(id, { title: 'hi' })).toBe(false);
 
     // No stats persisted because every send failed.
     const persisted = await model.findById(bot._id);
@@ -530,7 +530,7 @@ describe('BotsService - media group', () => {
 
 describe('BotsService - sendByCategoryWithFailover', () => {
   test('no bots in category → false', async () => {
-    const ok = await service.sendMessageByCategory(ChannelCategory.SAVED_MESSAGES, 'hi');
+    const ok = await service.sendMessageByCategory(ChannelCategory.SAVED_MESSAGES, { title: 'hi' });
     expect(ok).toBe(false);
   });
 
@@ -538,7 +538,7 @@ describe('BotsService - sendByCategoryWithFailover', () => {
     await seedBot({ category: ChannelCategory.SAVED_MESSAGES, status: 'inactive', lifecycle: 'pending_admin' });
     await seedBot({ category: ChannelCategory.SAVED_MESSAGES, status: 'inactive', lifecycle: 'dead_token' });
 
-    expect(await service.sendMessageByCategory(ChannelCategory.SAVED_MESSAGES, 'hi')).toBe(false);
+    expect(await service.sendMessageByCategory(ChannelCategory.SAVED_MESSAGES, { title: 'hi' })).toBe(false);
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
@@ -546,7 +546,7 @@ describe('BotsService - sendByCategoryWithFailover', () => {
     await seedBot({ category: ChannelCategory.HTTP_FAILURES });
     await seedBot({ category: ChannelCategory.HTTP_FAILURES });
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: false, description: 'nope' }));
-    const ok = await service.sendMessageByCategory(ChannelCategory.HTTP_FAILURES, 'hi');
+    const ok = await service.sendMessageByCategory(ChannelCategory.HTTP_FAILURES, { title: 'hi' });
     expect(ok).toBe(false);
   });
 
@@ -556,7 +556,7 @@ describe('BotsService - sendByCategoryWithFailover', () => {
     mockedAxios.post
       .mockResolvedValueOnce(axiosOk({ ok: false, description: 'fail' }))
       .mockResolvedValueOnce(axiosOk({ ok: true }));
-    const ok = await service.sendMessageByCategory(ChannelCategory.UNAUTH_CALLS, 'hi');
+    const ok = await service.sendMessageByCategory(ChannelCategory.UNAUTH_CALLS, { title: 'hi' });
     expect(ok).toBe(true);
   });
 
@@ -600,8 +600,8 @@ describe('BotsService - self-healing around bots that cannot reach their channel
     });
     const parseErrorSpy = jest.spyOn(require('../../../utils/parseError'), 'parseError');
 
-    expect(await service.sendMessageByCategory(ChannelCategory.CLIENT_UPDATES, 'one')).toBe(true);
-    expect(await service.sendMessageByCategory(ChannelCategory.CLIENT_UPDATES, 'two')).toBe(true);
+    expect(await service.sendMessageByCategory(ChannelCategory.CLIENT_UPDATES, { title: 'one' })).toBe(true);
+    expect(await service.sendMessageByCategory(ChannelCategory.CLIENT_UPDATES, { title: 'two' })).toBe(true);
 
     const tried = mockedAxios.post.mock.calls.map(([url]) => String(url).includes('bottok-gone/') ? 'gone' : 'ok');
     expect(tried).toEqual(['gone', 'ok', 'ok']);
@@ -949,7 +949,7 @@ describe('BotsService - flushPendingStats', () => {
     }
     cache.set('pendingStats', pending);
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
-    const ok = await service.sendMessageByBotId(bot._id.toString(), 'm');
+    const ok = await service.sendMessageByBotId(bot._id.toString(), { title: 'm' });
     expect(ok).toBe(true);
     // After forced flush the real bot's stat should be persisted to DB.
     const persisted = await model.findById(bot._id);
@@ -1593,5 +1593,134 @@ describe('BotsService - reconcilePendingAdminBotsNow (promote existing pending b
 
     await service.reconcilePendingAdminBotsNow({ pendingLimit: 50 });
     expect(await model.countDocuments({ lifecycle: 'active_verified' })).toBe(10);
+  });
+});
+
+describe('BotsService - Bot API rich messages', () => {
+  const urlOf = (call: any[]) => String(call[0]);
+  const bodyOf = (call: any[]) => call[1] as any;
+  const httpError = (status: number, description = 'Bad Request: x') => Object.assign(new Error(description), { response: { status, data: { ok: false, description } } });
+
+  test('a notice is sent with sendRichMessage (rich_message.html, clientId in the heading)', async () => {
+    const bot = await seedBot({ channelId: '-100777' });
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'Deploy done', fields: [{ label: 'Status', value: 'ok', code: false }, { label: 'Count', value: 3 }] })).toBe(true);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    const call = mockedAxios.post.mock.calls[0];
+    expect(urlOf(call)).toBe(`https://api.telegram.org/bot${bot.token}/sendRichMessage`);
+    expect(bodyOf(call).chat_id).toBe('-100777');
+    expect(bodyOf(call).text).toBeUndefined();
+    const html: string = bodyOf(call).rich_message.html;
+    expect(html).toContain('<h3>ℹ️ TESTCLIENT · Deploy done</h3>');
+    expect(html).toContain('<table bordered striped compact>');
+    expect(html).toContain('<td><b>Status</b></td><td>ok</td>');
+  });
+
+  test('a structured notice renders tables, details and URL buttons', async () => {
+    const bot = await seedBot();
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    await service.sendMessageByBotId(bot._id.toString(), {
+      severity: 'error',
+      title: 'Boom',
+      fields: [{ label: 'Mobile', value: '911234567890' }],
+      tables: [{ columns: ['A', 'B'], rows: [[1, 2]], numeric: [1] }],
+      details: 'stack line',
+      buttons: [{ text: '🔗 Open', url: 'https://example.com/x' }],
+    });
+    const html: string = bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html;
+    expect(html).toContain('<h3>❌ TESTCLIENT · Boom</h3>');
+    expect(html).toContain('<code>911234567890</code>');
+    expect(html).toContain('<th>A</th><th align="right">B</th>');
+    expect(html).toContain('<details><summary>Details</summary><pre>stack line</pre></details>');
+    expect(html).toContain('<tg-button type="url" style="primary" url="https://example.com/x">Open</tg-button>');
+  });
+
+  test('HTTP 400 on sendRichMessage falls back to the classic sendMessage with the same bot', async () => {
+    const bot = await seedBot();
+    mockedAxios.post
+      .mockRejectedValueOnce(httpError(400, "Bad Request: can't parse rich message"))
+      .mockResolvedValueOnce(axiosOk({ ok: true }));
+    expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'T', fields: [{ label: 'K', value: 'v' }], buttons: [{ text: 'Go', url: 'https://e.co' }] })).toBe(true);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+    expect(urlOf(mockedAxios.post.mock.calls[0])).toMatch(/\/sendRichMessage$/);
+    expect(urlOf(mockedAxios.post.mock.calls[1])).toBe(`https://api.telegram.org/bot${bot.token}/sendMessage`);
+    const classic = bodyOf(mockedAxios.post.mock.calls[1]);
+    expect(classic.parse_mode).toBe('HTML');
+    expect(classic.text).toContain('TESTCLIENT · T');
+    expect(classic.text).toContain('<b>K:</b> v');
+    expect(classic.reply_markup).toEqual({ inline_keyboard: [[{ text: 'Go', url: 'https://e.co' }]] });
+  });
+
+  test('HTTP 404 also falls back, and the classic text keeps the clientId prefix', async () => {
+    const bot = await seedBot();
+    mockedAxios.post
+      .mockRejectedValueOnce(httpError(404, 'Not Found'))
+      .mockResolvedValueOnce(axiosOk({ ok: true }));
+    expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'Hi' })).toBe(true);
+    const classic = bodyOf(mockedAxios.post.mock.calls[1]);
+    expect(classic.text).toBe('<b>ℹ️ TESTCLIENT · Hi</b>');
+    expect(classic.parse_mode).toBe('HTML');
+  });
+
+  test('a network error on sendRichMessage is a single attempt (no second send)', async () => {
+    const bot = await seedBot();
+    mockedAxios.post.mockRejectedValue(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+    expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'hi' })).toBe(false);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+  });
+
+  test('429 on sendRichMessage does not fall back classically; category failover moves to the next bot', async () => {
+    await seedBot({ category: ChannelCategory.UNAUTH_CALLS, lastUsed: new Date(1000) });
+    await seedBot({ category: ChannelCategory.UNAUTH_CALLS, lastUsed: new Date(2000) });
+    mockedAxios.post
+      .mockRejectedValueOnce(httpError(429, 'Too Many Requests: retry after 5'))
+      .mockResolvedValueOnce(axiosOk({ ok: true }));
+    expect(await service.sendMessageByCategory(ChannelCategory.UNAUTH_CALLS, { title: 'hi' })).toBe(true);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.post.mock.calls.map(urlOf).every(u => u.endsWith('/sendRichMessage'))).toBe(true);
+  });
+
+  test('allowServiceName=false drops the clientId prefix but is still a rich message', async () => {
+    const bot = await seedBot();
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    await service.sendMessageByBotId(bot._id.toString(), { title: 'Account Login' }, undefined, false);
+    expect(urlOf(mockedAxios.post.mock.calls[0])).toMatch(/\/sendRichMessage$/);
+    expect(bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html).toContain('<h3>ℹ️ Account Login</h3>');
+  });
+
+  test('an ok:false answer to sendRichMessage is a failure with no classic resend', async () => {
+    const bot = await seedBot();
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: false, description: 'nope' }));
+    expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'hi' })).toBe(false);
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+  });
+
+  test('media captions stay classic (no sendRichMessage)', async () => {
+    const bot = await seedBot();
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    await service.sendPhotoByBotId(bot._id.toString(), 'http://x/p.jpg', { caption: 'cap' });
+    expect(urlOf(mockedAxios.post.mock.calls[0])).toMatch(/\/sendPhoto$/);
+  });
+
+  test('disableNotification / protectContent / reply are carried in the rich body', async () => {
+    const bot = await seedBot();
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    await service.sendMessageByBotId(bot._id.toString(), { title: 'hi' }, { disableNotification: true, protectContent: true, replyToMessageId: 9 });
+    const body = bodyOf(mockedAxios.post.mock.calls[0]);
+    expect(body.disable_notification).toBe(true);
+    expect(body.protect_content).toBe(true);
+    expect(body.reply_parameters).toEqual({ message_id: 9, allow_sending_without_reply: false });
+  });
+
+  test('bot health summary is a counts table plus a failures table', async () => {
+    const bot = await seedBot({ category: ChannelCategory.ACCOUNT_NOTIFICATIONS });
+    mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
+    await (service as any).sendHealthSummary({ checked: 5, alive: 3, dead: 2, unknown: 0, replaced: 1, toppedUp: 0, deadRemaining: 1, failures: ['a failed', 'b failed'] });
+    const html: string = bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html;
+    expect(html).toContain('Bot Health Check</h3>');
+    expect(html).toContain('<th align="right">Checked</th>');
+    expect(html).toContain('<caption>Failures</caption>');
+    expect(html).toContain('a failed');
+    void bot;
   });
 });

@@ -29,8 +29,8 @@ import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { parseError } from '../../utils/parseError';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { buildCheckSummaryNotification } from '../shared/check-summary-notification';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import TelegramManager from '../Telegram/TelegramManager';
 import { SessionService } from '../session-manager';
@@ -560,17 +560,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            [
-                '<b>Buffer Client Created</b>',
-                '',
-                `<b>Mobile:</b> ${canonicalMobile}`,
-                `<b>Client ID:</b> ${bufferClient.clientId || '-'}`,
-                `<b>Status:</b> ${result.status}`,
-                `<b>Available Date:</b> ${bufferClient.availableDate || '-'}`,
-                `<b>Channels:</b> ${bufferClient.channels ?? '-'}`,
-                `<b>Message:</b> ${bufferClient.message || '-'}`,
-            ].join('\n'),
-            { parseMode: 'HTML' }
+            {
+                severity: 'success',
+                title: 'Buffer Client Created',
+                fields: [
+                    { label: 'Mobile', value: canonicalMobile },
+                    { label: 'Client ID', value: bufferClient.clientId || '-' },
+                    { label: 'Status', value: result.status, code: false },
+                    { label: 'Available date', value: bufferClient.availableDate || '-', code: false },
+                    { label: 'Channels', value: bufferClient.channels ?? '-', code: false },
+                    { label: 'Note', value: bufferClient.message || '-', code: false },
+                ],
+            }
         );
         return result;
     }
@@ -650,7 +651,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
             }
             this.logger.log(`Removing BufferClient with mobile: ${canonicalMobile}`);
-            await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Deleting Buffer Client\n\nMobile: ${canonicalMobile}\nReason: ${message || 'manual removal'}`)}`);
+            await sendBotNotice('notif', {
+                severity: 'warning',
+                title: 'Deleting Buffer Client',
+                fields: [
+                    { label: 'Mobile', value: canonicalMobile },
+                    { label: 'Reason', value: message || 'manual removal', code: false },
+                ],
+            });
             await this.bufferClientModel.deleteOne({ mobile: canonicalMobile }).exec();
         } catch (error) {
             const errorDetails = parseError(error, `failed to delete BufferClient: ${mobile}`);
@@ -702,8 +710,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.log(`Buffer client ${mobile} status updated to ${status}`);
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                `<b>Buffer Client Status Update</b>\n\n<b>Mobile:</b> ${mobile}\n<b>New Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}`,
-                { parseMode: 'HTML' }
+                {
+                    title: 'Buffer Client Status Update',
+                    fields: [
+                        { label: 'Mobile', value: mobile },
+                        { label: 'New status', value: status, code: false },
+                        { label: 'Reason', value: message || '-', code: false },
+                    ],
+                }
             ).catch((error) => this.logger.error(`Failed to send buffer status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
             return updated;
         } catch (error) {
@@ -711,8 +725,16 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                `<b>Buffer Client Status Update Failed</b>\n\n<b>Mobile:</b> ${mobile}\n<b>Attempted Status:</b> ${status}\n<b>Reason:</b> ${message || '-'}\n<b>Error:</b> ${errorMessage.substring(0, 120)}`,
-                { parseMode: 'HTML' }
+                {
+                    severity: 'error',
+                    title: 'Buffer Client Status Update Failed',
+                    fields: [
+                        { label: 'Mobile', value: mobile },
+                        { label: 'Attempted status', value: status, code: false },
+                        { label: 'Reason', value: message || '-', code: false },
+                        { label: 'Error', value: errorMessage.substring(0, 120), code: false },
+                    ],
+                },
             ).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
             throw error;
         }
@@ -755,14 +777,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             // transaction callback may retry, which would duplicate the notification.
             if (!session) await this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                [
-                    '<b>Buffer Primary Reassigned</b>',
-                    '',
-                    `<b>Client ID:</b> ${clientId}`,
-                    `<b>Primary Mobile:</b> ${mobile}`,
-                    `<b>Revoked In-Use:</b> ${revoked.modifiedCount}`,
-                ].join('\n'),
-                { parseMode: 'HTML' },
+                {
+                    severity: 'warning',
+                    title: 'Buffer Primary Reassigned',
+                    fields: [
+                        { label: 'Client ID', value: clientId },
+                        { label: 'Primary mobile', value: mobile },
+                        { label: 'Revoked in-use', value: revoked.modifiedCount, code: false },
+                    ],
+                },
             );
         }
 
@@ -1251,7 +1274,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         } catch (error) {
             const errMsg = parseError(error, 'checkBufferClients').message;
             this.logger.error(`checkBufferClients crashed: ${errMsg}`);
-            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ checkBufferClients CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'checkBufferClients crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
         } finally {
             this.isWarmupCheckProcessing = false;
         }
@@ -1312,7 +1335,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         } catch (error) {
             const errMsg = parseError(error, 'rotateReadyBufferClients').message;
             this.logger.error(`Ready buffer rotation sweep crashed: ${errMsg}`);
-            try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ READY Buffer Rotation CRASHED\n\n${errMsg}`)}`); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'READY Buffer Rotation crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             return false;
         } finally {
             this.readyRotationInProgress = false;
@@ -1502,7 +1525,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             } catch (error) {
                 const errMsg = parseError(error, 'addNewUserstoBufferClientsDynamic').message;
                 this.logger.error(`Dynamic buffer enrollment failed: ${errMsg}`);
-                try { await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`⚠️ Buffer Enrollment Failed\n\n${errMsg}`)}`); } catch { /* best effort */ }
+                try { await sendBotNotice('notif', { severity: 'warning', title: 'Buffer Enrollment failed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             }
         }
 
@@ -1744,17 +1767,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
             await this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                [
-                    '<b>Buffer Client Enrolled</b>',
-                    '',
-                    `<b>Client ID:</b> ${targetClientId}`,
-                    `<b>Mobile:</b> ${document.mobile}`,
-                    `<b>Available Date:</b> ${targetAvailableDate}`,
-                    `<b>Channels:</b> ${channels.ids.length}`,
-                    `<b>Warmup Phase:</b> ${WarmupPhase.ENROLLED}`,
-                    `<b>Source TG ID:</b> ${document.tgId}`,
-                ].join('\n'),
-                { parseMode: 'HTML' }
+                {
+                    severity: 'success',
+                    title: 'Buffer Client Enrolled',
+                    fields: [
+                        { label: 'Client ID', value: targetClientId },
+                        { label: 'Mobile', value: document.mobile },
+                        { label: 'Available date', value: targetAvailableDate, code: false },
+                        { label: 'Channels', value: channels.ids.length, code: false },
+                        { label: 'Warmup phase', value: WarmupPhase.ENROLLED, code: false },
+                        { label: 'Source TG ID', value: document.tgId },
+                    ],
+                }
             );
             return true;
         } catch (error: unknown) {
@@ -2034,45 +2058,23 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         createdEntries: string[],
     ): Promise<void> {
         const distribution = await this.getBufferClientDistribution();
-        const capLines = (entries: string[]): string[] => {
-            const capped = entries.slice(0, 10);
-            if (entries.length > 10) capped.push(`(+${entries.length - 10} more)`);
-            return capped;
-        };
-        const lines = capLines(
-            distribution.distributionPerClient
-                .sort((a, b) => a.clientId.localeCompare(b.clientId))
-                .map((item) =>
-                    `${item.clientId}: active=${item.activeCount}, assigned=${item.assignedCount}, inactive=${item.inactiveCount}, needed=${item.needed}, neverUsed=${item.neverUsed}, used24h=${item.usedInLast24Hours}`,
-                ),
-        );
-        const updatedLines = updatedEntries.length > 0
-            ? ['UpdatedThisRun:', ...capLines(updatedEntries.map((entry) => `- ${entry}`)), '']
-            : ['UpdatedThisRun: none', ''];
-        const createdLines = createdEntries.length > 0
-            ? ['CreatedThisRunDetails:', ...capLines(createdEntries.map((entry) => `- ${entry}`)), '']
-            : ['CreatedThisRunDetails: none', ''];
-
         await this.botsService.sendMessageByCategory(
             ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            [
-                '<b>Buffer Client Check Summary</b>',
-                '',
-                `<b>Active:</b> ${distribution.activeBufferClients}`,
-                `<b>Inactive:</b> ${distribution.inactiveBufferClients}`,
-                `<b>Unassigned:</b> ${distribution.unassignedBufferClients}`,
-                `<b>Updates Applied:</b> ${totalUpdates}`,
-                `<b>Created This Run:</b> ${createdCount}`,
-                `<b>Attempted Creates:</b> ${attemptedCount}`,
-                `<b>Total Needed:</b> ${distribution.summary.totalBufferClientsNeeded}`,
-                `<b>Clients Needing More:</b> ${distribution.summary.clientsNeedingBufferClients}`,
-                '',
-                ...updatedLines,
-                ...createdLines,
-                '<b>Per Client Summary:</b>',
-                ...lines,
-            ].join('\n'),
-            { parseMode: 'HTML' }
+            buildCheckSummaryNotification({
+                kind: 'Buffer',
+                active: distribution.activeBufferClients,
+                inactive: distribution.inactiveBufferClients,
+                unassigned: distribution.unassignedBufferClients,
+                totalUpdates,
+                createdCount,
+                attemptedCount,
+                totalNeeded: distribution.summary.totalBufferClientsNeeded,
+                clientsNeedingMore: distribution.summary.clientsNeedingBufferClients,
+                perClient: distribution.distributionPerClient,
+                updatedEntries,
+                createdEntries,
+                perClientLimit: 10,
+            }),
         );
     }
 }

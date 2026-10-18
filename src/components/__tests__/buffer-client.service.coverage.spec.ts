@@ -34,8 +34,8 @@ jest.mock('telegram/Helpers', () => ({
 jest.mock('../../utils/fetchWithTimeout', () => ({
     fetchWithTimeout: jest.fn(() => Promise.resolve({ ok: true })),
 }));
-jest.mock('../../utils/logbots', () => ({
-    notifbot: jest.fn(() => 'https://example.test/mock-bot'),
+jest.mock('../../utils/bot-notice', () => ({
+    sendBotNotice: jest.fn(() => Promise.resolve({ sent: true })),
 }));
 jest.mock('../../utils/isPermanentError', () => ({
     __esModule: true,
@@ -917,7 +917,7 @@ describe('BufferClientService coverage', () => {
             expect(after!.sessionRotatedAt ?? null).toBeNull();
             // The real summary notification was sent through the externally-mocked bots service.
             const summaryCall = botsService.sendMessageByCategory.mock.calls
-                .find((c) => typeof c[1] === 'string' && c[1].includes('Buffer Client Check Summary'));
+                .find((c) => c[1]?.title === 'Buffer Client Check Summary');
             expect(summaryCall).toBeDefined();
             // Guard cleared on completion.
             expect((service as any).checkingBufferClientsSince).toBe(0);
@@ -1256,7 +1256,7 @@ describe('BufferClientService coverage', () => {
             const old = await service.findOne('15552300010');
             expect(old!.inUse).toBe(false);
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
-                'ACCOUNT_NOTIFICATIONS', expect.stringContaining('Buffer Primary Reassigned'), expect.anything(),
+                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ title: 'Buffer Primary Reassigned' }),
             );
         });
     });
@@ -1267,7 +1267,7 @@ describe('BufferClientService coverage', () => {
         it('rethrows and notifies on update failure', async () => {
             await expect(service.updateStatus('15559990001', 'inactive', 'x')).rejects.toThrow();
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
-                'ACCOUNT_NOTIFICATIONS', expect.stringContaining('Failed'), expect.anything(),
+                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ severity: 'error', title: expect.stringContaining('Failed') }),
             );
         });
 
@@ -1315,8 +1315,9 @@ describe('BufferClientService coverage', () => {
             await service.create(makeBufferClientData({ mobile: '15559990010', status: 'active', clientId: 'test-client-1' }));
             await (service as any).sendBufferCheckSummaryNotification(2, 1, 1, ['a | b'], ['c | d']);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1]).toContain('Buffer Client Check Summary');
-            expect(lastCall[1]).toContain('UpdatedThisRun');
+            expect(lastCall[1].title).toBe('Buffer Client Check Summary');
+            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Per client', 'Updated this run', 'Created this run']));
+            expect(lastCall[1].tables.find((t: any) => t.title === 'Updated this run').rows).toEqual([[1, 'a | b']]);
         });
 
         it('sorts multiple clients by clientId and reports none when nothing ran', async () => {
@@ -1333,10 +1334,11 @@ describe('BufferClientService coverage', () => {
             ]);
             await (service as any).sendBufferCheckSummaryNotification(0, 0, 0, [], []);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1]).toContain('UpdatedThisRun: none');
-            expect(lastCall[1]).toContain('CreatedThisRunDetails: none');
+            // No entry tables when nothing ran
+            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual([expect.stringContaining('Per client')]);
             // alpha-client sorts before zeta-client in the per-client summary
-            expect(lastCall[1].indexOf('alpha-client')).toBeLessThan(lastCall[1].indexOf('zeta-client'));
+            const names = lastCall[1].tables[0].rows.map((r: unknown[]) => r[0]);
+            expect(names.indexOf('alpha-client')).toBeLessThan(names.indexOf('zeta-client'));
         });
     });
 
@@ -1614,10 +1616,10 @@ describe('BufferClientService coverage', () => {
                 calculationReason: 'deficit', priority: 5, replenishmentWindowNeeds: [], windowNeeds: [],
             });
             jest.spyOn(service, 'addNewUserstoBufferClientsDynamic').mockRejectedValue(new Error('enroll boom'));
-            const { fetchWithTimeout } = require('../../utils/fetchWithTimeout');
+            const { sendBotNotice } = require('../../utils/bot-notice');
             await service.checkBufferClients();
-            const failCall = (fetchWithTimeout as jest.Mock).mock.calls
-                .find((c: any[]) => typeof c[0] === 'string' && c[0].includes('Buffer%20Enrollment%20Failed'));
+            const failCall = (sendBotNotice as jest.Mock).mock.calls
+                .find((c: any[]) => c[1]?.title === 'Buffer Enrollment failed');
             expect(failCall).toBeDefined();
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });

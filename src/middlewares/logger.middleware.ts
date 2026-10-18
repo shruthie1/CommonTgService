@@ -39,8 +39,17 @@ export class LoggerMiddleware implements NestMiddleware {
         if (statusCode >= 500) {
           botsService.sendMessageByCategory(
             ChannelCategory.HTTP_FAILURES,
-            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
-            { parseMode: 'HTML' }
+            {
+              severity: statusCode >= 500 ? 'error' : 'warning',
+              title: `HTTP ${statusCode}`,
+              fields: [
+                { label: 'Path', value: safeOriginalUrl, code: false },
+                { label: 'Method', value: method },
+                { label: 'Status', value: statusCode, code: false },
+                { label: 'IP', value: ip },
+                { label: 'Duration', value: durationStr, code: false },
+              ],
+            }
           );
           this.logger.error(
             `${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
@@ -48,8 +57,17 @@ export class LoggerMiddleware implements NestMiddleware {
         } else if (statusCode >= 400) {
           botsService.sendMessageByCategory(
             ChannelCategory.HTTP_FAILURES,
-            `<b>HTTP ${statusCode}</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Method:</b> ${method}\n<b>IP:</b> ${ip}\n<b>Duration:</b> ${durationStr}`,
-            { parseMode: 'HTML' }
+            {
+              severity: statusCode >= 500 ? 'error' : 'warning',
+              title: `HTTP ${statusCode}`,
+              fields: [
+                { label: 'Path', value: safeOriginalUrl, code: false },
+                { label: 'Method', value: method },
+                { label: 'Status', value: statusCode, code: false },
+                { label: 'IP', value: ip },
+                { label: 'Duration', value: durationStr, code: false },
+              ],
+            }
           );
           this.logger.warn(
             `${method} ${safeOriginalUrl} ${ip} || StatusCode: ${statusCode} || Duration: ${durationStr}`,
@@ -74,8 +92,13 @@ export class LoggerMiddleware implements NestMiddleware {
         }
         botsService.sendMessageByCategory(
           ChannelCategory.HTTP_FAILURES,
-          `<b>HTTP Request Error</b>\n\n<b>Path:</b> ${safeOriginalUrl}\n<b>Error:</b> ${errorDetails.message?.substring(0, 200)}`,
-          { parseMode: 'HTML' }
+          {
+            severity: 'error',
+            title: 'HTTP Request Error',
+            fields: [{ label: 'Path', value: safeOriginalUrl, code: false }],
+            details: errorDetails.message?.substring(0, 200),
+            detailsTitle: 'Error message',
+          }
         );
       });
     } else {

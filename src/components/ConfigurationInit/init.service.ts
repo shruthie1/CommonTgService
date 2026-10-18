@@ -2,8 +2,7 @@ import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Configuration } from './configuration.schema';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
-import { notifbot } from '../../utils/logbots';
+import { sendBotNotice } from '../../utils/bot-notice';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../../utils';
 
@@ -39,22 +38,23 @@ export class ConfigurationService implements OnModuleInit {
     }
 
     private async notifyStart() {
-        if (process.env.LOCAL_SERVER) {
-            this.logger.log('Skipping configuration startup notification in local mode');
-            return;
-        }
         try {
             const clientId = process.env.clientId || this.configService.get('clientId');
             if (!clientId) {
                 this.logger.warn('No clientId found in environment or configuration');
                 return;
             }
+            if (process.env.LOCAL_SERVER) {
+                this.logger.log('Skipping configuration startup notification in local mode');
+                return;
+            }
             // Startup ping is best-effort: disable retries and notifications so a
             // failed/cancelled send doesn't loop 3x or spam the failures channel.
-            await fetchWithTimeout(
-                `${notifbot()}&text=${encodeURIComponent(`Service started: ${clientId}`)}`,
-                { retryConfig: { maxRetries: 0 }, notificationConfig: { enabled: false } },
-            );
+            await sendBotNotice('notif', {
+                severity: 'success',
+                title: 'Service started',
+                fields: [{ label: 'Client ID', value: clientId }],
+            });
         } catch (error) {
             this.logger.warn('Failed to send start notification', error);
         }

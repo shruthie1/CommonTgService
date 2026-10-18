@@ -14,6 +14,8 @@ import { UsersService } from '../users/users.service';
 // ChannelCategory lives in ./channel-category.enum to break a circular import
 // (create-bot.dto -> bots.service -> TelegramService -> ... -> create-bot.dto).
 import { ChannelCategory } from './channel-category.enum';
+import { formatClassicNotificationHtml, formatRichMessageHtml } from '../../utils/rich-message';
+import type { RichNotificationInput } from '../../utils/rich-message';
 
 /** Minimal fields the replacement flow needs from a dead bot (plain, not a Mongoose doc). */
 export interface DeadBotInfo {
@@ -687,11 +689,16 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         console.error(JSON.stringify({ event: 'bot_category_unhealthy', category, requiredLifecycle: 'active_verified' }));
         // Avoid recursive notification attempts if the notification category itself is unhealthy.
         if (category !== ChannelCategory.ACCOUNT_NOTIFICATIONS) {
-            await this.notify(`<b>Bot category unhealthy</b>\nCategory: ${category}\nNo verified active bot is eligible to send. Repair is required.`);
+            await this.notify({
+                severity: 'error',
+                title: 'Bot category unhealthy',
+                summary: 'No verified active bot is eligible to send. Repair is required.',
+                fields: [{ label: 'Category', value: category }],
+            });
         }
     }
 
-    async sendMessageByCategory(category: ChannelCategory, message: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
+    async sendMessageByCategory(category: ChannelCategory, message: RichNotificationInput, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
         return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options, allowServiceName);
     }
 
@@ -727,7 +734,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return this.sendByCategoryWithFailover(category, this.sendMediaGroupByBotId, media, options);
     }
 
-    async sendMessageByBotId(botId: string, message: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
+    async sendMessageByBotId(botId: string, message: RichNotificationInput, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
         const bot = await this.getBotById(botId);
         const success = await this.executeSendMessage(bot, message, options, allowServiceName);
         if (success) {
@@ -808,25 +815,62 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return success;
     }
 
-    private async executeSendMessage(bot: BotDocument, text: string, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
+    /** Rich-message HTML for this notice. */
+    private richMessageHtml(message: RichNotificationInput, allowServiceName: boolean): string {
+        const source = message.source ?? (allowServiceName ? process.env.clientId ?? '' : '');
+        return formatRichMessageHtml(message, { prefix: source.toUpperCase() || undefined });
+    }
+
+    /** Classic sendMessage body: the fallback when Telegram refuses the rich payload. */
+    private classicMessageBody(bot: BotDocument, message: RichNotificationInput, options: SendMessageOptions | undefined, allowServiceName: boolean): Record<string, unknown> {
+        const buttons = (message.buttons ?? []).filter(b => b.url);
+        return {
+            chat_id: bot.channelId,
+            text: formatClassicNotificationHtml(message, allowServiceName ? process.env.clientId?.toUpperCase() : undefined),
+            parse_mode: 'HTML',
+            disable_notification: options?.disableNotification,
+            reply_to_message_id: options?.replyToMessageId,
+            allow_sending_without_reply: options?.allowSendingWithoutReply,
+            protect_content: options?.protectContent,
+            reply_markup: buttons.length ? { inline_keyboard: [buttons.map(b => ({ text: b.text, url: b.url }))] } : undefined,
+        };
+    }
+
+    private async executeSendMessage(bot: BotDocument, text: RichNotificationInput, options?: SendMessageOptions, allowServiceName: boolean = true): Promise<boolean> {
         if (!this.isSelectable(bot)) {
             console.warn(`[BotHealth] refused direct send through non-verified bot @${bot.username}`);
             return false;
         }
+        const body: Record<string, unknown> = {
+            chat_id: bot.channelId,
+            rich_message: { html: this.richMessageHtml(text, allowServiceName) },
+        };
+        if (options?.disableNotification) body.disable_notification = true;
+        if (options?.protectContent) body.protect_content = true;
+        if (options?.replyToMessageId) {
+            body.reply_parameters = { message_id: options.replyToMessageId, allow_sending_without_reply: options.allowSendingWithoutReply === true };
+        }
+        try {
+            const response = await axios.post(`https://api.telegram.org/bot${bot.token}/sendRichMessage`, body, { timeout: 15000 });
+            if (response.data?.ok !== true) {
+                console.error(`Telegram API error for sendRichMessage with bot ${bot.username}:`, response.data?.description);
+            }
+            return response.data?.ok === true;
+        } catch (error) {
+            if (this.noteUnreachableSend(bot, error)) return false;
+            const status = Number((error as { response?: { status?: number } })?.response?.status);
+            // Only a refused payload (400/404) is resent classically with the same bot; rate limits (429)
+            // return false so category failover moves on, and network errors stay a single attempt.
+            if (status !== 400 && status !== 404) {
+                parseError(error, `Failed to execute sendRichMessage for bot ${bot.username}`);
+                return false;
+            }
+            console.warn(`[BotRich] sendRichMessage refused for bot ${bot.username} (${status}); falling back to sendMessage`);
+        }
         try {
             const response = await axios.post(
                 `https://api.telegram.org/bot${bot.token}/sendMessage`,
-                {
-                    chat_id: bot.channelId,
-                    text: `${allowServiceName ? `${process.env.clientId?.toUpperCase()}\n\n${text}` : text}`,
-                    parse_mode: options?.parseMode,
-                    disable_web_page_preview: options?.disableWebPagePreview,
-                    disable_notification: options?.disableNotification,
-                    reply_to_message_id: options?.replyToMessageId,
-                    allow_sending_without_reply: options?.allowSendingWithoutReply,
-                    protect_content: options?.protectContent,
-                    link_preview_options: options?.linkPreviewOptions,
-                },
+                this.classicMessageBody(bot, text, options, allowServiceName),
                 { timeout: 15000 }
             );
             if (!response.data?.ok) {
@@ -1557,7 +1601,17 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 { $set: { repairAttempts: 1, lifecycleReason: `admin setup failed: ${(err?.message || String(err)).slice(0, 180)}`, lifecycleUpdatedAt: new Date(), nextRepairAt: this.nextRepairDate(1), status: 'inactive' } },
             ).exec();
             await this.refreshBotCache();
-            await this.notify(`<b>Bot created but NOT usable (left inactive)</b>\nCategory: ${category}\nNew bot: @${username}\nChannel: ${channelId}\nAction: add it as admin manually, then it self-activates on next health check.\nReason: ${(err?.message || String(err)).substring(0, 120)}`);
+            await this.notify({
+                severity: 'warning',
+                title: 'Bot created but NOT usable',
+                summary: 'Left inactive. Add it as admin manually, then it self-activates on the next health check.',
+                fields: [
+                    { label: 'Category', value: category },
+                    { label: 'New bot', value: `@${username}` },
+                    { label: 'Channel', value: channelId },
+                    { label: 'Reason', value: (err?.message || String(err)).substring(0, 120), code: false },
+                ],
+            });
             console.log(`[BotHealth] provisioned @${username} (${category}) — created but NOT yet admin (inactive)`);
             return { saved, username, active: false };
         }
@@ -1725,7 +1779,16 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 if (!adminMobile) {
                     const msg = `${category}: channel ${channelId} has NO controllable admin — NOT creating bots (would be abandoned). ${liveCount}/${this.minHealthyBotsPerCategory} live; ${reuse.reused} reused. Fix: make a manager account admin of the channel, or re-point the category to a controllable channel.`;
                     topUpFailures.push(msg);
-                    await this.notify(`<b>Bot top-up BLOCKED — uncontrollable channel</b>\nCategory: ${category}\nChannel: ${channelId}\nHealthy: ${liveCount}/${this.minHealthyBotsPerCategory}\nCreation skipped to avoid orphan bots. Add a manager as channel admin, then bots self-heal.`);
+                    await this.notify({
+                        severity: 'warning',
+                        title: 'Bot top-up BLOCKED: uncontrollable channel',
+                        summary: 'Creation skipped to avoid orphan bots. Add a manager as channel admin, then bots self-heal.',
+                        fields: [
+                            { label: 'Category', value: category },
+                            { label: 'Channel', value: channelId },
+                            { label: 'Healthy', value: `${liveCount}/${this.minHealthyBotsPerCategory}`, code: false },
+                        ],
+                    });
                     console.warn(`[BotHealth] ${msg}`);
                     continue;
                 }
@@ -2290,29 +2353,38 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return ordered;
     }
 
-    private async notify(html: string): Promise<void> {
+    private async notify(message: RichNotificationInput): Promise<void> {
         try {
-            await this.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, html, { parseMode: 'HTML' });
+            await this.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, message);
         } catch (err) {
             console.error('[BotHealth] failed to send notification:', err);
         }
     }
 
     private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[]; singleAdmin?: string[]; managerCoverage?: string }): Promise<void> {
-        const lines = [
-            '<b>Bot Health Check</b>',
-            `Checked: ${s.checked} | Alive: ${s.alive} | Dead: ${s.dead} | Unknown: ${s.unknown}`,
-            `Replaced: ${s.replaced} | Topped up: ${s.toppedUp} | Dead remaining: ${s.deadRemaining}`,
-        ];
-        if (s.managerCoverage) lines.push(s.managerCoverage);
-        if (s.singleAdmin?.length) {
-            lines.push(`Only one of our accounts can add bots in: ${s.singleAdmin.join(', ')}`);
-        }
+        const input: RichNotificationInput = {
+            severity: s.failures.length || s.dead > 0 ? 'warning' : 'info',
+            title: 'Bot Health Check',
+            summary: `${s.checked} checked, ${s.alive} alive, ${s.dead} dead`,
+            tables: [{
+                columns: ['Checked', 'Alive', 'Dead', 'Unknown', 'Replaced', 'Topped up', 'Dead remaining'],
+                rows: [[s.checked, s.alive, s.dead, s.unknown, s.replaced, s.toppedUp, s.deadRemaining]],
+                numeric: [0, 1, 2, 3, 4, 5, 6],
+            }],
+            fields: [
+                ...(s.managerCoverage ? [{ label: 'Manager coverage', value: s.managerCoverage, code: false }] : []),
+                ...(s.singleAdmin?.length ? [{ label: 'Single admin in', value: s.singleAdmin.join(', '), code: false }] : []),
+            ],
+        };
         if (s.failures.length) {
-            const shown = s.failures.slice(0, 10).map(f => `• ${f}`);
-            if (s.failures.length > 10) shown.push(`(+${s.failures.length - 10} more)`);
-            lines.push(`<b>Failures:</b>\n${shown.join('\n')}`);
+            const shown = s.failures.slice(0, 10);
+            input.tables!.push({
+                title: s.failures.length > 10 ? `Failures (+${s.failures.length - 10} more)` : 'Failures',
+                columns: ['#', 'Failure'],
+                rows: shown.map((f, i) => [i + 1, f]),
+                numeric: [0],
+            });
         }
-        await this.notify(lines.join('\n'));
+        await this.notify(input);
     }
 }

@@ -30,6 +30,10 @@ jest.mock('../common', () => ({
 
 // ---- mock the bots notification sink ----------------------------------------
 const sendMessageByCategory = jest.fn().mockResolvedValue(undefined);
+// Notifications are structured rich-notice objects; flatten one to text for content assertions.
+const noticeText = (n: any): string => typeof n === 'string'
+    ? n
+    : [n.title, n.summary, ...(n.fields ?? []).map((f: any) => `${f.label}: ${f.value}`), ...[].concat(n.details ?? [])].filter(Boolean).join('\n');
 // Production code reads the sink via tryGetBotsServiceInstance (non-throwing,
 // returns null when unset). Mock both accessors to the same factory.
 jest.mock('../bot.service.instance', () => {
@@ -205,7 +209,7 @@ describe('ERR_CANCELED (our own abort-on-timeout) is retried like any other time
         // affected: it must read as a timeout, not the generic "Attempt 0 failed" wording that
         // ERR_CANCELED fell through to before isTimeout recognised it.
         expect(sendMessageByCategory).toHaveBeenCalled();
-        const firstNotificationText = String(sendMessageByCategory.mock.calls[0][1]);
+        const firstNotificationText = noticeText(sendMessageByCategory.mock.calls[0][1]);
         expect(firstNotificationText).toMatch(/timeout/i);
         expect(firstNotificationText).not.toMatch(/attempt 0 failed/i);
     });
@@ -223,7 +227,7 @@ describe('failure-notification prefix is a single line', () => {
     test('the host/endpoint prefix has no embedded newline', async () => {
         axiosFn.mockRejectedValueOnce(axiosError({ code: 'ECONNRESET' }));
         await fetchWithTimeout('https://api.telegram.org/botTOKEN/sendMessage?chat_id=-1', {}, 0);
-        const notificationText = String(sendMessageByCategory.mock.calls[0][1]);
+        const notificationText = noticeText(sendMessageByCategory.mock.calls[0][1]);
         expect(notificationText).not.toContain('\n\n\nendpoint');
         expect(notificationText).toContain('host: api.telegram.org endpoint:');
     });
@@ -253,7 +257,7 @@ describe('diagnostic redaction', () => {
                 0,
             );
 
-            const notifications = sendMessageByCategory.mock.calls.map((call) => String(call[1])).join('\n');
+            const notifications = sendMessageByCategory.mock.calls.map((call) => noticeText(call[1])).join('\n');
             const diagnostics = [...logSpy.mock.calls, ...errorSpy.mock.calls].flat().join('\n');
             expect(notifications).toContain('/bot[REDACTED]/sendMessage?[REDACTED]');
             expect(diagnostics).toContain('/bot[REDACTED]/sendMessage?[REDACTED]');
@@ -274,7 +278,7 @@ describe('diagnostic redaction', () => {
 
         await fetchWithTimeout(tokenUrl, {}, 0);
 
-        const notifications = sendMessageByCategory.mock.calls.map((call) => String(call[1])).join('\n');
+        const notifications = sendMessageByCategory.mock.calls.map((call) => noticeText(call[1])).join('\n');
         expect(axiosFn.create).not.toHaveBeenCalled();
         expect(notifications).not.toContain('123456:secret-token');
         expect(notifications).not.toContain('-100123');
@@ -417,8 +421,9 @@ describe('notification resilience', () => {
         // The per-attempt notifyInternal returns early on status 429 (no send for it).
         // The end-of-retries summary notification has no 429 status, so it sends once.
         expect(sendMessageByCategory).toHaveBeenCalledTimes(1);
-        const [, text] = sendMessageByCategory.mock.calls[0];
-        expect(text).toContain('retries exhausted');
+        const [, notice] = sendMessageByCategory.mock.calls[0];
+        expect(notice.title).toContain('retries exhausted');
+        expect(notice.severity).toBe('error');
     });
 });
 
@@ -430,7 +435,7 @@ describe('notification message formatting branches', () => {
             .mockImplementation(() => ({ status: 500, message: 'socket hang up ETIMEDOUT', error: 'E' }));
         axiosFn.mockRejectedValue(axiosError({ status: 500, message: 'ETIMEDOUT' }));
         await fetchWithTimeout('https://api.example.com/x', {}, 0);
-        const sent = sendMessageByCategory.mock.calls.map(c => c[1]).join('\n');
+        const sent = sendMessageByCategory.mock.calls.map(c => noticeText(c[1])).join('\n');
         expect(sent).toContain('Connection timed out');
         spy.mockRestore();
     });
@@ -442,7 +447,7 @@ describe('notification message formatting branches', () => {
             .mockImplementation(() => ({ status: 500, message: 'connect ECONNREFUSED 127.0.0.1', error: 'E' }));
         axiosFn.mockRejectedValue(axiosError({ status: 500, message: 'ECONNREFUSED' }));
         await fetchWithTimeout('https://api.example.com/x', {}, 0);
-        const sent = sendMessageByCategory.mock.calls.map(c => c[1]).join('\n');
+        const sent = sendMessageByCategory.mock.calls.map(c => noticeText(c[1])).join('\n');
         expect(sent).toContain('Connection refused');
         spy.mockRestore();
     });

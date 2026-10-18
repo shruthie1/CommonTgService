@@ -1,3 +1,4 @@
+import { textToRichInput } from '../../utils/rich-message';
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { BotsService } from './bots.service';
@@ -168,9 +169,9 @@ export class BotsController {
       if (bot.category !== category) {
         throw new Error(`Bot ${botId} does not belong to category ${category}`);
       }
-      return this.botsService.sendMessageByBotId(botId, data.message, data.options);
+      return this.botsService.sendMessageByBotId(botId, this.toNotice(data), data.options);
     }
-    return this.botsService.sendMessageByCategory(category, data.message, data.options);
+    return this.botsService.sendMessageByCategory(category, this.toNotice(data), data.options);
   }
 
   @Post('category/:category/photo')
@@ -472,4 +473,9 @@ export class BotsController {
     return this.botsService.getBotStatsByCategory(category);
   }
 
+
+  /** The HTTP body is free-form external text (plain or HTML): structure it into a rich notice. */
+  private toNotice(data: SendMessageDto) {
+    return textToRichInput(data.message, { html: data.options?.parseMode === 'HTML' });
+  }
 }

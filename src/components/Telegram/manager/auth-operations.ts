@@ -4,8 +4,7 @@ import { sleep } from 'telegram/Helpers';
 import bigInt from 'big-integer';
 import { TgContext, SessionInfo } from './types';
 import { parseError } from '../../../utils/parseError';
-import { fetchWithTimeout } from '../../../utils/fetchWithTimeout';
-import { notifbot } from '../../../utils/logbots';
+import { sendBotNotice } from '../../../utils/bot-notice';
 import { generateTGConfig } from '../utils/generateTGConfig';
 import { getAuthProtectionReason, isAuthFingerprintMatch } from '../utils/tg-config';
 import { MailReader } from '../../../IMap/IMap';
@@ -42,7 +41,17 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
             continue;
         }
         ctx.logger.info(ctx.phoneNumber, `Revoking auth: ${auth.appName} | ${auth.deviceModel} | ${auth.country}`);
-        await fetchWithTimeout(`${notifbot()}&text=${encodeURIComponent(`Removing Auth\n\nMobile: ${ctx.phoneNumber}\nApp: ${auth.appName || 'unknown'}\nDevice: ${auth.deviceModel || 'unknown'}\nCountry: ${auth.country || 'unknown'}\nAPI ID: ${auth.apiId || 'unknown'}`)}`);
+        await sendBotNotice('notif', {
+            severity: 'warning',
+            title: 'Removing Auth',
+            fields: [
+                { label: 'Mobile', value: ctx.phoneNumber },
+                { label: 'App', value: auth.appName || 'unknown', code: false },
+                { label: 'Device', value: auth.deviceModel || 'unknown', code: false },
+                { label: 'Country', value: auth.country || 'unknown', code: false },
+                { label: 'API ID', value: auth.apiId || 'unknown' },
+            ],
+        });
         const revoked = await resetAuthorization(ctx, auth);
         if (revoked) {
             revokedCount++;
