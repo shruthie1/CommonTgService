@@ -93,9 +93,8 @@ describe('InitModule', () => {
             expect(conn.on).toHaveBeenCalledWith('disconnected', expect.any(Function));
             expect(conn.on).toHaveBeenCalledWith('reconnected', expect.any(Function));
             expect(conn.on).toHaveBeenCalledWith('close', expect.any(Function));
-            // Startup notification sent
-            expect(mockedFetch).toHaveBeenCalledTimes(1);
-            expect(mockedFetch).toHaveBeenCalledWith('notif', expect.objectContaining({ severity: 'success', title: 'Service Started' }), { timeout: 5000 });
+            // No start notice from here (ConfigurationService sends the only one), so a boot pings once.
+            expect(mockedFetch).not.toHaveBeenCalled();
             expect(InitModule.isReady()).toBe(true);
 
             await mod.onModuleDestroy();
@@ -218,14 +217,14 @@ describe('InitModule', () => {
 
     describe('sendNotification', () => {
         it('swallows network failures without throwing', async () => {
-            mockedFetch.mockRejectedValueOnce(new Error('network down'));
-            const conn = makeConnection();
+            const conn = makeConnection({ readyState: 1, close: jest.fn().mockResolvedValue(undefined) });
             const mod = makeModule(conn);
+            await mod.onModuleInit();
 
-            // Startup notification fails but init still completes
-            await expect(mod.onModuleInit()).resolves.toBeUndefined();
+            // Shutdown notification fails but destroy still completes
+            mockedFetch.mockRejectedValueOnce(new Error('network down'));
+            await expect(mod.onModuleDestroy()).resolves.toBeUndefined();
             expect(warnSpy).toHaveBeenCalledWith('Failed to send notification:', expect.any(Error));
-            await mod.onModuleDestroy();
         });
     });
 

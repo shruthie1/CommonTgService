@@ -84,12 +84,7 @@ export class InitModule implements OnModuleDestroy, OnModuleInit {
       InitModule.initializationStatus.isInitializing = false;
 
       console.log(`Started :: ${process.env.clientId}`);
-
-      // Optional: Send notification on successful startup
-      // Local smoke/dev instances must not emit external Telegram notifications.
-      if (!process.env.LOCAL_SERVER) {
-        await this.sendNotification({ severity: 'success', title: 'Service Started', fields: [{ label: 'Client ID', value: process.env.clientId }] });
-      }
+      // No start notice here: ConfigurationService.notifyStart sends the one "Service started".
 
     } catch (error) {
       InitModule.initializationStatus.isInitializing = false;
