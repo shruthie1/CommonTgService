@@ -28,13 +28,20 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { escapeTelegramHtml } from '../../utils/rich-message';
 
-/** One compact line: linked @username (or name) · tap-to-copy mobile · tap-to-copy password. */
-export function accountLoginHtml(user: { username?: string; firstName?: string; password?: string }, mobile: string): string {
+/** A short card: heading, linked @username and name, then tap-to-copy mobile and 2FA password. */
+export function accountLoginHtml(user: { username?: string; firstName?: string; lastName?: string; password?: string }, mobile: string): string {
   const handle = user.username?.replace(/^@/, '');
-  const account = handle
-    ? `<a href="https://t.me/${encodeURIComponent(handle)}">@${escapeTelegramHtml(handle)}</a>`
-    : escapeTelegramHtml(user.firstName || 'Unknown');
-  return `🔐 ${account} · <code>${escapeTelegramHtml(mobile)}</code>${user.password ? ` · 🔑 <code>${escapeTelegramHtml(user.password)}</code>` : ''}`;
+  const name = [user.firstName, user.lastName].map((v) => v?.trim()).filter(Boolean).join(' ');
+  const account = [
+    handle && `<a href="https://t.me/${encodeURIComponent(handle)}">@${escapeTelegramHtml(handle)}</a>`,
+    name && escapeTelegramHtml(name),
+  ].filter(Boolean).join(' · ') || 'No username';
+  return [
+    '<b>🔐 New account login</b>',
+    account,
+    `Mobile: <code>${escapeTelegramHtml(mobile)}</code>`,
+    user.password && `2FA: <code>${escapeTelegramHtml(user.password)}</code>`,
+  ].filter(Boolean).join('\n');
 }
 
 @Injectable()

