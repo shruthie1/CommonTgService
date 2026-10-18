@@ -29,16 +29,14 @@ import { PromoteClientService } from '../promote-clients/promote-client.service'
 import { escapeTelegramHtml } from '../../utils/rich-message';
 
 /** A short card: heading, linked @username and name, then tap-to-copy mobile and 2FA password. */
+/** Plain multi-line account-login notice (owner, 2026-10-18): one "Label: value" line per known fact. */
 export function accountLoginHtml(user: { username?: string; firstName?: string; lastName?: string; password?: string }, mobile: string): string {
   const handle = user.username?.replace(/^@/, '');
   const name = [user.firstName, user.lastName].map((v) => v?.trim()).filter(Boolean).join(' ');
-  const account = [
-    handle && `<a href="https://t.me/${encodeURIComponent(handle)}">@${escapeTelegramHtml(handle)}</a>`,
-    name && escapeTelegramHtml(name),
-  ].filter(Boolean).join(' · ') || 'No username';
   return [
-    '<b>🔐 New account login</b>',
-    account,
+    '<b>New account login</b>',
+    handle && `Account: <a href="https://t.me/${encodeURIComponent(handle)}">@${escapeTelegramHtml(handle)}</a>`,
+    name && `Name: ${escapeTelegramHtml(name)}`,
     `Mobile: <code>${escapeTelegramHtml(mobile)}</code>`,
     user.password && `2FA: <code>${escapeTelegramHtml(user.password)}</code>`,
   ].filter(Boolean).join('\n');

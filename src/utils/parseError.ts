@@ -347,7 +347,7 @@ export function parseError(
             ],
             details: notificationMessage,
             detailsTitle: 'Error message',
-          }, { prefix: clientId ? String(clientId).toUpperCase() : undefined, timeout: fullConfig.notificationTimeout }).catch(() => undefined);
+          }, { prefix: clientId ? String(clientId) : undefined, timeout: fullConfig.notificationTimeout }).catch(() => undefined);
         }
       } catch (notificationError) {
         console.error('Failed to prepare error notification:', notificationError);

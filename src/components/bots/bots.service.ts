@@ -702,7 +702,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return this.sendByCategoryWithFailover(category, this.sendMessageByBotId, message, options, allowServiceName);
     }
 
-    /** One classic HTML message (parse_mode HTML, no rich card, no client prefix): compact one-liners. */
+    /** One classic HTML message (parse_mode HTML, no rich card, no client prefix): plain multi-line notices. */
     async sendHtmlByCategory(category: ChannelCategory, html: string, options?: SendMessageOptions): Promise<boolean> {
         return this.sendByCategoryWithFailover(category, this.sendHtmlByBotId, html, options);
     }
@@ -851,7 +851,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     /** Rich-message HTML for this notice. */
     private richMessageHtml(message: RichNotificationInput, allowServiceName: boolean): string {
         const source = message.source ?? (allowServiceName ? process.env.clientId ?? '' : '');
-        return formatRichMessageHtml(message, { prefix: source.toUpperCase() || undefined });
+        return formatRichMessageHtml(message, { prefix: source || undefined });
     }
 
     /** Classic sendMessage body: the fallback when Telegram refuses the rich payload. */
@@ -859,7 +859,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         const buttons = (message.buttons ?? []).filter(b => b.url);
         return {
             chat_id: bot.channelId,
-            text: formatClassicNotificationHtml(message, allowServiceName ? process.env.clientId?.toUpperCase() : undefined),
+            text: formatClassicNotificationHtml(message, allowServiceName ? process.env.clientId : undefined),
             parse_mode: 'HTML',
             disable_notification: options?.disableNotification,
             reply_to_message_id: options?.replyToMessageId,
@@ -933,7 +933,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (options.caption) {
-            formData.append('caption', `${process.env.clientId?.toUpperCase()}:\n\n${options.caption}`);
+            formData.append('caption', `${process.env.clientId}:\n\n${options.caption}`);
         }
         if (options.parseMode) formData.append('parse_mode', options.parseMode);
         if (options.disableNotification) formData.append('disable_notification', 'true');
@@ -974,7 +974,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 type: item.type,
                 media: Buffer.isBuffer(item.media) ? `attach://file${i}` : item.media,
             };
-            if (item.caption) mediaObj.caption = `${process.env.clientId?.toUpperCase()}:\n\n${item.caption}`;
+            if (item.caption) mediaObj.caption = `${process.env.clientId}:\n\n${item.caption}`;
             if (item.parseMode) mediaObj.parse_mode = item.parseMode;
             if (item.hasSpoiler) mediaObj.has_spoiler = true;
             if (item.type === 'video') {

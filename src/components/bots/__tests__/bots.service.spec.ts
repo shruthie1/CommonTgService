@@ -1611,9 +1611,8 @@ describe('BotsService - Bot API rich messages', () => {
     expect(bodyOf(call).chat_id).toBe('-100777');
     expect(bodyOf(call).text).toBeUndefined();
     const html: string = bodyOf(call).rich_message.html;
-    expect(html).toContain('<p><b>ℹ️ TESTCLIENT · Deploy done</b></p>');
-    expect(html).toContain('<p>Status ok · Count <code>3</code></p>');
-    expect(html).not.toContain('<table');
+    expect(html).toContain('<b>testclient</b><br/><b>Deploy done</b><br/>');
+    expect(html).toContain('<table bordered striped compact><tr><td><b>Status</b></td><td>ok</td></tr><tr><td><b>Count</b></td><td><code>3</code></td></tr></table>');
   });
 
   test('a structured notice renders tables, details and URL buttons', async () => {
@@ -1628,7 +1627,7 @@ describe('BotsService - Bot API rich messages', () => {
       buttons: [{ text: '🔗 Open', url: 'https://example.com/x' }],
     });
     const html: string = bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html;
-    expect(html).toContain('<p><b>❌ TESTCLIENT · Boom</b></p>');
+    expect(html).toContain('<b>testclient</b><br/><b>Boom</b><br/>');
     expect(html).toContain('<code>911234567890</code>');
     expect(html).toContain('<th>A</th><th align="right">B</th>');
     expect(html).toContain('<details><summary>Details</summary><pre>stack line</pre></details>');
@@ -1646,7 +1645,7 @@ describe('BotsService - Bot API rich messages', () => {
     expect(urlOf(mockedAxios.post.mock.calls[1])).toBe(`https://api.telegram.org/bot${bot.token}/sendMessage`);
     const classic = bodyOf(mockedAxios.post.mock.calls[1]);
     expect(classic.parse_mode).toBe('HTML');
-    expect(classic.text).toContain('TESTCLIENT · T');
+    expect(classic.text).toContain('testclient · T');
     expect(classic.text).toContain('<b>K:</b> v');
     expect(classic.reply_markup).toEqual({ inline_keyboard: [[{ text: 'Go', url: 'https://e.co' }]] });
   });
@@ -1658,7 +1657,7 @@ describe('BotsService - Bot API rich messages', () => {
       .mockResolvedValueOnce(axiosOk({ ok: true }));
     expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'Hi' })).toBe(true);
     const classic = bodyOf(mockedAxios.post.mock.calls[1]);
-    expect(classic.text).toBe('<b>ℹ️ TESTCLIENT · Hi</b>');
+    expect(classic.text).toBe('<b>testclient · Hi</b>');
     expect(classic.parse_mode).toBe('HTML');
   });
 
@@ -1685,7 +1684,7 @@ describe('BotsService - Bot API rich messages', () => {
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
     await service.sendMessageByBotId(bot._id.toString(), { title: 'Account Login' }, undefined, false);
     expect(urlOf(mockedAxios.post.mock.calls[0])).toMatch(/\/sendRichMessage$/);
-    expect(bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html).toContain('<p><b>ℹ️ Account Login</b></p>');
+    expect(bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html).toContain('<b>Account Login</b><br/>');
   });
 
   test('sendHtmlByBotId posts one classic HTML sendMessage with no rich card and no clientId prefix', async () => {
@@ -1728,7 +1727,7 @@ describe('BotsService - Bot API rich messages', () => {
     mockedAxios.post.mockResolvedValue(axiosOk({ ok: true }));
     await (service as any).sendHealthSummary({ checked: 5, alive: 3, dead: 2, unknown: 0, replaced: 1, toppedUp: 0, deadRemaining: 1, failures: ['a failed', 'b failed'] });
     const html: string = bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html;
-    expect(html).toContain('Bot Health Check</b></p>');
+    expect(html).toContain('Bot Health Check</b><br/>');
     expect(html).toContain('<th align="right">Checked</th>');
     expect(html).toContain('<caption>Failures</caption>');
     expect(html).toContain('a failed');

@@ -1,13 +1,12 @@
 import { buttonsFromReplyMarkup, formatClassicNotificationHtml, formatRichMessageHtml, RICH_MESSAGE_MAX_CHARS, textToRichInput } from '../rich-message';
 
 describe('formatRichMessageHtml', () => {
-  test('heading with prefix + icon, summary, up to 3 short fields inline (ids as code)', () => {
+  test('client line, then icon + title, summary, and fields always in a table (ids as code)', () => {
     const html = formatRichMessageHtml({ title: 'Done', severity: 'success', summary: 'all good', fields: [{ label: 'Mobile', value: '91123' }, { label: 'Note', value: 'two words' }] }, { prefix: 'CMS' });
-    expect(html).toContain('<p><b>✅ CMS · Done</b></p>');
+    expect(html.startsWith('<b>CMS</b><br/><b>Done</b><br/>')).toBe(true);
     expect(html).not.toContain('<h3>');
-    expect(html).toContain('<p>all good</p>');
-    expect(html).toContain('<p>Mobile <code>91123</code> · Note two words</p>');
-    expect(html).not.toContain('<table');
+    expect(html).toContain('all good<br/>');
+    expect(html).toContain('<table bordered striped compact><tr><td><b>Mobile</b></td><td><code>91123</code></td></tr><tr><td><b>Note</b></td><td>two words</td></tr></table>');
   });
 
   test('more than 3 fields, a long value, or fieldLayout table keeps the table', () => {
@@ -47,22 +46,22 @@ describe('formatRichMessageHtml', () => {
       quoteLabel: 'Login message',
       quotes: [{ label: 'Reply', text: 'ok' }],
     });
-    expect(html).toContain('<p><b>Login message</b></p><blockquote>Hi &lt;b&gt;<br/>&nbsp;&nbsp;two&nbsp;&nbsp;spaces<br/><br/>end &amp; done</blockquote>');
-    expect(html).toContain('<p><b>Reply</b></p><blockquote>ok</blockquote>');
+    expect(html).toContain('<b>Login message</b><br/><blockquote>Hi &lt;b&gt;<br/>&nbsp;&nbsp;two&nbsp;&nbsp;spaces<br/><br/>end &amp; done</blockquote>');
+    expect(html).toContain('<b>Reply</b><br/><blockquote>ok</blockquote>');
     expect(html).not.toMatch(/<td[^>]*>[^<]*Hi/);
     expect(html).not.toContain('<code>Hi');
-    expect(html.indexOf('</table>')).toBeLessThan(html.indexOf('<p><b>Login message</b>'));
+    expect(html.indexOf('</table>')).toBeLessThan(html.indexOf('<b>Login message</b>'));
   });
 
   test('quote label defaults to Message; text over 800 chars is an expandable quote', () => {
-    expect(formatRichMessageHtml({ title: 'T', quote: 'short' })).toContain('<p><b>Message</b></p><blockquote>short</blockquote>');
+    expect(formatRichMessageHtml({ title: 'T', quote: 'short' })).toContain('<b>Message</b><br/><blockquote>short</blockquote>');
     const long = formatRichMessageHtml({ title: 'T', quote: 'x'.repeat(801) });
     expect(long).toContain('<blockquote expandable>');
     expect(long).toContain('</blockquote>');
   });
 
   test('multi-line summaries keep their line breaks', () => {
-    expect(formatRichMessageHtml({ title: 'T', summary: 'one\ntwo' })).toContain('<p>one<br/>two</p>');
+    expect(formatRichMessageHtml({ title: 'T', summary: 'one\ntwo' })).toContain('one<br/>two<br/>');
   });
 
   test('details are collapsible and clipped to the budget', () => {
@@ -102,7 +101,7 @@ describe('textToRichInput', () => {
 describe('classic fallback + markup helpers', () => {
   test('formatClassicNotificationHtml degrades tables to lines and keeps the prefix', () => {
     const text = formatClassicNotificationHtml({ title: 'T', severity: 'error', tables: [{ columns: ['A', 'B'], rows: [[1, 2]] }], details: 'd' }, 'CMS');
-    expect(text).toContain('<b>❌ CMS · T</b>');
+    expect(text).toContain('<b>CMS · T</b>');
     expect(text).toContain('<b>A | B</b>\n1 | 2');
   });
 

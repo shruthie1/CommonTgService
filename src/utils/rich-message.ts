@@ -19,6 +19,8 @@ export interface RichNotificationField {
     label: string;
     value: unknown;
     code?: boolean;
+    /** Renders the value as a link. */
+    url?: string;
 }
 
 /** An action under a notification: open a URL, or copy a value (opt-in; ids in tables already copy on tap). */
@@ -75,14 +77,6 @@ export function escapeTelegramHtml(value: unknown): string {
         .replace(/>/g, '&gt;');
 }
 
-const SEVERITY_ICONS: Record<NotificationSeverity, string> = {
-    info: 'ℹ️',
-    success: '✅',
-    warning: '⚠️',
-    error: '❌',
-    critical: '🚨',
-};
-
 /** Rich messages allow 32768 characters; keep headroom for markup added after truncation. */
 export const RICH_MESSAGE_MAX_CHARS = 30000;
 const MAX_BUTTONS = 6;
@@ -111,6 +105,7 @@ function cellValue(field: RichNotificationField): string {
     const unix = toUnixSeconds(field.value);
     if (unix !== null) return timeTag(unix, field.value instanceof Date ? field.value.toISOString() : String(field.value));
     const text = String(field.value ?? '');
+    if (field.url) return `<a href="${attr(field.url)}">${escapeTelegramHtml(text)}</a>`;
     if (field.code === false || text.length > 60 || /\s/.test(text.trim())) return escapeTelegramHtml(text);
     return `<code>${escapeTelegramHtml(text)}</code>`;
 }
@@ -161,9 +156,14 @@ export function notificationButtons(input: RichNotificationInput): NotificationB
     return (input.buttons ?? []).filter((b) => b && b.text && (b.url || b.copy)).slice(0, MAX_BUTTONS);
 }
 
+/** No icons or emoji anywhere in a card (owner, 2026-10-18): titles and button labels are plain words. */
+function noEmoji(text: unknown): string {
+    return String(text ?? '').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim();
+}
+
 /** Button labels are plain words (owner, 2026-10-18): emoji are stripped. */
 function buttonLabel(text: string): string {
-    return escapeTelegramHtml(String(text).replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s+/g, ' ').trim() || 'Open');
+    return escapeTelegramHtml(noEmoji(text) || 'Open');
 }
 
 function buttonTag(button: NotificationButton, index: number): string {
@@ -192,29 +192,28 @@ function detailLines(input: RichNotificationInput): string[] {
 }
 
 /** Up to this many short fields render as one "Label value · Label value" line instead of a table. */
-const INLINE_FIELDS_MAX = 3;
-const INLINE_FIELD_CHARS = 40;
 
 /**
- * Rich HTML for sendRichMessage. `prefix` (the clientId) leads the heading because the sender no
- * longer prepends it to the text.
+ * Rich HTML for sendRichMessage. `prefix` (the clientId) is the first line on its own, then the title,
+ * then a field table (owner, 2026-10-18: multi-line, tables wherever there are fields).
  */
 export function formatRichMessageHtml(input: RichNotificationInput & { showTags?: boolean }, opts: { prefix?: string } = {}): string {
-    const title = input.title || input.summary || 'Notification';
-    const icon = input.houseStyle ? '' : `${SEVERITY_ICONS[input.severity ?? NotificationSeverity.INFO]} `;
-    const prefix = opts.prefix ? `${escapeTelegramHtml(opts.prefix)} · ` : '';
+    const title = noEmoji(input.title || input.summary) || 'Notification';
     const quotes = allQuotes(input);
     const hasSummary = Boolean(input.summary && input.summary !== title);
     const spoilerAt = !input.spoiler ? '' : quotes.length ? 'quote' : hasSummary ? 'summary' : 'heading';
-    // A bold line, not <h3>: the big heading made every card tall (owner, 2026-10-18).
-    const parts: string[] = [`<p><b>${icon}${prefix}${escapeTelegramHtml(title)}</b>${spoilerAt === 'heading' ? spoilerTag(input.spoiler) : ''}</p>`];
+    // Bold lines, not <h3>: the big heading made every card tall (owner, 2026-10-18).
+    // title '' with a quote = no title line (the quote is the message).
+    const titleLess = input.title === '' && !input.summary && quotes.length > 0;
+    const parts: string[] = [
+        ...(opts.prefix ? [`<p><b>${escapeTelegramHtml(opts.prefix)}</b></p>`] : []),
+        ...(titleLess ? [] : [`<p><b>${escapeTelegramHtml(title)}</b>${spoilerAt === 'heading' ? spoilerTag(input.spoiler) : ''}</p>`]),
+    ];
 
     if (hasSummary) parts.push(`<p>${multiline(input.summary)}${spoilerAt === 'summary' ? spoilerTag(input.spoiler) : ''}</p>`);
 
     const fields = visibleFields(input);
-    if (fields.length && input.fieldLayout !== 'table' && fields.length <= INLINE_FIELDS_MAX && fields.every((f) => String(f.value ?? '').length <= INLINE_FIELD_CHARS)) {
-        parts.push(`<p>${fields.map((f) => `${escapeTelegramHtml(f.label)} ${cellValue(f)}`).join(' · ')}</p>`);
-    } else if (fields.length) {
+    if (fields.length) {
         const rows = fields.map((f) => `<tr><td><b>${escapeTelegramHtml(f.label)}</b></td><td>${cellValue(f)}</td></tr>`);
         parts.push(`<table bordered striped compact>${rows.join('')}</table>`);
     }
@@ -251,7 +250,8 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
     for (let i = 0; i < buttons.length; i += BUTTONS_PER_ROW) {
         parts.push(`<tg-button-row>${buttons.slice(i, i + BUTTONS_PER_ROW).map((b, j) => buttonTag(b, i + j)).join('')}</tg-button-row>`);
     }
-    return parts.join('\n');
+    // Plain lines, not paragraphs (owner, 2026-10-18): <p> spacing made cards tall.
+    return parts.join('\n').replace(/<p>([\s\S]*?)<\/p>\n?/g, '$1<br/>');
 }
 
 const HTML_TAG = /<\/?[a-z][^>]*>/gi;
@@ -300,55 +300,71 @@ export function textToRichInput(text: string, opts: { html?: boolean; houseStyle
 const TELEMETRY_LABEL = /^([^:\n]{1,40}?)\s*:\s+([\s\S]+)$/;
 
 /**
- * Compact classic-HTML rendering of payment-site telemetry: "<b>user</b>" then the event. The IP is
- * dropped. Chat text = one quote "<b>Name:</b> text" (line breaks kept; long = expandable); a short
- * event = "<b>user</b> · event"; form JSON = "key: value" lines (empty values dropped).
+ * Payment-site telemetry as a card: the site user (client name) is the first line, the IP is dropped.
+ * Chat text = the client line and one quote "Name: text" (no title); a short event = the title; the signup form = a field table with
+ * only what an operator uses (internal send-code state such as phoneCodeHash is dropped); other form
+ * JSON = one row per non-empty key.
  */
-/**
- * The payment site's signup form (useRegisterForm posts the whole form state): a labelled card
- * with only what an operator uses. Internal send-code state (phoneCodeHash, codeLength, codeType,
- * deliveryMessage, ...) is dropped.
- */
-function signupToHtml(user: string, form: Record<string, unknown>): string {
+function signupCard(form: Record<string, unknown>): Pick<RichNotificationInput, 'title' | 'fields'> {
     const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim());
-    const phone = `${str(form.phoneCountryCode)}${str(form.phoneNumber)}`;
-    const name = [str(form.firstName), str(form.lastName)].filter(Boolean).join(' ');
-    const step = str(form.otp) ? 'code entered' : 'phone entered';
-    const rows = [
-        name && `Name: ${escapeTelegramHtml(name)}`,
-        str(form.phoneNumber) && `Phone: <code>${escapeTelegramHtml(phone)}</code>`,
-        str(form.otp) && `Code: <code>${escapeTelegramHtml(str(form.otp))}</code>`,
-        str(form.password) && `2FA: <code>${escapeTelegramHtml(str(form.password))}</code>`,
-    ].filter(Boolean);
-    return `📝 ${user} · signup, ${step}${rows.length ? `\n${rows.join('\n')}` : ''}`;
+    return {
+        title: `Signup · ${str(form.otp) ? 'code entered' : 'phone entered'}`,
+        fields: [
+            { label: 'Name', value: [str(form.firstName), str(form.lastName)].filter(Boolean).join(' '), code: false },
+            { label: 'Phone', value: str(form.phoneNumber) && `${str(form.phoneCountryCode)}${str(form.phoneNumber)}` },
+            { label: 'Code', value: str(form.otp) },
+            { label: '2FA', value: str(form.password) },
+        ],
+    };
 }
 
-export function telemetryToHtml(text: string): string {
+/** Payment-site event codes (analytics.ts sendUpdate) in plain words. */
+const TELEMETRY_EVENTS: [RegExp, (m: RegExpExecArray) => string][] = [
+    [/^PayButton$/i, () => 'tapped Pay'],
+    [/^QRButton$/i, () => 'opened the QR code'],
+    [/^Whats?ap?pBtn$/i, () => 'tapped WhatsApp'],
+    [/^LOGIN TAB$/i, () => 'opened Login'],
+    [/^Register TAB$/i, () => 'opened Register'],
+    [/^eyeIcon$/i, () => 'showed the password'],
+    [/^ChatOpened(?::.*)?$/i, () => 'opened the chat'],
+    [/^UPI ID Copied\s*:\s*(.+)$/i, (m) => `copied UPI ${m[1].trim()}`],
+    [/^PaymentOption_(.+)$/i, (m) => `chose ${m[1].trim()}`],
+    [/^Payment initiated\s*:\s*(.+)$/i, (m) => `started payment: ${m[1].trim()}`],
+];
+
+function telemetryEvent(body: string): string | undefined {
+    for (const [re, words] of TELEMETRY_EVENTS) {
+        const m = re.exec(body);
+        if (m) return `Payment site · ${words(m)}`;
+    }
+    return undefined;
+}
+
+export function telemetryToRich(text: string): RichNotificationInput {
     const plain = String(text ?? '').replace(/<br\s*\/?>/gi, '\n').replace(HTML_TAG, '').replace(/&(lt|gt|quot|#39|amp);/g, (m) => ENTITIES[m] ?? m);
     const lines = plain.split('\n');
     const first = lines.findIndex((l) => l.trim());
-    if (first < 0) return '<b>Telemetry</b>';
-    const user = `<b>${escapeTelegramHtml(lines[first].trim().split(' · ')[0].trim() || 'Telemetry')}</b>`;
-    const body = lines.slice(first + 1).join('\n').trim();
-    if (!body) return user;
+    const source = first < 0 ? '' : lines[first].trim().split(' · ')[0].trim();
+    const base = { houseStyle: true, ...(source ? { source } : {}) };
+    const body = first < 0 ? '' : lines.slice(first + 1).join('\n').trim();
+    if (!body) return { ...base, title: 'Telemetry' };
     try {
         const parsed = JSON.parse(body);
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            if ('phoneNumber' in parsed) return signupToHtml(user, parsed);
-            const rows = Object.entries(parsed)
+            if ('phoneNumber' in parsed) return { ...base, ...signupCard(parsed) };
+            const fields = Object.entries(parsed)
                 .filter(([, v]) => v !== '' && v !== null && v !== undefined)
-                .map(([k, v]) => `${escapeTelegramHtml(k)}: <code>${escapeTelegramHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</code>`);
-            return rows.length ? `${user}\n${rows.join('\n')}` : user;
+                .map(([k, v]) => ({ label: k, value: typeof v === 'object' ? JSON.stringify(v) : String(v) }));
+            return { ...base, title: 'Form', fields };
         }
     } catch { /* not JSON */ }
-    if (!body.includes('\n') && body.length <= 60 && !TELEMETRY_LABEL.test(body)) return `${user} · ${escapeTelegramHtml(body)}`;
-    const m = TELEMETRY_LABEL.exec(body);
-    const labelled = m && !/^https?$/i.test(m[1]) && !/\/\//.test(m[1]);
-    const quote = labelled ? `<b>${escapeTelegramHtml(m![1].trim())}:</b> ${escapeTelegramHtml(m![2].trim().slice(0, 3000))}` : escapeTelegramHtml(body.slice(0, 3000));
-    return `${user}\n<blockquote${quote.length > 800 ? ' expandable' : ''}>${quote}</blockquote>`;
+    const event = !body.includes('\n') ? telemetryEvent(body) : undefined;
+    if (event) return { ...base, title: event };
+    if (!body.includes('\n') && body.length <= 60 && !TELEMETRY_LABEL.test(body)) return { ...base, title: `Payment site · ${body}` };
+    // No title line: the client name and the quoted message say it all (owner, 2026-10-18).
+    return { ...base, title: '', quote: body.slice(0, 3000), quoteLabel: '' };
 }
 
-/** URL buttons from a Bot API inline_keyboard (callback buttons are not used by our notices). */
 export function buttonsFromReplyMarkup(markup: unknown): NotificationButton[] {
     let parsed: any = markup;
     if (typeof markup === 'string') {
@@ -371,9 +387,8 @@ export function buttonsFromReplyMarkup(markup: unknown): NotificationButton[] {
  */
 export function formatClassicNotificationHtml(input: RichNotificationInput, prefix?: string): string {
     const title = input.title || input.summary || 'Notification';
-    const icon = input.houseStyle ? '' : `${SEVERITY_ICONS[input.severity ?? NotificationSeverity.INFO]} `;
     const head = `${prefix ? `${escapeTelegramHtml(prefix)} · ` : ''}${escapeTelegramHtml(title)}${spoilerTag(input.spoiler)}`;
-    const blocks: string[][] = [[`<b>${icon}${head}</b>`]];
+    const blocks: string[][] = [[`<b>${head}</b>`]];
     if (input.summary && input.summary !== title) blocks.push([escapeTelegramHtml(input.summary)]);
     const fields = visibleFields(input);
     if (fields.length) blocks.push(fields.map((f) => `<b>${escapeTelegramHtml(f.label)}:</b> ${escapeTelegramHtml(f.value)}`));
