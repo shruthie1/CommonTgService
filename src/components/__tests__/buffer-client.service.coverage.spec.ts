@@ -1306,6 +1306,54 @@ describe('BufferClientService coverage', () => {
             expect(created!.channels).toBe(2);
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });
+
+        it('reports the enrolment inside the run summary, not as a separate per-mobile notice', async () => {
+            usersService.executeQuery.mockResolvedValue([{ mobile: '15551850002', tgId: 'tg-enroll-2' }]);
+            usersService.search.mockResolvedValue([{ mobile: '15551850002', tgId: 'tg-enroll-2', session: 'src-session' }]);
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+                hasPassword: jest.fn(async () => false),
+                client: {},
+            } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: ['a', 'b'], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            botsService.sendMessageByCategory.mockClear();
+
+            await service.checkBufferClients();
+
+            const titles = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]?.title);
+            expect(titles).not.toContain('Buffer Client Enrolled');
+            expect(titles.filter((t) => t === 'Buffer Client Check Summary')).toHaveLength(1);
+            const summary = botsService.sendMessageByCategory.mock.calls.find((c) => c[1]?.title === 'Buffer Client Check Summary')![1];
+            const events = summary.tables.find((t: any) => String(t.title).startsWith('Warmup / enrolment events'));
+            expect(events.rows.map((r: unknown[]) => [r[1], r[2]])).toEqual([['15551850002', 'Buffer Client Enrolled']]);
+        });
+    });
+
+    describe('per-mobile notice batching', () => {
+        it('collects routine events of a crashed run into ONE message and keeps critical ones immediate', async () => {
+            botsService.sendMessageByCategory.mockClear();
+            jest.spyOn(service as any, '_checkBufferClientsInternal').mockImplementationOnce(async () => {
+                const send = (service as any).sendAccountNotice.bind(service);
+                await send({ severity: 'success', title: 'Buffer · Warmup complete', fields: [{ label: 'Mobile', value: '1' }] });
+                await send({ severity: 'warning', title: 'Buffer · Warmup failed', fields: [{ label: 'Mobile', value: '2' }] });
+                await send({ severity: 'error', title: 'Buffer · Warmup error', fields: [{ label: 'Mobile', value: '3' }] });
+                await send({ severity: 'critical', title: 'Buffer · Session lost', fields: [{ label: 'Mobile', value: '4' }] });
+                throw new Error('run crashed');
+            });
+
+            await service.checkBufferClients();
+
+            const calls = botsService.sendMessageByCategory.mock.calls;
+            expect(calls).toHaveLength(2);
+            expect(calls[0][1].title).toBe('Buffer · Session lost');
+            expect(calls[1][1].tables[0].rows.map((r: unknown[]) => r[1])).toEqual(['1', '2', '3']);
+        });
+
+        it('sends immediately when no run is active (HTTP-triggered single events)', async () => {
+            botsService.sendMessageByCategory.mockClear();
+            await (service as any).sendAccountNotice({ severity: 'success', title: 'x', fields: [{ label: 'Mobile', value: '1' }] });
+            expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
+        });
     });
 
     // ─── sendBufferCheckSummaryNotification (real) ───────────────────────────

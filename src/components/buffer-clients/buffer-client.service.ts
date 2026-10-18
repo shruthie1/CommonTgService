@@ -31,6 +31,7 @@ import { PromoteClientService } from '../promote-clients/promote-client.service'
 import { parseError } from '../../utils/parseError';
 import { buildCheckSummaryNotification } from '../shared/check-summary-notification';
 import { sendBotNotice } from '../../utils/bot-notice';
+import { currentNoticeBatch, eventsToTable, runWithNoticeBatch, sendNoticeBatched } from '../../utils/notice-batch';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import TelegramManager from '../Telegram/TelegramManager';
 import { SessionService } from '../session-manager';
@@ -558,8 +559,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             return this.bufferClientModel.create({ ...createData });
         });
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
-        await this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+        await this.sendAccountNotice(
             {
                 severity: 'success',
                 title: 'Buffer Client Created',
@@ -1270,7 +1270,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
         this.isWarmupCheckProcessing = true;
         try {
-            await this._checkBufferClientsInternal();
+            // One run = one summary message: per-mobile warmup/enrol events are collected and sent
+            // inside the summary; anything left over (a crashed run) goes out here.
+            await runWithNoticeBatch(async (batch) => {
+                try {
+                    await this._checkBufferClientsInternal();
+                } finally {
+                    await this.flushLeftoverNoticeBatch(batch, 'Buffer warmup run (summary not reached)');
+                }
+            });
         } catch (error) {
             const errMsg = parseError(error, 'checkBufferClients').message;
             this.logger.error(`checkBufferClients crashed: ${errMsg}`);
@@ -1765,8 +1773,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (!enrolled) return false;
 
             this.logger.log(`Created BufferClient for ${targetClientId} with availability ${targetAvailableDate}`);
-            await this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            await this.sendAccountNotice(
                 {
                     severity: 'success',
                     title: 'Buffer Client Enrolled',
@@ -2058,9 +2065,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         createdEntries: string[],
     ): Promise<void> {
         const distribution = await this.getBufferClientDistribution();
-        await this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            buildCheckSummaryNotification({
+        const summary = buildCheckSummaryNotification({
                 kind: 'Buffer',
                 active: distribution.activeBufferClients,
                 inactive: distribution.inactiveBufferClients,
@@ -2074,7 +2079,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 updatedEntries,
                 createdEntries,
                 perClientLimit: 10,
-            }),
+            });
+        const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Warmup / enrolment events');
+        if (eventsTable) (summary.tables ??= []).push(eventsTable);
+        await sendNoticeBatched(
+            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input),
+            summary,
         );
     }
 }

@@ -27,6 +27,7 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { parseError } from '../../utils/parseError';
 import { buildCheckSummaryNotification } from '../shared/check-summary-notification';
 import { sendBotNotice } from '../../utils/bot-notice';
+import { currentNoticeBatch, eventsToTable, runWithNoticeBatch, sendNoticeBatched } from '../../utils/notice-batch';
 import { connectionManager } from '../Telegram/utils/connection-manager';
 import TelegramManager from '../Telegram/TelegramManager';
 import { SessionService } from '../session-manager';
@@ -441,8 +442,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const newUser = new this.promoteClientModel(promoteClientData);
             return newUser.save();
         });
-        await this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+        await this.sendAccountNotice(
             {
                 severity: 'success',
                 title: 'Promote Client Created',
@@ -1004,7 +1004,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
         this.isWarmupCheckProcessing = true;
         try {
-            await this._checkPromoteClientsInternal();
+            // One run = one summary message: per-mobile warmup/enrol events are collected and sent
+            // inside the summary; anything left over (a crashed run) goes out here.
+            await runWithNoticeBatch(async (batch) => {
+                try {
+                    await this._checkPromoteClientsInternal();
+                } finally {
+                    await this.flushLeftoverNoticeBatch(batch, 'Promote warmup run (summary not reached)');
+                }
+            });
         } catch (error) {
             const errMsg = parseError(error, 'checkPromoteClients').message;
             this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
@@ -1337,8 +1345,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             // Do NOT mark user as 2FA-enabled here — 2FA is set later during settling phase
             this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
-            await this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            await this.sendAccountNotice(
                 {
                     severity: 'success',
                     title: 'Promote Client Enrolled',
@@ -1601,9 +1608,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         createdEntries: string[],
     ): Promise<void> {
         const distribution = await this.getPromoteClientDistribution();
-        await this.botsService.sendMessageByCategory(
-            ChannelCategory.ACCOUNT_NOTIFICATIONS,
-            buildCheckSummaryNotification({
+        const summary = buildCheckSummaryNotification({
                 kind: 'Promote',
                 active: distribution.activePromoteClients,
                 inactive: distribution.inactivePromoteClients,
@@ -1616,7 +1621,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 perClient: distribution.distributionPerClient,
                 updatedEntries,
                 createdEntries,
-            }),
+            });
+        const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Warmup / enrolment events');
+        if (eventsTable) (summary.tables ??= []).push(eventsTable);
+        await sendNoticeBatched(
+            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input),
+            summary,
         );
     }
 

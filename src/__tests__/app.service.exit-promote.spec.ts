@@ -84,6 +84,7 @@ describe('AppService client channel join contract', () => {
         getActiveChannels: jest.fn().mockResolvedValue([]),
       },
       joinChannelMap: new Map(),
+      joinClientIds: new Map(),
       joinChannelQueue: jest.fn(),
       logger: {
         warn: jest.fn(),
@@ -152,7 +153,7 @@ describe('AppService leave-all dispatch contract', () => {
     ]);
 
     expect(result).toBe('returned');
-    expect((service as any).sendToAll).toHaveBeenCalledWith('leavechannels');
+    expect((service as any).sendToAll).toHaveBeenCalledWith('leavechannels?batchNotice=1');
     resolveDispatch!();
   });
 });

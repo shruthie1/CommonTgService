@@ -30,6 +30,10 @@ import {
 import type { SetupClientQueryDto } from './components/clients/dto/setup-client.dto';
 import { fetchWithTimeout, parseError } from './utils';
 import { sendBotNotice } from './utils/bot-notice';
+import { sendNoticeBatched } from './utils/notice-batch';
+import { joinRowFromResponse } from './utils/channel-cycle';
+import { mergeByClient, NoticeDigestFlusher, pushDigestEntries } from './utils/notice-digest';
+import { RedisClient } from './utils/redisClient';
 import { textToRichInput } from './utils/rich-message';
 import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
 import { AccountMaintenanceService } from './control-plane/maintenance/account-maintenance.service';
@@ -56,6 +60,10 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   private joinChannelIntervalId: NodeJS.Timeout;
   private joinChannelMap: Map<string, Channel[] | ActiveChannel[]> = new Map();
   private joinChannelQueueRunning = false;
+  /** repl -> clientId for the join-results rows. */
+  private joinClientIds: Map<string, string> = new Map();
+  private digestFlusher?: NoticeDigestFlusher;
+  private digestTimers: NodeJS.Timeout[] = [];
   private readonly scheduledJobs: Array<{ cancel: () => unknown }> = [];
   private refresTime: number = 0;
 
@@ -83,6 +91,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     console.log('App Module initiated !!');
 
     if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
+      this.startDigestFlusher();
+    }
+    if (this.runtimeConfig.enabled('UMS_SCHEDULER')) {
       this.logger.log('Starting UMS access-data cleanup interval (every 15 minutes)');
       this.cleanupInterval = setInterval(
         () => this.cleanupOldAccessData(),
@@ -99,18 +110,19 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           async () => {
             this.logger.log('Starting UMS primary-client channel join/leave cycle');
             try {
-              await sendBotNotice('pppl', {
-                title: 'Channel join cycle started',
-                fields: [{ label: 'Service', value: process.env.clientId }],
-              });
-            } catch (error) {
-              parseError(error, 'UMS scheduled join notification failed');
-            }
-
-            try {
               // Original UMS used the UTC calendar day with an IST schedule.
               if (new Date().getUTCDate() % 3 === 1) {
                 this.logger.log('UMS channel cycle branch=leave-all');
+                // A leave sweep runs for hours (2 min per channel), so this start notice stays; the
+                // per-client results arrive later as ONE summary. The join branch reports once, when
+                // its scan finishes, and has no separate start notice.
+                try {
+                  await sendBotNotice('pppl', {
+                    title: 'Channel leave cycle started',
+                  });
+                } catch (error) {
+                  parseError(error, 'UMS scheduled leave notification failed');
+                }
                 await this.leaveChannelsAll();
               } else {
                 this.logger.log('UMS channel cycle branch=join');
@@ -267,7 +279,9 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   async leaveChannelsAll() {
-    void this.sendToAll('leavechannels').catch((error) => {
+    // batchNotice=1: each client leaves silently and queues ONE digest row when its sweep ends (the
+    // flusher posts one table). An older client ignores the flag and keeps its own notices.
+    void this.sendToAll('leavechannels?batchNotice=1').catch((error) => {
       parseError(error, 'leaveChannelsAll dispatch failed');
     });
   }
@@ -475,6 +489,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     };
     const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
     const twentyDays = Date.now() - 20 * 24 * 60 * 60 * 1000;
+    // Stale other-persona rows reset by this request: reported once, after the loop.
+    const resets: unknown[][] = [];
 
     try {
       const query1 = {
@@ -512,15 +528,11 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
             resp.videos.push(...doc.videos);
           } else {
             if (doc.lastMsgTimeStamp < twentyDays) {
-              await sendBotNotice('pppl', {
-                severity: 'warning',
-                title: 'Resetting UserData',
-                fields: [
-                  { label: 'Profile', value: doc.profile },
-                  { label: 'Chat', value: doc.chatId },
-                  { label: 'Last message', value: getReadableTimeDifference(doc.lastMsgTimeStamp, Date.now()), code: false },
-                ],
-              });
+              resets.push([
+                doc.profile,
+                doc.chatId,
+                getReadableTimeDifference(doc.lastMsgTimeStamp, Date.now()),
+              ]);
               await this.userDataService.update(doc.profile, doc.chatId, {
                 payAmount: 0,
                 demoGiven: false,
@@ -534,6 +546,17 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       }
     } catch (error) {
       parseError(error);
+    }
+    if (resets.length) {
+      try {
+        await sendBotNotice('pppl', {
+          severity: 'warning',
+          title: 'Resetting UserData',
+          tables: [{ columns: [`Profile (${resets.length})`, 'Chat', 'Last message'], rows: resets }],
+        });
+      } catch (error) {
+        parseError(error, 'Resetting UserData notification failed', false);
+      }
     }
     console.log(resp);
     return resp;
@@ -620,48 +643,66 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     console.log('Joining Channel Started');
     await sleep(2000);
     const clients = await this.clientService.findAll();
-    await Promise.all(
-      clients.map(async (document) => {
-        try {
-          const resp = await fetchWithTimeout(
-            `${document.repl}/channelinfo`,
-            { timeout: 200000 },
-            1,
-          );
-          await sendBotNotice('pppl', {
-            title: 'Channel SendTrue',
-            fields: [
-              { label: 'Client ID', value: document.clientId },
-              { label: 'Can send', value: resp.data.canSendTrueCount },
-            ],
-          });
-          if (
-            resp?.data?.canSendTrueCount &&
-            resp?.data?.canSendTrueCount < 350
-          ) {
-            const excludedIds = this.getJoinedChannelIdsFromInfo(resp.data);
-            const result = await this.activeChannelsService.getActiveChannels(
-              25,
-              0,
-              excludedIds,
+    // One row per client; the cycle reports ONCE (the scan below is the whole run: the joins it
+    // queues are paced by joinChannelQueue, whose results are reported once when the queue drains).
+    const rows: Array<[string, unknown, unknown, string]> = clients.map((c) => [c.clientId, '-', '-', 'pending']);
+    try {
+      await Promise.all(
+        clients.map(async (document, index) => {
+          const row = rows[index];
+          try {
+            const resp = await fetchWithTimeout(
+              `${document.repl}/channelinfo`,
+              { timeout: 200000 },
+              1,
             );
-            await sendBotNotice('pppl', {
-              title: 'Started joining channels',
-              fields: [
-                { label: 'Client ID', value: document.clientId },
-                { label: 'Channels', value: result.length },
-              ],
-            });
-            this.joinChannelMap.set(document.repl, result);
+            row[1] = resp.data.canSendTrueCount ?? '-';
+            row[3] = 'ok';
+            if (
+              resp?.data?.canSendTrueCount &&
+              resp?.data?.canSendTrueCount < 350
+            ) {
+              const excludedIds = this.getJoinedChannelIdsFromInfo(resp.data);
+              const result = await this.activeChannelsService.getActiveChannels(
+                25,
+                0,
+                excludedIds,
+              );
+              row[2] = result.length;
+              row[3] = 'joining';
+              this.joinChannelMap.set(document.repl, result);
+              this.joinClientIds.set(document.repl, document.clientId);
+            }
+          } catch (error) {
+            row[3] = `error: ${String(parseError(error, `joinchannelForClients ${document.clientId}`, false)?.message ?? 'unknown').slice(0, 80)}`;
           }
-        } catch (error) {
-          parseError(error);
-        }
-      }),
-    );
-    this.joinChannelQueue();
-    console.log('Joining Channel Triggered Succesfully for ', clients.length);
+        }),
+      );
+      this.joinChannelQueue();
+      console.log('Joining Channel Triggered Succesfully for ', clients.length);
+    } finally {
+      if (rows.length) await this.sendJoinCycleSummary(rows);
+    }
     return 'Initiated Joining channels';
+  }
+
+  private async sendJoinCycleSummary(rows: Array<[string, unknown, unknown, string]>): Promise<void> {
+    try {
+      const joining = rows.filter((r) => r[3] === 'joining');
+      const failed = rows.filter((r) => String(r[3]).startsWith('error'));
+      await sendNoticeBatched((input) => sendBotNotice('pppl', input), {
+        severity: failed.length ? 'warning' : 'info',
+        title: 'Channel join cycle',
+        // Table only: totals live in the headers, failures in the Status column.
+        tables: [{
+          columns: [`Client (${rows.length})`, 'Can send', `Channels (${joining.reduce((n, r) => n + (Number(r[2]) || 0), 0)})`, 'Status'],
+          rows,
+          numeric: [1, 2],
+        }],
+      });
+    } catch (error) {
+      parseError(error, 'UMS channel join summary failed', false);
+    }
   }
 
   async joinChannelQueue() {
@@ -674,6 +715,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           const keys = Array.from(this.joinChannelMap.keys());
           if (keys.length > 0) {
             console.log('In JOIN CHANNEL interval: ', new Date().toISOString());
+            const tickRows: Array<{ clientId: string; row: Record<string, string | number> }> = [];
             const promises = keys.map(async (url) => {
               const channels = this.joinChannelMap.get(url);
               if (channels && channels.length > 0) {
@@ -686,7 +728,18 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
                   return;
                 }
                 try {
-                  await fetchWithTimeout(joinUrl);
+                  // batchNotice=1: the client answers with its outcome instead of posting a bot
+                  // message per channel; the outcomes become one results table when the queue ends.
+                  // An older client ignores the flag (and still posts its own message).
+                  const batchUrl = new URL(joinUrl);
+                  batchUrl.searchParams.set('batchNotice', '1');
+                  const response = await fetchWithTimeout(batchUrl.toString(), {
+                    notificationConfig: { enabled: false },
+                  });
+                  tickRows.push({
+                    clientId: this.joinClientIds.get(url) ?? url,
+                    row: joinRowFromResponse(this.describeJoinableChannel(channel as JoinableChannel), response),
+                  });
                   console.log(url, ' Trying to join :', this.describeJoinableChannel(channel as JoinableChannel));
                 } catch (error) {
                   parseError(error, 'Outer Err: ');
@@ -696,6 +749,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
               }
             });
             await Promise.all(promises);
+            await this.digestJoinRows(tickRows);
           } else {
             this.clearJoinChannelInterval();
           }
@@ -705,6 +759,53 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       },
       3 * 60 * 1000,
     );
+  }
+
+  /**
+   * This tick's join outcomes, queued in the Redis digest (they survive a restart; the flusher posts
+   * one table). If Redis refuses, the tick is sent as one table directly: never one message per row.
+   */
+  private async digestJoinRows(rows: Array<{ clientId: string; row: Record<string, string | number> }>): Promise<void> {
+    if (rows.length === 0) return;
+    const queued = await pushDigestEntries(
+      RedisClient.getClient() as any,
+      'CHANNEL_NOTIFICATIONS',
+      'join-results',
+      rows.map(({ clientId, row }) => ({ clientId, title: 'Channel join results', row, merge: 'sum' as const })),
+    );
+    if (queued) return;
+    try {
+      const merged = mergeByClient(rows.map(({ clientId, row }) => ({ clientId, at: Date.now(), title: '', row, merge: 'sum' as const })));
+      await sendNoticeBatched((input) => this.botsService.sendMessageByCategory(ChannelCategory.CHANNEL_NOTIFICATIONS, input, undefined, false), {
+        title: 'Channel join results',
+        tables: [{
+          columns: [`Client (${merged.length})`, 'Joined', 'Failed', 'Flood wait', 'No response', 'Old build', 'Last error'],
+          rows: merged.map(({ clientId, row }) => [clientId, row.Joined, row.Failed, row['Flood wait'], row['No response'], row['Old build'], row['Last error']]),
+          numeric: [1, 2, 3, 4, 5],
+        }],
+      });
+    } catch (error) {
+      parseError(error, 'UMS channel join results notification failed', false);
+    }
+  }
+
+  /**
+   * UMS only: drain the notice digest every 5 minutes (first pass shortly after boot, which also
+   * publishes the heartbeat clients check before they queue anything).
+   */
+  private startDigestFlusher(): void {
+    this.digestFlusher = new NoticeDigestFlusher(
+      () => RedisClient.getClient() as any,
+      (category, input) => this.botsService.sendMessageByCategory(category as ChannelCategory, input, undefined, false),
+      (category) => Object.values(ChannelCategory).includes(category as ChannelCategory),
+      this.logger as any,
+    );
+    const run = () => void this.digestFlusher?.runOnce().catch(() => undefined);
+    const first = setTimeout(run, 15_000);
+    const every = setInterval(run, 5 * 60 * 1000);
+    first.unref?.();
+    every.unref?.();
+    this.digestTimers.push(first, every);
   }
 
   private getJoinedChannelIdsFromInfo(channels: { ids?: string[]; canSendFalseChats?: string[] } | null | undefined): string[] {
@@ -1154,6 +1255,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (this.joinChannelIntervalId) {
       clearInterval(this.joinChannelIntervalId);
     }
+    for (const timer of this.digestTimers) clearTimeout(timer);
     for (const job of this.scheduledJobs) job.cancel();
   }
 }

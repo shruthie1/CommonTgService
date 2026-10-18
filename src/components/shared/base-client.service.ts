@@ -29,6 +29,8 @@ import { ChannelCategory } from '../bots/channel-category.enum';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { generateTGConfig } from '../Telegram/utils/generateTGConfig';
 import type { NotificationSeverity, RichNotificationField, RichNotificationInput } from '../../utils/rich-message';
+import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../utils/notice-batch';
+import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
 import {
@@ -1162,8 +1164,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     // Foreign password — account is NOT safely controlled by us
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
-                    this.botsService.sendMessageByCategory(
-                        ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                    this.sendAccountNotice(
                         this.warmupNotice('critical', 'Foreign 2FA password', doc.mobile, [{ label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], 'Unrecoverable: the account is not safely controlled by us')
                     );
                     return 0;
@@ -1245,8 +1246,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 this.logger.error(`Session permanently lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
-                this.botsService.sendMessageByCategory(
-                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                this.sendAccountNotice(
                     this.warmupNotice('critical', 'Session lost', doc.mobile, [{ label: 'Cause', value: 'revoked during auth cleanup', code: false }, { label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], undefined, errorMsg?.substring(0, 120))
                 );
             }
@@ -1273,6 +1273,31 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             details,
             detailsTitle: 'Error message',
         };
+    }
+
+    /**
+     * Account-notification sender for per-mobile events. Inside a maintenance run (a NoticeBatch is
+     * active) routine results are collected and sent as ONE table with the run summary; critical
+     * events (bans, lost sessions, permanent errors) are never deferred. Outside a run it sends at
+     * once, exactly as before.
+     */
+    protected sendAccountNotice(input: RichNotificationInput): Promise<boolean> {
+        const batch = currentNoticeBatch();
+        if (batch && input.severity !== 'critical') {
+            batch.add(input);
+            return Promise.resolve(true);
+        }
+        return this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input);
+    }
+
+    /** Events still collected when a run ends without reaching its summary: send them as one message. */
+    protected async flushLeftoverNoticeBatch(batch: NoticeBatch, title: string): Promise<void> {
+        const table = eventsToTable(batch.drain(), 'Events');
+        if (!table) return;
+        await sendNoticeBatched(
+            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input),
+            { severity: 'warning', title: `${this.clientType} · ${title}`, tables: [table] },
+        );
     }
 
     // ---- Main Warmup Processing (replaces processBufferClient / processPromoteClient) ----
@@ -1363,8 +1388,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             const rotated = await this.rotateSession(doc.mobile);
             if (rotated) {
-                this.botsService.sendMessageByCategory(
-                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                this.sendAccountNotice(
                     this.warmupNotice('success', 'Warmup complete', doc.mobile, [{ label: 'Session', value: 'rotated', code: false }, { label: 'Channels', value: doc.channels || 0, code: false }])
                 );
                 return { updateCount: 1, updateSummary: 'rotate_session' };
@@ -1375,8 +1399,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 failedUpdateAttempts: failedAttempts + 1,
                 lastUpdateFailure: new Date(),
             });
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            this.sendAccountNotice(
                 this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'rotate_session', code: false }, { label: 'Fails', value: failedAttempts + 1, code: false }])
             );
             return { updateCount: 0, updateSummary: 'ready_rotation_attempt_failed' };
@@ -1392,8 +1415,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 await this.deactivateClient(doc.mobile, reason, { permanent: true });
             }
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            this.sendAccountNotice(
                 this.warmupNotice('error', 'Warmup error', doc.mobile, [{ label: 'Step', value: 'rotate_session', code: false }, { label: 'Fails', value: `${failCount}/${this.MAX_FAILED_ATTEMPTS}`, code: false }], undefined, errorDetails.message?.substring(0, 120) || 'unknown')
             );
             return { updateCount: 0, updateSummary: 'ready_rotation_attempt_failed' };
@@ -1480,8 +1502,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+            this.sendAccountNotice(
                 this.warmupNotice('success', 'Warmup ready', doc.mobile, [{ label: 'Channels', value: doc.channels || 0, code: false }], 'Eligible for rotation')
             );
             return { updateCount: 0, updateSummary: 'advance_to_ready' };
@@ -1526,8 +1547,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 case 'set_2fa':
                     updateCount = await this.set2fa(doc, failedAttempts);
                     if (updateCount === 0) {
-                        this.botsService.sendMessageByCategory(
-                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                        this.sendAccountNotice(
                             this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'set_2fa', code: false }, { label: 'Fails', value: failedAttempts + 1, code: false }])
                         );
                     }
@@ -1542,8 +1562,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     });
                     updateCount = await this.removeOtherAuths(doc, failedAttempts);
                     if (updateCount === 0) {
-                        this.botsService.sendMessageByCategory(
-                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                        this.sendAccountNotice(
                             this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'remove_other_auths', code: false }, { label: 'Fails', value: failedAttempts + 1, code: false }])
                         );
                     }
@@ -1553,8 +1572,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
                     if (updateCount > 0) {
-                        this.botsService.sendMessageByCategory(
-                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                        this.sendAccountNotice(
                             this.warmupNotice('success', 'Warmup complete', doc.mobile, [{ label: 'Session', value: 'rotated', code: false }, { label: 'Channels', value: doc.channels || 0, code: false }])
                         );
                     } else {
@@ -1563,8 +1581,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                             failedUpdateAttempts: (doc.failedUpdateAttempts || 0) + 1,
                             lastUpdateFailure: new Date(),
                         });
-                        this.botsService.sendMessageByCategory(
-                            ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                        this.sendAccountNotice(
                             this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'rotate_session', code: false }, { label: 'Fails', value: (doc.failedUpdateAttempts || 0) + 1, code: false }])
                         );
                     }
@@ -1589,13 +1606,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (isPermanentError(errorDetails)) {
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
-                this.botsService.sendMessageByCategory(
-                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                this.sendAccountNotice(
                     this.warmupNotice('critical', 'Warmup permanent error', doc.mobile, [{ label: 'Step', value: warmupAction.action, code: false }, { label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], undefined, errorDetails.message?.substring(0, 120))
                 );
             } else {
-                this.botsService.sendMessageByCategory(
-                    ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                this.sendAccountNotice(
                     this.warmupNotice('error', 'Warmup error', doc.mobile, [{ label: 'Step', value: warmupAction.action, code: false }, { label: 'Fails', value: `${failCount}/${this.MAX_FAILED_ATTEMPTS}`, code: false }], undefined, errorDetails?.message?.substring(0, 120) || 'unknown')
                 );
             }
