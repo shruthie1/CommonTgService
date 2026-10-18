@@ -917,7 +917,7 @@ describe('BufferClientService coverage', () => {
             expect(after!.sessionRotatedAt ?? null).toBeNull();
             // The real summary notification was sent through the externally-mocked bots service.
             const summaryCall = botsService.sendMessageByCategory.mock.calls
-                .find((c) => c[1]?.title === 'Buffer Client Check Summary');
+                .find((c) => c[1]?.title === 'Buffer pool check');
             expect(summaryCall).toBeDefined();
             // Guard cleared on completion.
             expect((service as any).checkingBufferClientsSince).toBe(0);
@@ -1322,8 +1322,8 @@ describe('BufferClientService coverage', () => {
 
             const titles = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]?.title);
             expect(titles).not.toContain('Buffer Client Enrolled');
-            expect(titles.filter((t) => t === 'Buffer Client Check Summary')).toHaveLength(1);
-            const summary = botsService.sendMessageByCategory.mock.calls.find((c) => c[1]?.title === 'Buffer Client Check Summary')![1];
+            expect(titles.filter((t) => t === 'Buffer pool check')).toHaveLength(1);
+            const summary = botsService.sendMessageByCategory.mock.calls.find((c) => c[1]?.title === 'Buffer pool check')![1];
             const events = summary.tables.find((t: any) => String(t.title).startsWith('Warmup / enrolment events'));
             expect(events.rows.map((r: unknown[]) => [r[1], r[2]])).toEqual([['15551850002', 'Buffer Client Enrolled']]);
         });
@@ -1361,11 +1361,13 @@ describe('BufferClientService coverage', () => {
     describe('summary notification', () => {
         it('builds and sends the per-client summary message', async () => {
             await service.create(makeBufferClientData({ mobile: '15559990010', status: 'active', clientId: 'test-client-1' }));
-            await (service as any).sendBufferCheckSummaryNotification(2, 1, 1, ['a | b'], ['c | d']);
+            await (service as any).sendBufferCheckSummaryNotification(2, 1, 1, [{ clientId: 'a', mobile: 'b', change: '2fa', count: 2 }], [{ clientId: 'c', mobile: 'd' }]);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1].title).toBe('Buffer Client Check Summary');
-            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Per client', 'Updated this run', 'Created this run']));
-            expect(lastCall[1].tables.find((t: any) => t.title === 'Updated this run').rows).toEqual([[1, 'a | b']]);
+            expect(lastCall[1].title).toBe('Buffer pool check');
+            expect(lastCall[3]).toBe(false); // no "UMS ·" heading prefix
+            expect(lastCall[1].summary).toBeUndefined();
+            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Pool', 'Per client', 'Updated (1)', 'Created (1)']));
+            expect(lastCall[1].tables.find((t: any) => t.title === 'Updated (1)').rows).toEqual([['a', 'b', '2fa', 2]]);
         });
 
         it('sorts multiple clients by clientId and reports none when nothing ran', async () => {
@@ -1383,9 +1385,9 @@ describe('BufferClientService coverage', () => {
             await (service as any).sendBufferCheckSummaryNotification(0, 0, 0, [], []);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
             // No entry tables when nothing ran
-            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual([expect.stringContaining('Per client')]);
+            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(['Pool', expect.stringContaining('Per client')]);
             // alpha-client sorts before zeta-client in the per-client summary
-            const names = lastCall[1].tables[0].rows.map((r: unknown[]) => r[0]);
+            const names = lastCall[1].tables[1].rows.map((r: unknown[]) => r[0]);
             expect(names.indexOf('alpha-client')).toBeLessThan(names.indexOf('zeta-client'));
         });
     });

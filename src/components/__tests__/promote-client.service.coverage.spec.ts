@@ -678,7 +678,7 @@ describe('PromoteClientService coverage', () => {
             expect(after!.warmupPhase).toBe(WarmupPhase.READY);
             expect(after!.sessionRotatedAt ?? null).toBeNull();
             const summaryCall = botsService.sendMessageByCategory.mock.calls
-                .find((c) => c[1]?.title === 'Promote Client Check Summary');
+                .find((c) => c[1]?.title === 'Promote pool check');
             expect(summaryCall).toBeDefined();
             expect((service as any).checkingPromoteClientsSince).toBe(0);
         });
@@ -791,11 +791,12 @@ describe('PromoteClientService coverage', () => {
 
         it('sends promote check summary notification', async () => {
             await service.create(makePromoteClientData({ mobile: '15552000010', status: 'active', clientId: 'test-client-1' }));
-            await (service as any).sendPromoteCheckSummaryNotification(1, 1, 1, ['a | b'], ['c | d']);
+            await (service as any).sendPromoteCheckSummaryNotification(1, 1, 1, [{ clientId: 'a', mobile: 'b', change: 'privacy', count: 1 }], [{ clientId: 'c', mobile: 'd' }]);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1].title).toBe('Promote Client Check Summary');
-            expect(lastCall[1].tables[0].columns).toEqual(['Client', 'Active', 'Assigned', 'Inactive', 'Needed', 'Never used', 'Used 24h']);
-            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Updated this run', 'Created this run']));
+            expect(lastCall[1].title).toBe('Promote pool check');
+            expect(lastCall[3]).toBe(false); // no "UMS ·" heading prefix
+            expect(lastCall[1].tables[1].columns).toEqual(['Client (1)', 'Active', 'Assigned', 'Inactive', 'Needed', 'Never used', 'Used 24h']);
+            expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Updated (1)', 'Created (1)']));
         });
     });
 
@@ -968,8 +969,8 @@ describe('PromoteClientService coverage', () => {
             await (service as any).sendPromoteCheckSummaryNotification(0, 0, 0, [], []);
             const summary = botsService.sendMessageByCategory.mock.calls.pop()[1];
             // alpha should be listed before zeta after sorting
-            expect(summary.tables[0].rows.map((r: unknown[]) => r[0])).toEqual(expect.arrayContaining(['alpha', 'zeta']));
-            const names = summary.tables[0].rows.map((r: unknown[]) => r[0]);
+            expect(summary.tables[1].rows.map((r: unknown[]) => r[0])).toEqual(expect.arrayContaining(['alpha', 'zeta']));
+            const names = summary.tables[1].rows.map((r: unknown[]) => r[0]);
             expect(names.indexOf('alpha')).toBeLessThan(names.indexOf('zeta'));
         });
     });
@@ -1539,8 +1540,8 @@ describe('PromoteClientService coverage', () => {
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
             });
             await service.checkPromoteClients();
-            const summary = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]).find((m: any) => m?.title?.includes('Check Summary'));
-            expect(JSON.stringify(summary)).toContain('| updated | count=1');
+            const summary = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]).find((m: any) => m?.title?.includes('pool check'));
+            expect(summary.tables.find((t: any) => String(t.title).startsWith('Updated')).rows).toEqual([['test-client-1', '15553900050', 'updated', 1]]);
         });
 
         it('skips an unhealthy assigned account in the cap tally (919) and caps need message (1035)', async () => {

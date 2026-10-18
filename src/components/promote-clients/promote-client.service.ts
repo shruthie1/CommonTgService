@@ -25,7 +25,7 @@ import { ClientService } from '../clients/client.service';
 import { UpdatePromoteClientDto } from './dto/update-promote-client.dto';
 import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { parseError } from '../../utils/parseError';
-import { buildCheckSummaryNotification } from '../shared/check-summary-notification';
+import { buildCheckSummaryNotification, type CheckEntry } from '../shared/check-summary-notification';
 import { sendBotNotice } from '../../utils/bot-notice';
 import { currentNoticeBatch, eventsToTable, runWithNoticeBatch, sendNoticeBatched } from '../../utils/notice-batch';
 import { connectionManager } from '../Telegram/utils/connection-manager';
@@ -1103,7 +1103,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
 
         let totalUpdates = 0;
-        const updatedEntries: string[] = [];
+        const updatedEntries: CheckEntry[] = [];
         // warmupAction computed ONCE here and carried through (priority + sensitive/organic
         // prechecks reuse it), instead of recomputing per account (was 3× + TOCTOU risk).
         const promoteClientsToProcess: Array<{
@@ -1179,9 +1179,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const processResult = await this.processClient(promoteClient, client, warmupAction);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
-                updatedEntries.push(
-                    `${client.clientId} | ${promoteClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,
-                );
+                updatedEntries.push({ clientId: client.clientId, mobile: promoteClient.mobile, change: processResult.updateSummary || 'updated', count: processResult.updateCount });
             }
         }
 
@@ -1231,7 +1229,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
         }
 
-        let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: string[] } = {
+        let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] } = {
             createdCount: 0,
             attemptedCount: 0,
             createdEntries: [],
@@ -1415,7 +1413,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             priority: number;
         }>,
         promoteClientsPerClient?: Map<string, number>,
-    ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: string[] }> {
+    ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] }> {
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
 
         let totalNeeded = 0;
@@ -1457,7 +1455,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
-        const createdEntries: string[] = [];
+        const createdEntries: CheckEntry[] = [];
         const enrolledThisRun = new Set<string>();
 
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
@@ -1479,7 +1477,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
-                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
+                    createdEntries.push({ clientId: assignment.clientId, mobile: document.mobile });
                 }
                 attemptedCount++;
             } catch (error: unknown) {
@@ -1604,8 +1602,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         totalUpdates: number,
         createdCount: number,
         attemptedCount: number,
-        updatedEntries: string[],
-        createdEntries: string[],
+        updatedEntries: CheckEntry[],
+        createdEntries: CheckEntry[],
     ): Promise<void> {
         const distribution = await this.getPromoteClientDistribution();
         const summary = buildCheckSummaryNotification({
@@ -1625,7 +1623,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Warmup / enrolment events');
         if (eventsTable) (summary.tables ??= []).push(eventsTable);
         await sendNoticeBatched(
-            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input),
+            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input, undefined, false),
             summary,
         );
     }

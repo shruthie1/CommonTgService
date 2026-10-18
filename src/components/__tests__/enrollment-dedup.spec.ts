@@ -375,7 +375,7 @@ describe('Enrollment Deduplication', () => {
             );
 
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('15550050001');
+            expect(result.createdEntries[0].mobile).toBe('15550050001');
 
             // Verify the promote client doc was actually created
             const doc = await PromoteClientModel.findOne({ mobile: '15550050001' }).lean();
@@ -394,7 +394,7 @@ describe('Enrollment Deduplication', () => {
             );
 
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('15550060001');
+            expect(result.createdEntries[0].mobile).toBe('15550060001');
 
             const doc = await BufferClientModel.findOne({ mobile: '15550060001' }).lean();
             expect(doc).toBeTruthy();
@@ -693,7 +693,7 @@ describe('Enrollment Deduplication', () => {
 
             // Only 1 created (the fresh one)
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('15550210003');
+            expect(result.createdEntries[0].mobile).toBe('15550210003');
         });
 
         it('batch buffer enrollment skips users already enrolled as promote', async () => {
@@ -711,7 +711,7 @@ describe('Enrollment Deduplication', () => {
             );
 
             expect(result.createdCount).toBe(1);
-            expect(result.createdEntries[0]).toContain('15550220003');
+            expect(result.createdEntries[0].mobile).toBe('15550220003');
         });
     });
 

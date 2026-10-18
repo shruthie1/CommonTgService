@@ -29,7 +29,7 @@ import { ClientService } from '../clients/client.service';
 import { UpdateBufferClientDto } from './dto/update-buffer-client.dto';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { parseError } from '../../utils/parseError';
-import { buildCheckSummaryNotification } from '../shared/check-summary-notification';
+import { buildCheckSummaryNotification, type CheckEntry } from '../shared/check-summary-notification';
 import { sendBotNotice } from '../../utils/bot-notice';
 import { currentNoticeBatch, eventsToTable, runWithNoticeBatch, sendNoticeBatched } from '../../utils/notice-batch';
 import { connectionManager } from '../Telegram/utils/connection-manager';
@@ -1377,7 +1377,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
 
         let totalUpdates = 0;
-        const updatedEntries: string[] = [];
+        const updatedEntries: CheckEntry[] = [];
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
 
         // Collect buffer clients for priority-sorted processing. The warmupAction is computed ONCE
@@ -1470,9 +1470,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             const processResult = await this.processClient(bufferClient, client, warmupAction);
             if (processResult.updateCount > 0) {
                 totalUpdates += processResult.updateCount;
-                updatedEntries.push(
-                    `${client.clientId} | ${bufferClient.mobile} | ${processResult.updateSummary || 'updated'} | count=${processResult.updateCount}`,
-                );
+                updatedEntries.push({ clientId: client.clientId, mobile: bufferClient.mobile, change: processResult.updateSummary || 'updated', count: processResult.updateCount });
             }
         }
 
@@ -1522,7 +1520,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
         }
 
-        let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: string[] } = {
+        let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] } = {
             createdCount: 0,
             attemptedCount: 0,
             createdEntries: [],
@@ -1844,7 +1842,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             priority: number;
         }>,
         bufferClientsPerClient?: Map<string, number>,
-    ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: string[] }> {
+    ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] }> {
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
 
         let totalNeeded = 0;
@@ -1886,7 +1884,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         let attemptedCount = 0;
         let createdCount = 0;
         let assignmentIndex = 0;
-        const createdEntries: string[] = [];
+        const createdEntries: CheckEntry[] = [];
         const enrolledThisRun = new Set<string>();
 
         while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
@@ -1908,7 +1906,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 if (created) {
                     assignmentIndex++;
                     createdCount++;
-                    createdEntries.push(`${assignment.clientId} | ${document.mobile}`);
+                    createdEntries.push({ clientId: assignment.clientId, mobile: document.mobile });
                 }
                 attemptedCount++;
             } catch (error: unknown) {
@@ -2061,8 +2059,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         totalUpdates: number,
         createdCount: number,
         attemptedCount: number,
-        updatedEntries: string[],
-        createdEntries: string[],
+        updatedEntries: CheckEntry[],
+        createdEntries: CheckEntry[],
     ): Promise<void> {
         const distribution = await this.getBufferClientDistribution();
         const summary = buildCheckSummaryNotification({
@@ -2083,7 +2081,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Warmup / enrolment events');
         if (eventsTable) (summary.tables ??= []).push(eventsTable);
         await sendNoticeBatched(
-            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input),
+            (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input, undefined, false),
             summary,
         );
     }

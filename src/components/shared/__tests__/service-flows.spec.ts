@@ -788,7 +788,7 @@ describe('Service flow reliability', () => {
         expect(result).toEqual({
             createdCount: 1,
             attemptedCount: 1,
-            createdEntries: ['client-1 | 929001'],
+            createdEntries: [{ clientId: 'client-1', mobile: '929001' }],
         });
     });
 
@@ -1058,7 +1058,7 @@ describe('Service flow reliability', () => {
         expect(result).toEqual({
             createdCount: 1,
             attemptedCount: 1,
-            createdEntries: ['client-1 | 919001'],
+            createdEntries: [{ clientId: 'client-1', mobile: '919001' }],
         });
     });
 
