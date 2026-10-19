@@ -10,8 +10,10 @@ import {
     InternalServerErrorException,
     NotFoundException,
     forwardRef,
+    Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { JOIN_REQUEST_MODEL_NAME, type JoinRequestDocument } from '../join-requests/join-request.schema';
 import { ClientSession, Model } from 'mongoose';
 import { CreateBufferClientDto } from './dto/create-buffer-client.dto';
 import {
@@ -133,6 +135,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         @Inject(forwardRef(() => SessionService))
         sessionService: SessionService,
         botsService: BotsService,
+        @Optional()
+        @InjectModel(JOIN_REQUEST_MODEL_NAME)
+        joinRequestModel?: Model<JoinRequestDocument>,
     ) {
         super(
             telegramService,
@@ -145,6 +150,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             BufferClientService.name,
         );
         this.promoteClientService = promoteClientServiceRef;
+        this.joinRequestModel = joinRequestModel;
     }
 
     private async getPrimaryClientMobiles(clientId?: string | null): Promise<Set<string>> {
@@ -859,7 +865,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
-                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
+                    const channelsToJoin = await this.fetchJoinCandidates(doc.mobile, channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
                     if (channelsToJoin.length === 0) continue;
 
                     if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
@@ -894,13 +900,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return added;
     }
 
-    private async fetchJoinableChannels(currentChannels: number, limit: number, excludedIds: string[]): Promise<(Channel | ActiveChannel)[]> {
-        const capped = Math.min(limit, 25);
-        if (capped <= 0) return [];
-        return currentChannels < 220
-            ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
-            : this.channelsService.getActiveChannels(capped, 0, excludedIds);
-    }
 
     async markAsActive(mobile: string, message: string = 'Account is functioning properly'): Promise<BufferClientDocument> {
         return this.updateStatus(mobile, 'active', message);
@@ -1630,9 +1629,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
-                    const result = channels.ids.length < 220
-                        ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds) // Reduced from 150 to 25
-                        : await this.channelsService.getActiveChannels(25, 0, excludedIds);
+                    // activeChannels below 220, channels above; skips pending join requests, approval-only last.
+                    const result = await this.fetchJoinCandidates(mobile, channels.ids.length, 25, excludedIds);
 
                     if (!this.joinChannelMap.has(mobile)) {
                         if (this.safeSetJoinChannelMap(mobile, result)) {

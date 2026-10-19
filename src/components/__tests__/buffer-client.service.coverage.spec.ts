@@ -23,6 +23,7 @@ import {
     mockBotsService, mockActiveChannelsService, mockChannelsService, mockSessionService,
 } from './api-test-helpers';
 import { connectionManager } from '../Telegram/utils/connection-manager';
+import { JoinRequestSchema } from '../join-requests/join-request.schema';
 import * as channelInfoModule from '../../utils/telegram-utils/channelinfo';
 import * as organicModule from '../shared/organic-activity';
 import isPermanentErrorDefault from '../../utils/isPermanentError';
@@ -485,6 +486,43 @@ describe('BufferClientService coverage', () => {
             const added = await service.refillJoinQueue('test-client-1');
             expect(added).toBe(1);
             expect((service as any).joinChannelMap.get('15551500001')).toEqual([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+        });
+
+        it('skips channels with a live joinRequests entry for this mobile (pending request not re-sent)', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500091', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            const JoinRequestModel = connection.model('JoinRequestBufferSkip', JoinRequestSchema, 'joinRequests_buffer_skip');
+            await JoinRequestModel.create({ mobile: '15551500091', channelId: 'pending1', pool: 'buffer', requestedAt: new Date() });
+            await JoinRequestModel.create({ mobile: '15551500099', channelId: 'otherMobile1', pool: 'buffer', requestedAt: new Date() });
+            (service as any).joinRequestModel = JoinRequestModel;
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: ['x1'], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([{ channelId: 'n1', username: 'n1', canSendMsgs: true }]);
+
+            await service.refillJoinQueue('test-client-1');
+
+            const notIds = activeChannelsService.getActiveChannels.mock.calls[0][2] as string[];
+            expect(notIds).toEqual(expect.arrayContaining(['x1', 'pending1']));
+            expect(notIds).not.toContain('otherMobile1');
+            await JoinRequestModel.deleteMany({});
+        });
+
+        it('orders approval-only (joinRequestRequired) channels after instant-join channels', async () => {
+            await service.create(makeBufferClientData({ mobile: '15551500092', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            jest.spyOn(channelInfoModule, 'channelInfo').mockResolvedValue({ ids: ['x1'], canSendFalseCount: 0, canSendFalseChats: [] } as any);
+            activeChannelsService.getActiveChannels.mockResolvedValue([
+                { channelId: 'a1', username: 'a1', canSendMsgs: true, joinRequestRequired: true },
+                { channelId: 'i1', username: 'i1', canSendMsgs: true },
+                { channelId: 'a2', username: 'a2', canSendMsgs: true, joinRequestRequired: true },
+                { channelId: 'i2', username: 'i2', canSendMsgs: true, joinRequestRequired: false },
+            ]);
+
+            await service.refillJoinQueue('test-client-1');
+
+            const queued = ((service as any).joinChannelMap.get('15551500092') || []).map((c: any) => c.channelId);
+            expect(queued).toEqual(['i1', 'i2', 'a1', 'a2']);
         });
 
         it('recovers below-floor terminal accounts while rejecting phase-less legacy records', async () => {

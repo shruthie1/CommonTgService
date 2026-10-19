@@ -72,6 +72,16 @@ export class Channel {
   @Prop({ type: Number, default: null })
   bannedAt?: number | null;
 
+  // Approval-only channel: a join returned INVITE_REQUEST_SENT. Join selection orders these
+  // after instant-join channels. Additive; no default so other docs are not stamped.
+  @ApiProperty({ required: false, type: Boolean })
+  @Prop({ type: Boolean, required: false })
+  joinRequestRequired?: boolean;
+
+  @ApiProperty({ required: false, type: Date })
+  @Prop({ type: Date, required: false })
+  joinRequestSeenAt?: Date;
+
   // REMOVED starred / score — neither has a writer or reader in the channel
   // lifecycle. Keeping Mongoose defaults here recreated obsolete fields on
   // every new document after cleanup.

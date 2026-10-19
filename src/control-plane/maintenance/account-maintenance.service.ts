@@ -184,7 +184,15 @@ export class AccountMaintenanceService {
           tgId: me.id.toString(),
         } as any,
       );
-      await manager.client.sendMessage('me', { message: '.' });
+      // Bring the account online (replaces the old "." to Saved Messages). Best-effort:
+      // a failed status call must not fail the refresh above or the discovery below.
+      try {
+        await manager.setOnlineStatus();
+      } catch (statusError) {
+        this.logger.warn(
+          `Online status update failed for ${user.mobile}: ${parseError(statusError, 'UpdateStatus', false).message}`,
+        );
+      }
       await this.persistDiscoveredChannels(dialogs);
     } catch (error) {
       const details = parseError(

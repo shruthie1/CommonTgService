@@ -102,6 +102,16 @@ export class ActiveChannel {
   @Prop({ type: Number, default: null })
   lastLiveCheckedAt?: number | null;
 
+  // Approval-only channel: a join returned INVITE_REQUEST_SENT. Join selection orders these
+  // after instant-join channels. Additive; no default so other docs are not stamped.
+  @ApiProperty({ required: false, type: Boolean })
+  @Prop({ type: Boolean, required: false })
+  joinRequestRequired?: boolean;
+
+  @ApiProperty({ required: false, type: Date })
+  @Prop({ type: Date, required: false })
+  joinRequestSeenAt?: Date;
+
   // REMOVED successMsgCount / failureMsgCount / followupMsgSuccessCount / followupMsgFailureCount /
   // deletedCount / freeformDeletedCount / followUpDeletedCount / messageIndex / messageId / message /
   // lastMessageTime — outcome-tracking fields migrated to the channelIntelligence collection

@@ -24,6 +24,8 @@ import { computeCheck } from 'telegram/Password';
 import { StringSession } from 'telegram/sessions';
 import isPermanentError from '../../utils/isPermanentError';
 import isDeadChannelError from '../../utils/isDeadChannelError';
+import { hasTelegramErrorCode, isFloodWaitError } from '../../utils/telegram-error-code';
+import type { JoinRequestDocument } from '../join-requests/join-request.schema';
 import type { BotsService } from '../bots/bots.service';
 import { ChannelCategory } from '../bots/channel-category.enum';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
@@ -466,6 +468,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             );
         }
     }
+
+    /**
+     * `joinRequests` model (pending join requests to approval-only channels). Set by the
+     * concrete pool service; when absent, join-request persistence and filtering are skipped.
+     */
+    protected joinRequestModel?: Model<JoinRequestDocument>;
 
     constructor(
         protected readonly telegramService: TelegramService,
@@ -1699,6 +1707,80 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
     }
 
+    /** Channel ids this mobile already has a live (unexpired) join request for. */
+    protected async getPendingJoinRequestChannelIds(mobile: string): Promise<string[]> {
+        if (!this.joinRequestModel) return [];
+        try {
+            const rows = await this.joinRequestModel
+                .find({ mobile }, { channelId: 1, _id: 0 })
+                .lean()
+                .exec();
+            return rows.map((row) => String(row.channelId)).filter(Boolean);
+        } catch (error) {
+            this.logger.warn(`Failed to read pending join requests for ${mobile}: ${this.getErrorText(error)}`);
+            return [];
+        }
+    }
+
+    /**
+     * Join candidates for one mobile: skips channels with a live join request for this mobile,
+     * and orders approval-only channels after instant-join channels.
+     */
+    protected async fetchJoinCandidates(
+        mobile: string,
+        currentChannels: number,
+        limit: number,
+        excludedIds: string[],
+    ): Promise<(Channel | ActiveChannel)[]> {
+        const capped = Math.min(limit, 25);
+        if (capped <= 0) return [];
+        const pending = await this.getPendingJoinRequestChannelIds(mobile);
+        const notIds = pending.length ? Array.from(new Set([...excludedIds, ...pending])) : excludedIds;
+        // Curated activeChannels pool until 220, then the broader channels collection.
+        const result: (Channel | ActiveChannel)[] = currentChannels < 220
+            ? await this.activeChannelsService.getActiveChannels(capped, 0, notIds)
+            : await this.channelsService.getActiveChannels(capped, 0, notIds);
+        return this.orderInstantJoinFirst<Channel | ActiveChannel>(result);
+    }
+
+    /** Stable reorder: channels flagged joinRequestRequired go after instant-join channels. */
+    protected orderInstantJoinFirst<T extends { joinRequestRequired?: boolean }>(channels: T[]): T[] {
+        if (!Array.isArray(channels)) return channels;
+        const instant = channels.filter((channel) => channel?.joinRequestRequired !== true);
+        const approval = channels.filter((channel) => channel?.joinRequestRequired === true);
+        return [...instant, ...approval];
+    }
+
+    /**
+     * Record a join request sent to an approval-only channel (INVITE_REQUEST_SENT): upsert the
+     * per-mobile joinRequests entry and flag the channel. Failures are logged, never thrown.
+     */
+    protected async recordJoinRequest(mobile: string, channel: Channel | ActiveChannel | null): Promise<void> {
+        const channelId = channel?.channelId ? String(channel.channelId) : '';
+        if (!channelId) return;
+        if (this.joinRequestModel) {
+            try {
+                await this.joinRequestModel.updateOne(
+                    { mobile, channelId },
+                    {
+                        $set: { requestedAt: new Date(), pool: this.clientType, username: channel?.username ?? null },
+                        $setOnInsert: { mobile, channelId },
+                    },
+                    { upsert: true },
+                ).exec();
+            } catch (error) {
+                this.logger.warn(`Failed to record join request ${mobile} -> ${channelId}: ${this.getErrorText(error)}`);
+            }
+        }
+        for (const service of [this.activeChannelsService, this.channelsService]) {
+            try {
+                await service?.markJoinRequestRequired?.(channelId);
+            } catch (error) {
+                this.logger.warn(`Failed to flag approval-only channel ${channelId}: ${this.getErrorText(error)}`);
+            }
+        }
+    }
+
     /**
      * Round-robin channel joining with human-like pacing:
      * - Each mobile gets joinsPerMobilePerRound (3) joins before rotating to the next
@@ -1834,18 +1916,22 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 );
                 const rawErrorMessage = this.getErrorText(error);
 
-                if (rawErrorMessage === 'INVITE_REQUEST_SENT') {
-                    // NOT a failure: the channel requires admin approval and our join
-                    // request was accepted (pending approval). Count it as a successful
-                    // attempt, do NOT re-queue, do NOT increment failure counts.
-                    // Persist the increment here: the post-loop success increment is skipped
-                    // because tryJoiningChannel threw, so without this the count drifts.
-                    this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
+                if (hasTelegramErrorCode(error, 'INVITE_REQUEST_SENT')) {
+                    // Pending, NOT a failure: the channel requires admin approval and our join
+                    // request was sent. Not re-queued, not a failure, and NOT a joined channel
+                    // (no channels++). It does count toward the daily join cap. The request is
+                    // recorded in joinRequests so selection skips this channel for this mobile.
+                    this.logger.log(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
                     this.incrementDailyJoinCount(mobile);
-                    try {
-                        await this.model.updateOne({ mobile }, { $inc: { channels: 1 } });
-                    } catch (incError) {
-                        this.logger.warn(`Failed to persist invite-request join for ${mobile}: ${this.getErrorText(incError)}`);
+                    await this.recordJoinRequest(mobile, currentChannel);
+                    // Joins that DID succeed earlier in this round: the post-loop increment is
+                    // skipped because tryJoiningChannel threw, so persist them here.
+                    if (joinCount > 0) {
+                        try {
+                            await this.model.updateOne({ mobile }, { $inc: { channels: joinCount } });
+                        } catch (incError) {
+                            this.logger.warn(`Failed to persist ${joinCount} successful joins for ${mobile} after join request: ${this.getErrorText(incError)}`);
+                        }
                     }
                 } else if (isDeadChannelError(error)) {
                     // Channel username no longer resolves (renamed/deleted/never existed).
@@ -1854,7 +1940,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     // collections, so it won't be re-queued on the next refill either.
                     this.logger.warn(`${mobile} dead channel @${currentChannel?.username ?? 'unknown'} (${rawErrorMessage}) — dropped from queue`);
                     // Deliberately do NOT unshift currentChannel back into the queue.
-                } else if (errorDetails.error === 'FloodWaitError' || rawErrorMessage === 'CHANNELS_TOO_MUCH') {
+                } else if (errorDetails.error === 'FloodWaitError' || isFloodWaitError(error) || hasTelegramErrorCode(error, 'CHANNELS_TOO_MUCH')) {
                     this.logger.warn(`${mobile} FloodWaitError or too many channels, removing from queue`);
                     this.removeFromJoinMap(mobile);
 
@@ -1863,7 +1949,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         const channelsInfo = await this.telegramService.getChannelInfo(mobile, true);
                         await this.update(mobile, { channels: channelsInfo.ids.length });
                     } catch (channelError: unknown) {
-                        if (this.getErrorText(channelError) === 'CHANNELS_TOO_MUCH') {
+                        if (hasTelegramErrorCode(channelError, 'CHANNELS_TOO_MUCH')) {
                             await this.update(mobile, { channels: 500 });
                         }
                     }

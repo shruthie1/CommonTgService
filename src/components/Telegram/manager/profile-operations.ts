@@ -176,6 +176,11 @@ export async function updatePrivacyBatch(ctx: TgContext, settings: PrivacyBatchS
     return true;
 }
 
+/** Mark the account online, as an opened official app does (account.UpdateStatus offline=false). */
+export async function setOnlineStatus(ctx: TgContext): Promise<void> {
+    await ctx.client.invoke(new Api.account.UpdateStatus({ offline: false }));
+}
+
 export async function updateProfile(ctx: TgContext, firstName: string, about: string): Promise<void> {
     const data: Record<string, string> = { lastName: '' };
     if (firstName !== undefined) data['firstName'] = firstName;

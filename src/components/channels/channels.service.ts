@@ -159,6 +159,18 @@ export class ChannelsService {
     return updatedChannel;
   }
 
+  /**
+   * Flag an existing channel as approval-only (a join returned INVITE_REQUEST_SENT). Never
+   * upserts: a channel absent from this collection stays absent. Additive fields only.
+   */
+  async markJoinRequestRequired(channelId: string): Promise<void> {
+    if (!channelId) return;
+    await this.ChannelModel.updateOne(
+      { channelId: this.channelKey(channelId) },
+      { $set: { joinRequestRequired: true, joinRequestSeenAt: new Date() } },
+    ).exec();
+  }
+
   async remove(channelId: string): Promise<void> {
     const botsService = getBotsServiceInstance();
     if (botsService) {

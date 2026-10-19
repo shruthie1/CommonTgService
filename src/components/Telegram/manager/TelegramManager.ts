@@ -440,6 +440,11 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return profileOps.updateProfile(this.ctx, firstName, about);
         }
 
+        /** Mark the account online (account.UpdateStatus offline=false), like an opened app. */
+        async setOnlineStatus(): Promise<void> {
+            return profileOps.setOnlineStatus(this.ctx);
+        }
+
         async updateUsername(baseUsername: string): Promise<string> {
             return profileOps.updateUsername(this.ctx, baseUsername);
         }

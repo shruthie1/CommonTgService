@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { JOIN_REQUEST_MODEL_NAME, JoinRequestSchema } from '../join-requests/join-request.schema';
 import { PromoteClientService } from './promote-client.service';
 import { PromoteClientController } from './promote-client.controller';
 import { PromoteClient, PromoteClientSchema } from './schemas/promote-client.schema';
@@ -17,6 +18,7 @@ import { BotsModule } from '../bots/bots.module';
   imports: [
     InitModule,
     MongooseModule.forFeature([{ name: PromoteClient.name, schema: PromoteClientSchema, collection: 'promoteClients' }]),
+    MongooseModule.forFeature([{ name: JOIN_REQUEST_MODEL_NAME, schema: JoinRequestSchema, collection: 'joinRequests' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ActiveChannelsModule),

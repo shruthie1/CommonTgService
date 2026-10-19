@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { JOIN_REQUEST_MODEL_NAME, JoinRequestSchema } from '../join-requests/join-request.schema';
 import { BufferClientService } from './buffer-client.service';
 import { BufferClientController } from './buffer-client.controller';
 import { BufferClientSchema } from './schemas/buffer-client.schema';
@@ -17,6 +18,7 @@ import { BotsModule } from '../bots/bots.module';
   imports: [
     InitModule,
     MongooseModule.forFeature([{ name: 'bufferClientModule', schema: BufferClientSchema, collection: 'bufferClients' }]),
+    MongooseModule.forFeature([{ name: JOIN_REQUEST_MODEL_NAME, schema: JoinRequestSchema, collection: 'joinRequests' }]),
     forwardRef(() => TelegramModule),
     forwardRef(() => UsersModule),
     forwardRef(() => ActiveChannelsModule),

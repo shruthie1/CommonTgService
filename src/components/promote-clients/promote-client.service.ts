@@ -8,8 +8,10 @@ import {
     InternalServerErrorException,
     NotFoundException,
     forwardRef,
+    Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { JOIN_REQUEST_MODEL_NAME, type JoinRequestDocument } from '../join-requests/join-request.schema';
 import { Model } from 'mongoose';
 import { CreatePromoteClientDto } from './dto/create-promote-client.dto';
 import {
@@ -90,6 +92,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         @Inject(forwardRef(() => SessionService))
         sessionService: SessionService,
         botsService: BotsService,
+        @Optional()
+        @InjectModel(JOIN_REQUEST_MODEL_NAME)
+        joinRequestModel?: Model<JoinRequestDocument>,
     ) {
         super(
             telegramService,
@@ -102,6 +107,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             PromoteClientService.name,
         );
         this.bufferClientService = bufferClientServiceRef;
+        this.joinRequestModel = joinRequestModel;
     }
 
     // ---- Abstract implementations ----
@@ -634,7 +640,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
                 if (channels.canSendFalseCount < 10) {
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
-                    const channelsToJoin = await this.fetchJoinableChannels(channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
+                    const channelsToJoin = await this.fetchJoinCandidates(doc.mobile, channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
                     if (channelsToJoin.length === 0) continue;
 
                     if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
@@ -670,14 +676,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return added;
     }
 
-    private async fetchJoinableChannels(currentChannels: number, limit: number, excludedIds: string[]): Promise<(Channel | ActiveChannel)[]> {
-        const capped = Math.min(limit, 25);
-        if (capped <= 0) return [];
-        // Use curated activeChannels pool until 220, then broader channels collection
-        return currentChannels < 220
-            ? this.activeChannelsService.getActiveChannels(capped, 0, excludedIds)
-            : this.channelsService.getActiveChannels(capped, 0, excludedIds);
-    }
 
     async updateLastUsed(mobile: string): Promise<PromoteClient> {
         return this.update(mobile, { lastUsed: new Date() });
@@ -931,11 +929,8 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                     if (channels.canSendFalseCount < 10) {
                         const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
                         await sleep(5000 + Math.random() * 3000);
-                        const isBelowThreshold = channels.ids.length < 220;
-
-                        const result = isBelowThreshold
-                            ? await this.activeChannelsService.getActiveChannels(25, 0, excludedIds) // Reduced from 150
-                            : await this.channelsService.getActiveChannels(25, 0, excludedIds);
+                        // activeChannels below 220, channels above; skips pending join requests, approval-only last.
+                        const result = await this.fetchJoinCandidates(mobile, channels.ids.length, 25, excludedIds);
 
                         if (!this.joinChannelMap.has(mobile)) {
                             if (this.safeSetJoinChannelMap(mobile, result)) {
