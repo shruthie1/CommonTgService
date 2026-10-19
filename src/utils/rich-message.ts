@@ -163,13 +163,21 @@ function noEmoji(text: unknown): string {
 
 /** Button labels are plain words (owner, 2026-10-18): emoji are stripped. */
 function buttonLabel(text: string): string {
-    return escapeTelegramHtml(noEmoji(text) || 'Open');
+    return noEmoji(text) || 'Open';
 }
 
-function buttonTag(button: NotificationButton, index: number): string {
-    const style = index === 0 && button.url ? ' style="primary"' : '';
-    if (button.url) return `<tg-button type="url"${style} url="${attr(button.url)}">${buttonLabel(button.text)}</tg-button>`;
-    return `<tg-button type="copy_text" text="${attr(button.copy)}">${buttonLabel(button.text)}</tg-button>`;
+/**
+ * Buttons as a classic inline keyboard under the bubble (owner, 2026-10-19: the in-card HTML buttons were
+ * rejected). sendRichMessage accepts reply_markup like sendMessage does.
+ */
+export function notificationKeyboard(input: RichNotificationInput): { inline_keyboard: Record<string, unknown>[][] } | undefined {
+    const buttons = notificationButtons(input).map((b) => (b.url
+        ? { text: buttonLabel(b.text), url: b.url }
+        : { text: buttonLabel(b.text), copy_text: { text: b.copy } }));
+    if (!buttons.length) return undefined;
+    const rows: Record<string, unknown>[][] = [];
+    for (let i = 0; i < buttons.length; i += BUTTONS_PER_ROW) rows.push(buttons.slice(i, i + BUTTONS_PER_ROW));
+    return { inline_keyboard: rows };
 }
 
 function renderTable(table: NotificationTable): string {
@@ -190,8 +198,6 @@ function detailLines(input: RichNotificationInput): string[] {
     if (!input.details) return [];
     return (Array.isArray(input.details) ? input.details : [input.details]).map((d) => String(d ?? '')).filter((d) => d.trim());
 }
-
-/** Up to this many short fields render as one "Label value · Label value" line instead of a table. */
 
 /**
  * Rich HTML for sendRichMessage. `prefix` (the clientId) is the first line on its own, then the title,
@@ -246,10 +252,7 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
     }
     if (footer.length) parts.push(`<p>${footer.join(' · ')}</p>`);
 
-    const buttons = notificationButtons(input);
-    for (let i = 0; i < buttons.length; i += BUTTONS_PER_ROW) {
-        parts.push(`<tg-button-row>${buttons.slice(i, i + BUTTONS_PER_ROW).map((b, j) => buttonTag(b, i + j)).join('')}</tg-button-row>`);
-    }
+    // Buttons are not in the HTML: senders attach notificationKeyboard(input) as reply_markup.
     // Plain lines, not paragraphs (owner, 2026-10-18): <p> spacing made cards tall.
     return parts.join('\n').replace(/<p>([\s\S]*?)<\/p>\n?/g, '$1<br/>');
 }
@@ -365,30 +368,15 @@ export function telemetryToRich(text: string): RichNotificationInput {
     return { ...base, title: '', quote: body.slice(0, 3000), quoteLabel: '' };
 }
 
-export function buttonsFromReplyMarkup(markup: unknown): NotificationButton[] {
-    let parsed: any = markup;
-    if (typeof markup === 'string') {
-        try { parsed = JSON.parse(markup); } catch { return []; }
-    }
-    const rows: any[] = Array.isArray(parsed?.inline_keyboard) ? parsed.inline_keyboard : [];
-    const buttons: NotificationButton[] = [];
-    for (const row of rows) {
-        for (const b of Array.isArray(row) ? row : []) {
-            if (b?.text && typeof b.url === 'string') buttons.push({ text: String(b.text), url: b.url });
-            else if (b?.text && typeof b.copy_text?.text === 'string') buttons.push({ text: String(b.text), copy: b.copy_text.text });
-        }
-    }
-    return buttons;
-}
-
 /**
  * Classic (sendMessage, parse_mode HTML) rendering of a structured notice: the fallback when
  * Telegram refuses the rich payload. Tables degrade to "a | b | c" lines.
  */
 export function formatClassicNotificationHtml(input: RichNotificationInput, prefix?: string): string {
     const title = input.title || input.summary || 'Notification';
-    const head = `${prefix ? `${escapeTelegramHtml(prefix)} · ` : ''}${escapeTelegramHtml(title)}${spoilerTag(input.spoiler)}`;
-    const blocks: string[][] = [[`<b>${head}</b>`]];
+    // Client id and title on separate lines (owner, 2026-10-19), as in rich cards.
+    const head = `<b>${escapeTelegramHtml(title)}</b>${spoilerTag(input.spoiler)}`;
+    const blocks: string[][] = [[...(prefix ? [`<b>${escapeTelegramHtml(prefix)}</b>`] : []), head]];
     if (input.summary && input.summary !== title) blocks.push([escapeTelegramHtml(input.summary)]);
     const fields = visibleFields(input);
     if (fields.length) blocks.push(fields.map((f) => `<b>${escapeTelegramHtml(f.label)}:</b> ${escapeTelegramHtml(f.value)}`));

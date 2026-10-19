@@ -14,7 +14,7 @@ import { UsersService } from '../users/users.service';
 // ChannelCategory lives in ./channel-category.enum to break a circular import
 // (create-bot.dto -> bots.service -> TelegramService -> ... -> create-bot.dto).
 import { ChannelCategory } from './channel-category.enum';
-import { formatClassicNotificationHtml, formatRichMessageHtml } from '../../utils/rich-message';
+import { formatClassicNotificationHtml, formatRichMessageHtml, notificationKeyboard } from '../../utils/rich-message';
 import type { RichNotificationInput } from '../../utils/rich-message';
 
 /** Minimal fields the replacement flow needs from a dead bot (plain, not a Mongoose doc). */
@@ -856,7 +856,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
 
     /** Classic sendMessage body: the fallback when Telegram refuses the rich payload. */
     private classicMessageBody(bot: BotDocument, message: RichNotificationInput, options: SendMessageOptions | undefined, allowServiceName: boolean): Record<string, unknown> {
-        const buttons = (message.buttons ?? []).filter(b => b.url);
         return {
             chat_id: bot.channelId,
             text: formatClassicNotificationHtml(message, allowServiceName ? process.env.clientId : undefined),
@@ -865,7 +864,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             reply_to_message_id: options?.replyToMessageId,
             allow_sending_without_reply: options?.allowSendingWithoutReply,
             protect_content: options?.protectContent,
-            reply_markup: buttons.length ? { inline_keyboard: [buttons.map(b => ({ text: b.text, url: b.url }))] } : undefined,
+            reply_markup: notificationKeyboard(message),
         };
     }
 
@@ -878,6 +877,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             chat_id: bot.channelId,
             rich_message: { html: this.richMessageHtml(text, allowServiceName) },
         };
+        const keyboard = notificationKeyboard(text);
+        if (keyboard) body.reply_markup = keyboard;
         if (options?.disableNotification) body.disable_notification = true;
         if (options?.protectContent) body.protect_content = true;
         if (options?.replyToMessageId) {
@@ -933,7 +934,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (options.caption) {
-            formData.append('caption', `${process.env.clientId}:\n\n${options.caption}`);
+            formData.append('caption', `${process.env.clientId}\n${options.caption}`);
         }
         if (options.parseMode) formData.append('parse_mode', options.parseMode);
         if (options.disableNotification) formData.append('disable_notification', 'true');
@@ -974,7 +975,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 type: item.type,
                 media: Buffer.isBuffer(item.media) ? `attach://file${i}` : item.media,
             };
-            if (item.caption) mediaObj.caption = `${process.env.clientId}:\n\n${item.caption}`;
+            if (item.caption) mediaObj.caption = `${process.env.clientId}\n${item.caption}`;
             if (item.parseMode) mediaObj.parse_mode = item.parseMode;
             if (item.hasSpoiler) mediaObj.has_spoiler = true;
             if (item.type === 'video') {

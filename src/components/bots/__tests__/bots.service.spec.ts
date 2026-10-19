@@ -1631,7 +1631,8 @@ describe('BotsService - Bot API rich messages', () => {
     expect(html).toContain('<code>911234567890</code>');
     expect(html).toContain('<th>A</th><th align="right">B</th>');
     expect(html).toContain('<details><summary>Details</summary><pre>stack line</pre></details>');
-    expect(html).toContain('<tg-button type="url" style="primary" url="https://example.com/x">Open</tg-button>');
+    expect(html).not.toContain('tg-button');
+    expect(bodyOf(mockedAxios.post.mock.calls[0]).reply_markup).toEqual({ inline_keyboard: [[{ text: 'Open', url: 'https://example.com/x' }]] });
   });
 
   test('HTTP 400 on sendRichMessage falls back to the classic sendMessage with the same bot', async () => {
@@ -1645,7 +1646,7 @@ describe('BotsService - Bot API rich messages', () => {
     expect(urlOf(mockedAxios.post.mock.calls[1])).toBe(`https://api.telegram.org/bot${bot.token}/sendMessage`);
     const classic = bodyOf(mockedAxios.post.mock.calls[1]);
     expect(classic.parse_mode).toBe('HTML');
-    expect(classic.text).toContain('testclient · T');
+    expect(classic.text).toContain('<b>testclient</b>\n<b>T</b>');
     expect(classic.text).toContain('<b>K:</b> v');
     expect(classic.reply_markup).toEqual({ inline_keyboard: [[{ text: 'Go', url: 'https://e.co' }]] });
   });
@@ -1657,7 +1658,7 @@ describe('BotsService - Bot API rich messages', () => {
       .mockResolvedValueOnce(axiosOk({ ok: true }));
     expect(await service.sendMessageByBotId(bot._id.toString(), { title: 'Hi' })).toBe(true);
     const classic = bodyOf(mockedAxios.post.mock.calls[1]);
-    expect(classic.text).toBe('<b>testclient · Hi</b>');
+    expect(classic.text).toBe('<b>testclient</b>\n<b>Hi</b>');
     expect(classic.parse_mode).toBe('HTML');
   });
 

@@ -1,4 +1,4 @@
-import { buttonsFromReplyMarkup, formatClassicNotificationHtml, formatRichMessageHtml, RICH_MESSAGE_MAX_CHARS, textToRichInput } from '../rich-message';
+import { formatClassicNotificationHtml, formatRichMessageHtml, notificationKeyboard, RICH_MESSAGE_MAX_CHARS, textToRichInput } from '../rich-message';
 
 describe('formatRichMessageHtml', () => {
   test('client line, then icon + title, summary, and fields always in a table (ids as code)', () => {
@@ -71,11 +71,14 @@ describe('formatRichMessageHtml', () => {
     expect(html).toContain('more chars)');
   });
 
-  test('buttons: emoji stripped, first URL primary, rows of 3, copy buttons supported', () => {
-    const html = formatRichMessageHtml({ title: 'T', buttons: [1, 2, 3, 4].map((i) => ({ text: `🔗 Go ${i}`, url: `https://e.co/${i}` })).concat([{ text: 'Copy', url: undefined as any, copy: 'abc' } as any]) });
-    expect(html).toContain('<tg-button type="url" style="primary" url="https://e.co/1">Go 1</tg-button>');
-    expect(html.match(/<tg-button-row>/g)).toHaveLength(2);
-    expect(html).toContain('<tg-button type="copy_text" text="abc">Copy</tg-button>');
+  test('buttons: a classic keyboard under the bubble, not in the HTML; emoji stripped, rows of 3, copy buttons', () => {
+    const input = { title: 'T', buttons: [1, 2, 3, 4].map((i) => ({ text: `🔗 Go ${i}`, url: `https://e.co/${i}` })).concat([{ text: 'Copy', url: undefined as any, copy: 'abc' } as any]) };
+    expect(formatRichMessageHtml(input)).not.toContain('tg-button');
+    const kb = notificationKeyboard(input)!;
+    expect(kb.inline_keyboard).toHaveLength(2);
+    expect(kb.inline_keyboard[0][0]).toEqual({ text: 'Go 1', url: 'https://e.co/1' });
+    expect(kb.inline_keyboard[1][1]).toEqual({ text: 'Copy', copy_text: { text: 'abc' } });
+    expect(notificationKeyboard({ title: 'T' })).toBeUndefined();
   });
 });
 
@@ -101,14 +104,10 @@ describe('textToRichInput', () => {
 describe('classic fallback + markup helpers', () => {
   test('formatClassicNotificationHtml degrades tables to lines and keeps the prefix', () => {
     const text = formatClassicNotificationHtml({ title: 'T', severity: 'error', tables: [{ columns: ['A', 'B'], rows: [[1, 2]] }], details: 'd' }, 'CMS');
-    expect(text).toContain('<b>CMS · T</b>');
+    expect(text).toContain('<b>CMS</b>\n<b>T</b>');
     expect(text).toContain('<b>A | B</b>\n1 | 2');
   });
 
-  test('buttonsFromReplyMarkup extracts URL buttons only', () => {
-    expect(buttonsFromReplyMarkup({ inline_keyboard: [[{ text: 'a', url: 'https://x' }, { text: 'b', callback_data: 'c' }]] })).toEqual([{ text: 'a', url: 'https://x' }]);
-    expect(buttonsFromReplyMarkup('not json')).toEqual([]);
-  });
 });
 
 describe('textToRichInput: frontend MarkdownV2 text (vcui /sendtochannel)', () => {

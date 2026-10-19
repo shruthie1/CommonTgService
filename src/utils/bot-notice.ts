@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { notifTarget, ppplTarget } from './logbots';
-import { formatClassicNotificationHtml, formatRichMessageHtml } from './rich-message';
+import { formatClassicNotificationHtml, formatRichMessageHtml, notificationKeyboard } from './rich-message';
 import type { RichNotificationInput } from './rich-message';
 
 export interface BotNoticeOptions {
@@ -42,7 +42,7 @@ export async function sendBotNotice(
     try {
         const response = await axios.post(
             api('sendRichMessage'),
-            { chat_id: t.chatId, rich_message: { html: formatRichMessageHtml(input, { prefix: opts.prefix }) } },
+            { chat_id: t.chatId, rich_message: { html: formatRichMessageHtml(input, { prefix: opts.prefix }) }, reply_markup: notificationKeyboard(input) },
             { timeout },
         );
         return { sent: response.data?.ok === true, data: response.data };
@@ -56,7 +56,7 @@ export async function sendBotNotice(
     try {
         const response = await axios.post(
             api('sendMessage'),
-            { chat_id: t.chatId, text: formatClassicNotificationHtml(input, opts.prefix), parse_mode: 'HTML' },
+            { chat_id: t.chatId, text: formatClassicNotificationHtml(input, opts.prefix), parse_mode: 'HTML', reply_markup: notificationKeyboard(input) },
             { timeout },
         );
         return { sent: response.data?.ok === true, data: response.data };
