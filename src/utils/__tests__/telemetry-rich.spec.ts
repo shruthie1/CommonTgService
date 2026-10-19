@@ -21,17 +21,17 @@ describe('payment telemetry cards (client line first, no IP)', () => {
     expect(resp).toEqual({ ok: true });
     expect(category).toBe('WEB_TELEMETRY');
     const html = formatRichMessageHtml(input, { prefix: input.source });
-    expect(html).toBe('<b>keerthi2</b><br/><blockquote>Kirthi Gowda: Hii babiee....!!</blockquote>');
+    expect(html).toBe('<b>keerthi2</b>\n<blockquote>Kirthi Gowda: Hii babiee....!!</blockquote>');
     expect(html).not.toContain('2409');
   });
 
   test('multi-line user text keeps its line breaks and stays escaped', () => {
-    expect(render(`${head}<b>User:</b> line one\nline two\nthree &amp; &lt;b&gt;`)).toBe('<b>keerthi2</b><br/><blockquote>User: line one<br/>line two<br/>three &amp; &lt;b&gt;</blockquote>');
+    expect(render(`${head}<b>User:</b> line one\nline two\nthree &amp; &lt;b&gt;`)).toBe('<b>keerthi2</b>\n<blockquote>User: line one<br/>line two<br/>three &amp; &lt;b&gt;</blockquote>');
   });
 
   test('the signup form is a field table; internal send-code fields are dropped', () => {
     const phoneStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '', password: '', firstName: 'Ravi', lastName: '', phoneCodeHash: 'abc', codeLength: 5 });
-    expect(render(`${head}${phoneStep}`)).toBe('<b>keerthi2</b><br/><b>Signup · phone entered</b><br/><table bordered striped compact><tr><td><b>Name</b></td><td>Ravi</td></tr><tr><td><b>Phone</b></td><td><code>+919876543210</code></td></tr></table>');
+    expect(render(`${head}${phoneStep}`)).toBe('<b>keerthi2</b><br/><b>Signup · phone entered</b>\n<table bordered striped compact><tr><td><b>Name</b></td><td>Ravi</td></tr><tr><td><b>Phone</b></td><td><code>+919876543210</code></td></tr></table>');
     const codeStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '12345', password: 'pw', codeType: 'app', deliveryMessage: 'Code sent' });
     const html = render(`${head}${codeStep}`);
     expect(html).toContain('Signup · code entered');
@@ -40,7 +40,7 @@ describe('payment telemetry cards (client line first, no IP)', () => {
   });
 
   test('any other JSON object becomes one row per non-empty key', () => {
-    expect(render(`${head}{"a":"1","b":""}`)).toBe('<b>keerthi2</b><br/><b>Form</b><br/><table bordered striped compact><tr><td><b>a</b></td><td><code>1</code></td></tr></table>');
+    expect(render(`${head}{"a":"1","b":""}`)).toBe('<b>keerthi2</b><br/><b>Form</b>\n<table bordered striped compact><tr><td><b>a</b></td><td><code>1</code></td></tr></table>');
   });
 
   test('event codes read as plain words', () => {

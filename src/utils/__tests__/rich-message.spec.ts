@@ -5,7 +5,7 @@ describe('formatRichMessageHtml', () => {
     const html = formatRichMessageHtml({ title: 'Done', severity: 'success', summary: 'all good', fields: [{ label: 'Mobile', value: '91123' }, { label: 'Note', value: 'two words' }] }, { prefix: 'CMS' });
     expect(html.startsWith('<b>CMS</b><br/><b>Done</b><br/>')).toBe(true);
     expect(html).not.toContain('<h3>');
-    expect(html).toContain('all good<br/>');
+    expect(html).toContain('all good\n');
     expect(html).toContain('<table bordered striped compact><tr><td><b>Mobile</b></td><td><code>91123</code></td></tr><tr><td><b>Note</b></td><td>two words</td></tr></table>');
   });
 
@@ -46,15 +46,15 @@ describe('formatRichMessageHtml', () => {
       quoteLabel: 'Login message',
       quotes: [{ label: 'Reply', text: 'ok' }],
     });
-    expect(html).toContain('<b>Login message</b><br/><blockquote>Hi &lt;b&gt;<br/>&nbsp;&nbsp;two&nbsp;&nbsp;spaces<br/><br/>end &amp; done</blockquote>');
-    expect(html).toContain('<b>Reply</b><br/><blockquote>ok</blockquote>');
+    expect(html).toContain('<b>Login message</b>\n<blockquote>Hi &lt;b&gt;<br/>&nbsp;&nbsp;two&nbsp;&nbsp;spaces<br/><br/>end &amp; done</blockquote>');
+    expect(html).toContain('<b>Reply</b>\n<blockquote>ok</blockquote>');
     expect(html).not.toMatch(/<td[^>]*>[^<]*Hi/);
     expect(html).not.toContain('<code>Hi');
     expect(html.indexOf('</table>')).toBeLessThan(html.indexOf('<b>Login message</b>'));
   });
 
   test('quote label defaults to Message; text over 800 chars is an expandable quote', () => {
-    expect(formatRichMessageHtml({ title: 'T', quote: 'short' })).toContain('<b>Message</b><br/><blockquote>short</blockquote>');
+    expect(formatRichMessageHtml({ title: 'T', quote: 'short' })).toContain('<b>Message</b>\n<blockquote>short</blockquote>');
     const long = formatRichMessageHtml({ title: 'T', quote: 'x'.repeat(801) });
     expect(long).toContain('<blockquote expandable>');
     expect(long).toContain('</blockquote>');

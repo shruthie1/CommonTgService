@@ -254,7 +254,9 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
 
     // Buttons are not in the HTML: senders attach notificationKeyboard(input) as reply_markup.
     // Plain lines, not paragraphs (owner, 2026-10-18): <p> spacing made cards tall.
-    return parts.join('\n').replace(/<p>([\s\S]*?)<\/p>\n?/g, '$1<br/>');
+    // A block (table, quote, details, photo) already starts on its own line: a <br/> before it left a blank
+    // gap under the title (owner, 2026-10-19).
+    return parts.join('\n').replace(/<p>([\s\S]*?)<\/p>\n?/g, '$1<br/>').replace(/<br\/>\n?(?=<(?:table|blockquote|details|img)\b)/g, '\n');
 }
 
 const HTML_TAG = /<\/?[a-z][^>]*>/gi;
