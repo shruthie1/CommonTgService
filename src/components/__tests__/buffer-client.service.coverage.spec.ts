@@ -917,7 +917,7 @@ describe('BufferClientService coverage', () => {
             expect(after!.sessionRotatedAt ?? null).toBeNull();
             // The real summary notification was sent through the externally-mocked bots service.
             const summaryCall = botsService.sendMessageByCategory.mock.calls
-                .find((c) => c[1]?.title === 'Buffer pool check');
+                .find((c) => c[1]?.title === 'Buffer check');
             expect(summaryCall).toBeDefined();
             // Guard cleared on completion.
             expect((service as any).checkingBufferClientsSince).toBe(0);
@@ -1256,7 +1256,7 @@ describe('BufferClientService coverage', () => {
             const old = await service.findOne('15552300010');
             expect(old!.inUse).toBe(false);
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
-                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ title: 'Buffer Primary Reassigned' }),
+                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ title: 'Primary changed' }),
             );
         });
     });
@@ -1267,7 +1267,7 @@ describe('BufferClientService coverage', () => {
         it('rethrows and notifies on update failure', async () => {
             await expect(service.updateStatus('15559990001', 'inactive', 'x')).rejects.toThrow();
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
-                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ severity: 'error', title: expect.stringContaining('Failed') }),
+                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ severity: 'error', title: 'Status failed' }),
             );
         });
 
@@ -1321,11 +1321,11 @@ describe('BufferClientService coverage', () => {
             await service.checkBufferClients();
 
             const titles = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]?.title);
-            expect(titles).not.toContain('Buffer Client Enrolled');
-            expect(titles.filter((t) => t === 'Buffer pool check')).toHaveLength(1);
-            const summary = botsService.sendMessageByCategory.mock.calls.find((c) => c[1]?.title === 'Buffer pool check')![1];
-            const events = summary.tables.find((t: any) => String(t.title).startsWith('Warmup / enrolment events'));
-            expect(events.rows.map((r: unknown[]) => [r[1], r[2]])).toEqual([['15551850002', 'Buffer Client Enrolled']]);
+            expect(titles).not.toContain('Buffer enrolled');
+            expect(titles.filter((t) => t === 'Buffer check')).toHaveLength(1);
+            const summary = botsService.sendMessageByCategory.mock.calls.find((c) => c[1]?.title === 'Buffer check')![1];
+            const events = summary.tables.find((t: any) => String(t.title).startsWith('Events'));
+            expect(events.rows.map((r: unknown[]) => [r[1], r[2]])).toEqual([['15551850002', 'Buffer enrolled']]);
         });
     });
 
@@ -1363,7 +1363,7 @@ describe('BufferClientService coverage', () => {
             await service.create(makeBufferClientData({ mobile: '15559990010', status: 'active', clientId: 'test-client-1' }));
             await (service as any).sendBufferCheckSummaryNotification(2, 1, 1, [{ clientId: 'a', mobile: 'b', change: '2fa', count: 2 }], [{ clientId: 'c', mobile: 'd' }]);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1].title).toBe('Buffer pool check');
+            expect(lastCall[1].title).toBe('Buffer check');
             expect(lastCall[3]).toBe(false); // no "UMS ·" heading prefix
             expect(lastCall[1].summary).toBeUndefined();
             expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Pool', 'Per client', 'Updated (1)', 'Created (1)']));
@@ -1669,7 +1669,7 @@ describe('BufferClientService coverage', () => {
             const { sendBotNotice } = require('../../utils/bot-notice');
             await service.checkBufferClients();
             const failCall = (sendBotNotice as jest.Mock).mock.calls
-                .find((c: any[]) => c[1]?.title === 'Buffer Enrollment failed');
+                .find((c: any[]) => c[1]?.title === 'Enroll failed');
             expect(failCall).toBeDefined();
             expect((service as any).checkingBufferClientsSince).toBe(0);
         });

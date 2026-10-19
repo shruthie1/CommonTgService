@@ -163,7 +163,7 @@ export class UserDataService {
                 ChannelCategory.PROM_LOGS2,
                 {
                     severity: 'warning',
-                    title: 'Deleting UserData',
+                    title: 'Deleting data',
                     fields: [{ label: 'Profile', value: profile }, { label: 'Chat', value: chatId }],
                 },
             );

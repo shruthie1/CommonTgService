@@ -392,7 +392,7 @@ describe('deactivateClient & expireUserByMobile', () => {
 
     test('tags a foreign-2FA (permanent but not TG-dead) reason as [UNSAFE]', async () => {
         const service = new TestBaseService();
-        await service.pub.deactivateClient('919990000015', 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
+        await service.pub.deactivateClient('919990000015', 'Foreign 2FA — account unrecoverable if session dies', { permanent: true });
         expect(service.updateStatusMock).toHaveBeenCalledWith('919990000015', 'inactive', expect.stringMatching(/^\[UNSAFE\] /));
     });
 
@@ -2114,7 +2114,7 @@ describe('processClient orchestration branches', () => {
         expect(res.updateCount).toBe(0);
         expect(service.updateStatusMock).toHaveBeenCalledWith('919990000223', 'inactive', expect.any(String));
         const permanentNotice = service.botsServiceMock.sendMessageByCategory.mock.calls.find(
-            ([, body]: any[]) => body?.title?.includes('Warmup permanent error'),
+            ([, body]: any[]) => body?.title?.includes('Warmup fatal'),
         );
         expect(permanentNotice).toBeDefined();
     });

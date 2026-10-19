@@ -133,7 +133,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       // Original UMS-test used the UTC calendar day with an IST schedule.
       if (new Date().getUTCDate() % 4 === 0) {
         try {
-          await sendBotNotice('pppl', { title: 'Updating Promote Clients Info' });
+          await sendBotNotice('pppl', { title: 'Updating promote' });
         } catch (error) {
           this.logger.error(
             'UMS promote-info notification failed; continuing update',
@@ -190,7 +190,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         const utcDay = new Date().getUTCDate();
         if (utcDay % 7 === 0) {
           this.logger.log('UMS-test maintenance branch=day-mod-7');
-          await sendBotNotice('pppl', { title: 'Resetting Banned Channels' });
+          await sendBotNotice('pppl', { title: 'Reset banned' });
           setTimeout(async () => {
             // await this.activeChannelsService.resetAvailableMsgs();
             // await this.activeChannelsService.updateBannedChannels();
@@ -334,7 +334,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     try {
       await sendBotNotice('pppl', {
         severity: 'success',
-        title: 'Daily promote stats reset',
+        title: 'Daily reset',
         summary: `${resetRows.length} clients, ${resetRows.reduce((sum, [, n]) => sum + n, 0)} promotions before reset`,
         tables: [{ columns: ['Client', 'Promotions'], rows: resetRows, numeric: [1] }],
       });

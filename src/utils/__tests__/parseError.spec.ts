@@ -277,7 +277,7 @@ describe('parseError', () => {
     expect(target).toBe('notif');
     expect(notice).toEqual(expect.objectContaining({
       severity: 'error',
-      title: 'Application error',
+      title: 'App error',
       summary: 'pfx',
       detailsTitle: 'Error message',
       details: expect.stringContaining('a fresh failure'),

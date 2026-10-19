@@ -220,7 +220,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
     expect(sendBotNotice).toHaveBeenCalledTimes(1);
     const [target, notice] = (sendBotNotice as jest.Mock).mock.calls[0];
     expect(target).toBe('pppl');
-    expect(notice.title).toBe('Daily promote stats reset');
+    expect(notice.title).toBe('Daily reset');
     expect(notice.tables[0].columns).toEqual(['Client', 'Promotions']);
     expect(notice.tables[0].rows).toEqual([['UMS', 7]]);
     expect(notice.tables[0].numeric).toEqual([1]);

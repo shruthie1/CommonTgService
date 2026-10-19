@@ -180,7 +180,7 @@ export function notificationKeyboard(input: RichNotificationInput): { inline_key
     return { inline_keyboard: rows };
 }
 
-function renderTable(table: NotificationTable): string {
+function renderTable(table: NotificationTable, heading?: string): string {
     const numeric = new Set(table.numeric ?? []);
     const cell = (v: unknown, i: number, tag: 'td' | 'th') => {
         const align = numeric.has(i) ? ' align="right"' : '';
@@ -190,8 +190,10 @@ function renderTable(table: NotificationTable): string {
     };
     const head = `<tr>${table.columns.map((c, i) => cell(c, i, 'th')).join('')}</tr>`;
     const rows = table.rows.map((r) => `<tr>${table.columns.map((_, i) => cell(r[i], i, 'td')).join('')}</tr>`).join('');
-    const caption = table.title ? `<caption>${escapeTelegramHtml(table.title)}</caption>` : '';
-    return `<table bordered striped compact>${caption}${head}${rows}</table>`;
+    // Titles are header rows spanning the table (owner, 2026-10-19), as on field tables; no caption.
+    const titleRows = [heading, table.title].filter(Boolean)
+        .map((t) => `<tr><th colspan="${table.columns.length}">${escapeTelegramHtml(t)}</th></tr>`).join('');
+    return `<table bordered striped compact>${titleRows}${head}${rows}</table>`;
 }
 
 function detailLines(input: RichNotificationInput): string[] {
@@ -214,7 +216,9 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
     const fields = visibleFields(input);
     // With fields, the title is the table's header row, right under the client id (owner, 2026-10-19: a
     // title line above a table left a gap). Without fields it stays a bold line after a blank line.
-    const headerRow = !titleLess && fields.length > 0 && spoilerAt !== 'heading';
+    // Telegram wraps a header cell to the column widths: titles are kept short at their call sites.
+    // No field table: the title heads the first data table instead.
+    const headerRow = !titleLess && (fields.length > 0 || (input.tables?.length ?? 0) > 0) && spoilerAt !== 'heading';
     const parts: string[] = [
         ...(opts.prefix ? [`<p><b>${escapeTelegramHtml(opts.prefix)}</b>${titleLess || headerRow ? '' : '<br/>'}</p>`] : []),
         ...(titleLess || headerRow ? [] : [`<p><b>${escapeTelegramHtml(title)}</b>${spoilerAt === 'heading' ? spoilerTag(input.spoiler) : ''}</p>`]),
@@ -225,13 +229,12 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
 
     if (fields.length) {
         const rows = fields.map((f) => `<tr><td><b>${escapeTelegramHtml(f.label)}</b></td><td>${cellValue(f)}</td></tr>`);
-        // Non-breaking spaces: Telegram wraps a header cell to the column widths ("Told: not my / payment").
-        const head = headerRow ? `<tr><th colspan="2">${escapeTelegramHtml(title).replace(/ /g, '&nbsp;')}</th></tr>` : '';
+        const head = headerRow ? `<tr><th colspan="2">${escapeTelegramHtml(title)}</th></tr>` : '';
         parts.push(`<table bordered striped compact>${head}${rows.join('')}</table>`);
     }
-    if (summary && headerRow) parts.push(summary);
 
-    for (const table of input.tables ?? []) parts.push(renderTable(table));
+    (input.tables ?? []).forEach((table, i) => parts.push(renderTable(table, headerRow && !fields.length && i === 0 ? title : undefined)));
+    if (summary && headerRow) parts.push(summary);
 
     // Message content never goes in a table cell or <code>: label paragraph + quote block under the tables.
     quotes.forEach((q, i) => parts.push(renderQuote(q.label, q.text, i === 0 && spoilerAt === 'quote' ? input.spoiler : undefined)));
@@ -320,7 +323,7 @@ const TELEMETRY_LABEL = /^([^:\n]{1,40}?)\s*:\s+([\s\S]+)$/;
 function signupCard(form: Record<string, unknown>): Pick<RichNotificationInput, 'title' | 'fields'> {
     const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim());
     return {
-        title: `Signup · ${str(form.otp) ? 'code entered' : 'phone entered'}`,
+        title: `Signup: ${str(form.otp) ? 'code' : 'phone'}`,
         fields: [
             { label: 'Name', value: [str(form.firstName), str(form.lastName)].filter(Boolean).join(' '), code: false },
             { label: 'Phone', value: str(form.phoneNumber) && `${str(form.phoneCountryCode)}${str(form.phoneNumber)}` },

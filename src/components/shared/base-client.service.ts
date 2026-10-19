@@ -1165,7 +1165,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.logger.error(`${doc.mobile} has FOREIGN 2FA password — cannot control this account safely`);
                     const deactivated = await this.deactivateClient(doc.mobile, 'Foreign 2FA password — account unrecoverable if session dies', { permanent: true });
                     this.sendAccountNotice(
-                        this.warmupNotice('critical', 'Foreign 2FA password', doc.mobile, [{ label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], 'Unrecoverable: the account is not safely controlled by us')
+                        this.warmupNotice('critical', 'Foreign 2FA', doc.mobile, [{ label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], 'Unrecoverable: the account is not safely controlled by us')
                     );
                     return 0;
                 }
@@ -1267,9 +1267,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     ): RichNotificationInput {
         return {
             severity,
-            title: `${this.clientType} · ${title}`,
+            title,
             summary,
-            fields: [{ label: 'Mobile', value: mobile }, ...fields],
+            fields: [{ label: 'Mobile', value: mobile }, { label: 'Pool', value: this.clientType, code: false }, ...fields],
             details,
             detailsTitle: 'Error message',
         };
@@ -1296,7 +1296,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (!table) return;
         await sendNoticeBatched(
             (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input),
-            { severity: 'warning', title: `${this.clientType} · ${title}`, tables: [table] },
+            { severity: 'warning', title, fields: [{ label: 'Pool', value: this.clientType, code: false }], tables: [table] },
         );
     }
 
@@ -1607,7 +1607,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 const reason = await this.buildPermanentAccountReason(errorDetails.message);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 this.sendAccountNotice(
-                    this.warmupNotice('critical', 'Warmup permanent error', doc.mobile, [{ label: 'Step', value: warmupAction.action, code: false }, { label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], undefined, errorDetails.message?.substring(0, 120))
+                    this.warmupNotice('critical', 'Warmup fatal', doc.mobile, [{ label: 'Step', value: warmupAction.action, code: false }, { label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], undefined, errorDetails.message?.substring(0, 120))
                 );
             } else {
                 this.sendAccountNotice(

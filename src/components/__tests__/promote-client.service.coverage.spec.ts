@@ -678,7 +678,7 @@ describe('PromoteClientService coverage', () => {
             expect(after!.warmupPhase).toBe(WarmupPhase.READY);
             expect(after!.sessionRotatedAt ?? null).toBeNull();
             const summaryCall = botsService.sendMessageByCategory.mock.calls
-                .find((c) => c[1]?.title === 'Promote pool check');
+                .find((c) => c[1]?.title === 'Promote check');
             expect(summaryCall).toBeDefined();
             expect((service as any).checkingPromoteClientsSince).toBe(0);
         });
@@ -793,7 +793,7 @@ describe('PromoteClientService coverage', () => {
             await service.create(makePromoteClientData({ mobile: '15552000010', status: 'active', clientId: 'test-client-1' }));
             await (service as any).sendPromoteCheckSummaryNotification(1, 1, 1, [{ clientId: 'a', mobile: 'b', change: 'privacy', count: 1 }], [{ clientId: 'c', mobile: 'd' }]);
             const lastCall = botsService.sendMessageByCategory.mock.calls.pop();
-            expect(lastCall[1].title).toBe('Promote pool check');
+            expect(lastCall[1].title).toBe('Promote check');
             expect(lastCall[3]).toBe(false); // no "UMS ·" heading prefix
             expect(lastCall[1].tables[1].columns).toEqual(['Client (1)', 'Active', 'Assigned', 'Inactive', 'Needed', 'Never used', 'Used 24h']);
             expect(lastCall[1].tables.map((t: any) => t.title)).toEqual(expect.arrayContaining(['Updated (1)', 'Created (1)']));
@@ -823,7 +823,7 @@ describe('PromoteClientService coverage', () => {
         it('updateStatus rethrows and notifies on failure', async () => {
             await expect(service.updateStatus('15559990001', 'inactive', 'x')).rejects.toThrow();
             expect(botsService.sendMessageByCategory).toHaveBeenCalledWith(
-                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ severity: 'error', title: expect.stringContaining('Failed') }),
+                'ACCOUNT_NOTIFICATIONS', expect.objectContaining({ severity: 'error', title: 'Status failed' }),
             );
         });
 
@@ -1540,7 +1540,7 @@ describe('PromoteClientService coverage', () => {
                 totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'ok', priority: 0,
             });
             await service.checkPromoteClients();
-            const summary = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]).find((m: any) => m?.title?.includes('pool check'));
+            const summary = botsService.sendMessageByCategory.mock.calls.map((c) => c[1]).find((m: any) => m?.title === 'Promote check');
             expect(summary.tables.find((t: any) => String(t.title).startsWith('Updated')).rows).toEqual([['test-client-1', '15553900050', 'updated', 1]]);
         });
 

@@ -619,7 +619,7 @@ export class TelegramService implements OnModuleDestroy {
             this.logger.info(mobile, 'Removed other authorizations');
             await sendBotNotice('notif', {
                 severity: 'success',
-                title: 'Remove Other Auths',
+                title: 'Remove auths',
                 fields: [
                     { label: 'Mobile', value: mobile },
                     { label: 'Status', value: 'Non-protected sessions removed', code: false },
@@ -631,7 +631,7 @@ export class TelegramService implements OnModuleDestroy {
             this.logger.error(mobile, 'Failed to remove other authorizations', error);
             await sendBotNotice('notif', {
                 severity: 'error',
-                title: 'Remove Other Auths failed',
+                title: 'Remove failed',
                 fields: [{ label: 'Mobile', value: mobile }],
                 details: message.substring(0, 500),
                 detailsTitle: 'Error message',

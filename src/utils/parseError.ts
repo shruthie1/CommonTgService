@@ -339,7 +339,7 @@ export function parseError(
           // Rich message (falls back to the classic GET on 400/404). Not awaited to avoid delaying the response.
           sendBotNotice('notif', {
             severity: 'error',
-            title: 'Application error',
+            title: 'App error',
             summary: prefix ? String(prefix).slice(0, 200) : undefined,
             fields: [
               { label: 'Status', value: status },

@@ -31,9 +31,9 @@ describe('formatRichMessageHtml', () => {
     expect(html.match(/<tg-time unix="1792281600" format="wDT">/g)).toHaveLength(2);
   });
 
-  test('multi-column table with caption and right-aligned numeric columns', () => {
+  test('multi-column table with title row and right-aligned numeric columns', () => {
     const html = formatRichMessageHtml({ title: 'T', tables: [{ title: 'Per client', columns: ['Client', 'N'], rows: [['a', 1], ['b', 2]], numeric: [1] }] });
-    expect(html).toContain('<table bordered striped compact><caption>Per client</caption><tr><th>Client</th><th align="right">N</th></tr>');
+    expect(html).toContain('<tr><th colspan="2">Per client</th></tr><tr><th>Client</th><th align="right">N</th></tr>');
     expect(html).toContain('<tr><td>b</td><td align="right">2</td></tr>');
   });
 

@@ -121,7 +121,7 @@ describe('Users API', () => {
 
         it('should send bot notification on normal create', async () => {
             await service.create(makeUserData());
-            expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
+            expect(botsService.sendHtmlByCategory).toHaveBeenCalledTimes(1);
         });
 
         it('should call updateClientSession when activeClientSetup matches', async () => {
@@ -133,7 +133,7 @@ describe('Users API', () => {
             const result = await service.create(data);
             expect(result).toBeUndefined();
             expect(mockClientService.updateClientSession).toHaveBeenCalledWith(data.session, data.mobile);
-            expect(botsService.sendMessageByCategory).not.toHaveBeenCalled();
+            expect(botsService.sendHtmlByCategory).not.toHaveBeenCalled();
         });
     });
 

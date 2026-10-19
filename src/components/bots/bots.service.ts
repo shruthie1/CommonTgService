@@ -691,7 +691,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         if (category !== ChannelCategory.ACCOUNT_NOTIFICATIONS) {
             await this.notify({
                 severity: 'error',
-                title: 'Bot category unhealthy',
+                title: 'Bots unhealthy',
                 summary: 'No verified active bot is eligible to send. Repair is required.',
                 fields: [{ label: 'Category', value: category }],
             });
@@ -1637,7 +1637,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             await this.refreshBotCache();
             await this.notify({
                 severity: 'warning',
-                title: 'Bot created but NOT usable',
+                title: 'Bot unusable',
                 summary: 'Left inactive. Add it as admin manually, then it self-activates on the next health check.',
                 fields: [
                     { label: 'Category', value: category },
@@ -1815,7 +1815,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                     topUpFailures.push(msg);
                     await this.notify({
                         severity: 'warning',
-                        title: 'Bot top-up BLOCKED: uncontrollable channel',
+                        title: 'Top-up blocked',
                         summary: 'Creation skipped to avoid orphan bots. Add a manager as channel admin, then bots self-heal.',
                         fields: [
                             { label: 'Category', value: category },
@@ -2398,7 +2398,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     private async sendHealthSummary(s: { checked: number; alive: number; dead: number; unknown: number; replaced: number; toppedUp: number; deadRemaining: number; failures: string[]; singleAdmin?: string[]; managerCoverage?: string }): Promise<void> {
         const input: RichNotificationInput = {
             severity: s.failures.length || s.dead > 0 ? 'warning' : 'info',
-            title: 'Bot Health Check',
+            title: 'Bot health',
             summary: `${s.checked} checked, ${s.alive} alive, ${s.dead} dead`,
             tables: [{
                 columns: ['Checked', 'Alive', 'Dead', 'Unknown', 'Replaced', 'Topped up', 'Dead remaining'],

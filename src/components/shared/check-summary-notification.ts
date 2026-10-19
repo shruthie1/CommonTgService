@@ -68,7 +68,7 @@ export function buildCheckSummaryNotification(s: CheckSummaryInput): RichNotific
     }
     return {
         severity: 'info',
-        title: `${s.kind} pool check`,
+        title: `${s.kind} check`,
         tables,
     };
 }

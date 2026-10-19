@@ -184,7 +184,7 @@ export class TransactionService {
   private async sendNotification(filters: any, total: number): Promise<void> {
     try {
       await sendBotNotice('notif', {
-        title: 'Transaction search',
+        title: 'Txn search',
         summary: `${total} results`,
         fields: [
           { label: 'IP', value: filters.ip },

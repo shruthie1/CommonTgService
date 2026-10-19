@@ -123,7 +123,7 @@ describe('Buffer Client API', () => {
             expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
             const [category, message] = botsService.sendMessageByCategory.mock.calls[0];
             expect(category).toBe('ACCOUNT_NOTIFICATIONS');
-            expect(message.title).toBe('Buffer Client Created');
+            expect(message.title).toBe('Buffer created');
             expect(JSON.stringify(message.fields)).toContain('15550100002');
             expect(JSON.stringify(message.fields)).toContain('notif-test');
         });

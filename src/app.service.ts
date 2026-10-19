@@ -118,7 +118,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
                 // its scan finishes, and has no separate start notice.
                 try {
                   await sendBotNotice('pppl', {
-                    title: 'Channel leave cycle started',
+                    title: 'Leave cycle',
                   });
                 } catch (error) {
                   parseError(error, 'UMS scheduled leave notification failed');
@@ -212,7 +212,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
   async updateBufferClientInfo(): Promise<void> {
     try {
-      await sendBotNotice('pppl', { title: 'Updating Buffer Clients Info' });
+      await sendBotNotice('pppl', { title: 'Updating buffers' });
     } catch (error) {
       this.logger.error('CMS buffer-info notification failed; continuing update', error);
     }
@@ -551,7 +551,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       try {
         await sendBotNotice('pppl', {
           severity: 'warning',
-          title: 'Resetting UserData',
+          title: 'Reset userData',
           tables: [{ columns: [`Profile (${resets.length})`, 'Chat', 'Last message'], rows: resets }],
         });
       } catch (error) {
@@ -689,7 +689,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       const failed = rows.filter((r) => String(r[3]).startsWith('error'));
       await sendNoticeBatched((input) => sendBotNotice('pppl', input), {
         severity: failed.length ? 'warning' : 'info',
-        title: 'Channel join cycle',
+        title: 'Join cycle',
         // Table only: totals live in the headers, failures in the Status column.
         tables: [{
           columns: [`Client (${rows.length})`, 'Can send', `Channels (${joining.reduce((n, r) => n + (Number(r[2]) || 0), 0)})`, 'Status'],
@@ -768,13 +768,13 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       RedisClient.getClient() as any,
       'CHANNEL_NOTIFICATIONS',
       'join-results',
-      rows.map(({ clientId, row }) => ({ clientId, title: 'Channel join results', row, merge: 'sum' as const })),
+      rows.map(({ clientId, row }) => ({ clientId, title: 'Join results', row, merge: 'sum' as const })),
     );
     if (queued) return;
     try {
       const merged = mergeByClient(rows.map(({ clientId, row }) => ({ clientId, at: Date.now(), title: '', row, merge: 'sum' as const })));
       await sendNoticeBatched((input) => this.botsService.sendMessageByCategory(ChannelCategory.CHANNEL_NOTIFICATIONS, input, undefined, false), {
-        title: 'Channel join results',
+        title: 'Join results',
         tables: [{
           columns: [`Client (${merged.length})`, 'Joined', 'Failed', 'Flood wait', 'No response', 'Old build', 'Last error'],
           rows: merged.map(({ clientId, row }) => [clientId, row.Joined, row.Failed, row['Flood wait'], row['No response'], row['Old build'], row['Last error']]),

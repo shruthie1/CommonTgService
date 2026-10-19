@@ -803,7 +803,7 @@ describe('TelegramService — getAuths / removeOtherAuths', () => {
         expect(await svc.removeOtherAuths('m')).toBe('Removed other authorizations');
         expect(sendBotNotice).toHaveBeenCalledWith(
             'notif',
-            expect.objectContaining({ severity: 'success', title: 'Remove Other Auths', fields: expect.arrayContaining([{ label: 'Mobile', value: 'm' }]) }),
+            expect.objectContaining({ severity: 'success', title: 'Remove auths', fields: expect.arrayContaining([{ label: 'Mobile', value: 'm' }]) }),
             { timeout: 5000 },
         );
     });
@@ -813,7 +813,7 @@ describe('TelegramService — getAuths / removeOtherAuths', () => {
         await expect(svc.removeOtherAuths('m')).rejects.toThrow('auth fail');
         expect(sendBotNotice).toHaveBeenCalledWith(
             'notif',
-            expect.objectContaining({ severity: 'error', title: 'Remove Other Auths failed', details: 'auth fail' }),
+            expect.objectContaining({ severity: 'error', title: 'Remove failed', details: 'auth fail' }),
             { timeout: 5000 },
         );
     });

@@ -64,6 +64,7 @@ export function createUserModel(connection: Connection): Model<UserDocument> {
 export function mockBotsService() {
     return {
         sendMessageByCategory: jest.fn().mockResolvedValue(undefined),
+        sendHtmlByCategory: jest.fn().mockResolvedValue(true),
     };
 }
 

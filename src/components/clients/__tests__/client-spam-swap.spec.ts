@@ -234,7 +234,7 @@ describe('spam-aware setupClient swap', () => {
       const started = (sendBotNotice as jest.Mock).mock.calls.map((c) => c[1]).find((n) => n.title === 'Swap started');
       expect(started.fields).toEqual(expect.arrayContaining([{ label: 'Client ID', value: 'c1' }, { label: 'New mobile', value: '908' }]));
       expect(started.tables).toEqual([
-        { title: 'Skipped (SpamBot)', columns: ['Mobile', 'Reason'], rows: [['907', 'limited until 2099-01-02 10:00 UTC']] },
+        { title: 'Skipped: SpamBot', columns: ['Mobile', 'Reason'], rows: [['907', 'limited until 2099-01-02 10:00 UTC']] },
       ]);
     });
   });

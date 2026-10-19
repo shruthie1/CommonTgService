@@ -445,7 +445,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         await this.sendAccountNotice(
             {
                 severity: 'success',
-                title: 'Promote Client Created',
+                title: 'Promote created',
                 fields: [
                     { label: 'Mobile', value: canonicalMobile },
                     { label: 'Client ID', value: promoteClient.clientId || '-' },
@@ -520,7 +520,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
-                    title: 'Promote Client Status Update',
+                    title: 'Promote status',
                     fields: [
                         { label: 'Mobile', value: mobile },
                         { label: 'New status', value: status, code: false },
@@ -536,7 +536,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
                     severity: 'error',
-                    title: 'Promote Client Status Update Failed',
+                    title: 'Status failed',
                     fields: [
                         { label: 'Mobile', value: mobile },
                         { label: 'Attempted status', value: status, code: false },
@@ -727,7 +727,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             }
             await sendBotNotice('notif', {
                 severity: 'warning',
-                title: 'Deleting Promote Client',
+                title: 'Deleting promote',
                 fields: [
                     { label: 'Service', value: process.env.serviceName || process.env.clientId || 'unknown' },
                     { label: 'Mobile', value: mobile },
@@ -1016,7 +1016,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         } catch (error) {
             const errMsg = parseError(error, 'checkPromoteClients').message;
             this.logger.error(`checkPromoteClients crashed: ${errMsg}`);
-            try { await sendBotNotice('notif', { severity: 'error', title: 'checkPromoteClients crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'Check crashed', fields: [{ label: 'Pool', value: 'promote', code: false }], summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
         } finally {
             this.isWarmupCheckProcessing = false;
         }
@@ -1071,7 +1071,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         } catch (error) {
             const errMsg = parseError(error, 'rotateReadyPromoteClients').message;
             this.logger.error(`Ready promote rotation sweep crashed: ${errMsg}`);
-            try { await sendBotNotice('notif', { severity: 'error', title: 'READY Promote Rotation crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'Rotation crashed', fields: [{ label: 'Pool', value: 'promote', code: false }], summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             return false;
         } finally {
             this.readyRotationInProgress = false;
@@ -1240,7 +1240,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             } catch (error) {
                 const errMsg = parseError(error, 'addNewUserstoPromoteClientsDynamic').message;
                 this.logger.error(`Dynamic promote enrollment failed: ${errMsg}`);
-                try { await sendBotNotice('notif', { severity: 'warning', title: 'Promote Enrollment failed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
+                try { await sendBotNotice('notif', { severity: 'warning', title: 'Enroll failed', fields: [{ label: 'Pool', value: 'promote', code: false }], summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             }
         }
 
@@ -1346,7 +1346,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             await this.sendAccountNotice(
                 {
                     severity: 'success',
-                    title: 'Promote Client Enrolled',
+                    title: 'Promote enrolled',
                     fields: [
                         { label: 'Client ID', value: targetClientId },
                         { label: 'Mobile', value: document.mobile },
@@ -1620,7 +1620,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 updatedEntries,
                 createdEntries,
             });
-        const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Warmup / enrolment events');
+        const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Events');
         if (eventsTable) (summary.tables ??= []).push(eventsTable);
         await sendNoticeBatched(
             (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input, undefined, false),

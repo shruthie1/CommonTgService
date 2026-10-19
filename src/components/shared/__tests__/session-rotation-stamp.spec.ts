@@ -136,8 +136,8 @@ describe('sessionRotatedAt is a fact, not a control flag', () => {
             // trip this check.
             const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
             const returnBlock = code.slice(
-                code.indexOf('Returned to buffer pool') - 1500,
-                code.indexOf('Returned to buffer pool'),
+                code.indexOf('Returned to pool') - 1500,
+                code.indexOf('Returned to pool'),
             );
             expect(returnBlock).not.toMatch(/sessionRotatedAt:\s*null/);
         });

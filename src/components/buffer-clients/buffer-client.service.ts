@@ -562,7 +562,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         await this.sendAccountNotice(
             {
                 severity: 'success',
-                title: 'Buffer Client Created',
+                title: 'Buffer created',
                 fields: [
                     { label: 'Mobile', value: canonicalMobile },
                     { label: 'Client ID', value: bufferClient.clientId || '-' },
@@ -653,7 +653,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.logger.log(`Removing BufferClient with mobile: ${canonicalMobile}`);
             await sendBotNotice('notif', {
                 severity: 'warning',
-                title: 'Deleting Buffer Client',
+                title: 'Deleting buffer',
                 fields: [
                     { label: 'Mobile', value: canonicalMobile },
                     { label: 'Reason', value: message || 'manual removal', code: false },
@@ -711,7 +711,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
-                    title: 'Buffer Client Status Update',
+                    title: 'Buffer status',
                     fields: [
                         { label: 'Mobile', value: mobile },
                         { label: 'New status', value: status, code: false },
@@ -727,7 +727,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
                     severity: 'error',
-                    title: 'Buffer Client Status Update Failed',
+                    title: 'Status failed',
                     fields: [
                         { label: 'Mobile', value: mobile },
                         { label: 'Attempted status', value: status, code: false },
@@ -779,7 +779,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
                     severity: 'warning',
-                    title: 'Buffer Primary Reassigned',
+                    title: 'Primary changed',
                     fields: [
                         { label: 'Client ID', value: clientId },
                         { label: 'Primary mobile', value: mobile },
@@ -1282,7 +1282,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         } catch (error) {
             const errMsg = parseError(error, 'checkBufferClients').message;
             this.logger.error(`checkBufferClients crashed: ${errMsg}`);
-            try { await sendBotNotice('notif', { severity: 'error', title: 'checkBufferClients crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'Check crashed', fields: [{ label: 'Pool', value: 'buffer', code: false }], summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
         } finally {
             this.isWarmupCheckProcessing = false;
         }
@@ -1343,7 +1343,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         } catch (error) {
             const errMsg = parseError(error, 'rotateReadyBufferClients').message;
             this.logger.error(`Ready buffer rotation sweep crashed: ${errMsg}`);
-            try { await sendBotNotice('notif', { severity: 'error', title: 'READY Buffer Rotation crashed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
+            try { await sendBotNotice('notif', { severity: 'error', title: 'Rotation crashed', fields: [{ label: 'Pool', value: 'buffer', code: false }], summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             return false;
         } finally {
             this.readyRotationInProgress = false;
@@ -1531,7 +1531,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             } catch (error) {
                 const errMsg = parseError(error, 'addNewUserstoBufferClientsDynamic').message;
                 this.logger.error(`Dynamic buffer enrollment failed: ${errMsg}`);
-                try { await sendBotNotice('notif', { severity: 'warning', title: 'Buffer Enrollment failed', summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
+                try { await sendBotNotice('notif', { severity: 'warning', title: 'Enroll failed', fields: [{ label: 'Pool', value: 'buffer', code: false }], summary: errMsg.slice(0, 200), details: errMsg.length > 200 ? errMsg : undefined, detailsTitle: 'Error message' }); } catch { /* best effort */ }
             }
         }
 
@@ -1774,7 +1774,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             await this.sendAccountNotice(
                 {
                     severity: 'success',
-                    title: 'Buffer Client Enrolled',
+                    title: 'Buffer enrolled',
                     fields: [
                         { label: 'Client ID', value: targetClientId },
                         { label: 'Mobile', value: document.mobile },
@@ -2078,7 +2078,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 createdEntries,
                 perClientLimit: 10,
             });
-        const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Warmup / enrolment events');
+        const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Events');
         if (eventsTable) (summary.tables ??= []).push(eventsTable);
         await sendNoticeBatched(
             (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input, undefined, false),

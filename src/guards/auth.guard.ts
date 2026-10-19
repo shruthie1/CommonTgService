@@ -362,7 +362,7 @@ export class AuthGuard implements CanActivate {
                     ChannelCategory.UNAUTH_CALLS,
                     {
                         severity: 'warning',
-                        title: 'Unauthorized Attempt',
+                        title: 'Request blocked',
                         fields: [
                             { label: 'IP', value: clientIp || 'unknown' },
                             { label: 'Origin', value: origin || 'unknown', code: false },

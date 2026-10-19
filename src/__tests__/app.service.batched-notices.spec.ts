@@ -49,7 +49,7 @@ describe('AppService batched notices', () => {
       expect(notice).toHaveBeenCalledTimes(1);
       const [target, input] = notice.mock.calls[0];
       expect(target).toBe('pppl');
-      expect(input.title).toBe('Channel join cycle');
+      expect(input.title).toBe('Join cycle');
       const table = input.tables[0];
       expect(table.columns).toEqual(['Client (3)', 'Can send', 'Channels (4)', 'Status']);
       expect(table.rows).toEqual([
@@ -118,7 +118,7 @@ describe('AppService batched notices', () => {
       expect(update).toHaveBeenCalledTimes(3);
       expect(notice).toHaveBeenCalledTimes(1);
       const input = notice.mock.calls[0][1];
-      expect(input.title).toBe('Resetting UserData');
+      expect(input.title).toBe('Reset userData');
       expect(input.tables[0].rows.map((r: unknown[]) => r[0])).toEqual(['p1', 'p2', 'p3']);
       expect(input.tables[0].columns[0]).toBe('Profile (3)');
       expect(input.summary).toBeUndefined();

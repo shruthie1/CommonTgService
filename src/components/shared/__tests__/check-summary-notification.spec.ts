@@ -6,7 +6,7 @@ const base = { kind: 'Buffer', active: 3, inactive: 1, unassigned: 2, totalUpdat
 describe('buildCheckSummaryNotification', () => {
   test('tables only: pool totals in one row, per-client sorted neediest first with the count in the header', () => {
     const n = buildCheckSummaryNotification({ ...base, perClient: [row('alpha'), row('zeta', 3), row('beta', 1)] });
-    expect(n.title).toBe('Buffer pool check');
+    expect(n.title).toBe('Buffer check');
     expect(n.summary).toBeUndefined();
     expect(n.fields).toBeUndefined();
     expect(n.tables![0]).toEqual({

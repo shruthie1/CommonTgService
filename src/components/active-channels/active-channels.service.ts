@@ -326,7 +326,7 @@ export class ActiveChannelsService {
       if (botsService) {
         await botsService.sendMessageByCategory(
           ChannelCategory.PROM_LOGS2,
-          { title: 'Removing Active Channel', fields: [{ label: 'Channel', value: channelId }] },
+          { title: 'Removing channel', fields: [{ label: 'Channel', value: channelId }] },
         );
       }
 
@@ -738,7 +738,7 @@ export class ActiveChannelsService {
   // call site are undisturbed.
   async resetMessageDeletionCounters(): Promise<void> {
     try {
-      await sendBotNotice('notif', { title: 'Channel maintenance', summary: 'Reset message deletion counters' });
+      await sendBotNotice('notif', { title: 'Maintenance', summary: 'Reset message deletion counters' });
       await this.activeChannelModel.updateMany(
         { banned: false },
         { $set: { updatedAt: new Date() } }
@@ -750,7 +750,7 @@ export class ActiveChannelsService {
 
   async resetAvailableMsgs(): Promise<void> {
     try {
-      await sendBotNotice('notif', { title: 'Channel maintenance', summary: 'Reset available messages' });
+      await sendBotNotice('notif', { title: 'Maintenance', summary: 'Reset available messages' });
       const availableMsgs = await this.getAvailableMessages();
 
       await this.activeChannelModel.updateMany(
@@ -773,7 +773,7 @@ export class ActiveChannelsService {
 
   async updateBannedChannels(): Promise<void> {
     try {
-      await sendBotNotice('notif', { title: 'Channel maintenance', summary: 'Update banned channels' });
+      await sendBotNotice('notif', { title: 'Maintenance', summary: 'Update banned channels' });
       await this.activeChannelModel.updateMany(
         { $or: [{ banned: true }, { private: true }] },
         {

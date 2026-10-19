@@ -253,7 +253,7 @@ class ConnectionManager {
             if (botsService) {
                 await botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_LOGIN_FAILURES, {
                     severity: 'error',
-                    title: 'Client Connection Error',
+                    title: 'Connection error',
                     fields: [
                         { label: 'Mobile', value: mobile },
                         { label: 'Marked expired', value: String(markedAsExpired), code: false },

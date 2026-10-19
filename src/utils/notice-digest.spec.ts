@@ -255,8 +255,8 @@ describe('buildDigestNotice / pushDigestEntries', () => {
   it('pushDigestEntries queues in one MULTI with cap and TTL, and reports failure instead of throwing', async () => {
     const redis = new FakeRedis();
     expect(await pushDigestEntries(redis, 'CLIENT_UPDATES', 'join-results', [
-      { clientId: 'a1', title: 'Channel join results', row: { Channel: '@x', Result: 'joined' } },
-      { clientId: 'b1', title: 'Channel join results', row: { Channel: '@x', Result: 'failed' } },
+      { clientId: 'a1', title: 'Join results', row: { Channel: '@x', Result: 'joined' } },
+      { clientId: 'b1', title: 'Join results', row: { Channel: '@x', Result: 'failed' } },
     ])).toBe(true);
     expect(redis.lists.get('notice-digest::CLIENT_UPDATES::join-results')).toHaveLength(2);
     expect(redis.ttls.get('notice-digest::CLIENT_UPDATES::join-results')).toBe(86400);

@@ -94,7 +94,7 @@ export class LoggerMiddleware implements NestMiddleware {
           ChannelCategory.HTTP_FAILURES,
           {
             severity: 'error',
-            title: 'HTTP Request Error',
+            title: 'HTTP error',
             fields: [{ label: 'Path', value: safeOriginalUrl, code: false }],
             details: errorDetails.message?.substring(0, 200),
             detailsTitle: 'Error message',
