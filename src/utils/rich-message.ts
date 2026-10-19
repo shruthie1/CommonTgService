@@ -212,7 +212,8 @@ export function formatRichMessageHtml(input: RichNotificationInput & { showTags?
     // title '' with a quote = no title line (the quote is the message).
     const titleLess = input.title === '' && !input.summary && quotes.length > 0;
     const parts: string[] = [
-        ...(opts.prefix ? [`<p><b>${escapeTelegramHtml(opts.prefix)}</b></p>`] : []),
+        // A blank line between the client id and the title; the title sits on its table (owner, 2026-10-19).
+        ...(opts.prefix ? [`<p><b>${escapeTelegramHtml(opts.prefix)}</b>${titleLess ? '' : '<br/>'}</p>`] : []),
         ...(titleLess ? [] : [`<p><b>${escapeTelegramHtml(title)}</b>${spoilerAt === 'heading' ? spoilerTag(input.spoiler) : ''}</p>`]),
     ];
 

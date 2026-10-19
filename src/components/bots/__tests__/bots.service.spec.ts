@@ -1611,7 +1611,7 @@ describe('BotsService - Bot API rich messages', () => {
     expect(bodyOf(call).chat_id).toBe('-100777');
     expect(bodyOf(call).text).toBeUndefined();
     const html: string = bodyOf(call).rich_message.html;
-    expect(html).toContain('<b>testclient</b><br/><b>Deploy done</b>\n<table');
+    expect(html).toContain('<b>testclient</b><br/><br/><b>Deploy done</b>\n<table');
     expect(html).toContain('<table bordered striped compact><tr><td><b>Status</b></td><td>ok</td></tr><tr><td><b>Count</b></td><td><code>3</code></td></tr></table>');
   });
 
@@ -1627,7 +1627,7 @@ describe('BotsService - Bot API rich messages', () => {
       buttons: [{ text: '🔗 Open', url: 'https://example.com/x' }],
     });
     const html: string = bodyOf(mockedAxios.post.mock.calls[0]).rich_message.html;
-    expect(html).toContain('<b>testclient</b><br/><b>Boom</b>\n');
+    expect(html).toContain('<b>testclient</b><br/><br/><b>Boom</b>\n');
     expect(html).toContain('<code>911234567890</code>');
     expect(html).toContain('<th>A</th><th align="right">B</th>');
     expect(html).toContain('<details><summary>Details</summary><pre>stack line</pre></details>');

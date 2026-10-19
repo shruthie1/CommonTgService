@@ -3,7 +3,7 @@ import { formatClassicNotificationHtml, formatRichMessageHtml, notificationKeybo
 describe('formatRichMessageHtml', () => {
   test('client line, then icon + title, summary, and fields always in a table (ids as code)', () => {
     const html = formatRichMessageHtml({ title: 'Done', severity: 'success', summary: 'all good', fields: [{ label: 'Mobile', value: '91123' }, { label: 'Note', value: 'two words' }] }, { prefix: 'CMS' });
-    expect(html.startsWith('<b>CMS</b><br/><b>Done</b><br/>')).toBe(true);
+    expect(html.startsWith('<b>CMS</b><br/><br/><b>Done</b><br/>')).toBe(true);
     expect(html).not.toContain('<h3>');
     expect(html).toContain('all good\n');
     expect(html).toContain('<table bordered striped compact><tr><td><b>Mobile</b></td><td><code>91123</code></td></tr><tr><td><b>Note</b></td><td>two words</td></tr></table>');
