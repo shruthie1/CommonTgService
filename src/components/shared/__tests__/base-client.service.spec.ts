@@ -404,6 +404,72 @@ describe('BaseClientService (real Mongo)', () => {
       expect(await joinRequestModel.countDocuments({ mobile, channelId: 'dup1' })).toBe(1);
     });
 
+    test('1 successful join then INVITE_REQUEST_SENT in the same round: channels +1 persisted via $inc and joinRequests upserted', async () => {
+      const doc = await seed({ channels: 50 });
+      const mobile = doc.mobile;
+      const tryJoiningChannel = jest
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(realRpcError('INVITE_REQUEST_SENT'));
+      const telegramService = { tryJoiningChannel, getChannelInfo: jest.fn(async () => ({ ids: [] })) };
+      const activeChannelsService = {
+        findOne: jest.fn(async () => null),
+        incrementClientsJoined: jest.fn(async () => {}),
+        markJoinRequestRequired: jest.fn(async () => undefined),
+      };
+      mockGetClient.mockResolvedValue({});
+      const svc = new TestClientService(model, { telegramService, activeChannelsService } as any);
+      (svc as any).joinRequestModel = joinRequestModel;
+      const incSpy = jest.spyOn(model, 'updateOne');
+      svc.setJoinMap(mobile, [
+        { channelId: 'ok1', username: 'uok1', canSendMsgs: true },
+        { channelId: 'approval2', username: 'uapproval2', canSendMsgs: true },
+      ]);
+
+      await svc.callProcessJoinSeq();
+
+      const after = await model.findOne({ mobile }).exec();
+      expect(after!.channels).toBe(51);
+      expect(incSpy).toHaveBeenCalledWith({ mobile }, { $inc: { channels: 1 } });
+      const rows = await joinRequestModel.find({ mobile }).lean().exec();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ mobile, channelId: 'approval2' });
+      expect(svc.getJoinFailureCount(mobile)).toBe(0);
+      incSpy.mockRestore();
+    });
+
+    test('recordJoinRequest upsert throws: loop continues, daily count still incremented, no crash', async () => {
+      const docA = await seed({ channels: 50 });
+      const docB = await seed({ channels: 70 });
+      const tryJoiningChannel = jest.fn(async (mobile: string) => {
+        if (mobile === docA.mobile) throw realRpcError('INVITE_REQUEST_SENT');
+        return undefined;
+      });
+      const telegramService = { tryJoiningChannel, getChannelInfo: jest.fn(async () => ({ ids: [] })) };
+      const activeChannelsService = {
+        findOne: jest.fn(async () => null),
+        incrementClientsJoined: jest.fn(async () => {}),
+        markJoinRequestRequired: jest.fn(async () => undefined),
+      };
+      mockGetClient.mockResolvedValue({});
+      const svc = new TestClientService(model, { telegramService, activeChannelsService } as any);
+      const upsert = jest.fn(() => ({ exec: jest.fn().mockRejectedValue(new Error('mongo down')) }));
+      (svc as any).joinRequestModel = { updateOne: upsert };
+      svc.setJoinMap(docA.mobile, [{ channelId: 'approval3', username: 'uapproval3', canSendMsgs: true }]);
+      svc.setJoinMap(docB.mobile, [{ channelId: 'ok3', username: 'uok3', canSendMsgs: true }]);
+
+      await expect(svc.callProcessJoinSeq()).resolves.not.toThrow();
+
+      expect(upsert).toHaveBeenCalledTimes(1);
+      expect((svc as any).getDailyJoinCount(docA.mobile)).toBe(1);
+      expect(svc.getJoinFailureCount(docA.mobile)).toBe(0);
+      expect(activeChannelsService.markJoinRequestRequired).toHaveBeenCalledWith('approval3');
+      // The other mobile in the queue was still processed.
+      expect(tryJoiningChannel).toHaveBeenCalledWith(docB.mobile, expect.objectContaining({ channelId: 'ok3' }));
+      expect((await model.findOne({ mobile: docB.mobile }).exec())!.channels).toBe(71);
+      expect((await model.findOne({ mobile: docA.mobile }).exec())!.channels).toBe(50);
+    });
+
     test('CHANNELS_TOO_MUCH (real GramJS format) removes the mobile from the join queue and is not a transient failure', async () => {
       const doc = await seed({ channels: 50 });
       const mobile = doc.mobile;

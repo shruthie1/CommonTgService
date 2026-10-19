@@ -60,6 +60,10 @@ export class BufferClient {
   @Prop({ required: false, type: Date, default: null })
   lastChecked: Date;
 
+  @ApiPropertyOptional({ description: 'Timestamp of the most recent periodic health-check attempt (success or failure).'})
+  @Prop({ required: false, type: Date })
+  lastHealthCheckAttemptAt?: Date;
+
   @ApiProperty({ description: 'Operational status for the record.', enum: ['active', 'inactive']})
   @Prop({
     required: true,

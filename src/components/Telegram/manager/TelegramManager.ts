@@ -54,6 +54,16 @@ import { Dialog } from 'telegram/tl/custom/dialog';
             return TelegramManager.activeClientSetups.values().next().value;
         }
 
+        /** Every mobile taking part in an in-flight client setup (new and existing). */
+        public static getActiveClientSetupMobiles(): string[] {
+            const mobiles: string[] = [];
+            for (const setup of TelegramManager.activeClientSetups.values()) {
+                if (setup.newMobile) mobiles.push(setup.newMobile);
+                if (setup.existingMobile) mobiles.push(setup.existingMobile);
+            }
+            return mobiles;
+        }
+
         public static hasActiveClientSetup(): boolean {
             return TelegramManager.activeClientSetups.size > 0;
         }
@@ -473,6 +483,10 @@ import { Dialog } from 'telegram/tl/custom/dialog';
 
         async getLastActiveTime(): Promise<string> {
             return authOps.getLastActiveTime(this.ctx);
+        }
+
+        async getLastForeignActiveDate(): Promise<string | null> {
+            return authOps.getLastForeignActiveDate(this.ctx);
         }
 
         async hasPassword(): Promise<boolean> {

@@ -1133,9 +1133,188 @@ describe('BufferClientService coverage', () => {
                 mobile: '15551900001', status: 'active', clientId: 'test-client-1',
                 lastChecked: new Date('2020-01-01'),
             }));
+            await BufferClientModel.collection.updateMany({}, { $set: { warmupPhase: WarmupPhase.READY } });
             const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
             await service.updateInfo();
             expect(healthSpy).toHaveBeenCalledWith('15551900001', expect.any(Number), expect.any(Number));
+        });
+
+        it('updateInfo selects never-checked buffer clients (lastChecked null or missing)', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559400001', status: 'active', clientId: 'test-client-1', lastChecked: null }));
+            await service.create(makeBufferClientData({ mobile: '15559400002', status: 'active', clientId: 'test-client-1', lastChecked: null }));
+            await BufferClientModel.collection.updateOne({ mobile: '15559400002' }, { $unset: { lastChecked: '' } });
+            await BufferClientModel.collection.updateMany({}, { $set: { warmupPhase: WarmupPhase.READY } });
+            const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
+            await service.updateInfo();
+            const called = healthSpy.mock.calls.map(([mobile]) => mobile);
+            expect(called).toEqual(expect.arrayContaining(['15559400001', '15559400002']));
+            expect(healthSpy).toHaveBeenCalledWith('15559400001', 0, expect.any(Number));
+        });
+
+        it('updateInfo orders never-checked buffer clients first, then stale by channels ascending, and skips recently-checked', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559400011', status: 'active', clientId: 'test-client-1', channels: 300, lastChecked: null }));
+            await service.create(makeBufferClientData({ mobile: '15559400012', status: 'active', clientId: 'test-client-1', channels: 250, lastChecked: null }));
+            await service.create(makeBufferClientData({ mobile: '15559400013', status: 'active', clientId: 'test-client-1', channels: 10, lastChecked: new Date('2020-01-01') }));
+            await service.create(makeBufferClientData({ mobile: '15559400014', status: 'active', clientId: 'test-client-1', channels: 5, lastChecked: new Date('2020-06-01') }));
+            await service.create(makeBufferClientData({ mobile: '15559400015', status: 'active', clientId: 'test-client-1', channels: 1, lastChecked: new Date() }));
+            await service.create(makeBufferClientData({ mobile: '15559400016', status: 'inactive', clientId: 'test-client-1', channels: 1, lastChecked: null }));
+            await BufferClientModel.collection.updateMany({}, { $set: { warmupPhase: WarmupPhase.READY } });
+            const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
+            await service.updateInfo();
+            const called = healthSpy.mock.calls.map(([mobile]) => mobile);
+            expect(called).toEqual(['15559400012', '15559400011', '15559400014', '15559400013']);
+        });
+
+        it('updateInfo keeps the 25 cap, filling it with never-checked buffer clients before stale ones', async () => {
+            for (let i = 0; i < 26; i++) {
+                await service.create(makeBufferClientData({ mobile: `155594010${String(i).padStart(2, '0')}`, status: 'active', clientId: 'test-client-1', channels: 200, lastChecked: null }));
+            }
+            await service.create(makeBufferClientData({ mobile: '15559402000', status: 'active', clientId: 'test-client-1', channels: 0, lastChecked: new Date('2020-01-01') }));
+            await BufferClientModel.collection.updateMany({}, { $set: { warmupPhase: WarmupPhase.READY } });
+            const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
+            await service.updateInfo();
+            const called = healthSpy.mock.calls.map(([mobile]) => mobile);
+            expect(called).toHaveLength(25);
+            expect(called).not.toContain('15559402000');
+        });
+
+        describe('updateInfo() review fixes', () => {
+            const mkNever = (mobile: string, extra: Record<string, unknown> = {}) =>
+                service.create(makeBufferClientData({ mobile, status: 'active', clientId: 'test-client-1', channels: 100, lastChecked: null, ...extra }));
+            const setFields = (mobile: string, fields: Record<string, unknown>) =>
+                BufferClientModel.collection.updateOne({ mobile }, { $set: fields });
+            const spyHealth = () => jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
+            const calledMobiles = (spy: jest.SpyInstance) => spy.mock.calls.map(([m]) => m);
+
+            it('H1: only ready/session_rotated accounts are selected, in both the never-checked and stale groups', async () => {
+                const phases: Array<[string, string, Date | null]> = [
+                    ['15559600001', WarmupPhase.READY, null],
+                    ['15559600002', WarmupPhase.SESSION_ROTATED, null],
+                    ['15559600003', WarmupPhase.GROWING, null],
+                    ['15559600004', WarmupPhase.MATURING, null],
+                    ['15559600005', WarmupPhase.READY, new Date('2020-01-01')],
+                    ['15559600006', WarmupPhase.GROWING, new Date('2020-01-01')],
+                    ['15559600007', WarmupPhase.ENROLLED, new Date('2020-01-01')],
+                ];
+                for (const [mobile, phase, lastChecked] of phases) {
+                    await mkNever(mobile, { lastChecked });
+                    await setFields(mobile, { warmupPhase: phase });
+                }
+                const spy = spyHealth();
+                await service.updateInfo();
+                expect(calledMobiles(spy).sort()).toEqual(['15559600001', '15559600002', '15559600005']);
+            });
+
+            it('H2: mobiles in the join/leave queues are excluded and the 25 slots are filled from the rest', async () => {
+                for (let i = 0; i < 30; i++) {
+                    const mobile = `155596100${String(i).padStart(2, '0')}`;
+                    await mkNever(mobile, { channels: i });
+                    await setFields(mobile, { warmupPhase: WarmupPhase.READY });
+                }
+                (service as any).joinChannelMap.set('15559610000', []);
+                (service as any).joinChannelMap.set('15559610001', []);
+                (service as any).leaveChannelMap.set('15559610002', []);
+                const spy = spyHealth();
+                try {
+                    await service.updateInfo();
+                } finally {
+                    (service as any).joinChannelMap.clear();
+                    (service as any).leaveChannelMap.clear();
+                }
+                const called = calledMobiles(spy);
+                expect(called).toHaveLength(25);
+                expect(called).not.toContain('15559610000');
+                expect(called).not.toContain('15559610001');
+                expect(called).not.toContain('15559610002');
+                expect(called).toContain('15559610027');
+            });
+
+            it('H2: mobiles in an active client setup (new and existing) are excluded', async () => {
+                for (const mobile of ['15559620001', '15559620002', '15559620003']) {
+                    await mkNever(mobile);
+                    await setFields(mobile, { warmupPhase: WarmupPhase.READY });
+                }
+                telegramService.hasActiveClientSetup.mockReturnValue(true);
+                telegramService.getActiveClientSetupMobiles = jest.fn(() => ['15559620001', '15559620002']);
+                const spy = spyHealth();
+                await service.updateInfo();
+                expect(calledMobiles(spy)).toEqual(['15559620003']);
+            });
+
+            it('H2: a mobile that enters the join queue mid-round is skipped and does not use a slot', async () => {
+                for (let i = 0; i < 26; i++) {
+                    const mobile = `155596300${String(i).padStart(2, '0')}`;
+                    await mkNever(mobile, { channels: i });
+                    await setFields(mobile, { warmupPhase: WarmupPhase.READY });
+                }
+                const spy = jest.spyOn(service as any, 'performHealthCheck').mockImplementation(async () => {
+                    (service as any).joinChannelMap.set('15559630001', []);
+                    return { passed: true, performed: true };
+                });
+                try {
+                    await service.updateInfo();
+                } finally {
+                    (service as any).joinChannelMap.clear();
+                }
+                const called = calledMobiles(spy);
+                expect(called).toHaveLength(25);
+                expect(called).not.toContain('15559630001');
+                expect(called).toContain('15559630025');
+            });
+
+            it('M3: the live (inUse) account is never selected', async () => {
+                await mkNever('15559640001', { channels: 1 });
+                await mkNever('15559640002', { channels: 2 });
+                await setFields('15559640001', { warmupPhase: WarmupPhase.SESSION_ROTATED, inUse: true });
+                await setFields('15559640002', { warmupPhase: WarmupPhase.READY });
+                const spy = spyHealth();
+                await service.updateInfo();
+                expect(calledMobiles(spy)).toEqual(['15559640002']);
+            });
+
+            it('M3: never-checked group orders by last attempt (nulls first) then channels, and skips attempts within 24 h', async () => {
+                const now = Date.now();
+                await mkNever('15559650001', { channels: 1 });
+                await mkNever('15559650002', { channels: 50 });
+                await mkNever('15559650003', { channels: 10 });
+                await mkNever('15559650004', { channels: 0 });
+                await setFields('15559650001', { warmupPhase: WarmupPhase.READY, lastHealthCheckAttemptAt: new Date(now - 2 * 24 * 3600 * 1000) });
+                await setFields('15559650002', { warmupPhase: WarmupPhase.READY });
+                await setFields('15559650003', { warmupPhase: WarmupPhase.READY });
+                await setFields('15559650004', { warmupPhase: WarmupPhase.READY, lastHealthCheckAttemptAt: new Date(now - 3600 * 1000) });
+                const spy = spyHealth();
+                await service.updateInfo();
+                expect(calledMobiles(spy)).toEqual(['15559650003', '15559650002', '15559650001']);
+            });
+
+            it('M3: a failed health-check attempt stamps lastHealthCheckAttemptAt without setting lastChecked', async () => {
+                await mkNever('15559660001');
+                await setFields('15559660001', { warmupPhase: WarmupPhase.READY });
+                jest.spyOn(connectionManager, 'getClient').mockRejectedValue(new Error('connect boom'));
+                jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+                const before = Date.now();
+                await service.updateInfo();
+                const after: any = await BufferClientModel.findOne({ mobile: '15559660001' }).lean();
+                expect(after.lastHealthCheckAttemptAt).toBeInstanceOf(Date);
+                expect(after.lastHealthCheckAttemptAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+                expect(after.lastChecked ?? null).toBeNull();
+            });
+
+            it('M3: the live client mobile is excluded in the query, so it does not use one of the 25 slots', async () => {
+                for (let i = 0; i < 25; i++) {
+                    const mobile = `155596700${String(i).padStart(2, '0')}`;
+                    await mkNever(mobile, { channels: 10 + i });
+                    await setFields(mobile, { warmupPhase: WarmupPhase.READY });
+                }
+                await mkNever('15559670099', { channels: 0 });
+                await setFields('15559670099', { warmupPhase: WarmupPhase.READY });
+                clientService.findAll.mockResolvedValue([{ clientId: 'test-client-1', mobile: '15559670099' }]);
+                const spy = spyHealth();
+                await service.updateInfo();
+                const called = calledMobiles(spy);
+                expect(called).toHaveLength(25);
+                expect(called).not.toContain('15559670099');
+            });
         });
     });
 
@@ -1811,6 +1990,7 @@ describe('BufferClientService coverage', () => {
             await service.create(makeBufferClientData({
                 mobile: '15553800002', status: 'active', clientId: 'test-client-1', lastChecked: new Date('2020-01-02'),
             }));
+            await BufferClientModel.collection.updateMany({}, { $set: { warmupPhase: WarmupPhase.READY } });
             const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
             await service.updateInfo();
             expect(healthSpy).toHaveBeenCalledTimes(2);
@@ -1821,6 +2001,7 @@ describe('BufferClientService coverage', () => {
                 mobile: '15553800003', status: 'active', clientId: 'test-client-1', lastChecked: new Date('2020-01-01'),
             }));
             clientService.findAll.mockResolvedValue([{ clientId: 'test-client-1', mobile: '15553800003' }]);
+            await BufferClientModel.collection.updateMany({}, { $set: { warmupPhase: WarmupPhase.READY } });
             const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
             await service.updateInfo();
             expect(healthSpy).not.toHaveBeenCalled();
@@ -1998,9 +2179,10 @@ describe('BufferClientService coverage', () => {
             await service.create(makeBufferClientData({ mobile: '15554100004' }));
             // Persist an assignment on the DB row so the findOneAndUpdate guard
             // (assignedFirstName: null …) never matches → returns null.
+            // Only pics on the row: the guard fails and the re-read finds no name/bio.
             await BufferClientModel.updateOne(
                 { mobile: '15554100004' },
-                { $set: { assignedFirstName: 'Pre', assignedLastName: 'Existing', assignedBio: 'b' } },
+                { $set: { assignedProfilePics: ['https://pics/pre.jpg'] } },
             );
             // Pass an in-memory doc WITHOUT assigned fields so hasValidAssignment is false
             // and the code takes the atomic-assignment branch.
@@ -2011,8 +2193,117 @@ describe('BufferClientService coverage', () => {
             expect(count).toBe(0);
             const after = await service.findOne('15554100004');
             // The pre-existing DB assignment is untouched and the step was NOT stamped.
-            expect(after!.assignedFirstName).toBe('Pre');
+            expect(after!.assignedProfilePics).toEqual(['https://pics/pre.jpg']);
+            expect(after!.assignedFirstName ?? null).toBeNull();
             expect(after!.nameBioUpdatedAt ?? null).toBeNull();
+        });
+    });
+
+    describe('updateNameAndBio() unassignable persona counts as a failure', () => {
+        const pool = () => ({
+            clientId: 'test-client-1', name: 'n',
+            firstNames: ['Aria'], bufferLastNames: ['Stone'], bios: ['hi there'], profilePics: ['https://pics/p1.jpg'],
+            dbcoll: 'db',
+        });
+        const stubTg = (firstName = 'Old', lastName = '', about = '') => {
+            jest.spyOn(organicModule, 'performOrganicActivity').mockResolvedValue(undefined as any);
+            const invoke = jest.fn()
+                .mockResolvedValueOnce({ users: [{ lastName }], fullUser: { about } })
+                .mockResolvedValue(undefined);
+            jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
+                getMe: jest.fn(async () => ({ firstName, username: 'u' })),
+                client: { invoke },
+            } as any);
+            jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
+            return invoke;
+        };
+
+        it('pics-only assignment: increments failedUpdateAttempts, sets lastUpdateFailure, does not stamp', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559500001', clientId: 'test-client-1' }));
+            await BufferClientModel.updateOne({ mobile: '15559500001' }, { $set: { assignedProfilePics: ['https://pics/p1.jpg'] } });
+            const doc = await service.findOne('15559500001');
+            const invoke = stubTg();
+            const count = await service.updateNameAndBio(doc as any, pool() as any, 1);
+            expect(count).toBe(0);
+            const after: any = await service.findOne('15559500001');
+            expect(after.failedUpdateAttempts).toBe(2);
+            expect(after.lastUpdateFailure).toBeInstanceOf(Date);
+            expect(after.nameBioUpdatedAt ?? null).toBeNull();
+            expect(invoke).not.toHaveBeenCalled();
+        });
+
+        it('M5: guard not met but a concurrent name/bio assignment exists: uses it, stamps, resets failures', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559500002', clientId: 'test-client-1' }));
+            await BufferClientModel.updateOne(
+                { mobile: '15559500002' },
+                { $set: { assignedFirstName: 'Pre', assignedLastName: 'Existing', assignedBio: 'b' } },
+            );
+            const invoke = stubTg('Pre', 'Existing', 'b');
+            const count = await service.updateNameAndBio({ mobile: '15559500002', clientId: 'test-client-1' } as any, pool() as any, 2);
+            expect(count).toBe(1);
+            const after: any = await service.findOne('15559500002');
+            expect(after.assignedFirstName).toBe('Pre');
+            expect(after.failedUpdateAttempts).toBe(0);
+            expect(after.lastUpdateFailure ?? null).toBeNull();
+            expect(after.nameBioUpdatedAt).toBeInstanceOf(Date);
+            expect(invoke).toHaveBeenCalledTimes(1); // GetFullUser only; profile already matches
+        });
+
+        it('M4: pics-only persona pool (doc already holds pics) stamps the step done, no failure', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559500005', clientId: 'test-client-1' }));
+            await BufferClientModel.updateOne({ mobile: '15559500005' }, { $set: { assignedProfilePics: ['https://pics/p1.jpg'] } });
+            const doc = await service.findOne('15559500005');
+            const invoke = stubTg();
+            const picsOnly = { ...pool(), firstNames: [], bufferLastNames: [], bios: [] };
+            const count = await service.updateNameAndBio(doc as any, picsOnly as any, 1);
+            expect(count).toBe(1);
+            const after: any = await service.findOne('15559500005');
+            expect(after.nameBioUpdatedAt).toBeInstanceOf(Date);
+            expect(after.failedUpdateAttempts).toBe(0);
+            expect(invoke).not.toHaveBeenCalled();
+        });
+
+        it('M4: persona pool with empty name/bio fields and no assignment stamps done without touching the profile', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559500006', clientId: 'test-client-1' }));
+            const doc = await service.findOne('15559500006');
+            const invoke = stubTg();
+            const picsOnly = { ...pool(), firstNames: [], bufferLastNames: [], bios: [], profilePics: ['https://pics/p1.jpg', 'https://pics/p2.jpg'] };
+            const count = await service.updateNameAndBio(doc as any, picsOnly as any, 0);
+            expect(count).toBe(1);
+            const after: any = await service.findOne('15559500006');
+            expect(after.nameBioUpdatedAt).toBeInstanceOf(Date);
+            expect(after.failedUpdateAttempts).toBe(0);
+            expect(invoke).not.toHaveBeenCalled();
+        });
+
+        it('sends a warmup-failed notice when this failure reaches the 3-fail limit', async () => {
+            await service.create(makeBufferClientData({ mobile: '15559500003', clientId: 'test-client-1' }));
+            await BufferClientModel.updateOne({ mobile: '15559500003' }, { $set: { assignedProfilePics: ['https://pics/p1.jpg'] } });
+            const doc = await service.findOne('15559500003');
+            stubTg();
+            const notice = jest.spyOn(service as any, 'sendAccountNotice').mockResolvedValue(true);
+            await service.updateNameAndBio(doc as any, pool() as any, 2);
+            const after: any = await service.findOne('15559500003');
+            expect(after.failedUpdateAttempts).toBe(3);
+            expect(notice).toHaveBeenCalledWith(expect.objectContaining({
+                title: 'Warmup failed',
+                fields: expect.arrayContaining([expect.objectContaining({ label: 'Step', value: 'update_name_bio' })]),
+            }));
+        });
+
+        it('already-matching persona is still a success: stamped, failures reset, no profile write', async () => {
+            await service.create(makeBufferClientData({
+                mobile: '15559500004', clientId: 'test-client-1', assignedFirstName: 'Bea', assignedLastName: 'Lynn', assignedBio: 'bio',
+                failedUpdateAttempts: 2,
+            }));
+            const doc = await service.findOne('15559500004');
+            const invoke = stubTg('Bea', 'Lynn', 'bio');
+            const count = await service.updateNameAndBio(doc as any, pool() as any, 2);
+            expect(count).toBe(1);
+            const after: any = await service.findOne('15559500004');
+            expect(after.nameBioUpdatedAt).toBeInstanceOf(Date);
+            expect(after.failedUpdateAttempts).toBe(0);
+            expect(invoke).toHaveBeenCalledTimes(1); // GetFullUser only, no UpdateProfile
         });
     });
 

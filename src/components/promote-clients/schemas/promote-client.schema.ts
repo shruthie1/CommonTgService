@@ -88,6 +88,10 @@ export class PromoteClient {
   @ApiPropertyOptional({ description: 'Timestamp of the most recent periodic health check.'})
   @Prop({ required: false, type: Date, default: null })
   lastChecked: Date;
+
+  @ApiPropertyOptional({ description: 'Timestamp of the most recent periodic health-check attempt (success or failure).'})
+  @Prop({ required: false, type: Date })
+  lastHealthCheckAttemptAt?: Date;
   
   @ApiPropertyOptional({ description: 'Timestamp of the most recent warmup processing attempt.'})
   @Prop({ required: false, type: Date, default: null })

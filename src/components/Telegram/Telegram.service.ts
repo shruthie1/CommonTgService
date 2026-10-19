@@ -96,6 +96,11 @@ export class TelegramService implements OnModuleDestroy {
         return TelegramManager.getActiveClientSetup(newMobile);
     }
 
+    /** Every mobile taking part in an in-flight client setup (new and existing). */
+    public getActiveClientSetupMobiles(): string[] {
+        return TelegramManager.getActiveClientSetupMobiles();
+    }
+
     public hasActiveClientSetup(): boolean {
         return TelegramManager.hasActiveClientSetup();
     }

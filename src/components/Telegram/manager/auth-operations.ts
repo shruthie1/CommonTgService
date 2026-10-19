@@ -118,7 +118,12 @@ export async function getAuths(ctx: TgContext): Promise<Api.account.Authorizatio
     return await ctx.client.invoke(new Api.account.GetAuthorizations());
 }
 
-export async function getLastActiveTime(ctx: TgContext): Promise<string> {
+/**
+ * Latest `dateActive` (YYYY-MM-DD) among authorizations that are not ours, or null when there is
+ * no foreign authorization or the lookup failed. Callers that persist the value must treat null
+ * as "unknown" and keep what they already have, not as "active today".
+ */
+export async function getLastForeignActiveDate(ctx: TgContext): Promise<string | null> {
     if (!ctx.client) throw new Error('Client is not initialized');
 
     try {
@@ -133,12 +138,17 @@ export async function getLastActiveTime(ctx: TgContext): Promise<string> {
             }
         });
 
-        if (latest === 0) return new Date().toISOString().split('T')[0];
+        if (latest === 0) return null;
         return new Date(latest * 1000).toISOString().split('T')[0];
     } catch (error) {
         ctx.logger.error(ctx.phoneNumber, 'Error getting last active time:', error);
-        return new Date().toISOString().split('T')[0];
+        return null;
     }
+}
+
+/** Same as getLastForeignActiveDate but falls back to today (kept for the HTTP endpoint). */
+export async function getLastActiveTime(ctx: TgContext): Promise<string> {
+    return (await getLastForeignActiveDate(ctx)) ?? new Date().toISOString().split('T')[0];
 }
 
 export async function hasPassword(ctx: TgContext): Promise<boolean> {

@@ -94,6 +94,8 @@ export interface BaseClientDocument extends Document {
     message?: string;
     lastUsed?: Date;
     lastChecked?: Date;
+    /** Last periodic health-check attempt (success or failure); orders/limits never-checked retries. */
+    lastHealthCheckAttemptAt?: Date;
     inUse?: boolean;
     privacyUpdatedAt?: Date;
     twoFASetAt?: Date;
@@ -131,6 +133,7 @@ export type BaseClientUpdate = Partial<Pick<
     | 'message'
     | 'lastUsed'
     | 'lastChecked'
+    | 'lastHealthCheckAttemptAt'
     | 'inUse'
     | 'privacyUpdatedAt'
     | 'twoFASetAt'
@@ -867,6 +870,79 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     // ---- Health Check (redesigned: organic activity instead of SetPrivacy) ----
 
+    protected readonly PERIODIC_HEALTH_CHECK_LIMIT = 25;
+    /** Extra candidates fetched so mobiles that become busy mid-round can be skipped without shrinking the round. */
+    protected readonly PERIODIC_HEALTH_CHECK_SPARE = 10;
+
+    /** Mobiles another job is using right now: join/leave queues and in-flight client setups. */
+    protected getHealthCheckBusyMobiles(): Set<string> {
+        const busy = new Set<string>([...this.joinChannelMap.keys(), ...this.leaveChannelMap.keys()]);
+        if (this.telegramService.hasActiveClientSetup()) {
+            for (const mobile of this.telegramService.getActiveClientSetupMobiles()) busy.add(mobile);
+        }
+        return busy;
+    }
+
+    /**
+     * Periodic health-check candidates. Only ready/session_rotated accounts that are not live
+     * (inUse) and not busy. Never-checked accounts (lastChecked null/missing; `$lt` never matches
+     * those) go first, ordered by last attempt (nulls first) then channels, excluding accounts
+     * attempted in the last 24 h; then accounts last checked more than 5 days ago by channels.
+     */
+    protected async selectHealthCheckCandidates(excludedMobiles: Iterable<string>, fetchLimit: number): Promise<TDoc[]> {
+        const excluded = Array.from(new Set(excludedMobiles));
+        const base: MongoQuery = {
+            status: 'active',
+            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            inUse: { $ne: true },
+            ...(excluded.length > 0 ? { mobile: { $nin: excluded } } : {}),
+        };
+        const now = Date.now();
+        const neverChecked = await this.model
+            .find({
+                ...base,
+                $and: [
+                    { $or: [{ lastChecked: null }, { lastChecked: { $exists: false } }] },
+                    { $or: [{ lastHealthCheckAttemptAt: null }, { lastHealthCheckAttemptAt: { $lt: new Date(now - this.ONE_DAY_MS) } }] },
+                ],
+            })
+            .sort({ lastHealthCheckAttemptAt: 1, channels: 1 })
+            .limit(fetchLimit);
+        const stale = neverChecked.length < fetchLimit
+            ? await this.model
+                .find({ ...base, lastChecked: { $lt: new Date(now - 5 * this.ONE_DAY_MS) } })
+                .sort({ channels: 1 })
+                .limit(fetchLimit - neverChecked.length)
+            : [];
+        return [...neverChecked, ...stale];
+    }
+
+    /** Runs up to PERIODIC_HEALTH_CHECK_LIMIT health checks; busy mobiles are skipped and do not count. */
+    protected async runPeriodicHealthChecks(extraExcludedMobiles: Iterable<string> = []): Promise<number> {
+        const limit = this.PERIODIC_HEALTH_CHECK_LIMIT;
+        const clients = await this.selectHealthCheckCandidates(
+            [...extraExcludedMobiles, ...this.getHealthCheckBusyMobiles()],
+            limit + this.PERIODIC_HEALTH_CHECK_SPARE,
+        );
+        const now = Date.now();
+        let checked = 0;
+        for (const client of clients) {
+            if (checked >= limit) break;
+            // Joins/leaves/client setup can start during the sleeps between checks.
+            if (this.getHealthCheckBusyMobiles().has(client.mobile)) {
+                this.logger.debug(`Skipping ${this.clientType} health check for ${client.mobile}: busy in join/leave queue or client setup`);
+                continue;
+            }
+            if (checked > 0) {
+                await sleep(ClientHelperUtils.gaussianRandom(16000, 2500, 12000, 20000));
+            }
+            const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
+            await this.performHealthCheck(client.mobile, lastChecked, now);
+            checked++;
+        }
+        return checked;
+    }
+
     protected async performHealthCheck(mobile: string, lastChecked: number, now: number): Promise<{ passed: boolean; performed: boolean }> {
         // Randomize interval: 5-9 days instead of exactly 7
         const healthCheckIntervalDays = ClientHelperUtils.gaussianRandom(7, 1.5, 4, 10);
@@ -878,6 +954,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         let telegramClient: TelegramManager | null = null;
         try {
+            // Stamp every attempt (success or failure) so a never-checked account whose check keeps
+            // failing does not stay at the head of the updateInfo selection forever.
+            await this.update(mobile, { lastHealthCheckAttemptAt: new Date() });
             telegramClient = await connectionManager.getClient(mobile, {
                 autoDisconnect: false,
                 handler: false,
@@ -1281,6 +1360,29 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             details,
             detailsTitle: 'Error message',
         };
+    }
+
+    /**
+     * update_name_bio could not resolve a name/lastName/bio to apply (the assignment holds only
+     * pics, or the atomic assignment guard did not match). Record it as a step failure so the
+     * normal 3-fail skip and 7-day reset rules apply, instead of silently repeating every run.
+     * The step is NOT stamped (nameBioUpdatedAt stays unset).
+     */
+    protected async recordNameBioStepFailure(mobile: string, failedAttempts: number, reason: string): Promise<0> {
+        const fails = failedAttempts + 1;
+        this.logger.warn(`update_name_bio failed for ${mobile}: ${reason} (fails=${fails}/${this.MAX_FAILED_ATTEMPTS})`);
+        await this.update(mobile, {
+            lastUpdateAttempt: new Date(),
+            failedUpdateAttempts: fails,
+            lastUpdateFailure: new Date(),
+            organicActivityAt: new Date(),
+        });
+        if (fails === this.MAX_FAILED_ATTEMPTS) {
+            this.sendAccountNotice(
+                this.warmupNotice('warning', 'Warmup failed', mobile, [{ label: 'Step', value: 'update_name_bio', code: false }, { label: 'Fails', value: `${fails}/${this.MAX_FAILED_ATTEMPTS}`, code: false }], undefined, reason)
+            );
+        }
+        return 0;
     }
 
     /**

@@ -275,9 +275,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
             let updateCount = 0;
 
+            // A pool with pics but no firstNames/lastNames/bios cannot fail the name/bio step.
+            const hasNameBioPool = (client.firstNames?.length > 0) || (client.bufferLastNames?.length > 0) || (client.bios?.length > 0);
             if ((client.firstNames?.length > 0) || (client.bufferLastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
                 // ── PERSONA BRANCH ──────────────────────────────────────────
                 let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedProfilePics'> | null = null;
+                let unassignableReason: string | null = null;
 
                 // 1. Check if doc already has a valid assignment (any assigned field set AND pool version matches)
                 const hasValidAssignment = (
@@ -381,7 +384,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                             };
                             this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
                         } else {
-                            this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                            // Guard not met: another run may have assigned concurrently. Re-read and
+                            // use that assignment if it holds a name/bio; only otherwise is it a failure.
+                            const fresh = await this.model.findOne(
+                                { mobile: doc.mobile },
+                                { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 },
+                            ).lean();
+                            if (fresh && (fresh.assignedFirstName != null || fresh.assignedLastName != null || fresh.assignedBio != null)) {
+                                assignment = {
+                                    assignedFirstName: fresh.assignedFirstName,
+                                    assignedLastName: fresh.assignedLastName,
+                                    assignedBio: fresh.assignedBio,
+                                    assignedProfilePics: fresh.assignedProfilePics,
+                                };
+                                this.logger.log(`Using concurrently assigned persona for ${doc.mobile}`);
+                            } else {
+                                this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                                unassignableReason = 'atomic persona assignment guard not met';
+                            }
                         }
                     }
                 }
@@ -392,7 +412,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     assignment.assignedLastName != null ||
                     assignment.assignedBio != null
                 );
-                if (hasAnyAssignment) {
+                if (!hasNameBioPool) {
+                    // Pics-only pool: nothing name/bio-shaped exists to apply. Same as no pool.
+                    this.logger.warn(`Persona pool for ${doc.mobile} has no firstNames/lastNames/bios — marking name/bio step done`);
+                    updateCount = 1;
+                } else if (hasAnyAssignment) {
                     // Read current TG profile state once (needed for lastName and bio checks)
                     const fullUser: unknown = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
                     const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
@@ -432,6 +456,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     // update_name_bio forever (nameBioUpdatedAt never stamped, failures never
                     // incremented, so zombie detection never fires).  Mirrors updateProfilePhotos.
                     updateCount = Math.max(updateCount, 1);
+                } else if (unassignableReason) {
+                    // The atomic guard did not match and no concurrent name/bio assignment exists:
+                    // a failure, not a silent no-op (otherwise update_name_bio repeats every run).
+                    return await this.recordNameBioStepFailure(doc.mobile, failedAttempts, unassignableReason);
+                } else {
+                    // No candidate could be built: nothing to apply. Same as no pool.
+                    this.logger.warn(`No persona candidate for ${doc.mobile} — marking name/bio step done`);
+                    updateCount = 1;
                 }
             } else {
                 // No persona pool on client — stamp nameBioUpdatedAt anyway so the
@@ -1546,25 +1578,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     // ---- Buffer-specific: updateInfo ----
 
     async updateInfo() {
+        // The live client mobiles are excluded in the query (not counted toward the 25).
         const primaryClientMobiles = await this.getPrimaryClientMobiles();
-        const clients = await this.bufferClientModel
-            .find({ status: 'active', lastChecked: { $lt: new Date(Date.now() - 5 * this.ONE_DAY_MS) } })
-            .sort({ channels: 1 })
-            .limit(25);
-
-        const now = Date.now();
-        for (let i = 0; i < clients.length; i++) {
-            const client = clients[i];
-            if (this.isPrimaryClientMobile(client.mobile, primaryClientMobiles)) {
-                this.logger.debug(`Skipping buffer health check for ${client.mobile}: currently attached as primary client mobile`);
-                continue;
-            }
-            const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
-            await this.performHealthCheck(client.mobile, lastChecked, now);
-            if (i < clients.length - 1) {
-                await sleep(ClientHelperUtils.gaussianRandom(16000, 2500, 12000, 20000));
-            }
-        }
+        await this.runPeriodicHealthChecks(primaryClientMobiles);
     }
 
     // ---- Buffer-specific: Channel joining entry point ----

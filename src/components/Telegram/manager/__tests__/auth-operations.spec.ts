@@ -23,6 +23,7 @@ import {
     removeOtherAuths,
     getAuths,
     getLastActiveTime,
+    getLastForeignActiveDate,
     hasPassword,
     createNewSession,
     waitForOtp,
@@ -242,6 +243,28 @@ describe('getAuths', () => {
         const result = { authorizations: [] };
         const ctx = makeCtx({ invoke: jest.fn().mockResolvedValue(result) });
         expect(await getAuths(ctx)).toBe(result);
+    });
+});
+
+describe('getLastForeignActiveDate', () => {
+    test('throws without client', async () => {
+        await expect(getLastForeignActiveDate(makeCtx(null))).rejects.toThrow('Client is not initialized');
+    });
+    test('returns latest non-own dateActive', async () => {
+        jest.spyOn(tgConfig, 'isAuthFingerprintMatch').mockReturnValue(false);
+        const ctx = makeCtx({ invoke: jest.fn().mockResolvedValue({ authorizations: [
+            makeAuth({ current: false, dateActive: 1000 }), makeAuth({ current: false, dateActive: 2000 }),
+        ] }) });
+        expect(await getLastForeignActiveDate(ctx)).toBe(new Date(2000 * 1000).toISOString().split('T')[0]);
+    });
+    test('returns null (not today) when there is no foreign auth', async () => {
+        const ctx = makeCtx({ invoke: jest.fn().mockResolvedValue({ authorizations: [makeAuth({ current: true, dateActive: 5000 })] }) });
+        expect(await getLastForeignActiveDate(ctx)).toBeNull();
+    });
+    test('returns null (not today) on error and logs it', async () => {
+        const ctx = makeCtx({ invoke: jest.fn().mockRejectedValue(new Error('boom')) });
+        expect(await getLastForeignActiveDate(ctx)).toBeNull();
+        expect(ctx.logger.error).toHaveBeenCalled();
     });
 });
 

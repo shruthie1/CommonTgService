@@ -141,7 +141,7 @@ export class AccountMaintenanceService {
         handler: false,
       });
       const [
-        lastActive,
+        foreignLastActive,
         me,
         selfMessages,
         dialogs,
@@ -149,7 +149,7 @@ export class AccountMaintenanceService {
         hasPassword,
         calls,
       ] = await Promise.all([
-        manager.getLastActiveTime(),
+        manager.getLastForeignActiveDate(),
         manager.getMe(),
         manager.getSelfMSgsInfo(),
         manager.getDialogs({ limit: 5 }),
@@ -157,6 +157,12 @@ export class AccountMaintenanceService {
         manager.hasPassword(),
         manager.getCallLogStats(),
       ]);
+      // lastActive: write a real foreign-session date when there is one. With no foreign
+      // authorization (we hold the only session) or a failed lookup, keep the stored value so the
+      // account can age past the enrollment threshold; only a user with no stored value gets today.
+      const lastActive =
+        foreignLastActive ??
+        (user.lastActive ? undefined : new Date().toISOString().split('T')[0]);
       await this.usersService.updateByFilter(
         { $or: [{ tgId: user.tgId }, { mobile: me.phone }] },
         {
@@ -180,7 +186,7 @@ export class AccountMaintenanceService {
           otherVideoCount: selfMessages.otherVideoCount,
           ownVideoCount: selfMessages.ownVideoCount,
           twoFA: Boolean(hasPassword),
-          lastActive,
+          ...(lastActive ? { lastActive } : {}),
           tgId: me.id.toString(),
         } as any,
       );
