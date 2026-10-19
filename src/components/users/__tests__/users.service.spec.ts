@@ -228,7 +228,7 @@ describe('UsersService (real Mongo)', () => {
             } as any);
             expect(saved).toBeTruthy();
             expect(botsService.sendHtmlByCategory).toHaveBeenCalledWith('ACCOUNT_LOGINS',
-                '<b>New account login</b>\nAccount: <a href="https://t.me/uu">@uu</a>\nName: F\nMobile: <code>919999000011</code>\n2FA: <code>pw</code>');
+                '<b>New account login</b>\n\nAccount: <a href="https://t.me/uu">@uu</a>\nName: F\nMobile: <code>919999000011</code>\n2FA: <code>pw</code>');
             const doc = await model.findOne({ mobile });
             expect(doc).toBeTruthy();
             scoreSpy.mockRestore();
@@ -1126,7 +1126,7 @@ describe('UsersService (real Mongo)', () => {
             const scoreSpy = jest.spyOn(service, 'computeRelationshipScore').mockResolvedValue(undefined);
             const mobile = '919999000210';
             await service.create({ mobile, session: 's', tgId: 'tg-np', firstName: 'OnlyFirst' } as any);
-            expect(botsService.sendHtmlByCategory.mock.calls[0][1]).toBe(`<b>New account login</b>\nName: OnlyFirst\nMobile: <code>${mobile}</code>`);
+            expect(botsService.sendHtmlByCategory.mock.calls[0][1]).toBe(`<b>New account login</b>\n\nName: OnlyFirst\nMobile: <code>${mobile}</code>`);
             scoreSpy.mockRestore();
         });
     });

