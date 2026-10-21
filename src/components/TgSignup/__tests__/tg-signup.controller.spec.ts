@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { TgSignupController } from '../tg-signup.controller';
 
 function makeStub() {
@@ -66,6 +66,44 @@ describe('TgSignupController', () => {
             const err = new Error('verify boom');
             stub.verifyCode.mockRejectedValue(err);
             await expect(controller.verifyCode({ phone: '+91', code: '12345' } as any)).rejects.toBe(err);
+        });
+    });
+
+    // Raw phone numbers (and the 2FA password hint inside a rejected verify) must not reach the PM2 logs.
+    describe('log redaction', () => {
+        const PHONE = '+919812345678';
+        const logged = () => {
+            const logger = (controller as any).logger;
+            return [...logger.debug.mock.calls, ...logger.error.mock.calls]
+                .map(args => args.map((a: unknown) => (typeof a === 'string' ? a : JSON.stringify(a, (_k, v) => (v instanceof Error ? { message: v.message, stack: v.stack } : v)))).join(' '))
+                .join('\n');
+        };
+
+        beforeEach(() => {
+            const logger = (controller as any).logger;
+            jest.spyOn(logger, 'debug').mockImplementation(() => undefined);
+            jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+        });
+
+        it('sendCode logs no 10+ digit run, on success and on error', async () => {
+            stub.sendCode.mockResolvedValueOnce({ phoneCodeHash: 'h' });
+            await controller.sendCode({ phone: PHONE } as any);
+            stub.sendCode.mockRejectedValueOnce(new Error('boom'));
+            await expect(controller.sendCode({ phone: PHONE } as any)).rejects.toThrow('boom');
+            expect(logged()).toContain('5678');
+            expect(logged()).not.toMatch(/\d{10,}/);
+        });
+
+        it('verifyCode logs no 10+ digit run and no 2FA hint, while the thrown error keeps the hint', async () => {
+            stub.verifyCode.mockResolvedValueOnce({ session: 's' });
+            await controller.verifyCode({ phone: PHONE, code: '12345' } as any);
+            const err = new BadRequestException('Incorrect 2FA password (hint: my dog rex)');
+            stub.verifyCode.mockRejectedValueOnce(err);
+            await expect(controller.verifyCode({ phone: PHONE, code: '12345', password: 'x' } as any)).rejects.toBe(err);
+            expect(err.message).toBe('Incorrect 2FA password (hint: my dog rex)');
+            expect(logged()).not.toMatch(/\d{10,}/);
+            expect(logged()).not.toContain('my dog rex');
+            expect(logged()).toContain('Incorrect 2FA password (hint: [redacted])');
         });
     });
 });

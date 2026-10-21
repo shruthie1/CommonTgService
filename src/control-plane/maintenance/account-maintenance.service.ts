@@ -15,6 +15,18 @@ import { contains, parseError } from '../../utils';
 import { getTelegramChannelLiveFacts } from '../../utils/telegram-utils/channel-live-facts';
 import { isEligibleDiscoveredChannel } from './channel-eligibility';
 
+// users holds one doc per session, so one mobile can have several docs. The
+// selection query sorts by mobile and over-fetches by this factor so that `limit`
+// still yields up to `limit` distinct mobiles after duplicates are dropped.
+const DUPLICATE_DOC_OVERFETCH = 5;
+
+// Owner rule: every automated Telegram retry backs off exponentially and stops.
+// A non-permanent failure waits 3h x 2^(failures-1), capped at 7 days, and the
+// row is never selected again once it has failed MAX_MAINTENANCE_FAILURES times.
+const MAINTENANCE_RETRY_BASE_MS = 3 * 60 * 60 * 1000;
+const MAINTENANCE_RETRY_MAX_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_MAINTENANCE_FAILURES = 5;
+
 @Injectable()
 export class AccountMaintenanceService {
   private readonly logger = new Logger(AccountMaintenanceService.name);
@@ -106,7 +118,10 @@ export class AccountMaintenanceService {
       `Raw-user query excludes lifecycle pool mobiles: buffer=${bufferClients.length}, promote=${promoteClients.length}, unique=${lifecycleMobiles.length}`,
     );
 
-    return this.usersService.executeQuery(
+    // Sorted by mobile so a mobile's duplicate docs are adjacent; within a mobile
+    // the representative is the newest doc (updatedAt desc, _id asc), the same
+    // tiebreak usersService.search uses.
+    const rows = await this.usersService.executeQuery(
       {
         expired: false,
         ...(lifecycleMobiles.length
@@ -124,11 +139,58 @@ export class AccountMaintenanceService {
             updatedAt: { $lte: threeMonthsAgo },
           },
         ],
+        // $not also matches docs that never failed (field missing).
+        maintenanceRetryAt: { $not: { $gt: now } },
+        maintenanceFailures: { $not: { $gte: MAX_MAINTENANCE_FAILURES } },
       },
-      {},
-      limit,
-      skip,
+      { mobile: 1, updatedAt: -1, _id: 1 },
+      (skip + limit) * DUPLICATE_DOC_OVERFETCH,
+      0,
     );
+
+    // One login per mobile per run: both `limit` and `skip` count mobiles.
+    const seenMobiles = new Set<string>();
+    const representatives: typeof rows = [];
+    for (const row of rows) {
+      if (seenMobiles.has(row.mobile)) continue;
+      seenMobiles.add(row.mobile);
+      representatives.push(row);
+    }
+    return representatives.slice(skip, skip + limit);
+  }
+
+  private maintenanceRetryDelayMs(failures: number): number {
+    return Math.min(
+      MAINTENANCE_RETRY_BASE_MS * 2 ** Math.max(0, failures - 1),
+      MAINTENANCE_RETRY_MAX_MS,
+    );
+  }
+
+  /**
+   * Records a non-permanent failure on every doc of this account so the next
+   * selection skips it until the backoff expires.  Filters by tgId and writes no
+   * `mobile`, so a non-canonical stored mobile cannot trip the schema setter.
+   */
+  private async recordMaintenanceFailure(
+    user: { mobile: string; tgId: string } & Record<string, any>,
+  ): Promise<void> {
+    const failures = (Number(user.maintenanceFailures) || 0) + 1;
+    const retryAt = new Date(Date.now() + this.maintenanceRetryDelayMs(failures));
+    try {
+      await this.usersService.updateByFilter(
+        { tgId: user.tgId },
+        { maintenanceFailures: failures, maintenanceRetryAt: retryAt } as any,
+      );
+      this.logger.warn(
+        failures >= MAX_MAINTENANCE_FAILURES
+          ? `Account maintenance for ${user.mobile} failed ${failures} times; no further retries`
+          : `Account maintenance for ${user.mobile} failed (${failures}/${MAX_MAINTENANCE_FAILURES}); next retry after ${retryAt.toISOString()}`,
+      );
+    } catch (recordError) {
+      this.logger.error(
+        `Could not record maintenance backoff for ${user.mobile}: ${parseError(recordError, 'RecordMaintenanceFailure', false).message}`,
+      );
+    }
   }
 
   private async updateUser(
@@ -163,8 +225,12 @@ export class AccountMaintenanceService {
       const lastActive =
         foreignLastActive ??
         (user.lastActive ? undefined : new Date().toISOString().split('T')[0]);
+      // Filter and write by tgId only.  `me.phone` can be '' or non-canonical
+      // (hidden number, legacy format); the users mobile setter throws on it,
+      // which used to fail the whole write so updatedAt never moved and the
+      // account was re-selected every run.  The stored mobile stays as is.
       await this.usersService.updateByFilter(
-        { $or: [{ tgId: user.tgId }, { mobile: me.phone }] },
+        { tgId: user.tgId },
         {
           contacts: 'savedCount' in contacts ? contacts.savedCount : 0,
           calls: calls || {
@@ -176,7 +242,6 @@ export class AccountMaintenanceService {
           },
           firstName: me.firstName,
           lastName: me.lastName,
-          mobile: me.phone,
           username: me.username,
           msgs: selfMessages.total,
           totalChats: dialogs.total,
@@ -188,6 +253,8 @@ export class AccountMaintenanceService {
           twoFA: Boolean(hasPassword),
           ...(lastActive ? { lastActive } : {}),
           tgId: me.id.toString(),
+          maintenanceFailures: 0,
+          maintenanceRetryAt: null,
         } as any,
       );
       // Bring the account online (replaces the old "." to Saved Messages). Best-effort:
@@ -215,6 +282,8 @@ export class AccountMaintenanceService {
         ])
       ) {
         await this.usersService.delete(user.tgId);
+      } else {
+        await this.recordMaintenanceFailure(user);
       }
     } finally {
       if (manager) await connectionManager.unregisterClient(user.mobile);

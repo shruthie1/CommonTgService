@@ -356,6 +356,8 @@ describe('PromoteClientService coverage', () => {
 
         it('queues a leave when too many unsendable channels', async () => {
             await service.create(makePromoteClientData({ mobile: '15551500002', channels: 50, status: 'active', clientId: 'test-client-1' }));
+            // Leaves are never queued for fresh warmup phases; this account is past them.
+            await PromoteClientModel.collection.updateOne({ mobile: '15551500002' }, { $set: { warmupPhase: WarmupPhase.GROWING } });
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();

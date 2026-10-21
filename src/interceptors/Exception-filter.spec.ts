@@ -109,4 +109,35 @@ describe('ExceptionsFilter', () => {
         expect(json).not.toHaveBeenCalled();
         expect(end).toHaveBeenCalled();        // terminate the already-started response
     });
+
+    // The 2FA password hint stays in the HTTP response (the signup UI shows it) but never reaches the logs.
+    describe('2FA password hint', () => {
+        const savedEnv = process.env.NODE_ENV;
+        beforeEach(() => { process.env.NODE_ENV = 'production'; }); // parseError only logs outside tests
+        afterEach(() => { process.env.NODE_ENV = savedEnv; });
+
+        it('logs a redacted hint and returns the response unchanged', () => {
+            const filter = new ExceptionsFilter();
+            const { host, response } = makeHost();
+            const err = new BadRequestException('Incorrect 2FA password (hint: my dog rex)');
+
+            filter.catch(err, host);
+
+            const payload = response.status.mock.results[0].value.json.mock.calls[0][0];
+            // Same body as before the redaction (error = parseError's type of the original exception).
+            expect(payload).toEqual({ statusCode: 400, message: 'Incorrect 2FA password (hint: my dog rex)', error: 'BadRequestException' });
+            const logged = errorSpy.mock.calls.map(args => args.map(String).join(' ')).join('\n');
+            expect(logged).toContain('(hint: [redacted])');
+            expect(logged).not.toContain('my dog rex');
+        });
+
+        it('leaves errors without a hint untouched in the log', () => {
+            const filter = new ExceptionsFilter();
+            const { host } = makeHost();
+            filter.catch(new BadRequestException('Incorrect 2FA password'), host);
+            const logged = errorSpy.mock.calls.map(args => args.map(String).join(' ')).join('\n');
+            expect(logged).toContain('Incorrect 2FA password');
+            expect(logged).not.toContain('[redacted]');
+        });
+    });
 });

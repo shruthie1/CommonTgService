@@ -54,8 +54,8 @@ describe('AccountMaintenanceService lifecycle ownership', () => {
       expect.objectContaining({
         mobile: { $nin: ['10000000001', '10000000002'] },
       }),
-      {},
-      400,
+      { mobile: 1, updatedAt: -1, _id: 1 },
+      2000,
       0,
     );
   });
@@ -148,7 +148,7 @@ describe('AccountMaintenanceService lifecycle ownership', () => {
       expect(manager.setOnlineStatus).toHaveBeenCalledTimes(1);
       expect(manager.client.sendMessage).not.toHaveBeenCalled();
       expect(usersService.updateByFilter).toHaveBeenCalledWith(
-        { $or: [{ tgId: '99' }, { mobile: '10000000009' }] },
+        { tgId: '99' },
         expect.objectContaining({ lastActive: '2026-10-19', totalChats: 7, contacts: 4, twoFA: true, msgs: 3 }),
       );
     });

@@ -1470,6 +1470,28 @@ describe('TgSignupService practical flows', () => {
             await expect(service.verifyCode('+919999000217', '12345', 'bad')).rejects.toThrow('Incorrect 2FA password (hint: city)');
         });
 
+        test('the wrong-password hint is redacted from the service logs but kept in the thrown error', async () => {
+            mockConfig();
+            computeCheckMock.mockResolvedValue('computed');
+            queueConnectSuccess();
+            queueInvokeResult(SENT_APP());
+            const service = makeService();
+            const logger = (service as any).logger;
+            const spies = ['log', 'warn', 'error', 'debug', 'verbose'].map(m => jest.spyOn(logger, m).mockImplementation(() => undefined));
+            await service.sendCode('+919999000219');
+
+            clientInstances[0].invoke
+                .mockImplementationOnce(async () => { throw { errorMessage: 'SESSION_PASSWORD_NEEDED' }; })
+                .mockImplementationOnce(async () => ({ srp: 'p1', hint: 'secret-city' }))
+                .mockImplementationOnce(async () => { throw { errorMessage: 'PASSWORD_HASH_INVALID' }; });
+
+            await expect(service.verifyCode('+919999000219', '12345', 'bad')).rejects.toThrow('Incorrect 2FA password (hint: secret-city)');
+            const logged = spies.flatMap(s => s.mock.calls).map(args => args.map(String).join(' ')).join('\n');
+            expect(logged).toContain('Verification error for');
+            expect(logged).toContain('(hint: [redacted])');
+            expect(logged).not.toContain('secret-city');
+        });
+
         test('GetPassword failure on the 2FA prompt still asks for the password', async () => {
             mockConfig();
             queueConnectSuccess();

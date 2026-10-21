@@ -1,8 +1,17 @@
 import { Controller, Post, Body, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiExtraModels } from '@nestjs/swagger';
-import { TgSignupService } from './tg-signup.service';
+import { TgSignupService, maskPhone } from './tg-signup.service';
 import { SendCodeDto, VerifyCodeDto, TgSignupResponse } from './dto/tg-signup.dto';
 import { Logger } from '../../utils';
+import { redactPasswordHint } from '../../interceptors/Exception-filter';
+
+/** Log-safe error fields: the 2FA password hint in "Incorrect 2FA password (hint: …)" is redacted. */
+function loggableError(error: unknown): { error: string; stack?: string } {
+    return {
+        error: redactPasswordHint(error instanceof Error ? error.message : String(error)),
+        stack: error instanceof Error ? redactPasswordHint(error.stack) : undefined,
+    };
+}
 
 @Controller('tgsignup')
 @ApiTags('tgsignup')
@@ -44,7 +53,7 @@ export class TgSignupController {
     })
     async sendCode(@Body() sendCodeDto: SendCodeDto): Promise<TgSignupResponse> {
         try {
-            this.logger.debug(`[SEND_CODE] Request received for phone: ${sendCodeDto.phone}`);
+            this.logger.debug(`[SEND_CODE] Request received for phone: ${maskPhone(sendCodeDto.phone)}`);
             const result = await this.tgSignupService.sendCode(sendCodeDto.phone);
 
             return {
@@ -58,10 +67,7 @@ export class TgSignupController {
                 resendAfter: result.resendAfter,
             };
         } catch (error) {
-            this.logger.error(`[SEND_CODE] Error for phone: ${sendCodeDto.phone}`, {
-                error,
-                stack: error instanceof Error ? error.stack : undefined
-            });
+            this.logger.error(`[SEND_CODE] Error for phone: ${maskPhone(sendCodeDto.phone)}`, loggableError(error));
 
             throw error;
         }
@@ -91,7 +97,7 @@ export class TgSignupController {
     })
     async verifyCode(@Body() verifyCodeDto: VerifyCodeDto): Promise<TgSignupResponse> {
         try {
-            this.logger.debug(`[VERIFY_CODE] Request received for phone: ${verifyCodeDto.phone}`);
+            this.logger.debug(`[VERIFY_CODE] Request received for phone: ${maskPhone(verifyCodeDto.phone)}`);
 
             const result = await this.tgSignupService.verifyCode(
                 verifyCodeDto.phone,
@@ -107,10 +113,7 @@ export class TgSignupController {
                 passwordHint: result.passwordHint,
             };
         } catch (error) {
-            this.logger.error(`[VERIFY_CODE] Error for phone: ${verifyCodeDto.phone}`, {
-                error,
-                stack: error instanceof Error ? error.stack : undefined
-            });
+            this.logger.error(`[VERIFY_CODE] Error for phone: ${maskPhone(verifyCodeDto.phone)}`, loggableError(error));
 
             throw error;
         }

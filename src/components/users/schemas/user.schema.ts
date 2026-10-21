@@ -117,6 +117,15 @@ export class User {
   @Prop()
   lastActive: string;
 
+  // --- Raw-user maintenance retry state (account-maintenance.service) ---
+  @ApiProperty({ description: 'Consecutive failed maintenance logins', required: false })
+  @Prop({ required: false, type: Number })
+  maintenanceFailures?: number;
+
+  @ApiProperty({ description: 'Earliest time maintenance may retry this account', required: false })
+  @Prop({ required: false, type: Date })
+  maintenanceRetryAt?: Date | null;
+
   // --- Call summary (account-level) ---
   @ApiProperty({ description: 'Call statistics', required: false })
   @Prop({

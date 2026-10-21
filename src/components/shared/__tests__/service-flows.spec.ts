@@ -1166,7 +1166,7 @@ describe('Service flow reliability', () => {
     });
 
     test('buffer refillJoinQueue queues leave work when live channelInfo says the mobile should leave', async () => {
-        const doc = { mobile: '919990012222', channels: 50, status: 'active' };
+        const doc = { mobile: '919990012222', channels: 50, status: 'active', warmupPhase: WarmupPhase.GROWING };
         const bufferModel: any = {
             find: jest.fn(() => createQueryChain(() => [doc])),
         };

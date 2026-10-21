@@ -2211,25 +2211,31 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
      * Find one of OUR accounts that is an admin of the channel, so it can promote the new
      * bot. Preference order (to protect the manager accounts, we only USE one that is verified
      * admin in THIS channel — never blind-fire):
-     *   1. configured channel-manager accounts (primary then backup) — verify each is actually
-     *      admin in this specific channel before using it,
-     *   2. otherwise scan healthy accounts and match one against the channel's admin set.
+     *   1. the channel's own bots (Bot API, no account activity),
+     *   2. otherwise the configured channel-manager accounts (primary then backup, live users doc only),
+     *      matching our accounts against the admin set they read.
      */
     private async resolveChannelAdminMobile(channelId: string): Promise<string | null> {
-        // Read the channel's admin list ONCE via any account that can see it (managers first,
-        // then healthy accounts), then pick the BEST of OUR controllable admins to promote with —
+        // Read the channel's admin list ONCE (via its bots, else via a manager that can see it), then pick the BEST of OUR controllable admins to promote with —
         // preferring one that has `addAdmins` (required to promote a bot) AND `postMessages` (so the
         // bot can be granted post). This avoids RIGHT_FORBIDDEN and naturally selects a
         // full-rights/creator account (e.g. @Saurabh) over a limited manager.
         // Bot API first (no account activity); the account scan only when no bot of the channel can read it.
+        // Account scan = the managers only: a random healthy account can never read a broadcast channel's
+        // admin list, so each one was a wasted login (~17 per channel per night). A manager without a live
+        // users doc (expired / no session) is skipped via one Mongo read, before any login.
         const viaBots = await this.readChannelViaBots(channelId);
-        const viewers = viaBots ? [] : [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(15))];
+        const managers = viaBots ? [] : [...new Set(this.getChannelManagerMobiles())];
+        const live = managers.length ? new Set((await this.findHealthyAccountsByIdentity(managers, [])).map(u => u.mobile)) : new Set<string>();
+        const viewers = managers.filter(m => live.has(m));
+        const blind = new Set<string>(); // viewers that could not see the channel: never re-tried for the About
         let admins: any[] | null = viaBots && viaBots.admins.length > 0 ? viaBots.admins : null;
         for (const viewer of viewers) {
             try {
                 const res = await this.telegramService.getGroupAdmins(viewer, channelId);
                 if (Array.isArray(res) && res.length > 0) { admins = res; break; }
             } catch {
+                blind.add(viewer);
                 continue; // this viewer can't see the channel — try next
             }
         }
@@ -2241,7 +2247,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         // search() still applies its default exclusions (expired, buffer/promote pool mobiles).
         const aboutMobiles = new Set<string>();
         for (const m of (viaBots?.about || '').match(/\d{10,13}/g) || []) aboutMobiles.add(m);
-        for (const viewer of aboutMobiles.size > 0 ? [] : viewers) {
+        for (const viewer of aboutMobiles.size > 0 ? [] : viewers.filter(v => !blind.has(v))) {
             let about = '';
             try { about = await this.telegramService.getChannelAbout(viewer, channelId); }
             catch { continue; }

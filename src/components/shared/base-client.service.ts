@@ -342,6 +342,55 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return this.getDailyJoinCount(mobile) >= this.config.maxChannelJoinsPerDay;
     }
 
+    /** Fresh accounts never mass-leave: joins are allowed in these phases, leaves are not.
+     *  Live 2026-10-21: an account enrolled that day left 438 can't-send chats in 3h. */
+    protected static readonly NO_LEAVE_WARMUP_PHASES: ReadonlySet<string> = new Set<string>([
+        WarmupPhase.ENROLLED,
+        WarmupPhase.SETTLING,
+        WarmupPhase.IDENTITY,
+    ]);
+    /** Per-mobile daily leave cap. Same day key and reset as the daily join cap. */
+    protected readonly MAX_LEAVES_PER_DAY = 20;
+    protected dailyLeaveCounts: Map<string, number> = new Map();
+    protected dailyLeaveDate: string = '';
+
+    protected resetDailyLeaveCountersIfNeeded(): void {
+        const today = ClientHelperUtils.getTodayDateString();
+        if (today !== this.dailyLeaveDate) {
+            this.dailyLeaveCounts.clear();
+            this.dailyLeaveDate = today;
+        }
+    }
+
+    protected getRemainingDailyLeaves(mobile: string): number {
+        this.resetDailyLeaveCountersIfNeeded();
+        return Math.max(0, this.MAX_LEAVES_PER_DAY - (this.dailyLeaveCounts.get(mobile) || 0));
+    }
+
+    protected addDailyLeaveCount(mobile: string, count: number): void {
+        this.resetDailyLeaveCountersIfNeeded();
+        this.dailyLeaveCounts.set(mobile, (this.dailyLeaveCounts.get(mobile) || 0) + count);
+    }
+
+    /**
+     * Single entry point for queueing can't-send chats to leave (prep sweep + refill, promote and
+     * buffer). Skips fresh warmup phases and mobiles that used today's leave allowance; the next
+     * prep/refill run re-queues whatever is still needed.
+     */
+    protected queueLeaveChannelsIfAllowed(doc: Pick<BaseClientDocument, 'mobile' | 'warmupPhase'>, channels: string[]): boolean {
+        const mobile = doc.mobile;
+        const phase = doc.warmupPhase || WarmupPhase.ENROLLED;
+        if (BaseClientService.NO_LEAVE_WARMUP_PHASES.has(phase)) {
+            this.logger.debug(`${mobile} in ${phase}: not queueing ${channels?.length ?? 0} channels to leave`);
+            return false;
+        }
+        if (this.getRemainingDailyLeaves(mobile) <= 0) {
+            this.logger.debug(`${mobile} hit daily leave cap (${this.MAX_LEAVES_PER_DAY}), not queueing leaves`);
+            return false;
+        }
+        return this.safeSetLeaveChannelMap(mobile, channels);
+    }
+
     /**
      * Use a stable per-attempt cooldown jitter so scheduler prechecks and processClient()
      * make the same decision for the same mobile + lastUpdateAttempt.
@@ -2170,10 +2219,19 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     continue;
                 }
 
-                channelsToProcess = channels.splice(0, this.config.leaveChannelBatchSize);
+                // Daily cap: take at most today's remaining allowance; when it is used up, drop the
+                // rest of this mobile's queue (the next prep/refill run re-queues what is still needed).
+                const allowance = this.getRemainingDailyLeaves(mobile);
+                if (allowance <= 0) {
+                    this.logger.debug(`${mobile} hit daily leave cap (${this.MAX_LEAVES_PER_DAY}), dropping ${channels.length} queued leaves`);
+                    this.removeFromLeaveMap(mobile);
+                    continue;
+                }
+
+                channelsToProcess = channels.splice(0, Math.min(this.config.leaveChannelBatchSize, allowance));
                 this.logger.debug(`${mobile} leaving ${channelsToProcess.length} channels (${channels.length} remaining)`);
 
-                if (channels.length > 0) {
+                if (channels.length > 0 && allowance > channelsToProcess.length) {
                     this.leaveChannelMap.set(mobile, channels);
                 } else {
                     this.removeFromLeaveMap(mobile);
@@ -2181,6 +2239,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 const client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
                 const leaveResult = await client.leaveChannels(channelsToProcess);
+                // Count every attempted leave (not just successes) so the cap bounds Telegram actions.
+                this.addDailyLeaveCount(mobile, channelsToProcess.length);
                 const leftCount = leaveResult?.successCount ?? channelsToProcess.length;
                 const skippedCount = leaveResult?.skipCount ?? 0;
                 this.logger.debug(`${mobile} leave result: success=${leftCount}, skipped=${skippedCount}, attempted=${channelsToProcess.length}`);

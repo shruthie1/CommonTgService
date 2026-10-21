@@ -238,5 +238,18 @@ describe('TimestampService', () => {
             expect(stored.clientA).toBeUndefined();
             expect(stored.clientB).toBeUndefined();
         });
+
+        it('clears a doc written through update() (mongoose timestamps) without an updatedAt conflict', async () => {
+            await service.update({ clientA: Date.now() - 3_600_000, clientB_promote: Date.now() - 7_200_000 });
+            const seeded = await model.collection.findOne({});
+            expect(seeded.updatedAt).toBeInstanceOf(Date);
+
+            await expect(service.clear()).resolves.toBeDefined();
+
+            const stored = await model.collection.findOne({});
+            expect(stored.clientA).toBeUndefined();
+            expect(stored.clientB_promote).toBeUndefined();
+            expect(await service.getTimeDifferences(0)).toEqual({});
+        });
     });
 });

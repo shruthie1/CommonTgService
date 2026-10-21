@@ -1156,10 +1156,13 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
   });
 
   test('pending_admin becomes active_verified only after the admin check succeeds', async () => {
+    // The account-scan fallback reads the admin list through the configured managers only.
+    process.env.channelManagerPrimary = MANAGER.mobile;
     wireHealthyDeps();
     await seedBot({ category: ChannelCategory.UNVDS, channelId: '-100pending', status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
 
     await service.validateAndReplaceBots();
+    delete process.env.channelManagerPrimary;
 
     const bot = await model.findOne({ category: ChannelCategory.UNVDS });
     expect(bot.lifecycle).toBe('active_verified');
@@ -1484,6 +1487,11 @@ describe('BotsService - resolveChannelAdminMobile finds admins beyond the 200-ro
   // lookup by its identity does. Before the fix every pending bot stayed "no controllable admin".
   const ADMIN = { mobile: '919600000282', username: 'myvcacc', tgId: '5550001', session: 'sess' };
   const strangers = Array.from({ length: 200 }, (_, i) => ({ mobile: `91800000${String(i).padStart(4, '0')}`, tgId: `77${i}`, session: 's' }));
+  // The account-scan fallback reads the channel through the configured managers only (live users docs).
+  const MANAGERS = [{ mobile: '910000000009', tgId: '8809', session: 's' }, { mobile: '910000000008', tgId: '8808', session: 's' }];
+
+  beforeEach(() => { process.env.channelManagerPrimary = MANAGERS[0].mobile; process.env.channelManagerBackup = MANAGERS[1].mobile; });
+  afterEach(() => { delete process.env.channelManagerPrimary; delete process.env.channelManagerBackup; });
 
   function wire(about = '') {
     const telegramService = {
@@ -1498,7 +1506,7 @@ describe('BotsService - resolveChannelAdminMobile finds admins beyond the 200-ro
         const tgIn = q?.tgId?.$in as string[] | undefined;
         const mobIn = q?.mobile?.$in as string[] | undefined;
         if (tgIn) return [ADMIN, ...strangers].filter(u => tgIn.includes(u.tgId));
-        if (mobIn) return [ADMIN, ...strangers].filter(u => mobIn.includes(u.mobile));
+        if (mobIn) return [ADMIN, ...MANAGERS, ...strangers].filter(u => mobIn.includes(u.mobile));
         return strangers; // the capped 200-row list: ADMIN is not in it
       }),
     };
@@ -1517,16 +1525,10 @@ describe('BotsService - resolveChannelAdminMobile finds admins beyond the 200-ro
 
   test('an EMPTY About from the first viewer falls through to the next viewer', async () => {
     wire();
-    process.env.channelManagerPrimary = '910000000009';
-    process.env.channelManagerBackup = '910000000008';
     const tg: any = mockModuleRef.get({ name: 'TelegramService' });
     tg.getGroupAdmins = jest.fn(async () => [{ userId: '999999', rank: 'creator', permissions: {} }]); // no admin of ours
     tg.getChannelAbout = jest.fn().mockResolvedValueOnce('').mockResolvedValueOnce(`created by ${ADMIN.mobile}`);
-    try {
-      await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
-    } finally {
-      delete process.env.channelManagerPrimary; delete process.env.channelManagerBackup;
-    }
+    await expect((service as any).resolveChannelAdminMobile('-1004354365190')).resolves.toBe(ADMIN.mobile);
   });
 
   test('a creator mobile named in the channel About outside the window is selected', async () => {
@@ -1557,7 +1559,7 @@ describe('BotsService - reconcilePendingAdminBotsNow (promote existing pending b
       getChannelAbout: jest.fn(async () => ''),
     };
     const usersService = {
-      search: jest.fn(async (q: any) => (q?.tgId?.$in?.includes(ADMIN.tgId) ? [ADMIN] : [])),
+      search: jest.fn(async (q: any) => (q?.tgId?.$in?.includes(ADMIN.tgId) || q?.mobile?.$in?.includes(ADMIN.mobile) ? [ADMIN] : [])),
     };
     mockModuleRef.get.mockImplementation((token: any) => {
       const name = token?.name || String(token);
@@ -1733,5 +1735,62 @@ describe('BotsService - Bot API rich messages', () => {
     expect(html).toContain('<tr><th colspan="2">Failures</th></tr>');
     expect(html).toContain('a failed');
     void bot;
+  });
+});
+
+describe('BotsService - account-scan fallback reads only the channel managers (2026-10-21)', () => {
+  // No bot of the channel can read it (readChannelViaBots → null). Random healthy accounts can never read a
+  // broadcast channel's admin list, so each one was a wasted Telegram login (~17 per channel per night).
+  const PRIMARY = { mobile: '910000000011', tgId: '1011', session: 's-p' };
+  const BACKUP = { mobile: '910000000012', tgId: '1012', session: 's-b' };
+  const OTHERS = Array.from({ length: 20 }, (_, i) => ({ mobile: `9180000000${String(i).padStart(2, '0')}`, tgId: `20${i}`, session: `s${i}` }));
+  let telegramService: any;
+  let liveUsers: any[];
+
+  beforeEach(() => {
+    process.env.channelManagerPrimary = PRIMARY.mobile;
+    process.env.channelManagerBackup = BACKUP.mobile;
+    liveUsers = [PRIMARY, BACKUP, ...OTHERS];
+    telegramService = {
+      getGroupAdmins: jest.fn(async () => { throw new Error('CHAT_ADMIN_REQUIRED'); }),
+      getChannelAbout: jest.fn(async () => { throw new Error('CHANNEL_PRIVATE'); }),
+    };
+    const usersService = {
+      search: jest.fn(async (q: any) => liveUsers.filter(u =>
+        (!q?.mobile && !q?.tgId) || q?.mobile?.$in?.includes(u.mobile) || q?.tgId?.$in?.includes(u.tgId))),
+    };
+    mockModuleRef.get.mockImplementation((token: any) => {
+      const name = token?.name || String(token);
+      if (/Telegram/i.test(name)) return telegramService;
+      if (/Users/i.test(name)) return usersService;
+      return {};
+    });
+  });
+  afterEach(() => { delete process.env.channelManagerPrimary; delete process.env.channelManagerBackup; });
+
+  test('getGroupAdmins runs once per manager and never for random accounts; About is not re-tried on them', async () => {
+    expect(await (service as any).resolveChannelAdminMobile('-100noreader')).toBeNull();
+
+    const viewers = telegramService.getGroupAdmins.mock.calls.map((c: any[]) => c[0]);
+    expect(viewers).toEqual([PRIMARY.mobile, BACKUP.mobile]);
+    // Both managers already failed to see the channel: reading its About through them again is a wasted login.
+    expect(telegramService.getChannelAbout).not.toHaveBeenCalled();
+  });
+
+  test('a manager whose users doc is not live (expired / no session) is skipped without a login', async () => {
+    liveUsers = [BACKUP, ...OTHERS];
+    expect(await (service as any).resolveChannelAdminMobile('-100noreader')).toBeNull();
+    expect(telegramService.getGroupAdmins.mock.calls.map((c: any[]) => c[0])).toEqual([BACKUP.mobile]);
+  });
+
+  test('a manager that can see the channel still supplies the About and the admin match', async () => {
+    telegramService.getGroupAdmins.mockImplementation(async (viewer: string) => {
+      if (viewer !== BACKUP.mobile) throw new Error('CHAT_ADMIN_REQUIRED');
+      return [{ userId: BACKUP.tgId, rank: 'admin', permissions: { addAdmins: true, postMessages: true } }];
+    });
+    telegramService.getChannelAbout.mockImplementation(async () => '');
+    expect(await (service as any).resolveChannelAdminMobile('-100noreader')).toBe(BACKUP.mobile);
+    expect(telegramService.getGroupAdmins.mock.calls.map((c: any[]) => c[0])).toEqual([PRIMARY.mobile, BACKUP.mobile]);
+    expect(telegramService.getChannelAbout.mock.calls.map((c: any[]) => c[0])).toEqual([BACKUP.mobile]);
   });
 });

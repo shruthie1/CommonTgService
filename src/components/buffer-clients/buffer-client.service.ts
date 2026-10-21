@@ -904,7 +904,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         added++;
                     }
                 } else if (!this.leaveChannelMap.has(doc.mobile)) {
-                    if (this.safeSetLeaveChannelMap(doc.mobile, channels.canSendFalseChats)) {
+                    if (this.queueLeaveChannelsIfAllowed(doc, channels.canSendFalseChats)) {
                         leaveAdded++;
                     }
                 }
@@ -1631,6 +1631,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         for (let i = 0; i < clients.length; i++) {
             const document = clients[i];
             const mobile = document.mobile;
+            // Same guard as refillJoinQueue: a capped mobile can't join today, so don't connect it.
+            if (this.isMobileDailyCapped(mobile)) continue;
             // Hoisted so the catch can hand the live client to buildPermanentAccountReason.
             let client: TelegramManager | null = null;
 
@@ -1646,7 +1648,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
                     // activeChannels below 220, channels above; skips pending join requests, approval-only last.
-                    const result = await this.fetchJoinCandidates(mobile, channels.ids.length, 25, excludedIds);
+                    const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(mobile);
+                    const result = await this.fetchJoinCandidates(mobile, channels.ids.length, remaining, excludedIds);
 
                     if (!this.joinChannelMap.has(mobile)) {
                         if (this.safeSetJoinChannelMap(mobile, result)) {
@@ -1656,7 +1659,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     // No session creation during warmup — use existing old session
                 } else {
                     if (!this.leaveChannelMap.has(mobile)) {
-                        if (this.safeSetLeaveChannelMap(mobile, channels.canSendFalseChats)) {
+                        if (this.queueLeaveChannelsIfAllowed(document, channels.canSendFalseChats)) {
                             leaveSet.add(mobile);
                         }
                     }

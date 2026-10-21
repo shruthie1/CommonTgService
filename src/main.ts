@@ -2,7 +2,6 @@ import { setProcessListeners, setShutdownHandler } from './processListeners';
 setProcessListeners();
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import mongoose from 'mongoose'
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
@@ -11,6 +10,7 @@ import { Logger } from './utils';
 import { ExceptionsFilter } from './interceptors/Exception-filter';
 import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
 import { getApiKey } from './utils/apiKey';
+import { configureMongooseDebug } from './mongoose-debug';
 
 async function bootstrap() {
   try {
@@ -52,7 +52,7 @@ async function bootstrap() {
         },
       }
     );
-    mongoose.set('debug', true)
+    configureMongooseDebug();
     app.useGlobalFilters(new ExceptionsFilter());
     app.useGlobalInterceptors(new TimeoutInterceptor(60000));
     app.useGlobalPipes(new ValidationPipe({

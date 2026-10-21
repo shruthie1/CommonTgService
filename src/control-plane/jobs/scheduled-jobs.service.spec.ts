@@ -134,6 +134,20 @@ describe('ScheduledJobsService scheduler ownership', () => {
     service.onModuleDestroy();
   });
 
+  it('does not re-run raw-user processing after a restart; only the 3-hourly cron runs it', () => {
+    jest.useFakeTimers();
+    try {
+      const service = createService(['UMS_TEST_SCHEDULER']);
+      service.onModuleInit();
+      jest.advanceTimersByTime(10 * 60_000);
+
+      expect((service as any).maintenance.processEligibleUsers).not.toHaveBeenCalled();
+      service.onModuleDestroy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('uses the injected Nest connection for the legacy daily stats2 and paid-user reset', async () => {
     const stats2 = {
       deleteMany: jest.fn().mockResolvedValue({ deletedCount: 12 }),

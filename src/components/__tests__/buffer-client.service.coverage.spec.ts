@@ -690,6 +690,8 @@ describe('BufferClientService coverage', () => {
         it('queues join + leave sets based on channel info', async () => {
             await service.create(makeBufferClientData({ mobile: '15551600001', channels: 10, status: 'active', clientId: 'test-client-1' }));
             await service.create(makeBufferClientData({ mobile: '15551600002', channels: 20, status: 'active', clientId: 'test-client-1' }));
+            // Leaves are never queued for fresh warmup phases; these accounts are past them.
+            await BufferClientModel.collection.updateMany({ mobile: { $in: ['15551600001', '15551600002'] } }, { $set: { warmupPhase: WarmupPhase.GROWING } });
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
@@ -1657,6 +1659,8 @@ describe('BufferClientService coverage', () => {
     describe('refillJoinQueue() additional branches', () => {
         it('queues a leave set (and arms the leave timeout) when canSendFalseCount is high', async () => {
             await service.create(makeBufferClientData({ mobile: '15553100001', channels: 10, status: 'active', clientId: 'test-client-1' }));
+            // Leaves are never queued for fresh warmup phases; this account is past them.
+            await BufferClientModel.collection.updateOne({ mobile: '15553100001' }, { $set: { warmupPhase: WarmupPhase.GROWING } });
             jest.spyOn(service as any, 'createTimeout').mockImplementation(() => 1 as any);
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();

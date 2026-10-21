@@ -11,6 +11,7 @@ import { CreateUserDto } from "../users/dto/create-user.dto";
 import { parseError } from "../../utils/parseError";
 import { generateTGConfig } from "../Telegram/utils/generateTGConfig";
 import { Logger } from "../../utils";
+import { redactPasswordHint } from "../../interceptors/Exception-filter";
 
 type SignupStage = 'code_sent' | 'awaiting_password';
 
@@ -96,7 +97,7 @@ function bareTypeName(value: unknown): string {
     return name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name;
 }
 
-function maskPhone(phone: string): string {
+export function maskPhone(phone: string): string {
     return phone && phone.length > 4 ? `${'*'.repeat(phone.length - 4)}${phone.slice(-4)}` : phone;
 }
 
@@ -779,7 +780,7 @@ export class TgSignupService implements OnModuleDestroy {
                 throw new BadRequestException('Verification failed. Please try again.');
             }
         } catch (error: unknown) {
-            this.logger.error(`Verification error for ${maskPhone(phone)}: ${errorText(error)}`);
+            this.logger.error(`Verification error for ${maskPhone(phone)}: ${redactPasswordHint(errorText(error))}`);
 
             const message = errorText(error);
             if (message.includes('No active signup session') ||

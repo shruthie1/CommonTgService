@@ -142,22 +142,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
           'ums-user-data-retention',
           '0 3 * * * ',
           'Asia/Kolkata',
-          async () => {
-            this.logger.log('Starting UMS user-data/timestamp retention');
-            try {
-              const res = await this.userDataService.removeRedundantData();
-              await this.timestampService.clear();
-              console.log(
-                'Deleted userdata older than month | count: ',
-                res.deletedCount,
-              );
-              this.logger.log(
-                `Completed UMS user-data/timestamp retention: deleted=${res.deletedCount}`,
-              );
-            } catch (e) {
-              console.error('Error Deleteing old userData', e);
-            }
-          },
+          () => this.runUserDataRetention(),
         );
         if (retentionJob) this.scheduledJobs.push(retentionJob);
       }
@@ -229,6 +214,32 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
       const axiosError = error as AxiosError;
       this.logger.error(`Forward request failed: ${axiosError.message}`, axiosError.stack);
       throw new Error(`Forward GET request failed: ${axiosError.message}`);
+    }
+  }
+
+  /**
+   * Nightly retention. The two steps are independent: a failed userData sweep
+   * must not skip the timestamps clear, and each failure is reported as itself.
+   */
+  private async runUserDataRetention(): Promise<void> {
+    this.logger.log('Starting UMS user-data/timestamp retention');
+    try {
+      const res = await this.userDataService.removeRedundantData();
+      this.logger.log(
+        `Completed UMS userData retention: deleted=${res.deletedCount}`,
+      );
+    } catch (e) {
+      this.logger.error(
+        `UMS userData retention failed: ${parseError(e, 'userData retention', false).message}`,
+      );
+    }
+    try {
+      await this.timestampService.clear();
+      this.logger.log('Completed UMS timestamps clear');
+    } catch (e) {
+      this.logger.error(
+        `UMS timestamps clear failed: ${parseError(e, 'timestamps clear', false).message}`,
+      );
     }
   }
 

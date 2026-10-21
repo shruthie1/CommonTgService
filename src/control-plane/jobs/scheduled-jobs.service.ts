@@ -219,9 +219,8 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
         this.runDailyUserStatsReset(),
       );
     }
-    this.afterStartup('ums-test-initial-user-processing', 120_000, () =>
-      this.maintenance.processEligibleUsers(400, 0),
-    );
+    // No startup run of processEligibleUsers: it re-logged into up to 400
+    // accounts 120 s after every restart, on top of the 3-hourly cron above.
   }
 
   private afterStartup(

@@ -104,7 +104,8 @@ export class TimestampService {
     }
 
     /**
-     * Clears the timestamp document by removing all fields except `_id`.
+     * Clears the timestamp document by removing all client fields (everything
+     * except `_id`, `createdAt` and `updatedAt`).
      * If no document exists, creates an empty one and returns it.
      */
     async clear(): Promise<any> {
@@ -120,8 +121,11 @@ export class TimestampService {
             return createdObj;
         }
 
-        // Determine keys to unset (exclude _id)
-        const keys = Object.keys(timestamp).filter(k => k !== '_id');
+        // Determine keys to unset. Keep _id and the schema timestamps: mongoose
+        // `timestamps: true` also $sets updatedAt on this update, and unsetting
+        // it in the same write fails with "would create a conflict at 'updatedAt'".
+        const keep = new Set(['_id', 'createdAt', 'updatedAt']);
+        const keys = Object.keys(timestamp).filter(k => !keep.has(k));
 
         if (keys.length === 0) {
             const copy = { ...timestamp };
