@@ -435,7 +435,26 @@ describe('UsersService (real Mongo)', () => {
         });
     });
 
+    // Duplicate users docs (one per login session) for one mobile/tgId, inserted
+    // highest _id first so insertion order disagrees with _id order, then given
+    // identical updatedAt the way the bulk updateMany paths stamp them.
+    async function seedTiedDuplicates(mobile: string, tgId: string) {
+        const lowId = new mongoose.Types.ObjectId('000000000000000000000001');
+        const highId = new mongoose.Types.ObjectId('0000000000000000000000ff');
+        await seedUser({ _id: highId, mobile, tgId, firstName: 'High' });
+        await seedUser({ _id: lowId, mobile, tgId, firstName: 'Low' });
+        const at = new Date('2026-01-01T00:00:00Z');
+        await model.collection.updateMany({ mobile }, { $set: { updatedAt: at } });
+        return { lowId, highId };
+    }
+
     describe('update', () => {
+        test('duplicate docs for a tgId: writes the lowest _id deterministically', async () => {
+            const { lowId, highId } = await seedTiedDuplicates('919999000030', 'dup-up');
+            const r = await service.update('dup-up', { firstName: 'Updated' } as any);
+            expect(String((r as any)._id)).toBe(String(lowId));
+            expect((await model.findById(highId).lean()).firstName).toBe('High');
+        });
         test('found + mobile canonicalization', async () => {
             await seedUser({ tgId: 'up-1', mobile: '919999000020' });
             const r = await service.update('up-1', { mobile: '+919999000021', firstName: 'New' } as any);
@@ -501,6 +520,13 @@ describe('UsersService (real Mongo)', () => {
 
         test('invalid mobile → BadRequest', async () => {
             await expect(service.search({ mobile: 'garbage' } as any)).rejects.toBeInstanceOf(BadRequestException);
+        });
+
+        test('duplicate docs with tied updatedAt: lowest _id first, same doc update() writes', async () => {
+            const { lowId } = await seedTiedDuplicates('919999000031', 'dup-search');
+            const r = await service.search({ mobile: '919999000031' } as any);
+            expect(r.map((u: any) => u.firstName)).toEqual(['Low', 'High']);
+            expect(String((r[0] as any)._id)).toBe(String(lowId));
         });
     });
 

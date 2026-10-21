@@ -722,7 +722,9 @@ export class UsersService {
       updateData.mobile = this.canonicalMobile(updateData.mobile);
     }
     const updated = await this.userModel
-      .findOneAndUpdate({ tgId }, { $set: updateData }, { new: true })
+      // A tgId can have several docs (one per login session); always write the lowest _id,
+      // the same doc search() returns first, so reads and writes never depend on index order.
+      .findOneAndUpdate({ tgId }, { $set: updateData }, { new: true, sort: { _id: 1 } })
       .exec();
     if (!updated) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);
@@ -781,7 +783,8 @@ export class UsersService {
 
     const listQuery = await this.getDefaultUserListQuery(query);
 
-    return this.userModel.find(listQuery).sort({ updatedAt: -1 }).limit(200).exec();
+    // _id tiebreak: bulk updateMany paths give a mobile's duplicate docs identical updatedAt.
+    return this.userModel.find(listQuery).sort({ updatedAt: -1, _id: 1 }).limit(200).exec();
   }
 
   async computeRelationshipScore(mobile: string): Promise<void> {
