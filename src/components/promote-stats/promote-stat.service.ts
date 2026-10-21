@@ -32,7 +32,7 @@ export class PromoteStatService {
   }
 
   async update(client: string, updatePromoteStatDto: UpdatePromoteStatDto): Promise<PromoteStat> {
-    const promoteStat = await this.promoteStatModel.findOneAndUpdate({ client }, updatePromoteStatDto, { new: true }).exec();
+    const promoteStat = await this.promoteStatModel.findOneAndUpdate({ client }, updatePromoteStatDto, { returnDocument: 'after' }).exec();
     if (!promoteStat) {
       throw new NotFoundException(`PromoteStat not found for client ${client}`);
     }

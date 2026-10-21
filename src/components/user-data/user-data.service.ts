@@ -136,7 +136,7 @@ export class UserDataService {
         delete (sanitizedDto as any).chatId;
         
         const updatedUser = await this.userDataModel
-            .findOneAndUpdate(await this.userRowFilter(profile, chatId), { $set: sanitizedDto }, { new: true, upsert: false })
+            .findOneAndUpdate(await this.userRowFilter(profile, chatId), { $set: sanitizedDto }, { returnDocument: 'after', upsert: false })
             .lean()
             .exec();
 
@@ -228,7 +228,7 @@ export class UserDataService {
 
     async incrementTotalCount(profile: string, chatId: string, amount: number = 1): Promise<UserDataDocument> {
         const updatedUser = await this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { new: true })
+            .findOneAndUpdate({ profile, chatId }, { $inc: { totalCount: amount } }, { returnDocument: 'after' })
             .lean()
             .exec();
 
@@ -240,7 +240,7 @@ export class UserDataService {
 
     async incrementPayAmount(profile: string, chatId: string, amount: number): Promise<UserDataDocument> {
         const updatedUser = await this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { new: true })
+            .findOneAndUpdate({ profile, chatId }, { $inc: { payAmount: amount } }, { returnDocument: 'after' })
             .lean()
             .exec();
 
@@ -252,7 +252,7 @@ export class UserDataService {
 
     async updateLastActive(profile: string, chatId: string): Promise<UserDataDocument> {
         return this.userDataModel
-            .findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { new: true })
+            .findOneAndUpdate({ profile, chatId }, { $set: { lastActiveTime: new Date() } }, { returnDocument: 'after' })
             .lean()
             .exec();
     }
@@ -321,7 +321,7 @@ export class UserDataService {
                         paidReply: false,
                     },
                 },
-                { new: true },
+                { returnDocument: 'after' },
             )
             .lean()
             .exec();

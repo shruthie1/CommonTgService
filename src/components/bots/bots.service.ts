@@ -539,7 +539,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
             throw new BadRequestException('Bot lifecycle fields are managed only by the health workflow');
         }
         const bot = await this.botModel
-            .findByIdAndUpdate(id, { ...updateBotDto, lastUsed: new Date() }, { new: true })
+            .findByIdAndUpdate(id, { ...updateBotDto, lastUsed: new Date() }, { returnDocument: 'after' })
             .lean()
             .exec();
         if (!bot) {
@@ -1930,7 +1930,8 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
                 // transient: fall through to the account read-back
             }
         }
-        for (const viewerMobile of [...this.getChannelManagerMobiles(), ...(await this.getHealthyAccountMobiles(10))]) {
+        // Managers only (live, deduped): a random healthy account cannot read a broadcast channel's admin list.
+        for (const viewerMobile of await this.liveChannelManagerMobiles()) {
             try {
                 const admins = await this.telegramService.getGroupAdmins(viewerMobile, channelId);
                 const ids = new Set((Array.isArray(admins) ? admins : []).map((a: any) => String(a?.id ?? a?.userId ?? a?.user?.id ?? '')));
@@ -2208,6 +2209,17 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * The configured channel managers, deduped, that still have a live users doc (one Mongo read, no login).
+     * The only accounts worth an admin-list read: a random healthy account cannot see a broadcast channel's admins.
+     */
+    private async liveChannelManagerMobiles(): Promise<string[]> {
+        const managers = [...new Set(this.getChannelManagerMobiles())];
+        if (!managers.length) return [];
+        const live = new Set((await this.findHealthyAccountsByIdentity(managers, [])).map(u => u.mobile));
+        return managers.filter(m => live.has(m));
+    }
+
+    /**
      * Find one of OUR accounts that is an admin of the channel, so it can promote the new
      * bot. Preference order (to protect the manager accounts, we only USE one that is verified
      * admin in THIS channel — never blind-fire):
@@ -2225,9 +2237,7 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         // admin list, so each one was a wasted login (~17 per channel per night). A manager without a live
         // users doc (expired / no session) is skipped via one Mongo read, before any login.
         const viaBots = await this.readChannelViaBots(channelId);
-        const managers = viaBots ? [] : [...new Set(this.getChannelManagerMobiles())];
-        const live = managers.length ? new Set((await this.findHealthyAccountsByIdentity(managers, [])).map(u => u.mobile)) : new Set<string>();
-        const viewers = managers.filter(m => live.has(m));
+        const viewers = viaBots ? [] : await this.liveChannelManagerMobiles();
         const blind = new Set<string>(); // viewers that could not see the channel: never re-tried for the About
         let admins: any[] | null = viaBots && viaBots.admins.length > 0 ? viaBots.admins : null;
         for (const viewer of viewers) {
@@ -2326,22 +2336,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
-    private shuffle<T>(arr: T[]): T[] {
-        const a = [...arr];
-        for (let i = a.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [a[i], a[j]] = [a[j], a[i]];
-        }
-        return a;
-    }
-
-    /**
-     * SINGLE source of "our usable accounts" for channel-admin viewing/matching: expired=false, has
-     * a non-empty session + mobile, shuffled. Used by the channel-admin flows (viewers, admin-id
-     * matching) where any healthy account works. Bot CREATION uses a separate, foreign-first query
-     * (pickHealthyCreatorCandidates → usersService.getBotCreatorAccounts) because search()'s 200-row
-     * cap only surfaces the newest (mostly Indian) accounts.
-     */
     /** Healthy accounts (live session) matching the given mobiles or tgIds — uncapped by list size. */
     private async findHealthyAccountsByIdentity(mobiles: string[], tgIds: string[]): Promise<Array<{ mobile: string; username?: string | null; firstName?: string | null; tgId?: string | null; session?: string | null }>> {
         const found: any[] = [];
@@ -2351,11 +2345,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         } catch { return []; }
         const seen = new Set<string>();
         return found.filter(u => u?.session && String(u.session).trim() && u.mobile && !seen.has(u.mobile) && seen.add(u.mobile));
-    }
-
-    private async getHealthyAccounts(): Promise<Array<{ mobile: string; username?: string | null; firstName?: string | null; tgId?: string | null; session?: string | null }>> {
-        const users = await this.usersService.search({ expired: false });
-        return this.shuffle(users.filter(u => u.session && String(u.session).trim() && u.mobile));
     }
 
     /**
@@ -2377,21 +2366,6 @@ export class BotsService implements OnModuleInit, OnModuleDestroy {
         return usable.slice(0, Math.max(1, n)).map(u => ({ mobile: u.mobile, username: u.username, firstName: u.firstName }));
     }
 
-    /**
-     * Healthy account mobiles to use as channel viewers/admins. Managers first (most likely to
-     * be admins of our channels), then a shuffled sample of other healthy accounts.
-     */
-    private async getHealthyAccountMobiles(limit: number): Promise<string[]> {
-        const managers = this.getChannelManagerMobiles();
-        const others = (await this.getHealthyAccounts()).map(u => u.mobile);
-        // Dedupe while preserving manager-first order.
-        const ordered: string[] = [];
-        for (const m of [...managers, ...others]) {
-            if (m && !ordered.includes(m)) ordered.push(m);
-            if (ordered.length >= limit) break;
-        }
-        return ordered;
-    }
 
     private async notify(message: RichNotificationInput): Promise<void> {
         try {

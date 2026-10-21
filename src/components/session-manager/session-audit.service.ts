@@ -67,7 +67,7 @@ export class SessionAuditService {
             const updatedRecord = await this.sessionAuditModel.findOneAndUpdate(
                 query,
                 { $set: updateData },
-                { new: true, sort: { createdAt: -1 } } // Sort by creation time to get the latest if no sessionString
+                { returnDocument: 'after', sort: { createdAt: -1 } } // Sort by creation time to get the latest if no sessionString
             );
 
             if (updatedRecord) {
@@ -104,7 +104,7 @@ export class SessionAuditService {
                     $inc: { usageCount: 1 },
                     $set: { lastUsedAt: new Date() }
                 },
-                { new: true, sort: { createdAt: -1 } } // Get the latest session if no sessionString provided
+                { returnDocument: 'after', sort: { createdAt: -1 } } // Get the latest session if no sessionString provided
             );
 
             if (updatedRecord) {

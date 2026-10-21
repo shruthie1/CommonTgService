@@ -138,7 +138,7 @@ export class UpiIdService implements OnModuleDestroy, OnModuleInit {
                         } 
                     },
                     { 
-                        new: true, 
+                        returnDocument: 'after', 
                         upsert: true, 
                         lean: true,
                         runValidators: true // Ensure schema validation

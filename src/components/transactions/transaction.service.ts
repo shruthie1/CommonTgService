@@ -203,7 +203,7 @@ export class TransactionService {
     try {
       const updatedTransaction = await this.transactionModel
         .findByIdAndUpdate(id, updateTransactionDto, {
-          new: true,
+          returnDocument: 'after',
           runValidators: true
         })
         .exec();

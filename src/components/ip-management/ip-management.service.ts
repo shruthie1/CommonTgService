@@ -108,7 +108,7 @@ export class IpManagementService {
         const updatedIp = await this.proxyIpModel.findOneAndUpdate(
             { ipAddress, port },
             { $set: updateDto },
-            { new: true }
+            { returnDocument: 'after' }
         ).lean();
 
         if (!updatedIp) {

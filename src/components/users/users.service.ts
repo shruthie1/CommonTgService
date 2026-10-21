@@ -702,7 +702,7 @@ export class UsersService {
             password: 'Ajtdmwajt1@',
           },
         },
-        { new: true, upsert: true },
+        { returnDocument: 'after', upsert: true },
       ).exec();
       this.logger.log(`backfillFromPool: recreated missing user for ${canonicalMobile} (tgId ${tgId})`);
       return created ? created.toJSON() : null;
@@ -724,7 +724,7 @@ export class UsersService {
     const updated = await this.userModel
       // A tgId can have several docs (one per login session); always write the lowest _id,
       // the same doc search() returns first, so reads and writes never depend on index order.
-      .findOneAndUpdate({ tgId }, { $set: updateData }, { new: true, sort: { _id: 1 } })
+      .findOneAndUpdate({ tgId }, { $set: updateData }, { returnDocument: 'after', sort: { _id: 1 } })
       .exec();
     if (!updated) {
       throw new NotFoundException(`User with tgId ${tgId} not found`);

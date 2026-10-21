@@ -25,7 +25,7 @@ export class PromoteMsgsService {
         const updatedUser = await this.promotemsgModel.findOneAndUpdate(
             {}, // Assuming you want to update the first document found in the collection
             { $set: { ...updateClientDto } },
-            { new: true, upsert: true }
+            { returnDocument: 'after', upsert: true }
         ).exec();
         if (!updatedUser) {
             throw new NotFoundException(`promotemsgModel not found`);

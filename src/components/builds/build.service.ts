@@ -25,7 +25,7 @@ export class BuildService {
         const updatedUser = await this.buildModel.findOneAndUpdate(
             {}, // Assuming you want to update the first document found in the collection
             { $set: { ...updateClientDto } },
-            { new: true, upsert: true }
+            { returnDocument: 'after', upsert: true }
         ).exec();
         if (!updatedUser) {
             throw new NotFoundException(`buildModel not found`);

@@ -54,6 +54,27 @@ describe('payment telemetry cards (client line first, no IP)', () => {
     expect(render(`${head}PayButton`)).toBe('<b>keerthi2</b><br/><br/><b>Payment site · tapped Pay</b><br/>');
   });
 
+  test('the response does not wait for the Telegram send (it never resolves here)', async () => {
+    const botsService = { sendMessageByCategory: jest.fn(() => new Promise(() => undefined)) };
+    const service = Object.assign(Object.create(AppService.prototype), { botsService });
+    const timeout = new Promise((resolve) => setTimeout(() => resolve('blocked'), 200));
+    await expect(Promise.race([service.sendPaymentTelemetry(`${head}PayButton`), timeout])).resolves.toEqual({ ok: true });
+    expect(botsService.sendMessageByCategory).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed or rejected send is logged, never thrown into the request', async () => {
+    const warn = jest.fn();
+    for (const outcome of [async () => false, async () => { throw new Error('tg down'); }]) {
+      const botsService = { sendMessageByCategory: jest.fn(outcome) };
+      const service = Object.assign(Object.create(AppService.prototype), { botsService, logger: { warn } });
+      expect(await service.sendPaymentTelemetry(`${head}PayButton`)).toEqual({ ok: true });
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0][0]).toBe('webTelemetry: send returned falsy (message dropped)');
+    expect(warn.mock.calls[1][0]).toBe('webTelemetry: send failed (message dropped): tg down');
+  });
+
   test('an empty message is not sent', async () => {
     const botsService = { sendMessageByCategory: jest.fn() };
     const service = Object.assign(Object.create(AppService.prototype), { botsService });

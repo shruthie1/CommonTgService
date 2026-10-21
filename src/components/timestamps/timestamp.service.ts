@@ -88,7 +88,7 @@ export class TimestampService {
         const updatedTimestamp = await this.timestampModel.findOneAndUpdate(
             {}, // Update the first document found in the collection
             { $set: { ...updateTimestampDto } },
-            { new: true, upsert: true, lean: true }
+            { returnDocument: 'after', upsert: true, lean: true }
         ).exec();
 
         if (!updatedTimestamp) {

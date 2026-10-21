@@ -83,6 +83,22 @@ describe('AppService batched notices', () => {
       expect(String(bad[3])).toMatch(/^error: .*ECONNREFUSED/);
     });
 
+    it('an unreachable tg-aut (fetchWithTimeout resolved undefined) is a clear row and log, not a TypeError', async () => {
+      const service = makeService([
+        { clientId: 'ok1', repl: 'https://ok1.example' },
+        { clientId: 'down1', repl: 'https://down1.example' },
+      ]);
+      fetchSpy.mockImplementation((async (url: string) =>
+        url.startsWith('https://down1') ? undefined : { data: { canSendTrueCount: 500 } }) as any);
+
+      await service.joinchannelForClients();
+
+      const rows = notice.mock.calls[0][1].tables[0].rows;
+      expect(rows.find((r: unknown[]) => r[0] === 'down1')[3]).toBe('error: tg-aut unreachable');
+      expect(rows.find((r: unknown[]) => r[0] === 'ok1')[3]).toBe('ok');
+      expect(service.logger.warn).toHaveBeenCalledWith('tg-aut unreachable for down1 (https://down1.example/channelinfo)');
+    });
+
     it('sends the summary even when the queue start throws, and nothing when there are no clients', async () => {
       const service = makeService([{ clientId: 'a1', repl: 'https://a1.example' }], {
         joinChannelQueue: jest.fn(() => { throw new Error('queue boom'); }),
@@ -94,6 +110,25 @@ describe('AppService batched notices', () => {
       notice.mockClear();
       await makeService([]).joinchannelForClients();
       expect(notice).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('blockUserAll / unblockUserAll', () => {
+    it('an unreachable tg-aut does not throw and the next profile is still tried', async () => {
+      const profiles = [{ clientId: 'p1', repl: 'https://down.example' }, { clientId: 'p1b', repl: 'https://up.example' }];
+      const service = makeService([], {
+        userDataService: { search: jest.fn().mockResolvedValue([{ profile: 'p1' }]) },
+        clientService: { executeQuery: jest.fn().mockResolvedValue(profiles) },
+      });
+      fetchSpy.mockImplementation((async (url: string) => (url.startsWith('https://down') ? undefined : { data: 'ok' })) as any);
+
+      await expect(service.blockUserAll('chat-1')).resolves.toBe(' | p1');
+      await expect(service.unblockUserAll('chat-1')).resolves.toBe(' | p1');
+      expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([
+        'https://down.example/blockuser/chat-1', 'https://up.example/blockuser/chat-1',
+        'https://down.example/unblockuser/chat-1', 'https://up.example/unblockuser/chat-1',
+      ]);
+      expect(service.logger.warn).toHaveBeenCalledWith('tg-aut unreachable for p1 (https://down.example/blockuser/chat-1)');
     });
   });
 

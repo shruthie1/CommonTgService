@@ -1296,7 +1296,7 @@ export class TelegramService implements OnModuleDestroy {
     async getBotInfo(token: string) {
         try {
             const response = await fetchWithTimeout(`https://api.telegram.org/bot${token}/getMe`);
-            if (response.data?.ok) {
+            if (response?.data?.ok) {
                 return response.data.result;
             }
             throw new Error('Failed to get bot info');

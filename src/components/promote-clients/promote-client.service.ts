@@ -268,7 +268,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                                 assignedBio: pick.bio || null,
                                 assignedProfilePics: pick.profilePics,
                             } },
-                            { new: true },
+                            { returnDocument: 'after' },
                         );
 
                         if (result) {
@@ -538,7 +538,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             throw new BadRequestException('Cannot activate PromoteClient without a session');
         }
         const updatedUser = await this.promoteClientModel
-            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { returnDocument: 'after' })
             .exec();
         if (!updatedUser) {
             throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
@@ -869,7 +869,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                             enrolledAt: new Date(),
                         }
                     },
-                    { new: true, upsert: true },
+                    { returnDocument: 'after', upsert: true },
                 )
                 .exec();
         } catch (error) {
@@ -1352,7 +1352,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                             enrolledAt: new Date(),
                         }
                     },
-                    { new: true, upsert: true }
+                    { returnDocument: 'after', upsert: true }
                 ).exec();
                 return true;
             });

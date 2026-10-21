@@ -270,7 +270,7 @@ export class ActiveChannelsService {
           {
             $set: { ...cleanDto, updatedAt: new Date() },
           },
-          { new: true, upsert: true, lean: true }
+          { returnDocument: 'after', upsert: true, lean: true }
         )
         .exec();
 
@@ -304,7 +304,7 @@ export class ActiveChannelsService {
         .findOneAndUpdate(
           { channelId: this.channelKey(channelId) },
           { $pull: { availableMsgs: msg }, $set: { updatedAt: new Date() } },
-          { new: true, lean: true }
+          { returnDocument: 'after', lean: true }
         )
         .exec();
     } catch (error) {
@@ -322,7 +322,7 @@ export class ActiveChannelsService {
         .findOneAndUpdate(
           { channelId: this.channelKey(channelId) },
           { $addToSet: { availableMsgs: msg }, $set: { updatedAt: new Date() } },
-          { new: true, lean: true }
+          { returnDocument: 'after', lean: true }
         )
         .exec();
     } catch (error) {

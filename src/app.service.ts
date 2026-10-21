@@ -635,8 +635,15 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (!normalized) return { ok: false };
     const bounded = normalized.slice(0, 3500);
     // HTML posted by the payment site, as a card headed by the site user (no IP).
-    const sent = await this.botsService.sendMessageByCategory(ChannelCategory.WEB_TELEMETRY, telemetryToRich(bounded));
-    return { ok: Boolean(sent) };
+    // Fire-and-forget: the site ignores the body and serialises its posts, so waiting on Telegram
+    // (p95 1 s, max 30 s) only stalled its queue. ok=true means accepted; a failed send is logged.
+    void Promise.resolve()
+      .then(() => this.botsService.sendMessageByCategory(ChannelCategory.WEB_TELEMETRY, telemetryToRich(bounded)))
+      .then(
+        (sent) => { if (!sent) this.logger.warn('webTelemetry: send returned falsy (message dropped)'); },
+        (error) => this.logger.warn(`webTelemetry: send failed (message dropped): ${error?.message ?? error}`),
+      );
+    return { ok: true };
   }
 
   async findAllMasked(query: object) {
@@ -659,12 +666,15 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         clients.map(async (document, index) => {
           const row = rows[index];
           try {
-            const resp = await fetchWithTimeout(
-              `${document.repl}/channelinfo`,
-              { timeout: 200000 },
-              1,
-            );
-            row[1] = resp.data.canSendTrueCount ?? '-';
+            const url = `${document.repl}/channelinfo`;
+            const resp = await fetchWithTimeout(url, { timeout: 200000 }, 1);
+            // fetchWithTimeout resolves undefined (it does not throw) once its retries fail.
+            if (!resp) {
+              this.logger.warn(`tg-aut unreachable for ${document.clientId} (${url})`);
+              row[3] = 'error: tg-aut unreachable';
+              return;
+            }
+            row[1] = resp.data?.canSendTrueCount ?? '-';
             row[3] = 'ok';
             if (
               resp?.data?.canSendTrueCount &&
@@ -873,7 +883,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         const url = `${profile.repl}/blockuser/${chatId}`;
         console.log('Executing: ', url);
         const result = await fetchWithTimeout(url);
-        console.log(result.data);
+        if (!result) this.logger.warn(`tg-aut unreachable for ${profile.clientId} (${url})`);
+        else console.log(result.data);
       }
       profileData = profileData + ' | ' + userData.profile;
     }
@@ -892,7 +903,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
         const url = `${profile.repl}/unblockuser/${chatId}`;
         console.log('Executing: ', url);
         const result = await fetchWithTimeout(url);
-        console.log(result.data);
+        if (!result) this.logger.warn(`tg-aut unreachable for ${profile.clientId} (${url})`);
+        else console.log(result.data);
       }
       profileData = profileData + ' | ' + userData.profile;
     }
@@ -1265,6 +1277,7 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     }
     for (const timer of this.digestTimers) clearTimeout(timer);
     for (const job of this.scheduledJobs) job.cancel();
+    RedisClient.stopPing();
   }
 }
 

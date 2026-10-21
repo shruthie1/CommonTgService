@@ -99,7 +99,7 @@ describe('BufferClient Mongo integration', () => {
           lastUpdateAttempt: stepCompletedAt,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).lean();
 
     expect(updated?.warmupPhase).toBe('settling');

@@ -372,7 +372,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                                 assignedBio: pick.bio || null,
                                 assignedProfilePics: pick.profilePics,
                             } },
-                            { new: true },
+                            { returnDocument: 'after' },
                         );
 
                         if (result) {
@@ -655,7 +655,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             throw new BadRequestException('Cannot activate BufferClient without a session');
         }
         const updatedBufferClient = await this.bufferClientModel
-            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { new: true, returnDocument: 'after' })
+            .findOneAndUpdate({ mobile: canonicalMobile }, { $set: updateData }, { returnDocument: 'after' })
             .exec();
         if (!updatedBufferClient) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
@@ -837,7 +837,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         lastUsed: now,
                     },
                 },
-                { new: true, returnDocument: 'after', ...(session ? { session } : {}) },
+                { returnDocument: 'after', ...(session ? { session } : {}) },
             )
             .exec();
 
@@ -1012,7 +1012,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         warmupJitter: ClientHelperUtils.generateWarmupJitter(),
                         enrolledAt: new Date(),
                     }
-                }, { new: true, upsert: true })
+                }, { returnDocument: 'after', upsert: true })
                 .exec();
         } catch (error) {
             const errorDetails = parseError(error, `Failed to set as Buffer Client ${canonicalMobile}`);
@@ -1781,7 +1781,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                             enrolledAt: new Date(),
                         }
                     },
-                    { new: true, upsert: true }
+                    { returnDocument: 'after', upsert: true }
                 ).exec();
                 return true;
             });

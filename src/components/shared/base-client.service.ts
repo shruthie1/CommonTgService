@@ -2028,7 +2028,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         const inc = await this.model.findOneAndUpdate(
                             { mobile },
                             { $inc: { channels: joinCount } },
-                            { new: true, projection: { channels: 1 } },
+                            { returnDocument: 'after', projection: { channels: 1 } },
                         );
                         optimisticCount = typeof inc?.channels === 'number' ? inc.channels : null;
                     } catch (incError) {
@@ -2060,19 +2060,22 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.removeFromJoinMap(mobile);
                 }
             } catch (error: unknown) {
-                const errorDetails = this.handleError(
+                // INVITE_REQUEST_SENT is an expected pending state, not an error: checked before
+                // parseError so it is not logged as a "Join Channel Error" (~175/day).
+                const inviteRequestSent = hasTelegramErrorCode(error, 'INVITE_REQUEST_SENT');
+                const errorDetails = inviteRequestSent ? null : this.handleError(
                     error,
                     `${mobile} ${currentChannel ? `@${currentChannel.username}` : ''} Join Channel Error`,
                     mobile,
                 );
                 const rawErrorMessage = this.getErrorText(error);
 
-                if (hasTelegramErrorCode(error, 'INVITE_REQUEST_SENT')) {
+                if (inviteRequestSent) {
                     // Pending, NOT a failure: the channel requires admin approval and our join
                     // request was sent. Not re-queued, not a failure, and NOT a joined channel
                     // (no channels++). It does count toward the daily join cap. The request is
                     // recorded in joinRequests so selection skips this channel for this mobile.
-                    this.logger.log(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
+                    this.logger.debug(`${mobile} join request sent (pending approval) for @${currentChannel?.username ?? 'unknown'}`);
                     this.incrementDailyJoinCount(mobile);
                     await this.recordJoinRequest(mobile, currentChannel);
                     // Joins that DID succeed earlier in this round: the post-loop increment is

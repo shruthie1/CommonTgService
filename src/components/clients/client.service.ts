@@ -368,7 +368,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           .findOneAndUpdate(
             { clientId },
             { $set: cleanUpdateDto },
-            { new: true, runValidators: true },
+            { returnDocument: 'after', runValidators: true },
           )
           .lean()
           .exec(),
@@ -917,7 +917,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           .findOneAndUpdate(
             { clientId, mobile: this.canonicalMobile(expectedExistingMobile) },
             { $set: cleanUpdateDto },
-            { new: true, runValidators: true, session },
+            { returnDocument: 'after', runValidators: true, session },
           )
           .lean()
           .exec();

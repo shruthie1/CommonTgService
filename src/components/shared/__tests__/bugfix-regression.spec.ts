@@ -123,7 +123,7 @@ describe('Mongoose spread bug — real MongoDB', () => {
         const updated = await BufferClientModel.findOneAndUpdate(
             { _id: created._id },
             { $set: { warmupPhase: WarmupPhase.IDENTITY, enrolledAt: new Date('2026-03-10T12:00:00.000Z') } },
-            { new: true },
+            { returnDocument: 'after' },
         );
 
         expect(updated).toBeTruthy();

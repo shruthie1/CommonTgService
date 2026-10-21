@@ -1339,7 +1339,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
         client = (await BufferClientModel.findOneAndUpdate(
             { mobile: client.mobile },
             { $set: { warmupPhase: WarmupPhase.SETTLING, privacyUpdatedAt: new Date(enrolledAt.getTime() + 2 * ONE_DAY_MS) } },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
         expect(client.warmupPhase).toBe(WarmupPhase.SETTLING);
         expect(client.privacyUpdatedAt).toBeInstanceOf(Date);
@@ -1353,7 +1353,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
         client = (await BufferClientModel.findOneAndUpdate(
             { mobile: client.mobile },
             { $set: { twoFASetAt: new Date(enrolledAt.getTime() + 5 * ONE_DAY_MS) } },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
 
         // Day 7.5: 2FA 2.5d ago → remove_other_auths
@@ -1364,7 +1364,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
         client = (await BufferClientModel.findOneAndUpdate(
             { mobile: client.mobile },
             { $set: { otherAuthsRemovedAt: new Date(enrolledAt.getTime() + 8 * ONE_DAY_MS) } },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
 
         // Day 11: auth cleanup cooled down → identity (delete_photos)
@@ -1383,7 +1383,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
                     usernameUpdatedAt: new Date(enrolledAt.getTime() + 17 * ONE_DAY_MS),
                 },
             },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
 
         // Day 19.5: username cooled down and day>=14 → join_channels
@@ -1395,7 +1395,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
         client = (await BufferClientModel.findOneAndUpdate(
             { mobile: client.mobile },
             { $set: { warmupPhase: WarmupPhase.GROWING, channels: 220 } },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
 
         // Day 21: channels=220, day>=20 → maturing (upload_photo)
@@ -1412,7 +1412,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
                     profilePicsUpdatedAt: new Date(enrolledAt.getTime() + 21 * ONE_DAY_MS),
                 },
             },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
 
         // Day 25: photo done, day>=24 → advance_to_ready
@@ -1423,7 +1423,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
         client = (await BufferClientModel.findOneAndUpdate(
             { mobile: client.mobile },
             { $set: { warmupPhase: WarmupPhase.READY } },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
         action = getWarmupPhaseAction(client, enrolledAt.getTime() + 25 * ONE_DAY_MS);
         expect(action.action).toBe('rotate_session');
@@ -1437,7 +1437,7 @@ describe('Real MongoDB: full warmup lifecycle', () => {
                     sessionRotatedAt: new Date(enrolledAt.getTime() + 21 * ONE_DAY_MS),
                 },
             },
-            { new: true },
+            { returnDocument: 'after' },
         ))!;
         action = getWarmupPhaseAction(client, enrolledAt.getTime() + 22 * ONE_DAY_MS);
         expect(action.action).toBe('wait');
@@ -1471,12 +1471,12 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             BufferClientModel.findOneAndUpdate(
                 { mobile: created.mobile },
                 { $set: { failedUpdateAttempts: 0, lastUpdateFailure: null } },
-                { new: true },
+                { returnDocument: 'after' },
             ),
             BufferClientModel.findOneAndUpdate(
                 { mobile: created.mobile },
                 { $set: { otherAuthsRemovedAt: new Date() } },
-                { new: true },
+                { returnDocument: 'after' },
             ),
         ]);
 

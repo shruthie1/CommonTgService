@@ -1018,6 +1018,12 @@ describe('TelegramService — bot helpers', () => {
         await expect(svc.getBotInfo('token')).rejects.toThrow('Failed to get bot info: net');
     });
 
+    test('getBotInfo names an unreachable Bot API instead of a TypeError (fetchWithTimeout resolves undefined)', async () => {
+        mockFetch.mockResolvedValueOnce(undefined);
+        const { svc } = makeService();
+        await expect(svc.getBotInfo('token')).rejects.toThrow('Failed to get bot info: Failed to get bot info');
+    });
+
     test('addBotsToChannel throws when no bot tokens configured', async () => {
         const prev = process.env.BOT_TOKENS;
         delete process.env.BOT_TOKENS;

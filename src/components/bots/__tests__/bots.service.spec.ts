@@ -1793,4 +1793,23 @@ describe('BotsService - account-scan fallback reads only the channel managers (2
     expect(telegramService.getGroupAdmins.mock.calls.map((c: any[]) => c[0])).toEqual([PRIMARY.mobile, BACKUP.mobile]);
     expect(telegramService.getChannelAbout.mock.calls.map((c: any[]) => c[0])).toEqual([BACKUP.mobile]);
   });
+
+  test('verifyBotIsChannelAdmin reads the admin list through each manager once, never random accounts', async () => {
+    (service as any).sleep = jest.fn(async () => undefined);
+    expect(await (service as any).verifyBotIsChannelAdmin('-100noreader', '42')).toBe(false);
+    expect(telegramService.getGroupAdmins.mock.calls.map((c: any[]) => c[0])).toEqual([PRIMARY.mobile, BACKUP.mobile]);
+  });
+
+  test('verifyBotIsChannelAdmin skips a manager without a live users doc and dedupes primary == backup', async () => {
+    (service as any).sleep = jest.fn(async () => undefined);
+    process.env.channelManagerBackup = PRIMARY.mobile;
+    telegramService.getGroupAdmins.mockImplementation(async () => [{ id: '42' }]);
+    expect(await (service as any).verifyBotIsChannelAdmin('-100noreader', '42')).toBe(true);
+    expect(telegramService.getGroupAdmins.mock.calls.map((c: any[]) => c[0])).toEqual([PRIMARY.mobile]);
+
+    telegramService.getGroupAdmins.mockClear();
+    liveUsers = [...OTHERS]; // neither manager is live
+    expect(await (service as any).verifyBotIsChannelAdmin('-100noreader', '42')).toBe(false);
+    expect(telegramService.getGroupAdmins).not.toHaveBeenCalled();
+  });
 });

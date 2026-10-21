@@ -4,6 +4,10 @@ import { Logger } from "./logger";
 const logger = new Logger(__filename);
 
 const DEFAULT_REDIS_URI = "redis://127.0.0.1:6379";
+// The managed Valkey (Aiven) drops idle connections every 5-15 min. TCP keepalive does not reset a
+// server-side idle timeout (only commands do), so an idle client also sends a PING once a minute.
+const KEEPALIVE_MS = 30_000;
+const PING_INTERVAL_MS = 60_000;
 
 /** protocol//hostname:port only; never credentials. */
 function describeRedisUri(uri: string): string {
@@ -20,6 +24,7 @@ function describeRedisUri(uri: string): string {
  */
 export class RedisClient {
     private static instance: Redis | null = null;
+    private static pingTimer: NodeJS.Timeout | null = null;
 
     private constructor() {
         // Private constructor to enforce singleton pattern
@@ -38,12 +43,19 @@ export class RedisClient {
             const target = describeRedisUri(uri);
             const retryStrategy = (times: number) => {
                 const delay = Math.min(times * 100, 3000); // Exponential backoff, max 3s
-                logger.warn(`Retrying Redis connection (${times}) after ${delay}ms`);
+                logger.debug(`Retrying Redis connection (${times}) after ${delay}ms`);
                 return delay;
             };
 
             try {
-                RedisClient.instance = new Redis(uri, { retryStrategy });
+                RedisClient.instance = new Redis(uri, { retryStrategy, keepAlive: KEEPALIVE_MS });
+                const client = RedisClient.instance;
+                // Only while ready: a PING issued while reconnecting would sit in the offline queue.
+                // Failures are reported by the error/close handlers, so the PING result is ignored.
+                RedisClient.pingTimer = setInterval(() => {
+                    if (client.status === "ready") client.ping().catch(() => undefined);
+                }, PING_INTERVAL_MS);
+                RedisClient.pingTimer.unref();
 
                 RedisClient.instance.on("connect", () => {
                     logger.log(`Connected to Redis at ${target}`);
@@ -54,7 +66,7 @@ export class RedisClient {
                 });
 
                 RedisClient.instance.on("close", () => {
-                    logger.log("Redis connection closed");
+                    logger.debug("Redis connection closed"); // routine idle close; ioredis reconnects
                 });
             } catch (error: any) {
                 logger.error("Failed to initialize Redis client:", error);
@@ -68,7 +80,16 @@ export class RedisClient {
     /**
      * Gracefully disconnects the Redis client.
      */
+    /** Stops the idle PING (shutdown). The connection itself is left to disconnect(). */
+    static stopPing(): void {
+        if (RedisClient.pingTimer) {
+            clearInterval(RedisClient.pingTimer);
+            RedisClient.pingTimer = null;
+        }
+    }
+
     static async disconnect(): Promise<void> {
+        RedisClient.stopPing();
         if (RedisClient.instance) {
             try {
                 await RedisClient.instance.quit();

@@ -112,13 +112,13 @@ class TestClientService extends BaseClientService<BufferClientDocument> {
     return this._model.findOne({ mobile }).exec();
   }
   async update(mobile: string, updateDto: BaseClientUpdate): Promise<BufferClientDocument> {
-    return this._model.findOneAndUpdate({ mobile }, { $set: updateDto }, { new: true }).exec() as any;
+    return this._model.findOneAndUpdate({ mobile }, { $set: updateDto }, { returnDocument: 'after' }).exec() as any;
   }
   async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null> {
-    return this._model.findOneAndUpdate({ mobile }, { $set: { status: 'inactive', message: reason } }, { new: true }).exec();
+    return this._model.findOneAndUpdate({ mobile }, { $set: { status: 'inactive', message: reason } }, { returnDocument: 'after' }).exec();
   }
   async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument> {
-    return this._model.findOneAndUpdate({ mobile }, { $set: { status, message } }, { new: true }).exec() as any;
+    return this._model.findOneAndUpdate({ mobile }, { $set: { status, message } }, { returnDocument: 'after' }).exec() as any;
   }
   async refillJoinQueue(): Promise<number> {
     return 0;
@@ -384,6 +384,28 @@ describe('BaseClientService (real Mongo)', () => {
       // Channel flagged approval-only.
       expect(activeChannelsService.markJoinRequestRequired).toHaveBeenCalledWith('approval1');
       expect(channelsService.markJoinRequestRequired).toHaveBeenCalledWith('approval1');
+    });
+
+    test('INVITE_REQUEST_SENT is not logged as a "Join Channel Error"; the pending line is debug-level', async () => {
+      const doc = await seed({ channels: 50 });
+      const tryJoiningChannel = jest.fn().mockRejectedValue(realRpcError('INVITE_REQUEST_SENT'));
+      const telegramService = { tryJoiningChannel, getChannelInfo: jest.fn(async () => ({ ids: [] })) };
+      const activeChannelsService = { findOne: jest.fn(async () => null), markJoinRequestRequired: jest.fn(async () => undefined) };
+      const channelsService = { markJoinRequestRequired: jest.fn(async () => undefined) };
+      mockGetClient.mockResolvedValue({});
+      const svc = new TestClientService(model, { telegramService, activeChannelsService, channelsService } as any);
+      (svc as any).joinRequestModel = joinRequestModel;
+      const handleError = jest.spyOn(svc as any, 'handleError');
+      const log = jest.spyOn((svc as any).logger, 'log');
+      const debug = jest.spyOn((svc as any).logger, 'debug');
+      svc.setJoinMap(doc.mobile, [{ channelId: 'approval1', username: 'uapproval1', canSendMsgs: true }]);
+
+      await svc.callProcessJoinSeq();
+
+      expect(handleError.mock.calls.filter((c: any[]) => String(c[1]).includes('Join Channel Error'))).toHaveLength(0);
+      const pending = `${doc.mobile} join request sent (pending approval) for @uapproval1`;
+      expect(debug).toHaveBeenCalledWith(pending);
+      expect(log).not.toHaveBeenCalledWith(pending);
     });
 
     test('INVITE_REQUEST_SENT twice for the same mobile+channel keeps one joinRequests row', async () => {

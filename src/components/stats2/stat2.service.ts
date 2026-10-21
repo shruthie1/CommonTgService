@@ -23,7 +23,7 @@ export class Stat2Service {
   }
 
   async update(chatId: string, profile: string, updateStatDto: UpdateStatDto): Promise<Stat2> {
-    const stat = await this.statModel.findOneAndUpdate({ chatId, profile }, updateStatDto, { new: true }).exec();
+    const stat = await this.statModel.findOneAndUpdate({ chatId, profile }, updateStatDto, { returnDocument: 'after' }).exec();
     if (!stat) {
       throw new NotFoundException(`Stat not found for chatId ${chatId} and profile ${profile}`);
     }

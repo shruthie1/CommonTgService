@@ -1867,7 +1867,7 @@ describe('Service flow reliability', () => {
                         lastUpdateAttempt: expect.any(Date),
                     }),
                 }),
-                { new: true, returnDocument: 'after' },
+                { returnDocument: 'after' },
             );
             expect(unregisterSpy).toHaveBeenCalledWith('919990008888');
         });

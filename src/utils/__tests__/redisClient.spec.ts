@@ -33,6 +33,8 @@ const fakeRedis = {
     exists: jest.fn(),
     expire: jest.fn(),
     ttl: jest.fn(),
+    ping: jest.fn(async () => 'PONG'),
+    status: 'ready',
 };
 
 let constructorConfig: any;
@@ -47,11 +49,14 @@ jest.mock('ioredis', () => ({
 }));
 
 import { RedisClient } from '../redisClient';
+import { Logger } from '../logger';
 
 // Reset the singleton + mocks between every test for isolation.
 async function resetSingleton() {
     // Force-clear the private static instance via disconnect path or reflection.
     (RedisClient as any).instance = null;
+    clearInterval((RedisClient as any).pingTimer);
+    (RedisClient as any).pingTimer = null;
     for (const k of Object.keys(eventHandlers)) delete eventHandlers[k];
     jest.clearAllMocks();
 }
@@ -335,5 +340,62 @@ describe('keys / ttl', () => {
     test('ttl delegates', async () => {
         fakeRedis.ttl.mockResolvedValueOnce(99);
         expect(await RedisClient.ttl('k')).toBe(99);
+    });
+});
+
+describe('RedisClient idle-timeout survival (Aiven closes idle connections every 5-15 min)', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+        jest.restoreAllMocks();
+    });
+
+    test('TCP keepAlive is enabled (30 s initial delay)', () => {
+        RedisClient.getClient();
+        expect(constructorConfig.keepAlive).toBe(30000);
+    });
+
+    test('an unref\'d PING runs every 60 s while ready, skips while not ready, and stops on disconnect', async () => {
+        jest.useFakeTimers();
+        RedisClient.getClient();
+        expect((RedisClient as any).pingTimer.hasRef()).toBe(false);
+
+        jest.advanceTimersByTime(60_000);
+        expect(fakeRedis.ping).toHaveBeenCalledTimes(1);
+
+        fakeRedis.status = 'reconnecting';
+        jest.advanceTimersByTime(60_000);
+        expect(fakeRedis.ping).toHaveBeenCalledTimes(1); // no offline-queued PINGs
+        fakeRedis.status = 'ready';
+
+        fakeRedis.ping.mockRejectedValueOnce(new Error('Connection is closed.'));
+        jest.advanceTimersByTime(60_000); // a failed PING is swallowed (the error/close handlers report it)
+        expect(fakeRedis.ping).toHaveBeenCalledTimes(2);
+
+        fakeRedis.quit.mockResolvedValueOnce('OK');
+        await RedisClient.disconnect();
+        jest.advanceTimersByTime(180_000);
+        expect(fakeRedis.ping).toHaveBeenCalledTimes(2);
+    });
+
+    test('stopPing (AppService.onModuleDestroy) stops the PING without closing the connection', () => {
+        jest.useFakeTimers();
+        RedisClient.getClient();
+        RedisClient.stopPing();
+        jest.advanceTimersByTime(180_000);
+        expect(fakeRedis.ping).not.toHaveBeenCalled();
+        expect(fakeRedis.quit).not.toHaveBeenCalled();
+    });
+
+    test('close and reconnect attempts log at debug, not warn', () => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+        const debug = jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
+        const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+        RedisClient.getClient();
+        eventHandlers['close']();
+        constructorConfig.retryStrategy(2);
+        expect(warn).not.toHaveBeenCalled();
+        expect(log).not.toHaveBeenCalledWith('Redis connection closed');
+        expect(debug).toHaveBeenCalledWith('Redis connection closed');
+        expect(debug).toHaveBeenCalledWith('Retrying Redis connection (2) after 200ms');
     });
 });

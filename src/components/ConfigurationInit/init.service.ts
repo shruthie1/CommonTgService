@@ -97,7 +97,7 @@ export class ConfigurationService implements OnModuleInit {
             const updatedConfig = await this.configurationModel.findOneAndUpdate(
                 {},
                 { $set: updateData },
-                { new: true, upsert: true, lean: true }
+                { returnDocument: 'after', upsert: true, lean: true }
             ).exec();
 
             if (!updatedConfig) {

@@ -154,7 +154,7 @@ export class ChannelsService {
     const updatedChannel = await this.ChannelModel.findOneAndUpdate(
       { channelId: this.channelKey(channelId) },
       { $set: update },
-      { new: true, upsert: true },
+      { returnDocument: 'after', upsert: true },
     ).exec();
     return updatedChannel;
   }
