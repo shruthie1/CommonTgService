@@ -53,6 +53,8 @@ export class UserDataController {
   }
 
   @Get(':profile/:chatId')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache() // vcui gates paid calls on demoGiven/payAmount from this row: a cached copy replayed a demo (2026-10-21)
   @ApiOperation({
     summary: 'Get user data by profile/clientId and chat ID',
     description:

@@ -1,4 +1,9 @@
+import { ExecutionContext } from '@nestjs/common';
+import { INTERCEPTORS_METADATA } from '@nestjs/common/constants';
+import { Reflector } from '@nestjs/core';
+import { lastValueFrom, of } from 'rxjs';
 import { UserDataController } from '../user-data.controller';
+import { CloudflareCacheInterceptor } from '../../../interceptors';
 
 describe('UserDataController', () => {
     let service: any;
@@ -74,5 +79,23 @@ describe('UserDataController', () => {
             service.executeQuery.mockRejectedValueOnce(new Error('boom'));
             await expect(controller.executeQuery({ query: {} })).rejects.toThrow('boom');
         });
+    });
+
+    it('GET :profile/:chatId sends no-store and passes the body through unchanged', async () => {
+        const handler = UserDataController.prototype.findOne;
+        expect(Reflect.getMetadata(INTERCEPTORS_METADATA, handler)).toContain(CloudflareCacheInterceptor);
+        const setHeader = jest.fn();
+        const context = {
+            switchToHttp: () => ({ getResponse: () => ({ setHeader }) }),
+            getHandler: () => handler,
+        } as unknown as ExecutionContext;
+        const body = { chatId: '5723974555', demoGiven: true, payAmount: 50 };
+        const result = await lastValueFrom(
+            new CloudflareCacheInterceptor(new Reflector()).intercept(context, { handle: () => of(body) }),
+        );
+        expect(result).toBe(body);
+        expect(setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        expect(setHeader).toHaveBeenCalledWith('Pragma', 'no-cache');
+        expect(setHeader).toHaveBeenCalledWith('Expires', '0');
     });
 });

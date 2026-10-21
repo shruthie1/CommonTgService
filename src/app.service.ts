@@ -520,7 +520,8 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
 
       if (document2.length > 0) {
         for (const doc of document2) {
-          if (doc.canReply == 0 && doc.lastMsgTimeStamp > threeDaysAgo) {
+          // Owner rule (2026-10-21): blocked on any other persona = no call, however old the block.
+          if (doc.canReply == 0) {
             resp.canCall = false;
           }
           if (doc.callTime > threeDaysAgo) {
