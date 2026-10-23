@@ -16,6 +16,7 @@ import { sendBotNotice } from '../../utils/bot-notice';
 import { AppService } from '../../app.service';
 import { RuntimeConfigService } from '../config/runtime-config.service';
 import { AccountMaintenanceService } from '../maintenance/account-maintenance.service';
+import { AnalyticsHealthCheck } from '../../components/daily-analytics/analytics-health.check';
 
 const IST = 'Asia/Kolkata';
 
@@ -37,6 +38,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     // unsafe in the bundled runtime: it can be a different module instance from
     // the one MongooseModule connected, leaving scheduled jobs falsely "offline".
     @InjectConnection() private readonly connection: Connection,
+    private readonly analyticsHealth: AnalyticsHealthCheck,
   ) {}
 
   onModuleInit(): void {
@@ -97,6 +99,10 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     this.register('cms-buffer-join', '0 */3 * * *', () =>
       this.appService.joinBufferClients(),
     );
+    // Postgres analytics health for YESTERDAY (IST): read-only counts, Telegram alert on a gap
+    // (review L8). 02:30 IST leaves the tg-platform sink and the 00:xx rollups time to land.
+    // Run-claimed per IST day (controlPlaneJobRuns) so two processes with the CMS scheduler send one alert.
+    this.register('cms-analytics-health', '30 2 * * *', () => this.runAnalyticsHealth());
     this.register('cms-buffer-info-refresh', '25 0 * * *', async () => {
       // Original CMS used the UTC calendar day with an IST schedule.
       if (new Date().getUTCDate() % 5 === 0)
@@ -270,6 +276,37 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       Number(parts.find((part) => part.type === type)?.value || 0);
     const minutes = value('hour') * 60 + value('minute');
     return minutes >= 25 && minutes < 60;
+  }
+
+  private async runAnalyticsHealth(): Promise<void> {
+    const db = this.requireDatabase('analytics health check');
+    const runs = db.collection<any>('controlPlaneJobRuns');
+    const jobId = `analytics-health:${this.istDateKey()}`;
+    if (!(await this.claimJob(runs, jobId))) {
+      this.logger.warn(`Analytics health check already claimed or completed: ${jobId}`);
+      return;
+    }
+    try {
+      const problems = await this.analyticsHealth.run();
+      await runs.updateOne(
+        { _id: jobId },
+        { $set: { completedAt: new Date(), problems }, $unset: { leaseOwner: '', leaseExpiresAt: '' } },
+      );
+    } catch (error) {
+      await runs.updateOne(
+        { _id: jobId },
+        {
+          $set: {
+            failedAt: new Date(),
+            error: error instanceof Error ? error.message : String(error),
+            // An expired lease permits a safe manual/restart retry for this day.
+            leaseExpiresAt: new Date(0),
+          },
+          $unset: { leaseOwner: '' },
+        },
+      );
+      throw error;
+    }
   }
 
   private async runDailyPromoteReset(): Promise<void> {

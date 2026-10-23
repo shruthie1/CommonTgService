@@ -28,6 +28,30 @@ describe('AnalyticsPgReader', () => {
     await r.onModuleDestroy();
   });
 
+  it('onError reports THIS call\'s failure: disabled vs query error with its code', async () => {
+    delete process.env.ANALYTICS_DB_URL;
+    const disabled = jest.fn();
+    expect(await new AnalyticsPgReader().query('select 1', [], disabled)).toBeUndefined();
+    expect(disabled).toHaveBeenCalledWith({ kind: 'disabled', message: 'ANALYTICS_DB_URL not set' });
+
+    jest.resetModules();
+    const query = jest.fn(async (sql: string) => {
+      if (sql.includes('missing')) throw Object.assign(new Error('relation "missing" does not exist'), { code: '42P01' });
+      await new Promise((r) => setTimeout(r, 20));
+      throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    });
+    jest.doMock('pg', () => ({ Pool: jest.fn(() => ({ on: jest.fn(), query, end: jest.fn().mockResolvedValue(undefined) })) }));
+    const { AnalyticsPgReader: Fresh } = require('../analytics-pg.reader');
+    process.env.ANALYTICS_DB_URL = 'postgres://u:p@127.0.0.1:1/db';
+    const r = new Fresh();
+    const slow = jest.fn();
+    const fast = jest.fn();
+    await Promise.all([r.query('select slow', [], slow), r.query('select missing', [], fast)]);
+    expect(slow).toHaveBeenCalledWith({ kind: 'query', message: 'connect ECONNREFUSED', code: 'ECONNREFUSED' });
+    expect(fast).toHaveBeenCalledWith({ kind: 'query', message: 'relation "missing" does not exist', code: '42P01' });
+    jest.dontMock('pg');
+  });
+
   it('a missing pg module disables the reader instead of crashing', async () => {
     jest.resetModules();
     jest.doMock('pg', () => {

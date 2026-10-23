@@ -16,6 +16,17 @@ const LOG_INTERVAL_MS = 60_000;
  *  - any failure resolves to `undefined` (logged at most once a minute) so the caller falls back
  *    to Mongo. `query` never throws.
  */
+/**
+ * Why one `query` call returned undefined. kind 'disabled' = ANALYTICS_DB_URL unset; 'unavailable' =
+ * the pg module could not load; 'query' = the query or connection failed (`code` = SQLSTATE such as
+ * '42P01' for a missing table, or a Node socket code such as 'ECONNREFUSED').
+ */
+export interface AnalyticsPgError {
+  kind: 'disabled' | 'unavailable' | 'query';
+  message: string;
+  code?: string;
+}
+
 @Injectable()
 export class AnalyticsPgReader implements OnModuleDestroy {
   private readonly logger = new Logger(AnalyticsPgReader.name);
@@ -62,15 +73,36 @@ export class AnalyticsPgReader implements OnModuleDestroy {
     this.logger.warn(`Analytics Postgres ${what}; falling back to Mongo: ${(err as Error)?.message ?? err}`);
   }
 
-  /** Rows, or `undefined` when PG is not configured or the query failed (caller falls back). */
-  async query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[] | undefined> {
+  /**
+   * Rows, or `undefined` when PG is not configured or the query failed (caller falls back).
+   * `onError` receives THIS call's failure (per call, so concurrent requests never see each
+   * other's error).
+   */
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    params: unknown[] = [],
+    onError?: (error: AnalyticsPgError) => void,
+  ): Promise<T[] | undefined> {
     const pool = this.getPool();
-    if (!pool) return undefined;
+    if (!pool) {
+      onError?.(
+        this.isEnabled()
+          ? { kind: 'unavailable', message: 'pg module unavailable' }
+          : { kind: 'disabled', message: 'ANALYTICS_DB_URL not set' },
+      );
+      return undefined;
+    }
     try {
       const res = await pool.query(sql, params);
       return res.rows as T[];
     } catch (err) {
       this.logOnce('query failed', err);
+      const code = (err as { code?: unknown })?.code;
+      onError?.({
+        kind: 'query',
+        message: (err as Error)?.message ?? String(err),
+        code: typeof code === 'string' ? code : undefined,
+      });
       return undefined;
     }
   }

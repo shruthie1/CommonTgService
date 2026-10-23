@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { DailyAnalyticsService } from './daily-analytics.service';
 import { AnalyticsPgReader } from './analytics-pg.reader';
+import { AnalyticsHealthCheck } from './analytics-health.check';
 import { DailyAnalyticsController } from './daily-analytics.controller';
 import {
   PromoteStatDaily,
@@ -21,7 +22,7 @@ import {
     ]),
   ],
   controllers: [DailyAnalyticsController],
-  providers: [DailyAnalyticsService, AnalyticsPgReader],
-  exports: [DailyAnalyticsService],
+  providers: [DailyAnalyticsService, AnalyticsPgReader, AnalyticsHealthCheck],
+  exports: [DailyAnalyticsService, AnalyticsHealthCheck],
 })
 export class DailyAnalyticsModule {}

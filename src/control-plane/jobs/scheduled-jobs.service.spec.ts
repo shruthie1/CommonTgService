@@ -35,6 +35,8 @@ describe('ScheduledJobsService scheduler ownership', () => {
     else process.env.LOCAL_SERVER = originalLocalServer;
   });
 
+  const analyticsHealth = { run: jest.fn().mockResolvedValue([]) };
+
   function createService(
     enabled: string[],
     connection: { db?: unknown } = { db: {} },
@@ -57,12 +59,72 @@ describe('ScheduledJobsService scheduler ownership', () => {
       { resetMessageDeletionCounters: jest.fn() } as any,
       { deleteAll: jest.fn() } as any,
       connection as any,
+      analyticsHealth as any,
     );
   }
 
   function jobNames(): string[] {
     return scheduleJob.mock.calls.map(([name]) => name);
   }
+
+  it('registers the daily analytics health check at 02:30 IST only for CMS, and it runs the check', async () => {
+    createService(['UMS_SCHEDULER']).onModuleInit();
+    createService(['UMS_TEST_SCHEDULER']).onModuleInit();
+    expect(jobNames()).not.toContain('cms-analytics-health');
+
+    createService(['CMS_SCHEDULER']).onModuleInit();
+    expect(scheduleJob).toHaveBeenCalledWith('cms-analytics-health', '30 2 * * *', 'Asia/Kolkata', expect.any(Function));
+  });
+
+  it('analytics health: two CMS-scheduler processes on one Mongo send ONE check per IST day (run-claim)', async () => {
+    jest.setTimeout(60_000);
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-analytics-health-test' })
+      .asPromise();
+    try {
+      analyticsHealth.run.mockClear();
+      analyticsHealth.run.mockResolvedValue(['daily_client has 0 rows']);
+      const cms = createService(['CMS_SCHEDULER'], connection);
+      const ums = createService(['CMS_SCHEDULER'], connection);
+      cms.onModuleInit();
+      ums.onModuleInit();
+      const callbacks = scheduleJob.mock.calls.filter(([name]) => name === 'cms-analytics-health').map((c) => c[3]);
+      expect(callbacks).toHaveLength(2);
+      await Promise.all(callbacks.map((cb) => cb()));
+      await callbacks[0](); // a later re-fire the same day
+      expect(analyticsHealth.run).toHaveBeenCalledTimes(1);
+      const runs = (await connection.db.collection('controlPlaneJobRuns').find({}).toArray())
+        .filter((run) => String(run._id).startsWith('analytics-health:'));
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toEqual(expect.objectContaining({ completedAt: expect.any(Date), problems: ['daily_client has 0 rows'] }));
+    } finally {
+      analyticsHealth.run.mockResolvedValue([]);
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it('analytics health: a failed run expires its lease so a later fire the same day retries', async () => {
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-analytics-health-retry' })
+      .asPromise();
+    try {
+      analyticsHealth.run.mockClear();
+      analyticsHealth.run.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([]);
+      const service = createService(['CMS_SCHEDULER'], connection);
+      await expect((service as any).runAnalyticsHealth()).rejects.toThrow('boom');
+      await (service as any).runAnalyticsHealth();
+      expect(analyticsHealth.run).toHaveBeenCalledTimes(2);
+    } finally {
+      analyticsHealth.run.mockResolvedValue([]);
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
 
   it('registers buffer work, including one ready rotation per hour, only for CMS', () => {
     const service = createService(['CMS_SCHEDULER']);
