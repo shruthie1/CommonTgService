@@ -213,6 +213,20 @@ describe('BotsService - createBot', () => {
     expect(cached.some(b => b._id.toString() === created._id.toString())).toBe(true);
   });
 
+  test('registers an UNWANTED_UPDATES bot as pending_admin (category accepted by the schema)', async () => {
+    mockedAxios.get.mockResolvedValue(axiosOk());
+    const bot = await service.createBot({
+      token: 'unwanted_token_123456',
+      category: 'UNWANTED_UPDATES' as ChannelCategory,
+      channelId: '-1004464574947',
+    });
+    expect(bot.category).toBe('UNWANTED_UPDATES');
+    expect(bot.lifecycle).toBe('pending_admin');
+    expect(bot.status).toBe('inactive');
+    const cached = await service.getBots('UNWANTED_UPDATES' as ChannelCategory);
+    expect(cached.some(b => b.token === 'unwanted_token_123456')).toBe(true);
+  });
+
   test('throws on duplicate token', async () => {
     mockedAxios.get.mockResolvedValue(axiosOk());
     await seedBot({ token: 'dup_token_123456' });
@@ -1165,6 +1179,20 @@ describe('BotsService - validateAndReplaceBots + min-healthy top-up', () => {
     delete process.env.channelManagerPrimary;
 
     const bot = await model.findOne({ category: ChannelCategory.UNVDS });
+    expect(bot.lifecycle).toBe('active_verified');
+    expect(bot.status).toBe('active');
+    expect(bot.lastAdminVerifiedAt).toBeTruthy();
+  });
+
+  test('UNWANTED_UPDATES pending_admin bot is repaired by the same reconcile path as UNVDS', async () => {
+    process.env.channelManagerPrimary = MANAGER.mobile;
+    wireHealthyDeps();
+    await seedBot({ category: 'UNWANTED_UPDATES' as ChannelCategory, channelId: '-100unwanted', status: 'inactive', lifecycle: 'pending_admin', nextRepairAt: new Date(0) });
+
+    await service.validateAndReplaceBots();
+    delete process.env.channelManagerPrimary;
+
+    const bot = await model.findOne({ category: 'UNWANTED_UPDATES' });
     expect(bot.lifecycle).toBe('active_verified');
     expect(bot.status).toBe('active');
     expect(bot.lastAdminVerifiedAt).toBeTruthy();

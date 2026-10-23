@@ -30,4 +30,6 @@ export enum ChannelCategory {
     UNAUTH_CALLS = 'UNAUTH_CALLS',
     CLIENT_PROMOTIONS_1 = 'CLIENT_PROMOTIONS_1',
     CLIENT_PROMOTIONS_2 = 'CLIENT_PROMOTIONS_2',
+    // Unwanted-photo group (tg-aut postUnwantedPhoto). Same value as tg-core's ChannelCategory.
+    UNWANTED_UPDATES = 'UNWANTED_UPDATES',
 }

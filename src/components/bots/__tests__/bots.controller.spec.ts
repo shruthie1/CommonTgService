@@ -1,5 +1,8 @@
 import { BotsController } from '../bots.controller';
 import { ChannelCategory } from '../channel-category.enum';
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
+import { CreateBotDto } from '../dto/create-bot.dto';
 
 function makeService(overrides: any = {}) {
   return {
@@ -177,5 +180,32 @@ describe('BotsController - reconcile-pending input validation', () => {
     const s = svc(); const c = new BotsController(s as any);
     await c.reconcilePending('3', ChannelCategory.VC_NOTIFICATIONS, 'true');
     expect(s.reconcilePendingAdminBotsNow).toHaveBeenCalledWith({ dryRun: true, pendingLimit: 3, pendingCategory: ChannelCategory.VC_NOTIFICATIONS });
+  });
+});
+
+describe('UNWANTED_UPDATES category (bot channel, same handling as UNVDS)', () => {
+  test('reconcile-pending accepts category=UNWANTED_UPDATES', async () => {
+    const s = makeService({ reconcilePendingAdminBotsNow: jest.fn().mockResolvedValue({ failures: [], proposedActions: [], dryRun: true }) });
+    const c = new BotsController(s as any);
+    await c.reconcilePending('1', 'UNWANTED_UPDATES', 'true');
+    expect(s.reconcilePendingAdminBotsNow).toHaveBeenCalledWith({ dryRun: true, pendingLimit: 1, pendingCategory: 'UNWANTED_UPDATES' });
+  });
+
+  test('POST /bots DTO validation accepts UNWANTED_UPDATES and still rejects unknown categories', async () => {
+    const ok = await validate(plainToInstance(CreateBotDto, { token: 't', category: 'UNWANTED_UPDATES', channelId: '-1004464574947' }));
+    expect(ok).toHaveLength(0);
+    const bad = await validate(plainToInstance(CreateBotDto, { token: 't', category: 'NOT_A_CATEGORY', channelId: '-1' }));
+    expect(bad.map(e => e.property)).toEqual(['category']);
+  });
+
+  test('existing categories are unchanged (UNWANTED_UPDATES is appended)', () => {
+    const values = Object.values(ChannelCategory) as string[];
+    expect(values.slice(0, 22)).toEqual([
+      'CLIENT_UPDATES', 'USER_WARNINGS', 'VC_WARNINGS', 'USER_REQUESTS', 'VC_NOTIFICATIONS', 'CHANNEL_NOTIFICATIONS',
+      'ACCOUNT_NOTIFICATIONS', 'ACCOUNT_LOGIN_FAILURES', 'ACCOUNT_LOGINS', 'PROMOTION_ACCOUNT', 'CLIENT_ACCOUNT',
+      'PAYMENT_FAIL_QUERIES', 'FAILED_PAYMENTS', 'WEB_TELEMETRY', 'SAVED_MESSAGES', 'HTTP_FAILURES', 'UNVDS',
+      'PROM_LOGS1', 'PROM_LOGS2', 'UNAUTH_CALLS', 'CLIENT_PROMOTIONS_1', 'CLIENT_PROMOTIONS_2',
+    ]);
+    expect(values).toContain('UNWANTED_UPDATES');
   });
 });
