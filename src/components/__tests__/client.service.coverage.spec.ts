@@ -80,6 +80,7 @@ describe('ClientService coverage', () => {
         telegramService = {
             hasActiveClientSetup: jest.fn(() => false),
             getActiveClientSetup: jest.fn(() => null),
+            getActiveClientSetupMobiles: jest.fn(() => []),
             setActiveClientSetup: jest.fn(),
             clearActiveClientSetup: jest.fn(),
             updateUsernameForAClient: jest.fn(async () => 'new_username'),
@@ -95,6 +96,8 @@ describe('ClientService coverage', () => {
             executeQuery: jest.fn(async () => []),
             getOrEnsureDistinctUsersBackupSession: jest.fn(async () => null),
             markAsInactive: jest.fn(async () => null),
+            acquireProbeLease: jest.fn(async () => true),
+            releaseProbeLeases: jest.fn(async () => undefined),
         };
         usersService = {
             search: jest.fn(async () => []),
@@ -270,10 +273,12 @@ describe('ClientService coverage', () => {
             const first = service.setupClient('single-flight', { reason: 'first' } as any);
             const second = service.setupClient('single-flight', { reason: 'second' } as any);
 
-            expect(handleSpy).toHaveBeenCalledTimes(1);
+            // handleSetupClient now runs after the async dead-report write and the cross-process
+            // lease, so the single call is asserted once both requests have settled.
             release(result);
             await expect(first).resolves.toBe(result);
             await expect(second).resolves.toBe(result);
+            expect(handleSpy).toHaveBeenCalledTimes(1);
             expect((service as any).setupInFlightMap.has('single-flight')).toBe(false);
         });
 
@@ -362,7 +367,8 @@ describe('ClientService coverage', () => {
 
             expect(bufferClientService.executeQuery.mock.calls[0][0]).toEqual(expect.objectContaining({
                 clientId: 'swap-specific',
-                mobile: '15558881101',
+                // Pinned, but still never a busy mobile (in-flight setup / another client's main).
+                mobile: expect.objectContaining({ $eq: '15558881101', $nin: expect.arrayContaining(['15558881100']) }),
             }));
         });
 

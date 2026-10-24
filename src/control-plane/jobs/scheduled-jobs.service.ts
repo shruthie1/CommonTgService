@@ -19,6 +19,14 @@ import { AccountMaintenanceService } from '../maintenance/account-maintenance.se
 import { AnalyticsHealthCheck } from '../../components/daily-analytics/analytics-health.check';
 
 const IST = 'Asia/Kolkata';
+/**
+ * Swap-maintenance run claim. Worst case per run (design doc "Amplification bound"): <=54 SpamBot
+ * probes x 25 s hard cap = 22.5 min, plus <=9 cutovers (connect + getMe + restart call + retire), not
+ * individually capped, budgeted at 2 min each = 18 min: ~40 min (estimated from the code's timeouts,
+ * not measured live). 60 min leaves margin. The next slot skips while this claim is live, so the claim
+ * must outlive the run; a crashed run blocks at most the next one or two slots.
+ */
+export const SWAP_MAINTENANCE_CLAIM_TTL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
@@ -103,6 +111,28 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     // (review L8). 02:30 IST leaves the tg-platform sink and the 00:xx rollups time to land.
     // Run-claimed per IST day (controlPlaneJobRuns) so two processes with the CMS scheduler send one alert.
     this.register('cms-analytics-health', '30 2 * * *', () => this.runAnalyticsHealth());
+    // Degraded swap fallback (docs/design/2026-10-24-degraded-swap-fallback.md): every 30 min a
+    // swap-maintenance run (rescue dead mains, upgrade degraded clients, refill limited mains); daily
+    // summary at 10:05 IST. Both run-claimed so two CMS-scheduler processes never double-swap or
+    // double-alert.
+    // Claim TTL SWAP_MAINTENANCE_CLAIM_TTL_MS covers the worst-case run, and a slot does not start
+    // while the previous slot's run still holds its claim, so two runs never overlap.
+    this.register('cms-swap-maintenance', '7,37 * * * *', () => {
+      const now = new Date();
+      return this.runClaimed(`swap-maintenance:${this.halfHourSlotKey(now)}`, 'swap maintenance', async () => {
+        const results = await this.clientService.runSwapMaintenance();
+        return { results };
+      }, {
+        ttlMs: SWAP_MAINTENANCE_CLAIM_TTL_MS,
+        blockedBy: `swap-maintenance:${this.halfHourSlotKey(new Date(now.getTime() - 30 * 60 * 1000))}`,
+      });
+    });
+    this.register('cms-degraded-summary', '5 10 * * *', () =>
+      this.runClaimed(`degraded-summary:${this.istDateKey()}`, 'degraded summary', async () => {
+        const summary = await this.clientService.sendDegradedSummary();
+        return { summary };
+      }),
+    );
     this.register('cms-buffer-info-refresh', '25 0 * * *', async () => {
       // Original CMS used the UTC calendar day with an IST schedule.
       if (new Date().getUTCDate() % 5 === 0)
@@ -276,6 +306,50 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       Number(parts.find((part) => part.type === type)?.value || 0);
     const minutes = value('hour') * 60 + value('minute');
     return minutes >= 25 && minutes < 60;
+  }
+
+  /** UTC half-hour slot, e.g. 2026-10-24T05:30, used as the run-claim key of a 30-min job. */
+  private halfHourSlotKey(now: Date = new Date()): string {
+    const slot = new Date(Math.floor(now.getTime() / (30 * 60 * 1000)) * 30 * 60 * 1000);
+    return slot.toISOString().slice(0, 16);
+  }
+
+  /** Run `task` once per jobId across processes (controlPlaneJobRuns lease), recording the outcome. */
+  private async runClaimed(
+    jobId: string,
+    label: string,
+    task: () => Promise<Record<string, unknown>>,
+    options: { ttlMs?: number; blockedBy?: string } = {},
+  ): Promise<void> {
+    const db = this.requireDatabase(label);
+    const runs = db.collection<any>('controlPlaneJobRuns');
+    if (options.blockedBy) {
+      const previous = await runs.findOne({ _id: options.blockedBy, completedAt: { $exists: false }, leaseExpiresAt: { $gt: new Date() } });
+      if (previous) {
+        this.logger.warn(`${label} skipped: ${options.blockedBy} is still running (${previous.leaseOwner})`);
+        return;
+      }
+    }
+    if (!(await this.claimJob(runs, jobId, options.ttlMs))) {
+      this.logger.warn(`${label} already claimed or completed: ${jobId}`);
+      return;
+    }
+    try {
+      const outcome = await task();
+      await runs.updateOne(
+        { _id: jobId },
+        { $set: { completedAt: new Date(), ...outcome }, $unset: { leaseOwner: '', leaseExpiresAt: '' } },
+      );
+    } catch (error) {
+      await runs.updateOne(
+        { _id: jobId },
+        {
+          $set: { failedAt: new Date(), error: error instanceof Error ? error.message : String(error), leaseExpiresAt: new Date(0) },
+          $unset: { leaseOwner: '' },
+        },
+      );
+      throw error;
+    }
   }
 
   private async runAnalyticsHealth(): Promise<void> {
@@ -517,9 +591,9 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     return db;
   }
 
-  private async claimJob(collection: any, jobId: string): Promise<boolean> {
+  private async claimJob(collection: any, jobId: string, ttlMs: number = 15 * 60 * 1000): Promise<boolean> {
     const now = new Date();
-    const leaseExpiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    const leaseExpiresAt = new Date(now.getTime() + ttlMs);
     const claimed = await collection.updateOne(
       {
         _id: jobId,

@@ -176,6 +176,10 @@ export class BufferClient {
   @Prop({ required: false, type: String, enum: ['tg-aut', 'cms-probe'] })
   spamCheckSource?: SpamCheckSource;
 
+  @ApiPropertyOptional({ description: 'Cross-process SpamBot-probe / connect lease held by a CMS setupClient run (owner host:pid:uuid, until).', type: Object })
+  @Prop({ required: false, type: Object, default: undefined })
+  probeLease?: { owner: string; until: Date } | null;
+
   // ---- Persona assignment ----
   @ApiProperty({ description: 'Assigned first name from pool', required: false })
   @Prop({ required: false, default: null })

@@ -778,6 +778,62 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
     }
 
+    /**
+     * Degraded swap tier 2: move a same-persona sibling's spare buffer to `toClientId`. Matches only
+     * an active, not-in-use record still owned by `fromClientId`, so a buffer the sibling took in
+     * the meantime is never stolen. Throws ConflictException when nothing matched.
+     */
+    async reassignClientId(mobile: string, fromClientId: string, toClientId: string, session?: ClientSession): Promise<void> {
+        const result = await this.bufferClientModel.updateOne(
+            { mobile, clientId: fromClientId, inUse: { $ne: true }, status: 'active' },
+            { $set: { clientId: toClientId, message: `Reassigned from ${fromClientId} by degraded swap` } },
+            session ? { session } : undefined,
+        ).exec();
+        if ((result.matchedCount || 0) !== 1) {
+            throw new ConflictException(`Buffer ${mobile} is no longer a free spare of ${fromClientId}`);
+        }
+        this.logger.info(`Reassigned buffer ${mobile} from ${fromClientId} to ${toClientId} (degraded swap)`);
+    }
+
+    /**
+     * Cross-process probe/connect lease on one buffer row, taken by setupClient runs only (HTTP and
+     * the swap-maintenance job). Atomic: true only when the row had no lease, an expired one, or one
+     * already held by `owner`. Two setupClient runs in different CMS processes therefore never probe or
+     * connect the same session at once. Other paths that connect buffer sessions (warmup, health
+     * checks, channel joins, updateClient...) do NOT read this lease; they rely on their own
+     * in-process guards, as before (known limit, design doc "Safety").
+     */
+    async acquireProbeLease(mobile: string, owner: string, ttlMs: number): Promise<boolean> {
+        const now = new Date();
+        const leased = await this.bufferClientModel.findOneAndUpdate(
+            {
+                mobile,
+                $or: [
+                    { probeLease: { $exists: false } },
+                    { probeLease: null },
+                    { 'probeLease.until': { $lte: now } },
+                    { 'probeLease.owner': owner },
+                ],
+            },
+            { $set: { probeLease: { owner, until: new Date(now.getTime() + ttlMs) } } },
+            { projection: { _id: 1 } },
+        ).lean().exec();
+        return !!leased;
+    }
+
+    /** Extend every probe lease held by `owner` to `until` (a long setup run renews its leases). */
+    async renewProbeLeases(owner: string, until: Date): Promise<void> {
+        await this.bufferClientModel.updateMany({ 'probeLease.owner': owner }, { $set: { 'probeLease.until': until } }).exec();
+    }
+
+    /** Release probe leases held by `owner` (one mobile, or all of them). */
+    async releaseProbeLeases(owner: string, mobile?: string): Promise<void> {
+        await this.bufferClientModel.updateMany(
+            { 'probeLease.owner': owner, ...(mobile ? { mobile } : {}) },
+            { $unset: { probeLease: '' } },
+        ).exec();
+    }
+
     async setPrimaryInUse(clientId: string, mobile: string, session?: ClientSession): Promise<BufferClientDocument> {
         const now = new Date();
         // Verify the replacement exists BEFORE revoking the current primary. The partial

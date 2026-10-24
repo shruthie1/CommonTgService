@@ -106,6 +106,87 @@ describe('ScheduledJobsService scheduler ownership', () => {
     }
   });
 
+  it('DS-J01 degraded swap: swap maintenance every 30 min + daily summary, CMS only, run-claimed so two processes swap/alert ONCE per slot', async () => {
+    createService(['UMS_SCHEDULER']).onModuleInit();
+    expect(jobNames()).not.toContain('cms-swap-maintenance');
+    expect(jobNames()).not.toContain('cms-degraded-summary');
+    scheduleJob.mockClear();
+
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-degraded-test' })
+      .asPromise();
+    try {
+      const clientService = {
+        runSwapMaintenance: jest.fn().mockResolvedValue({ rescue: [], upgrade: [{ clientId: 'sneha2', fromTier: 3, status: 'swapped' }], refill: [] }),
+        sendDegradedSummary: jest.fn().mockResolvedValue({ degraded: 1, emptyPools: 0 }),
+      };
+      const a = createService(['CMS_SCHEDULER'], connection);
+      const b = createService(['CMS_SCHEDULER'], connection);
+      (a as any).clientService = clientService;
+      (b as any).clientService = clientService;
+      a.onModuleInit();
+      b.onModuleInit();
+      expect(scheduleJob).toHaveBeenCalledWith('cms-swap-maintenance', '7,37 * * * *', 'Asia/Kolkata', expect.any(Function));
+      expect(scheduleJob).toHaveBeenCalledWith('cms-degraded-summary', '5 10 * * *', 'Asia/Kolkata', expect.any(Function));
+
+      const upgrade = scheduleJob.mock.calls.filter(([name]) => name === 'cms-swap-maintenance').map((c) => c[3]);
+      const summary = scheduleJob.mock.calls.filter(([name]) => name === 'cms-degraded-summary').map((c) => c[3]);
+      await Promise.all(upgrade.map((cb) => cb()));
+      await Promise.all(summary.map((cb) => cb()));
+      expect(clientService.runSwapMaintenance).toHaveBeenCalledTimes(1);
+      expect(clientService.sendDegradedSummary).toHaveBeenCalledTimes(1);
+
+      const runs = await connection.db.collection('controlPlaneJobRuns').find({}).toArray();
+      const upgradeRun = runs.find((r) => String(r._id).startsWith('swap-maintenance:'));
+      expect(String(upgradeRun?._id)).toMatch(/^swap-maintenance:\d{4}-\d{2}-\d{2}T\d{2}:(00|30)$/);
+      expect(upgradeRun).toEqual(expect.objectContaining({
+        completedAt: expect.any(Date),
+        results: { rescue: [], upgrade: [{ clientId: 'sneha2', fromTier: 3, status: 'swapped' }], refill: [] },
+      }));
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
+  it('DS-J02 swap maintenance: the claim lasts 60 min (covers the worst-case run) and a slot is skipped while the previous slot still runs', async () => {
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-swap-overlap' })
+      .asPromise();
+    try {
+      scheduleJob.mockClear();
+      const runs = connection.db.collection<any>('controlPlaneJobRuns');
+      let claimTtlMs = 0;
+      const clientService = {
+        runSwapMaintenance: jest.fn(async () => {
+          const doc = await runs.findOne({ _id: { $regex: '^swap-maintenance:' }, leaseOwner: { $exists: true } } as any);
+          claimTtlMs = doc.leaseExpiresAt.getTime() - doc.startedAt.getTime();
+          return { rescue: [], upgrade: [], refill: [] };
+        }),
+        sendDegradedSummary: jest.fn(),
+      };
+      const svc = createService(['CMS_SCHEDULER'], connection);
+      (svc as any).clientService = clientService;
+      svc.onModuleInit();
+      const fire = scheduleJob.mock.calls.find(([name]) => name === 'cms-swap-maintenance')![3];
+      const previous = `swap-maintenance:${(svc as any).halfHourSlotKey(new Date(Date.now() - 30 * 60 * 1000))}`;
+      await runs.insertOne({ _id: previous, leaseOwner: 'other-host:1', leaseExpiresAt: new Date(Date.now() + 20 * 60 * 1000), startedAt: new Date() } as any);
+      await fire();
+      expect(clientService.runSwapMaintenance).not.toHaveBeenCalled();
+      await runs.updateOne({ _id: previous } as any, { $set: { completedAt: new Date() }, $unset: { leaseOwner: '', leaseExpiresAt: '' } });
+      await fire();
+      expect(clientService.runSwapMaintenance).toHaveBeenCalledTimes(1);
+      expect(claimTtlMs).toBe(60 * 60 * 1000);
+    } finally {
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
   it('analytics health: a failed run expires its lease so a later fire the same day retries', async () => {
     const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
     const connection = await mongoose

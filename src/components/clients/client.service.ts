@@ -35,6 +35,8 @@ import { connectionManager } from '../Telegram/utils/connection-manager';
 import { SortOrder } from 'mongoose';
 import path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
+import { randomUUID } from 'crypto';
 import { Api } from 'telegram/tl';
 import isPermanentError from '../../utils/isPermanentError';
 import { TelegramService } from '../Telegram/Telegram.service';
@@ -48,6 +50,40 @@ import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { canonicalizeMobile } from '../shared/mobile-utils';
 import { buildSpamEligibleFilter } from '../buffer-clients/schemas/buffer-client.schema';
 import { probeSpamBot, SpamProbeResult, SPAMBOT_TOTAL_TIMEOUT_MS } from '../Telegram/utils/spambot-probe';
+import {
+  buildTier3Query,
+  buildTier4Query,
+  ClientDegradedState,
+  DEAD_MAIN_HANDOFF_WAIT_MS,
+  DEAD_MAIN_RESCUE_REASON,
+  DEGRADED_UPGRADE_REASON,
+  isDeadMainEvidence,
+  leaseFreeFilter,
+  MAIN_SPAM_STATUS_FRESH_MS,
+  SWAP_LEASE_RENEW_MS,
+  SWAP_LEASE_TTL_MS,
+  SWAP_REPORT_GRACE_MS,
+  UPGRADE_MAX_PER_RUN,
+  DegradedTier,
+  isDeadSwapReason,
+  last4,
+  markerTierFromVerdict,
+  parseDegradedSwapTiers,
+  passRetryDelayMs,
+  PASS_MAX_ATTEMPTS,
+  swapPoolFingerprint,
+  swapRetryDecision,
+  type ClientSwapRetryState,
+  type PoolFingerprintRow,
+  type SwapRetryDecision,
+  type SwapRetryPass,
+  POOL_REFILL_MAX_PER_RUN,
+  POOL_REFILL_REASON,
+  probeAcceptanceForTier,
+  RESCUE_MAX_PER_RUN,
+  SIBLING_MIN_SPARES_AFTER,
+  SwapProbeAcceptance,
+} from './degraded-swap';
 
 // Configuration constants
 const CONFIG = {
@@ -87,12 +123,66 @@ interface SetupProbeBudget {
   skipped: string[];
   /** True when an unprobed candidate was passed over only because this budget ran out. */
   moreCandidatesPending?: boolean;
+  /** Verdict of the candidate isSpamSafeForSwap last accepted (read right after a true return). */
+  lastVerdict?: { status: SpamProbeResult['status']; limitedUntil: Date | null };
+  /** Cross-process lease owner of this setup run: every candidate is leased before any probe/connect. */
+  leaseOwner?: string;
+  /** Swap-maintenance job run: never create a backup session; candidates need a stored distinct one. */
+  jobPass?: boolean;
+}
+
+/** One row of a swap-maintenance pass (rescue / upgrade / pool refill). */
+export interface SwapMaintenanceResult {
+  clientId: string;
+  status: SetupClientStatus | 'cleared' | 'skipped_cooldown' | 'stopped' | 'waiting_handoff';
+  /** rescue / upgrade / refill: attempts used in this episode after this run. */
+  attempts?: number;
+  /** rescue / upgrade / refill: the pool changed since the last attempt, so a stopped or cooling episode re-armed. */
+  rearmed?: boolean;
+  fromTier?: DegradedTier;
+  degradedTier?: DegradedTier;
+  newMobile?: string;
 }
 
 interface SafeSetupBufferCandidate {
   mobile: string;
   session: string;
   backupUser: User;
+  /** SpamBot verdict the candidate was accepted on (degraded tiers accept limited/harsh). */
+  spamStatus?: SpamProbeResult['status'];
+  limitedUntil?: Date | null;
+}
+
+/**
+ * A degraded-tier pick, carried from selection to the cutover commit (keyed by clientId + new mobile,
+ * so one client's plan can never be applied to another client's cutover of the same mobile).
+ */
+interface DegradedSwapPlan {
+  clientId: string;
+  /** Tier the candidate was found in. */
+  pickTier: DegradedTier;
+  /**
+   * Tier stamped on clients.degraded, from the probe verdict (markerTierFromVerdict). null = the
+   * account meets tier-1 rules (a borrowed sibling spare, or a limited/harsh pick that probed free):
+   * no marker, and the commit clears any old one.
+   */
+  markerTier: DegradedTier | null;
+  reason: string;
+  fromMobile: string;
+  limitedUntil: Date | null;
+  since: Date;
+  /** Tier 2: sibling clientId the buffer is reassigned from inside the cutover transaction. */
+  fromClientId?: string;
+}
+
+/** Internal-only setup options; never reachable from the HTTP query. */
+interface SetupInternalOptions {
+  /** Upgrade-job run for a client currently degraded at this tier: only strictly better tiers. */
+  upgradeFromTier?: DegradedTier;
+  /** Swap-maintenance job pass (rescue / upgrade / refill): see SetupProbeBudget.jobPass. */
+  jobPass?: boolean;
+  /** Set by runSetup: the owner of this run's clients.swapLease and bufferClients.probeLease rows. */
+  leaseOwner?: string;
 }
 
 export type SetupClientStatus =
@@ -101,7 +191,9 @@ export type SetupClientStatus =
   | 'cooldown'
   | 'client_not_found'
   | 'no_candidate'
-  | 'failed';
+  | 'failed'
+  /** The caller's reportedMobile is not this client's main any more (a late report from a replaced process). Nothing was done. */
+  | 'stale_report';
 
 export interface SetupClientResult {
   status: SetupClientStatus;
@@ -115,6 +207,10 @@ export interface SetupClientResult {
   usedFutureAvailableFallback?: boolean;
   /** no_candidate only: unprobed candidates remain; the probe budget ran out, so retrying may find one. */
   moreCandidatesPending?: boolean;
+  /** swapped only: the new account is a degraded-swap pick of this tier (2 sibling, 3 limited, 4 harsh). */
+  degradedTier?: DegradedTier;
+  /** no_candidate only: the client already runs degraded; the CMS upgrade job owns moving it up. */
+  degraded?: boolean;
 }
 
 export interface PersonaAssignmentRecord {
@@ -157,6 +253,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
    * requests through the cooldown check would race on a non-renewable session.
    */
   private setupInFlightMap: Map<string, Promise<SetupClientResult>> = new Map();
+  /** How often a running setup renews its leases (a field so tests can shorten it). */
+  protected leaseRenewMs = SWAP_LEASE_RENEW_MS;
+  /** Degraded-tier picks between selection and cutover, keyed by `clientId:newMobile`. */
+  private degradedPlans: Map<string, DegradedSwapPlan> = new Map();
+  /**
+   * "No buffer" notices already sent this episode (`clientId:currentMobile:dead|normal`). A new
+   * current mobile (any swap, a manual fix, another process) is a new episode; a swap here also
+   * clears the client's keys.
+   */
+  private noBufferNoticeEpisodes: Set<string> = new Set();
   private clientsMap: Map<string, Client> = new Map();
   private cacheMetadata: CacheMetadata = { lastUpdated: 0, isStale: true };
   private checkInterval: NodeJS.Timeout | null = null;
@@ -302,12 +408,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
 
   async findAllMasked(): Promise<Partial<Client>[]> {
     const clients = await this.findAll();
-    return clients.map(({ session, mobile, password, ...maskedClient }) => maskedClient);
+    // `degraded` holds a mobile (fromMobile) and is internal; keep the masked shape unchanged.
+    return clients.map(({ session, mobile, password, degraded, swapRetry, deadMain, swapLease, swappedAt, sessionChangedAt, ...maskedClient }) => maskedClient);
   }
 
   async findOneMasked(clientId: string): Promise<Partial<Client>> {
     const client = await this.findOne(clientId, true);
-    const { session, mobile, password, ...maskedClient } = client;
+    const { session, mobile, password, degraded, swapRetry, deadMain, swapLease, swappedAt, sessionChangedAt, ...maskedClient } = client;
     return maskedClient;
   }
 
@@ -322,7 +429,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   async findAllMaskedObject(query?: SearchClientDto): Promise<Record<string, Partial<Client>>> {
     const filteredClients = query ? await this.search(query) : await this.findAll();
     return filteredClients.reduce((acc, client) => {
-      const { session, mobile, password, ...maskedClient } = client;
+      const { session, mobile, password, degraded, swapRetry, deadMain, swapLease, swappedAt, sessionChangedAt, ...maskedClient } = client;
       acc[client.clientId] = { clientId: client.clientId, ...maskedClient };
       return acc;
     }, {} as Record<string, Partial<Client>>);
@@ -363,11 +470,42 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         cleanUpdateDto.mobile = this.canonicalMobile(cleanUpdateDto.mobile);
       }
       await this.notifyClientUpdate(clientId);
+      // A manual mobile change installs an account the degraded marker does not describe: drop the
+      // marker (unless this update sets one itself), or the upgrade job would swap that account out.
+      // The dead-main evidence describes the old mobile / old session only: a new mobile or a new
+      // session (a manual re-login: the account was fixed) drops it, or rescue would retire a healthy main.
+      let clientUpdate: Record<string, unknown> = { $set: cleanUpdateDto };
+      if (cleanUpdateDto.mobile !== undefined || cleanUpdateDto.session !== undefined) {
+        const current = await this.clientModel.findOne({ clientId }, { mobile: 1, session: 1, degraded: 1, deadMain: 1 })
+          .lean<Pick<Client, 'mobile' | 'session' | 'degraded' | 'deadMain'>>().exec();
+        const mobileChanged = !!current && cleanUpdateDto.mobile !== undefined && this.canonicalMobile(current.mobile) !== cleanUpdateDto.mobile;
+        const sessionChanged = !!current && cleanUpdateDto.session !== undefined && current.session !== cleanUpdateDto.session;
+        const unset: Record<string, ''> = {};
+        if (mobileChanged && current!.degraded && (cleanUpdateDto as { degraded?: unknown }).degraded === undefined) {
+          unset.degraded = '';
+          this.logger.warn(`[${clientId}] Mobile changed by update; clearing the degraded marker (tier ${current!.degraded.tier})`);
+        }
+        if ((mobileChanged || sessionChanged) && current!.deadMain && (cleanUpdateDto as { deadMain?: unknown }).deadMain === undefined) {
+          unset.deadMain = '';
+          this.logger.warn(`[${clientId}] ${mobileChanged ? 'Mobile' : 'Session'} changed by update; clearing the dead-main report`);
+        }
+        // A new session opens the late-report window like a cutover: the running tg-aut
+        // process still holds the old session until its restart. A session-only fix keeps the mobile,
+        // so reportedMobile cannot tell the old process from the restarted one: sessionChangedAt holds
+        // those reports for the window too (screenSetupReport).
+        const extraSet: Record<string, unknown> = {};
+        if (sessionChanged) extraSet.swappedAt = new Date();
+        if (sessionChanged && !mobileChanged) extraSet.sessionChangedAt = extraSet.swappedAt;
+        else if (mobileChanged) unset.sessionChangedAt = '';
+        if (Object.keys(unset).length || Object.keys(extraSet).length) {
+          clientUpdate = { $set: { ...cleanUpdateDto, ...extraSet }, ...(Object.keys(unset).length ? { $unset: unset } : {}) };
+        }
+      }
       const updatedClient = await this.executeWithRetry(() =>
         this.clientModel
           .findOneAndUpdate(
             { clientId },
-            { $set: cleanUpdateDto },
+            clientUpdate,
             { returnDocument: 'after', runValidators: true },
           )
           .lean()
@@ -536,6 +674,118 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   async setupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<SetupClientResult> {
+    const screen = await this.screenSetupReport(clientId, setupClientQueryDto);
+    if (screen.answer) return screen.answer;
+    // A pinned ?mobile= call is an operator choice, not tg-aut evidence about the live session.
+    if (screen.mobile && !setupClientQueryDto?.mobile) {
+      await this.recordDeadMainReport(clientId, screen.mobile, setupClientQueryDto?.reason);
+    }
+    return this.runSetup(clientId, setupClientQueryDto, {});
+  }
+
+  /**
+   * HTTP /setupClient only (job passes call runSetup). A report is about the mobile tg-aut runs on,
+   * which after a cutover may no longer be the client's main:
+   *  - reportedMobile present and not clients.mobile: stale_report, nothing done (no swap, no deadMain);
+   *  - reportedMobile absent (old bundle), a reason given, no pinned mobile, and a cutover less than
+   *    SWAP_REPORT_GRACE_MS ago: answered 'cooldown' (old bundles know it) and nothing done.
+   * Returns the mobile the report is about (the screened main) for the deadMain write.
+   */
+  private async screenSetupReport(
+    clientId: string,
+    dto: SetupClientQueryDto,
+  ): Promise<{ answer?: SetupClientResult; mobile?: string }> {
+    let current: Pick<Client, 'mobile' | 'swappedAt' | 'sessionChangedAt'> | null;
+    try {
+      current = await this.clientModel.findOne({ clientId }, { mobile: 1, swappedAt: 1, sessionChangedAt: 1 })
+        .lean<Pick<Client, 'mobile' | 'swappedAt' | 'sessionChangedAt'>>().exec();
+    } catch (error) {
+      this.logger.warn(`[${clientId}] Could not screen the setupClient report: ${parseError(error, '', false).message}`);
+      return {};
+    }
+    if (!current?.mobile) return {}; // runSetup answers client_not_found
+    let reported: string | undefined;
+    if (dto?.reportedMobile) {
+      try {
+        reported = canonicalizeMobile(String(dto.reportedMobile));
+      } catch {
+        this.logger.warn(`[${clientId}] Unparseable reportedMobile ${last4(String(dto.reportedMobile))}; treated as absent`);
+      }
+    }
+    const main = current.mobile;
+    let mainCanonical = main;
+    try { mainCanonical = canonicalizeMobile(main); } catch { /* compare as stored */ }
+    if (reported) {
+      if (reported === mainCanonical) {
+        // Same mobile, but the session was just replaced by update(): this may be the process still
+        // on the old session. Held for the window; a genuinely dead new session retries past it.
+        const fixedAtMs = current.sessionChangedAt ? new Date(current.sessionChangedAt).getTime() : 0;
+        const fixLeftMs = fixedAtMs + SWAP_REPORT_GRACE_MS - Date.now();
+        if (dto?.reason && !dto?.mobile && fixedAtMs && fixLeftMs > 0) {
+          this.logger.warn(`[${clientId}] setupClient report for the main ${Math.round((Date.now() - fixedAtMs) / 1000)}s after a session change; ignored (may be the process on the old session)`, { reason: dto.reason });
+          return {
+            answer: {
+              status: 'cooldown',
+              swapped: false,
+              clientId,
+              message: 'Client session was just changed; a report from the process on the old session is ignored',
+              cooldownRemainingMs: fixLeftMs,
+            },
+          };
+        }
+        return { mobile: main };
+      }
+      this.logger.warn(`[${clientId}] Stale setupClient report for ${last4(reported)}; client now runs ${last4(main)}. Ignored`, { reason: dto?.reason });
+      return {
+        answer: {
+          status: 'stale_report',
+          swapped: false,
+          clientId,
+          message: `Report is for a mobile that is no longer this client's main (now ${last4(main)}); nothing done`,
+          existingMobile: main,
+        },
+      };
+    }
+    const swappedAtMs = current.swappedAt ? new Date(current.swappedAt).getTime() : 0;
+    const graceLeftMs = swappedAtMs + SWAP_REPORT_GRACE_MS - Date.now();
+    if (dto?.reason && !dto?.mobile && swappedAtMs && graceLeftMs > 0) {
+      this.logger.warn(`[${clientId}] setupClient report without reportedMobile ${Math.round((Date.now() - swappedAtMs) / 1000)}s after a cutover; ignored (may be the replaced process)`, { reason: dto.reason });
+      return {
+        answer: {
+          status: 'cooldown',
+          swapped: false,
+          clientId,
+          message: 'Client was just swapped; a report without reportedMobile may come from the replaced process and is ignored',
+          cooldownRemainingMs: graceLeftMs,
+        },
+      };
+    }
+    return { mobile: main };
+  }
+
+  /**
+   * /setupClient with a dead reason comes from tg-aut, the only process on the live session: the
+   * one piece of evidence the rescue pass acts on. Stored on clients.deadMain for the screened main
+   * (the write is guarded on it, so a cutover in between writes nothing), `at` = this report.
+   * CMS-side errors (users / pool rows) describe the backup session and are never used for rescue.
+   */
+  private async recordDeadMainReport(clientId: string, mobile: string, reason?: string): Promise<void> {
+    if (!reason || !isDeadSwapReason(reason) || reason.startsWith(DEAD_MAIN_RESCUE_REASON)) return;
+    try {
+      await this.clientModel.updateOne(
+        { clientId, mobile },
+        { $set: { deadMain: { mobile, reason: reason.substring(0, 200), at: new Date() } } },
+      ).exec();
+    } catch (error) {
+      this.logger.warn(`[${clientId}] Could not record the dead-main report: ${parseError(error, '', false).message}`);
+    }
+  }
+
+  private async runSetup(
+    clientId: string,
+    setupClientQueryDto: SetupClientQueryDto,
+    internal: SetupInternalOptions,
+  ): Promise<SetupClientResult> {
     this.logger.log(`Received New Client Request for - ${clientId}`);
     if (!toBoolean(process.env.AUTO_CLIENT_SETUP)) {
       this.logger.log('Auto client setup disabled');
@@ -570,7 +820,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
 
     let setupPromise!: Promise<SetupClientResult>;
-    setupPromise = this.handleSetupClient(clientId, setupClientQueryDto)
+    // Registered synchronously (before any await) so in-process callers join this run.
+    setupPromise = this.runLeasedSetup(clientId, setupClientQueryDto, internal)
       .finally(() => {
         // Do not let an older promise remove a newer request should this method
         // ever be extended to replace entries rather than coalesce them.
@@ -582,12 +833,78 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return setupPromise;
   }
 
+  /**
+   * Cross-process exclusivity between setupClient runs: the cms job and the ums / ums-test HTTP
+   * processes share Mongo but not memory. clients.swapLease is taken atomically before any probe or
+   * connection, renewed every SWAP_LEASE_RENEW_MS while the run lasts, and released in finally (TTL
+   * SWAP_LEASE_TTL_MS frees a crashed holder); the run's probe leases go with it. Only setupClient
+   * paths take these leases; other paths that connect sessions use their own in-process guards.
+   */
+  private async runLeasedSetup(
+    clientId: string,
+    setupClientQueryDto: SetupClientQueryDto,
+    internal: SetupInternalOptions,
+  ): Promise<SetupClientResult> {
+    const leaseOwner = `${os.hostname()}:${process.pid}:${randomUUID()}`;
+    const now = new Date();
+    const leased = await this.clientModel.findOneAndUpdate(
+      { clientId, ...leaseFreeFilter('swapLease', now) },
+      { $set: { swapLease: { owner: leaseOwner, until: new Date(now.getTime() + SWAP_LEASE_TTL_MS) } } },
+      { projection: { _id: 1 } },
+    ).lean().exec();
+    if (!leased) {
+      const holder = await this.clientModel.findOne({ clientId }, { swapLease: 1 }).lean<Pick<Client, 'swapLease'>>().exec();
+      if (holder) {
+        const untilMs = holder.swapLease?.until ? new Date(holder.swapLease.until).getTime() : now.getTime();
+        this.logger.warn(`[${clientId}] Setup already in progress in another CMS process (${holder.swapLease?.owner}); not started`);
+        return {
+          status: 'cooldown',
+          swapped: false,
+          clientId,
+          message: 'Client setup is in progress in another CMS process',
+          cooldownRemainingMs: Math.min(CONFIG.COOLDOWN_PERIOD, Math.max(0, untilMs - now.getTime())),
+        };
+      }
+      // No such client: handleSetupClient answers client_not_found.
+      return this.handleSetupClient(clientId, setupClientQueryDto, internal);
+    }
+    // Renew while running, so a long run (backup-session creation, slow connects) keeps its leases;
+    // a crashed process stops renewing and its leases expire after SWAP_LEASE_TTL_MS.
+    const renewal = setInterval(() => { void this.renewSetupLeases(clientId, leaseOwner); }, this.leaseRenewMs);
+    renewal.unref?.();
+    try {
+      return await this.handleSetupClient(clientId, setupClientQueryDto, { ...internal, leaseOwner });
+    } finally {
+      clearInterval(renewal);
+      try {
+        await this.clientModel.updateOne({ clientId, 'swapLease.owner': leaseOwner }, { $unset: { swapLease: '' } }).exec();
+        await this.bufferClientService.releaseProbeLeases(leaseOwner);
+      } catch (error) {
+        this.logger.warn(`[${clientId}] Lease release failed (expires in ${SWAP_LEASE_TTL_MS / 60_000} min): ${parseError(error, '', false).message}`);
+      }
+    }
+  }
+
+  private async renewSetupLeases(clientId: string, leaseOwner: string): Promise<void> {
+    const until = new Date(Date.now() + SWAP_LEASE_TTL_MS);
+    try {
+      await this.clientModel.updateOne({ clientId, 'swapLease.owner': leaseOwner }, { $set: { 'swapLease.until': until } }).exec();
+      await this.bufferClientService.renewProbeLeases(leaseOwner, until);
+    } catch (error) {
+      this.logger.warn(`[${clientId}] Lease renewal failed: ${parseError(error, '', false).message}`);
+    }
+  }
+
   private canSetupClient(clientId: string): boolean {
     const lastSetup = this.setupCooldownMap.get(clientId) || 0;
     return Date.now() > lastSetup + CONFIG.COOLDOWN_PERIOD;
   }
 
-  private async handleSetupClient(clientId: string, setupClientQueryDto: SetupClientQueryDto): Promise<SetupClientResult> {
+  private async handleSetupClient(
+    clientId: string,
+    setupClientQueryDto: SetupClientQueryDto,
+    internal: SetupInternalOptions = {},
+  ): Promise<SetupClientResult> {
     // NOTE: the cooldown is intentionally NOT set here. It is set only once a real swap actually
     // proceeds (a safe buffer candidate was found) — see below. Setting it up-front meant a
     // "no buffer available" run (e.g. all of a client's buffers are temporarily cooling down on
@@ -607,22 +924,29 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     this.logger.log('setupClientQueryDto:', setupClientQueryDto);
     const today = ClientHelperUtils.getTodayDateString();
     const permanentReplacement = this.isPermanentReplacementReason(setupClientQueryDto.reason);
-    const baseCandidateQuery: Omit<ClientMongoQuery, 'availableDate'> = {
+    const upgradeFromTier = internal.upgradeFromTier;
+    const dead = !upgradeFromTier && isDeadSwapReason(setupClientQueryDto.reason);
+    // Degraded tiers: only for a DEAD live account (or an upgrade run, which only moves UP), never
+    // when the caller pinned a mobile. DEGRADED_SWAP_TIERS is read now, so a config change applies
+    // to the next request.
+    const configuredTiers = parseDegradedSwapTiers();
+    const degradedTiers: DegradedTier[] = setupClientQueryDto.mobile
+      ? []
+      : upgradeFromTier
+        ? configuredTiers.filter((tier) => tier < upgradeFromTier)
+        : dead ? configuredTiers : [];
+    // Never a candidate: the current main, any mobile in an in-flight setup (this process), and any
+    // other client's current main. Two siblings racing for one spare cannot both take it.
+    const busyMobiles = await this.busyCandidateMobiles(clientId, existingClientMobile);
+    const baseCandidateQuery: Omit<ClientMongoQuery, 'availableDate'> = this.buildEligibleBufferQuery(
       clientId,
-      mobile: setupClientQueryDto.mobile || { $ne: existingClientMobile },
-      createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
-      // Match the warmup graduation threshold (>= MIN_CHANNELS_FOR_MATURING). Using $gt: 200
-      // excluded accounts sitting at exactly the graduation count, making them count as ready
-      // supply yet never swap-eligible.
-      channels: { $gte: MIN_CHANNELS_FOR_MATURING },
-      status: 'active',
-      inUse: { $ne: true },
-      warmupPhase: WarmupPhase.SESSION_ROTATED,
-      // Never swap in a harsh-limited account or one whose Telegram limit has not lifted yet.
-      // Accounts without spam fields stay eligible (they are probed before the swap).
-      ...buildSpamEligibleFilter(),
-    };
-    const newProbeBudget = (): SetupProbeBudget => ({ clientId, remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [] });
+      setupClientQueryDto.mobile ? { $eq: setupClientQueryDto.mobile, $nin: busyMobiles } : { $nin: busyMobiles },
+    );
+    const newProbeBudget = (): SetupProbeBudget => ({
+      clientId, remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [],
+      ...(internal.leaseOwner ? { leaseOwner: internal.leaseOwner } : {}),
+      ...(internal.jobPass ? { jobPass: true } : {}),
+    });
     const probeBudget = newProbeBudget();
     // The permanent-replacement fallback scan gets its own budget so an exhausted due-scan budget
     // cannot retire the existing account before the fallback has probed anything.
@@ -665,28 +989,91 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         query: futureCandidateQuery,
       });
     }
+    // Degraded fallback: only once tier 1 is truly empty. If tier 1 still has unprobed candidates
+    // (probe budget ran out), answer no_candidate + moreCandidatesPending instead so the caller's
+    // retry reaches them before anything worse is taken.
+    let degradedBudget: SetupProbeBudget | undefined;
+    let degradedPlan: DegradedSwapPlan | null = null;
+    const tier1Pending = !!(probeBudget.moreCandidatesPending || fallbackBudget?.moreCandidatesPending);
+    if (!newBufferClient && degradedTiers.length && !tier1Pending) {
+      degradedBudget = newProbeBudget();
+      const pick = await this.findDegradedCandidate(existingClient, degradedTiers, degradedBudget, today, busyMobiles);
+      if (pick) {
+        newBufferClient = pick.candidate;
+        const previous = existingClient.degraded;
+        // The marker comes from what the probe said, not from the tier the pick was found in.
+        const marker = markerTierFromVerdict(pick.tier, pick.candidate.spamStatus);
+        degradedPlan = {
+          clientId,
+          pickTier: pick.tier,
+          markerTier: marker === 1 ? null : marker,
+          // An upgrade keeps the episode's original dead reason and start time.
+          reason: (upgradeFromTier && previous?.reason) || setupClientQueryDto.reason || 'unknown',
+          since: (upgradeFromTier && previous?.since) ? new Date(previous.since) : new Date(),
+          fromMobile: existingClientMobile,
+          limitedUntil: marker === 3 ? (pick.candidate.limitedUntil ?? null) : null,
+          ...(pick.fromClientId ? { fromClientId: pick.fromClientId } : {}),
+        };
+      }
+      this.logger.warn(`[${clientId}] Degraded swap scan completed`, {
+        existingMobile: existingClientMobile,
+        reason: setupClientQueryDto.reason,
+        tiers: degradedTiers,
+        selected: newBufferClient?.mobile,
+        pickTier: degradedPlan?.pickTier,
+        markerTier: degradedPlan?.markerTier,
+      });
+    }
     if (!newBufferClient) {
       let existingRetired = false;
+      if (upgradeFromTier) {
+        // Upgrade run: the current degraded account is alive and keeps serving. Nothing to say.
+        this.logger.log(`[${clientId}] No better-tier buffer for degraded client (tier ${upgradeFromTier})`);
+        return {
+          status: 'no_candidate',
+          swapped: false,
+          clientId,
+          existingMobile: existingClientMobile,
+          degraded: true,
+          message: `No buffer better than degraded tier ${upgradeFromTier}`,
+        };
+      }
       if (permanentReplacement) {
         this.logger.warn(`[${clientId}] No replacement buffer available, but setup reason is permanent; marking existing mobile inactive`, {
           existingMobile: existingClientMobile,
           reason: setupClientQueryDto.reason,
         });
+        // Idempotent: an already retired main is not retired (or announced) again.
         await this.retireReplacedMobile(existingClientMobile, setupClientQueryDto.reason);
         existingRetired = true;
       }
-      const moreCandidatesPending = !!(probeBudget.moreCandidatesPending || fallbackBudget?.moreCandidatesPending);
+      const moreCandidatesPending = !!(
+        probeBudget.moreCandidatesPending || fallbackBudget?.moreCandidatesPending || degradedBudget?.moreCandidatesPending
+      );
       const pendingNote = moreCandidatesPending
         ? ' (SpamBot probe budget exhausted; more unprobed candidates remain, retry to check them)'
         : '';
-      await this.notify({
-        severity: 'warning',
-        title: 'No buffer',
-        summary: `No safe buffer clients for swap${pendingNote}`,
-        fields: [{ label: 'Client ID', value: clientId }],
-        tables: this.probeSkipTables(probeBudget, fallbackBudget),
-      });
-      this.logger.log('Buffer Clients not safely available');
+      const alreadyDegraded = !!existingClient.degraded;
+      // One notice per episode (dead / normal), not one per caller retry; the episode ends with the
+      // next successful swap. Every attempt is still logged below.
+      const episodeKey = `${clientId}:${existingClientMobile}:${dead ? 'dead' : 'normal'}`;
+      if (!this.noBufferNoticeEpisodes.has(episodeKey)) {
+        this.noBufferNoticeEpisodes.add(episodeKey);
+        await this.notify({
+          severity: dead ? 'critical' : 'warning',
+          title: 'No buffer',
+          summary: dead
+            ? `Live account is dead and no buffer exists in any allowed tier (degraded tiers: ${degradedTiers.join(',') || 'off'}); client stays on the dead account${pendingNote}`
+            : `No safe buffer clients for swap${pendingNote}`,
+          fields: [
+            { label: 'Client ID', value: clientId },
+            ...(dead ? [{ label: 'Reason', value: String(setupClientQueryDto.reason).substring(0, 80), code: false }] : []),
+            ...(alreadyDegraded ? [{ label: 'Degraded', value: `tier ${existingClient.degraded?.tier}`, code: false }] : []),
+          ],
+          tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget),
+        });
+      }
+      this.logger.log('Buffer Clients not safely available', { clientId, dead, moreCandidatesPending, alreadyDegraded });
       return {
         status: 'no_candidate',
         swapped: false,
@@ -694,12 +1081,33 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         existingMobile: existingClientMobile,
         existingRetired,
         ...(moreCandidatesPending ? { moreCandidatesPending: true } : {}),
+        ...(alreadyDegraded ? { degraded: true } : {}),
         message: `No safe buffer client is currently available${pendingNote}`,
+      };
+    }
+    // Another client's in-flight setup took this mobile while we were probing it: never share it.
+    // Checked synchronously right before registering our own setup (no await in between).
+    const conflictingSetup = this.telegramService.getActiveClientSetup(newBufferClient.mobile);
+    if (conflictingSetup && conflictingSetup.clientId !== clientId) {
+      this.logger.warn(`[${clientId}] Candidate ${newBufferClient.mobile} is in an active setup for ${conflictingSetup.clientId}; not taken`);
+      return {
+        status: 'failed',
+        swapped: false,
+        clientId,
+        existingMobile: existingClientMobile,
+        message: `Candidate is being set up for another client (${conflictingSetup.clientId}); retry`,
       };
     }
     // A real swap is proceeding — start the cooldown now so a genuine in-progress setup is not
     // retried concurrently, while a prior no-buffer run does not lock this path out.
     this.setupCooldownMap.set(clientId, Date.now());
+    const planKey = `${clientId}:${newBufferClient.mobile}`;
+    this.telegramService.setActiveClientSetup({
+      ...setupClientQueryDto,
+      clientId,
+      existingMobile: existingClientMobile,
+      newMobile: newBufferClient.mobile,
+    });
     try {
       this.logger.info(
         `[${clientId}] Selected replacement buffer client`,
@@ -707,8 +1115,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           existingMobile: existingClientMobile,
           newMobile: newBufferClient.mobile,
           usedFutureAvailableFallback,
+          pickTier: degradedPlan?.pickTier,
+          markerTier: degradedPlan?.markerTier,
+          upgradeFromTier,
         },
       );
+      if (degradedPlan) this.degradedPlans.set(planKey, degradedPlan);
       await this.notify({
         title: 'Swap started',
         fields: [
@@ -716,14 +1128,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           { label: 'Old mobile', value: existingClient.mobile },
           { label: 'Old username', value: existingClient.username ? `@${existingClient.username}` : undefined },
           { label: 'New mobile', value: newBufferClient.mobile },
+          ...(degradedPlan ? [{ label: 'Degraded tier', value: String(degradedPlan.markerTier ?? `${degradedPlan.pickTier} (meets tier-1 rules)`), code: false }] : []),
         ],
-        tables: this.probeSkipTables(probeBudget, fallbackBudget),
-      });
-      this.telegramService.setActiveClientSetup({
-        ...setupClientQueryDto,
-        clientId,
-        existingMobile: existingClientMobile,
-        newMobile: newBufferClient.mobile,
+        tables: this.probeSkipTables(probeBudget, fallbackBudget, degradedBudget),
       });
       this.logger.debug(`[${clientId}] Active client setup registered`, {
         existingMobile: existingClientMobile,
@@ -732,7 +1139,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         formalities: setupClientQueryDto.formalities,
       });
       await connectionManager.getClient(newBufferClient.mobile);
-      await this.updateClientSession(newBufferClient.session, newBufferClient.mobile);
+      await this.updateClientSession(newBufferClient.session, newBufferClient.mobile, clientId);
+      for (const key of [...this.noBufferNoticeEpisodes]) {
+        if (key.startsWith(`${clientId}:`)) this.noBufferNoticeEpisodes.delete(key);
+      }
+      await this.notifyDegradedTransition(clientId, existingClient, newBufferClient.mobile, degradedPlan, upgradeFromTier);
       return {
         status: 'swapped',
         swapped: true,
@@ -740,7 +1151,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         existingMobile: existingClientMobile,
         newMobile: newBufferClient.mobile,
         usedFutureAvailableFallback,
-        message: 'Client swap completed',
+        ...(degradedPlan?.markerTier ? { degradedTier: degradedPlan.markerTier } : {}),
+        message: degradedPlan?.markerTier ? `Client swap completed (degraded tier ${degradedPlan.markerTier})` : 'Client swap completed',
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -758,7 +1170,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         details: errorMessage.substring(0, 500),
         detailsTitle: 'Error message',
       });
-      if (permanent) {
+      // Never touch a mobile that is (now) ANY client's live main: a sibling's cutover won the race
+      // for it, or our own cutover committed before the error. No availableDate push, no disconnect.
+      const ownerOfMobile = await this.clientUsingMobile(newBufferClient.mobile);
+      if (ownerOfMobile) {
+        this.logger.warn(`[${clientId}] Swap failed on ${newBufferClient.mobile}, now the live main of ${ownerOfMobile}; leaving it untouched`);
+      } else if (permanent) {
         // Account is permanently dead — retire it everywhere (user + pools), don't recycle
         await this.usersService.expireAccount(newBufferClient.mobile, `Setup failed permanently: ${errorDetails.message}`);
       } else {
@@ -766,7 +1183,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         const availableDate = ClientHelperUtils.toDateString(Date.now() + 3 * 24 * 60 * 60 * 1000);
         await this.bufferClientService.createOrUpdate(newBufferClient.mobile, { availableDate });
       }
-      this.telegramService.clearActiveClientSetup(newBufferClient.mobile);
+      if (this.telegramService.getActiveClientSetup(newBufferClient.mobile)?.clientId === clientId) {
+        this.telegramService.clearActiveClientSetup(newBufferClient.mobile);
+      }
       return {
         status: 'failed',
         swapped: false,
@@ -776,15 +1195,21 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         message: errorMessage.substring(0, 200),
       };
     } finally {
-      await connectionManager.unregisterClient(newBufferClient.mobile);
+      this.degradedPlans.delete(planKey);
+      if (!(await this.clientUsingMobile(newBufferClient.mobile))) {
+        await connectionManager.unregisterClient(newBufferClient.mobile);
+      }
     }
   }
 
-  async updateClientSession(newSession: string, setupMobile?: string) {
+  async updateClientSession(newSession: string, setupMobile?: string, expectedClientId?: string) {
     const setup = this.telegramService.getActiveClientSetup(setupMobile);
     if (!setup) {
       const scope = setupMobile ? ` for ${setupMobile}` : '';
       throw new BadRequestException(`No active client setup found${scope}`);
+    }
+    if (expectedClientId && setup.clientId !== expectedClientId) {
+      throw new ConflictException(`Active setup for ${setupMobile} belongs to ${setup.clientId}, not ${expectedClientId}`);
     }
     const { archiveOld: returnOldToPool, clientId, existingMobile, formalities, newMobile, reason } = setup;
     const days = setup.days ?? 0;
@@ -837,7 +1262,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         username: updatedUsername,
         session: newSession,
         name: mirroredActiveName,
-      });
+      }, this.degradedPlanFor(clientId, newMobile));
       cutoverCommitted = true;
       this.logger.info(`[${clientId}] Cutover committed`, {
         existingMobile,
@@ -900,6 +1325,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     clientId: string,
     expectedExistingMobile: string,
     updateClientDto: Pick<UpdateClientDto, 'mobile' | 'username' | 'session' | 'name'>,
+    degradedPlan: DegradedSwapPlan | null = null,
   ): Promise<Client> {
     if (!updateClientDto.session?.trim()) {
       throw new BadRequestException('Cannot update client with a blank session');
@@ -909,6 +1335,24 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     cleanUpdateDto.mobile = this.canonicalMobile(cleanUpdateDto.mobile!);
     await this.notifyClientUpdate(clientId);
 
+    // A degraded pick stamps clients.degraded; any other cutover (tier 1, or a pick that meets
+    // tier-1 rules: markerTier null) clears it.
+    const degradedState: ClientDegradedState | null = degradedPlan?.markerTier
+      ? {
+        since: degradedPlan.since,
+        tier: degradedPlan.markerTier,
+        reason: degradedPlan.reason,
+        fromMobile: this.canonicalMobile(expectedExistingMobile),
+        limitedUntil: degradedPlan.limitedUntil,
+        ...(degradedPlan.fromClientId ? { fromClientId: degradedPlan.fromClientId } : {}),
+      }
+      : null;
+    // swappedAt opens the late-report grace window (screenSetupReport).
+    const swappedAt = new Date();
+    const clientUpdate: Record<string, unknown> = degradedState
+      ? { $set: { ...cleanUpdateDto, degraded: degradedState, swappedAt }, $unset: { swapRetry: '', deadMain: '', sessionChangedAt: '' } }
+      : { $set: { ...cleanUpdateDto, swappedAt }, $unset: { degraded: '', swapRetry: '', deadMain: '', sessionChangedAt: '' } };
+
     const session: ClientSession = await this.clientModel.db.startSession();
     let updatedClient: Client | null = null;
     try {
@@ -916,7 +1360,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         updatedClient = await this.clientModel
           .findOneAndUpdate(
             { clientId, mobile: this.canonicalMobile(expectedExistingMobile) },
-            { $set: cleanUpdateDto },
+            clientUpdate,
             { returnDocument: 'after', runValidators: true, session },
           )
           .lean()
@@ -925,6 +1369,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
           throw new ConflictException(
             `Client "${clientId}" changed before cutover; expected mobile ${expectedExistingMobile}`,
           );
+        }
+        if (degradedPlan?.fromClientId) {
+          // Tier 2: the sibling's spare becomes this client's, in the same transaction.
+          await this.bufferClientService.reassignClientId(cleanUpdateDto.mobile!, degradedPlan.fromClientId, clientId, session);
         }
         await this.bufferClientService.setPrimaryInUse(
           clientId,
@@ -994,7 +1442,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   private isPermanentReplacementReason(reason?: string): reason is string {
-    return !!reason && isPermanentError({ message: reason });
+    // isDeadSwapReason adds the internal DEAD_MAIN_RESCUE reason (rescue pass: main already retired).
+    return !!reason && (isPermanentError({ message: reason }) || isDeadSwapReason(reason));
   }
 
   /**
@@ -1007,6 +1456,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
    * exists for this mobile.
    */
   private async retireReplacedMobile(mobile: string, reason: string): Promise<void> {
+    if (await this.isAlreadyRetired(mobile)) {
+      this.logger.log(`Replaced account ${mobile} is already retired; not retired or announced again`);
+      return;
+    }
     try {
       await this.usersService.expireAccount(mobile, reason);
       this.logger.warn(`Replaced account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
@@ -1015,6 +1468,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const errorDetails = parseError(error, `Failed to retire replaced account: ${mobile}`, false);
       this.logger.error(`Failed to retire replaced account ${mobile}: ${errorDetails.message}`);
       await this.notify({ severity: 'error', title: 'Inactivate fail', fields: [{ label: 'Mobile', value: mobile }, { label: 'Reason', value: reason.substring(0, 100), code: false }], details: errorDetails.message.substring(0, 500), detailsTitle: 'Error message' });
+    }
+  }
+
+  /** Every users doc expired and the buffer row (if any) inactive: expireAccount already ran. */
+  private async isAlreadyRetired(mobile: string): Promise<boolean> {
+    try {
+      const users = (await this.usersService.findByMobileAnyStatus(mobile)) ?? [];
+      if (!users.length || !users.every((u) => u.expired === true)) return false;
+      const buffer = await this.bufferClientService.findOne(mobile, false);
+      return !buffer || buffer.status === 'inactive';
+    } catch {
+      return false; // unknown: retire (expireAccount is idempotent; at worst one extra notice)
     }
   }
 
@@ -1134,9 +1599,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       availableDate?: string;
       spamStatus?: string;
       spamCheckedAt?: Date | string | null;
+      limitedUntil?: Date | string | null;
     }>,
     existingClientSession: string,
     probeBudget: SetupProbeBudget = { clientId: '-', remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [] },
+    accept: SwapProbeAcceptance = {},
   ): Promise<SafeSetupBufferCandidate | null> {
     for (const candidate of candidates) {
       if (!candidate?.mobile || !candidate?.session) continue;
@@ -1144,22 +1611,79 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         this.logger.warn(`Skipping setup candidate ${candidate.mobile}: session matches current main client`);
         continue;
       }
-
-      try {
-        const backupUser = await this.assertDistinctUserBackupSession(candidate.mobile, candidate.session);
-        if (!backupUser.session?.trim() || backupUser.session.trim() === candidate.session.trim()) {
-          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: backup session is still duplicated`);
+      if (this.setupOwnedByAnotherClient(candidate.mobile, probeBudget.clientId)) {
+        this.logger.warn(`Skipping setup candidate ${candidate.mobile}: in an active setup for another client`);
+        continue;
+      }
+      // Lease the row before anything can connect it (backup-session creation, SpamBot probe,
+      // cutover): another CMS process holding it is mid-setup with this very session.
+      const owner = probeBudget.leaseOwner;
+      if (owner) {
+        let leased = false;
+        try {
+          leased = await this.bufferClientService.acquireProbeLease(candidate.mobile, owner, SWAP_LEASE_TTL_MS);
+        } catch (error) {
+          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: probe lease failed (${parseError(error, '', false).message})`);
           continue;
         }
-        if (!(await this.isSpamSafeForSwap(candidate, probeBudget))) continue;
-        return { mobile: candidate.mobile, session: candidate.session, backupUser };
+        if (!leased) {
+          this.logger.warn(`[${probeBudget.clientId}] Skipping setup candidate ${candidate.mobile}: leased by another CMS process`);
+          probeBudget.skipped.push(`${candidate.mobile} busy in another CMS process (not probed)`);
+          probeBudget.moreCandidatesPending = true;
+          continue;
+        }
+      }
+      let picked = false;
+      try {
+        const backupUser = probeBudget.jobPass
+          ? await this.storedDistinctBackup(candidate.mobile, candidate.session)
+          : await this.assertDistinctUserBackupSession(candidate.mobile, candidate.session);
+        if (!backupUser?.session?.trim() || backupUser.session.trim() === candidate.session.trim()) {
+          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: ${probeBudget.jobPass ? 'no stored distinct backup session (job passes never create one)' : 'backup session is still duplicated'}`);
+          continue;
+        }
+        probeBudget.lastVerdict = undefined;
+        if (!(await this.isSpamSafeForSwap(candidate, probeBudget, accept))) continue;
+        // A sibling's setup may have registered this mobile while we probed it.
+        if (this.setupOwnedByAnotherClient(candidate.mobile, probeBudget.clientId)) {
+          this.logger.warn(`Skipping setup candidate ${candidate.mobile}: taken by another client's setup during the probe`);
+          continue;
+        }
+        const verdict = probeBudget.lastVerdict as SetupProbeBudget['lastVerdict'];
+        // An inconclusive probe tells us nothing about the limit: keep the stored one.
+        const storedLimitedUntil = candidate.limitedUntil ? new Date(candidate.limitedUntil) : null;
+        picked = true; // keeps its lease through the cutover; runSetup releases it
+        return {
+          mobile: candidate.mobile,
+          session: candidate.session,
+          backupUser,
+          // Degraded tiers only (non-empty acceptance): tier-1 picks keep their original shape.
+          ...(verdict && Object.keys(accept).length
+            ? { spamStatus: verdict.status, limitedUntil: verdict.status === 'unknown' ? storedLimitedUntil : verdict.limitedUntil }
+            : {}),
+        };
       } catch (error) {
         this.logger.warn(`Skipping setup candidate ${candidate.mobile}: failed to ensure distinct backup session`);
         continue;
+      } finally {
+        if (owner && !picked) {
+          await this.bufferClientService.releaseProbeLeases(owner, candidate.mobile).catch((error: unknown) =>
+            this.logger.warn(`Probe lease release failed for ${candidate.mobile} (expires by TTL): ${parseError(error, '', false).message}`));
+        }
       }
     }
 
     return null;
+  }
+
+  /**
+   * Job passes: the users doc's STORED backup session, if it differs from the candidate's own.
+   * Read-only (getOrEnsureDistinctUsersBackupSession may connect and create a session).
+   */
+  private async storedDistinctBackup(mobile: string, candidateSession: string): Promise<User | null> {
+    const user = (await this.usersService.findByMobileAnyStatus(mobile))?.[0];
+    const backup = user?.session?.trim();
+    return user && backup && backup !== candidateSession.trim() ? user : null;
   }
 
   /** SpamBot-skipped swap candidates as a Mobile / Reason table (empty when none). */
@@ -1180,9 +1704,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   private async isSpamSafeForSwap(
     candidate: { mobile: string; availableDate?: string; spamStatus?: string; spamCheckedAt?: Date | string | null },
     budget: SetupProbeBudget,
+    accept: SwapProbeAcceptance = {},
   ): Promise<boolean> {
     const checkedAt = candidate.spamCheckedAt ? new Date(candidate.spamCheckedAt).getTime() : 0;
     if (candidate.spamStatus === 'free' && checkedAt > 0 && Date.now() - checkedAt < SPAM_FREE_FRESH_MS) {
+      budget.lastVerdict = { status: 'free', limitedUntil: null };
       return true;
     }
     // Each probe is capped to what is left of the request budget, so the request's total probing
@@ -1225,7 +1751,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       return false;
     }
     if (result.status === 'unknown') {
+      if (accept.rejectFrozenReply && /frozen/i.test(result.replyText || '')) {
+        // Degraded tiers: SpamBot answering about a frozen account means it cannot serve users.
+        this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot reply mentions a frozen account`);
+        budget.skipped.push(`${candidate.mobile} frozen (SpamBot reply)`);
+        return false;
+      }
       this.logger.warn(`[${budget.clientId}] SpamBot probe inconclusive for ${candidate.mobile} (${result.error || 'unrecognized reply'}); allowing candidate`);
+      budget.lastVerdict = { status: 'unknown', limitedUntil: null };
       return true;
     }
 
@@ -1245,7 +1778,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     } catch (error) {
       this.logger.warn(`[${budget.clientId}] Failed to persist SpamBot result for ${candidate.mobile}: ${parseError(error, '', false).message}`);
     }
-    if (result.status === 'free') return true;
+    if (result.status === 'free'
+      || (result.status === 'limited' && accept.limited)
+      || (result.status === 'harsh' && accept.harsh)) {
+      budget.lastVerdict = { status: result.status, limitedUntil: result.status === 'limited' ? result.limitedUntil : null };
+      return true;
+    }
 
     const detail = result.status === 'limited' && result.limitedUntil
       ? `limited until ${result.limitedUntil.toISOString().slice(0, 16).replace('T', ' ')} UTC`
@@ -1253,6 +1791,623 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     this.logger.warn(`[${budget.clientId}] Skipping setup candidate ${candidate.mobile}: SpamBot ${detail}`);
     budget.skipped.push(`${candidate.mobile} ${detail}`);
     return false;
+  }
+
+  /** Tier-1 eligibility for `clientId`'s own pool (also tier 2 on a sibling's pool). No availableDate. */
+  private buildEligibleBufferQuery(clientId: string, mobileFilter: unknown): Omit<ClientMongoQuery, 'availableDate'> {
+    return {
+      clientId,
+      mobile: mobileFilter,
+      createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
+      // Match the warmup graduation threshold (>= MIN_CHANNELS_FOR_MATURING). Using $gt: 200
+      // excluded accounts sitting at exactly the graduation count, making them count as ready
+      // supply yet never swap-eligible.
+      channels: { $gte: MIN_CHANNELS_FOR_MATURING },
+      status: 'active',
+      inUse: { $ne: true },
+      warmupPhase: WarmupPhase.SESSION_ROTATED,
+      // Never swap in a harsh-limited account or one whose Telegram limit has not lifted yet.
+      // Accounts without spam fields stay eligible (they are probed before the swap).
+      ...buildSpamEligibleFilter(),
+    };
+  }
+
+  /**
+   * Degraded tiers 2-4, in the given order, sharing one probe budget. Returns the first candidate
+   * that passes the users check (not expired, 2FA on), the distinct-backup-session check and the
+   * tier's SpamBot acceptance (frozen / unreachable accounts are always rejected).
+   */
+  private async findDegradedCandidate(
+    existingClient: Client,
+    tiers: DegradedTier[],
+    budget: SetupProbeBudget,
+    today: string,
+    busyMobiles: string[],
+  ): Promise<{ tier: DegradedTier; candidate: SafeSetupBufferCandidate; fromClientId?: string } | null> {
+    for (const tier of tiers) {
+      if (budget.remaining <= 0) {
+        budget.moreCandidatesPending = true;
+        break;
+      }
+      if (tier === 2) {
+        const pick = await this.findSiblingCandidate(existingClient, budget, today, busyMobiles);
+        if (pick) return { tier, ...pick };
+        continue;
+      }
+      const { query, sort } = tier === 3
+        ? buildTier3Query(existingClient.clientId, busyMobiles)
+        : buildTier4Query(existingClient.clientId, busyMobiles);
+      const candidates = await this.bufferClientService.executeQuery(query, sort, 10);
+      const healthy = await this.filterServingUsers(candidates);
+      this.logger.info(`[${existingClient.clientId}] Degraded tier ${tier} scan`, {
+        candidateCount: candidates.length,
+        healthyCount: healthy.length,
+      });
+      const candidate = await this.findSafeSetupBufferCandidate(healthy, existingClient.session, budget, probeAcceptanceForTier(tier));
+      if (candidate) return { tier, candidate };
+    }
+    return null;
+  }
+
+  /**
+   * Tier 2: a same-persona sibling (same dbcoll, other clientId) lends one tier-1-eligible spare,
+   * only while it keeps >= SIBLING_MIN_SPARES_AFTER USABLE spares. Usable = the tier-1 query plus
+   * the users checks (doc present, not expired, 2FA on) and a stored backup session distinct from
+   * the spare's own session, i.e. everything a real tier-1 pick checks except the SpamBot probe.
+   * Spares it might lose to a failed probe are counted as lost, so only the first
+   * (usable - SIBLING_MIN_SPARES_AFTER) are ever tried.
+   */
+  private async findSiblingCandidate(
+    existingClient: Client,
+    budget: SetupProbeBudget,
+    today: string,
+    busyMobiles: string[],
+  ): Promise<{ candidate: SafeSetupBufferCandidate; fromClientId: string } | null> {
+    const persona = (existingClient.dbcoll || '').trim().toLowerCase();
+    if (!persona) return null;
+    const siblings = (await this.findAll()).filter((client) =>
+      client.clientId !== existingClient.clientId && (client.dbcoll || '').trim().toLowerCase() === persona);
+    const ranked: Array<{ siblingId: string; spares: Awaited<ReturnType<BufferClientService['executeQuery']>> }> = [];
+    for (const sibling of siblings) {
+      const rows = await this.bufferClientService.executeQuery(
+        {
+          ...this.buildEligibleBufferQuery(sibling.clientId, { $nin: [...busyMobiles, sibling.mobile] }),
+          availableDate: { $lte: today },
+        },
+        { availableDate: 1, createdAt: 1 },
+      );
+      const spares = await this.filterServingUsers(rows, { requireDistinctBackup: true });
+      if (spares.length >= SIBLING_MIN_SPARES_AFTER + 1) ranked.push({ siblingId: sibling.clientId, spares });
+    }
+    ranked.sort((a, b) => b.spares.length - a.spares.length || a.siblingId.localeCompare(b.siblingId));
+    this.logger.info(`[${existingClient.clientId}] Degraded tier 2 scan`, {
+      siblings: siblings.map((s) => s.clientId),
+      lenders: ranked.map((r) => `${r.siblingId}:${r.spares.length}`),
+    });
+    for (const { siblingId, spares } of ranked) {
+      const tryable = spares.slice(0, spares.length - SIBLING_MIN_SPARES_AFTER);
+      const candidate = await this.findSafeSetupBufferCandidate(tryable, existingClient.session, budget, probeAcceptanceForTier(2));
+      if (candidate) return { candidate, fromClientId: siblingId };
+      if (budget.remaining <= 0) break;
+    }
+    return null;
+  }
+
+  /**
+   * Degraded tiers only: keep candidates whose users doc exists, is not expired and has 2FA on.
+   * requireDistinctBackup (sibling spare count) also needs a stored backup session that differs
+   * from the candidate's own session; read-only, it never creates one.
+   */
+  private async filterServingUsers<T extends { mobile: string; session?: string }>(
+    candidates: T[],
+    opts: { requireDistinctBackup?: boolean } = {},
+  ): Promise<T[]> {
+    const kept: T[] = [];
+    for (const candidate of candidates) {
+      try {
+        const user = (await this.usersService.findByMobileAnyStatus(candidate.mobile))?.[0];
+        const backup = user?.session?.trim();
+        const backupOk = !opts.requireDistinctBackup || (!!backup && backup !== (candidate.session || '').trim());
+        if (user && user.expired !== true && user.twoFA === true && backupOk) kept.push(candidate);
+        else this.logger.warn(`Skipping degraded candidate ${candidate.mobile}: users doc missing, expired, without 2FA${opts.requireDistinctBackup ? ' or without a distinct backup session' : ''}`);
+      } catch (error) {
+        this.logger.warn(`Skipping degraded candidate ${candidate.mobile}: users lookup failed (${parseError(error, '', false).message})`);
+      }
+    }
+    return kept;
+  }
+
+  /** One notice when a client becomes degraded, changes tier, borrows a sibling spare, or is cleared. */
+  private async notifyDegradedTransition(
+    clientId: string,
+    previous: Client,
+    newMobile: string,
+    plan: DegradedSwapPlan | null,
+    upgradeFromTier?: DegradedTier,
+  ): Promise<void> {
+    if (plan?.markerTier) {
+      const harsh = plan.markerTier === 4;
+      await this.notify({
+        severity: harsh ? 'critical' : 'warning',
+        title: upgradeFromTier ? 'Degraded upgrade' : 'Degraded swap',
+        summary: upgradeFromTier
+          ? `Moved from degraded tier ${upgradeFromTier} to tier ${plan.markerTier}`
+          : harsh
+            ? 'Dead main replaced by a HARSH-limited buffer (tier 4): inbound replies only until a better buffer exists'
+            : `Dead main replaced by a degraded buffer (tier ${plan.markerTier}); the swap-maintenance job will move it up`,
+        fields: [
+          { label: 'Client ID', value: clientId },
+          { label: 'Tier', value: String(plan.markerTier), code: false },
+          { label: 'New mobile', value: last4(newMobile) },
+          { label: 'Old mobile', value: last4(previous.mobile) },
+          { label: 'Limited until', value: plan.limitedUntil ? new Date(plan.limitedUntil).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : (harsh ? 'indefinite' : 'unknown'), code: false },
+          ...(plan.fromClientId ? [{ label: 'Borrowed from', value: plan.fromClientId }] : []),
+          { label: 'Reason', value: plan.reason.substring(0, 80), code: false },
+        ],
+      });
+      return;
+    }
+    if (plan?.fromClientId) {
+      // Tier 2 meets tier-1 rules: no marker, but the lender's pool shrank, so say so once.
+      await this.notify({
+        severity: 'warning',
+        title: 'Buffer borrowed',
+        summary: `Dead main replaced by a spare borrowed from ${plan.fromClientId} (meets tier-1 rules; no degraded marker)`,
+        fields: [
+          { label: 'Client ID', value: clientId },
+          { label: 'Borrowed from', value: plan.fromClientId },
+          { label: 'New mobile', value: last4(newMobile) },
+          { label: 'Old mobile', value: last4(previous.mobile) },
+          { label: 'Reason', value: plan.reason.substring(0, 80), code: false },
+        ],
+      });
+    }
+    if (previous.degraded) {
+      await this.notify({
+        severity: 'success',
+        title: 'Degraded cleared',
+        summary: `Moved from degraded tier ${previous.degraded.tier} to a normal (tier 1) buffer`,
+        fields: [
+          { label: 'Client ID', value: clientId },
+          { label: 'New mobile', value: last4(newMobile) },
+          { label: 'Old mobile', value: last4(previous.mobile) },
+        ],
+      });
+    }
+  }
+
+  /** Clients currently running on a degraded-swap account. */
+  async findDegradedClients(): Promise<Client[]> {
+    return this.clientModel.find({ degraded: { $exists: true, $ne: null } }).lean<Client[]>().exec();
+  }
+
+  /**
+   * Swap-maintenance job (every 30 min, run-claimed in the scheduler). Three passes over a fresh
+   * read of `clients`, each client handled by at most one pass per run:
+   *   1. rescue:  live-session evidence only: clients.deadMain for the CURRENT mobile with an owner
+   *               dead reason (tg-aut reported it via /setupClient). users / pool rows are never
+   *               evidence (CMS writes them when the BACKUP session fails). Waits
+   *               DEAD_MAIN_HANDOFF_WAIT_MS after the last report (tg-aut's handoff ladder runs
+   *               first), then runs the normal dead-reason setupClient (all configured tiers).
+   *   2. upgrade: degraded clients (alive). If the current account now meets tier-1 rules (its
+   *               limit expired, say) the marker is cleared without a swap (not an attempt);
+   *               otherwise only strictly better tiers are tried.
+   *   3. refill:  a main whose stored SpamBot verdict (at most MAIN_SPAM_STATUS_FRESH_MS old) says
+   *               limited/harsh, once a tier-1 buffer exists. Tier-1 rules only, reason POOL_REFILL.
+   * Every pass: at most 3 setup attempts per run (RESCUE / UPGRADE / POOL_REFILL _MAX_PER_RUN) and a
+   * per-client episode persisted on clients.swapRetry: 30 min doubling after each miss, hard stop
+   * after PASS_MAX_ATTEMPTS (one notice), re-armed only by a pool-fingerprint or mobile change. Job
+   * passes never create a backup session (jobPass). Every swap goes through runSetup: the same
+   * per-client lock, cross-process leases, 4-min cooldown, guards and notices as /setupClient. One
+   * client's error is a 'failed' row; it never aborts the run.
+   */
+  async runSwapMaintenance(): Promise<{ rescue: SwapMaintenanceResult[]; upgrade: SwapMaintenanceResult[]; refill: SwapMaintenanceResult[] }> {
+    const clients = await this.clientModel.find({}).lean<Client[]>().exec();
+    const states = new Map<string, Awaited<ReturnType<ClientService['readMainState']>>>();
+    for (const client of clients) {
+      if (client?.clientId && client.mobile) states.set(client.clientId, await this.readMainState(client));
+    }
+    const handled = new Set<string>();
+    const rescue = await this.rescueDeadMains(clients.filter((c) => states.get(c.clientId)?.dead), states, handled, clients);
+    const upgrade = await this.upgradeDegradedClients(
+      clients.filter((c) => !handled.has(c.clientId) && c.degraded && !states.get(c.clientId)?.dead),
+      states,
+      clients,
+    );
+    for (const row of upgrade) handled.add(row.clientId);
+    const refill = await this.refillLimitedMains(
+      clients.filter((c) => !handled.has(c.clientId) && !c.degraded && states.get(c.clientId)?.limited),
+      clients,
+    );
+    return { rescue, upgrade, refill };
+  }
+
+  /** What CMS knows about a client's current main, read fresh (no cache). Never touches Telegram. */
+  private async readMainState(client: Client): Promise<{
+    dead: boolean;
+    evidence?: string;
+    limited: boolean;
+    buffer: Awaited<ReturnType<BufferClientService['findOne']>> | null;
+    userExpired: boolean;
+  }> {
+    // Rescue evidence comes from the live session only (tg-aut's dead report), never from users /
+    // pool rows: CMS expires those when the BACKUP session (users[0].session) fails.
+    const dead = isDeadMainEvidence(client.deadMain, client.mobile);
+    const evidence = dead ? `tg-aut reported ${String(client.deadMain!.reason).substring(0, 120)}` : undefined;
+    let buffer: Awaited<ReturnType<BufferClientService['findOne']>> | null = null;
+    let users: User[] = [];
+    try {
+      buffer = (await this.bufferClientService.findOne(client.mobile, false)) ?? null;
+      users = (await this.usersService.findByMobileAnyStatus(client.mobile)) ?? [];
+    } catch (error) {
+      this.logger.warn(`[${client.clientId}] Could not read main state: ${parseError(error, '', false).message}`);
+      return { dead, evidence, limited: false, buffer: null, userExpired: false };
+    }
+    // Used by currentMeetsTier1 only (a degraded account with expired users docs is not "tier 1").
+    const userExpired = users.length > 0 && users.every((u) => u.expired === true);
+    const now = Date.now();
+    const limitedUntilMs = buffer?.limitedUntil ? new Date(buffer.limitedUntil).getTime() : 0;
+    const checkedAtMs = buffer?.spamCheckedAt ? new Date(buffer.spamCheckedAt).getTime() : 0;
+    // A stale verdict says nothing about today: refill trusts it only when fresh.
+    const fresh = checkedAtMs > 0 && now - checkedAtMs <= MAIN_SPAM_STATUS_FRESH_MS;
+    const limited = !dead && !!buffer && fresh && (
+      buffer.spamStatus === 'harsh' || (buffer.spamStatus === 'limited' && limitedUntilMs > now)
+    );
+    return { dead, evidence, limited, buffer, userExpired };
+  }
+
+  /**
+   * Fingerprint of the client's candidate pool (own pool + same-persona siblings). Read fresh; no
+   * Telegram. See swapPoolFingerprint for what changes it.
+   */
+  private async poolFingerprint(client: Client, clients: Client[]): Promise<string> {
+    const persona = (client.dbcoll || '').trim().toLowerCase();
+    const ids = new Set<string>([client.clientId]);
+    if (persona) {
+      for (const other of clients) {
+        if (other.clientId && (other.dbcoll || '').trim().toLowerCase() === persona) ids.add(other.clientId);
+      }
+    }
+    const rows = await this.bufferClientService.executeQuery({ clientId: { $in: [...ids] }, status: 'active' });
+    return swapPoolFingerprint(rows as unknown as PoolFingerprintRow[], Date.now(), ClientHelperUtils.getTodayDateString());
+  }
+
+  /** Where this client's rescue / upgrade / refill episode stands (persisted on clients.swapRetry). */
+  private async passDecision(pass: SwapRetryPass, client: Client, clients: Client[]): Promise<SwapRetryDecision> {
+    const decision = swapRetryDecision(client.swapRetry, pass, client.mobile, await this.poolFingerprint(client, clients), Date.now());
+    if (decision.kind === 'due' && decision.rearmed) {
+      this.logger.log(`[${client.clientId}] ${pass}: candidate pool changed since attempt ${client.swapRetry?.attempts}; episode re-armed`);
+    }
+    return decision;
+  }
+
+  /**
+   * Persist the outcome of one attempt. A swap ends the episode (the cutover also $unsets it). A
+   * miss counts; the PASS_MAX_ATTEMPTS-th miss is the hard stop with ONE notice. Guarded on the
+   * mobile so a concurrent cutover is never overwritten.
+   */
+  private async notePassOutcome(
+    pass: SwapRetryPass,
+    client: Client,
+    clients: Client[],
+    decision: Extract<SwapRetryDecision, { kind: 'due' }>,
+    swapped: boolean,
+  ): Promise<number> {
+    if (swapped) {
+      await this.clientModel.updateOne({ clientId: client.clientId, swapRetry: { $exists: true } }, { $unset: { swapRetry: '' } }).exec();
+      return 0;
+    }
+    const attempts = decision.attempts + 1;
+    const now = Date.now();
+    const stopped = attempts >= PASS_MAX_ATTEMPTS;
+    const keepSince = !decision.rearmed && decision.attempts > 0 && client.swapRetry?.since;
+    const state: ClientSwapRetryState = {
+      pass,
+      mobile: client.mobile,
+      attempts,
+      nextAt: new Date(now + passRetryDelayMs(attempts)),
+      // After the attempt: its own probes (spamStatus writes) must not count as a pool change.
+      poolFingerprint: await this.poolFingerprint(client, clients),
+      since: keepSince ? new Date(client.swapRetry!.since) : new Date(now),
+      stoppedAt: stopped ? new Date(now) : null,
+    };
+    const written = await this.clientModel.updateOne(
+      { clientId: client.clientId, mobile: client.mobile },
+      { $set: { swapRetry: state } },
+    ).exec();
+    if (stopped && (written.matchedCount || 0) === 1) {
+      const text = {
+        rescue: { severity: 'critical' as const, title: 'Rescue stopped', summary: `${client.clientId} stuck on dead main, rescue stopped after ${attempts} tries, will retry when the pool changes` },
+        upgrade: { severity: 'warning' as const, title: 'Upgrade stopped', summary: `${client.clientId} stays on its degraded (tier ${client.degraded?.tier ?? '?'}) account, upgrade stopped after ${attempts} tries, will retry when the pool changes` },
+        refill: { severity: 'warning' as const, title: 'Pool refill stopped', summary: `${client.clientId} stays on its SpamBot-limited main, pool refill stopped after ${attempts} tries, will retry when the pool changes` },
+      }[pass];
+      await this.notify({
+        ...text,
+        fields: [
+          { label: 'Client ID', value: client.clientId },
+          { label: 'Mobile', value: last4(client.mobile) },
+          { label: 'Since', value: state.since.toISOString() },
+        ],
+      });
+    }
+    return attempts;
+  }
+
+  /**
+   * One job attempt for one client: runSetup, then the episode bookkeeping. A CMS cooldown /
+   * another process's lease / a 'disabled' answer is not an attempt (nothing was probed).
+   */
+  private async runPassAttempt(
+    pass: SwapRetryPass,
+    client: Client,
+    all: Client[],
+    decision: Extract<SwapRetryDecision, { kind: 'due' }>,
+    request: SetupClientQueryDto,
+    internal: SetupInternalOptions,
+  ): Promise<SwapMaintenanceResult> {
+    let result: SetupClientResult;
+    try {
+      result = await this.runSetup(client.clientId, request, { ...internal, jobPass: true });
+    } catch (error) {
+      parseError(error, `[${client.clientId}] ${pass} failed`, false);
+      return { clientId: client.clientId, status: 'failed', attempts: await this.notePassOutcome(pass, client, all, decision, false) };
+    }
+    // Nothing was probed: CMS cooldown / another process's lease, or AUTO_CLIENT_SETUP off.
+    if (result.status === 'cooldown' || result.status === 'disabled') return { clientId: client.clientId, status: result.status };
+    const used = await this.notePassOutcome(pass, client, all, decision, result.swapped);
+    return {
+      clientId: client.clientId,
+      status: result.status,
+      ...(result.swapped ? {} : { attempts: used }),
+      ...(decision.rearmed ? { rearmed: true } : {}),
+      ...(result.degradedTier ? { degradedTier: result.degradedTier } : {}),
+      ...(result.newMobile ? { newMobile: result.newMobile } : {}),
+    };
+  }
+
+  private async rescueDeadMains(
+    clients: Client[],
+    states: Map<string, Awaited<ReturnType<ClientService['readMainState']>>>,
+    handled: Set<string>,
+    all: Client[],
+  ): Promise<SwapMaintenanceResult[]> {
+    const results: SwapMaintenanceResult[] = [];
+    let attempts = 0;
+    for (const client of clients) {
+      handled.add(client.clientId); // a dead main is never upgraded or refilled
+      if (attempts >= RESCUE_MAX_PER_RUN) break;
+      try {
+        const reportedAt = client.deadMain?.at ? new Date(client.deadMain.at).getTime() : 0;
+        if (Date.now() - reportedAt < DEAD_MAIN_HANDOFF_WAIT_MS) {
+          // tg-aut's own handoff ladder for this report is still running: let it finish.
+          results.push({ clientId: client.clientId, status: 'waiting_handoff' });
+          continue;
+        }
+        const decision = await this.passDecision('rescue', client, all);
+        if (decision.kind !== 'due') {
+          results.push({ clientId: client.clientId, status: decision.kind === 'stopped' ? 'stopped' : 'skipped_cooldown', attempts: decision.attempts });
+          continue;
+        }
+        attempts++;
+        const evidence = states.get(client.clientId)?.evidence || String(client.deadMain?.reason);
+        this.logger.warn(`[${client.clientId}] Rescue: current main ${client.mobile} is dead (${evidence}); running setupClient`);
+        const row = await this.runPassAttempt('rescue', client, all, decision,
+          { days: 0, archiveOld: false, formalities: false, reason: `${DEAD_MAIN_RESCUE_REASON}: ${client.deadMain!.reason}` }, {});
+        results.push({ ...row, ...(client.degraded?.tier ? { fromTier: client.degraded.tier } : {}) });
+      } catch (error) {
+        parseError(error, `[${client.clientId}] rescue failed`, false);
+        results.push({ clientId: client.clientId, status: 'failed' });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Upgrade pass: for each degraded (alive) client, clear the marker when the current account now
+   * meets tier-1 rules (not an attempt), else look for a strictly better tier and swap up (at most
+   * UPGRADE_MAX_PER_RUN attempts per run, same episode backoff + hard stop as rescue). The current
+   * account is alive, so a swap is a normal one: the degraded account returns to the pool
+   * (archiveOld) with its availableDate held to its limit. Sequential, one client at a time.
+   */
+  async upgradeDegradedClients(
+    clients?: Client[],
+    states?: Map<string, Awaited<ReturnType<ClientService['readMainState']>>>,
+    all?: Client[],
+  ): Promise<SwapMaintenanceResult[]> {
+    const results: SwapMaintenanceResult[] = [];
+    const list = clients ?? await this.findDegradedClients();
+    const pool = all ?? await this.clientModel.find({}).lean<Client[]>().exec();
+    let attempts = 0;
+    for (const client of list) {
+      const fromTier = client.degraded?.tier;
+      if (fromTier !== 2 && fromTier !== 3 && fromTier !== 4) continue;
+      try {
+        const state = states?.get(client.clientId) ?? await this.readMainState(client);
+        if (this.currentMeetsTier1(client, state)) {
+          const cleared = await this.clientModel.updateOne(
+            { clientId: client.clientId, mobile: client.mobile, degraded: { $exists: true } },
+            { $unset: { degraded: '', swapRetry: '' } },
+          ).exec();
+          if ((cleared.modifiedCount || 0) === 1) {
+            const cached = this.clientsMap.get(client.clientId);
+            if (cached) {
+              const { degraded: _dropped, ...rest } = cached;
+              this.clientsMap.set(client.clientId, rest as Client);
+            }
+            await this.notify({
+              severity: 'success',
+              title: 'Degraded cleared',
+              summary: `Current account now meets tier-1 rules (was degraded tier ${fromTier}); kept, no swap`,
+              fields: [{ label: 'Client ID', value: client.clientId }, { label: 'Mobile', value: last4(client.mobile) }],
+            });
+            results.push({ clientId: client.clientId, fromTier, status: 'cleared' });
+          }
+          continue;
+        }
+        if (attempts >= UPGRADE_MAX_PER_RUN) continue; // clears above still run for every client
+        const decision = await this.passDecision('upgrade', client, pool);
+        if (decision.kind !== 'due') {
+          results.push({ clientId: client.clientId, fromTier, status: decision.kind === 'stopped' ? 'stopped' : 'skipped_cooldown', attempts: decision.attempts });
+          continue;
+        }
+        attempts++;
+        const row = await this.runPassAttempt('upgrade', client, pool, decision,
+          { days: 0, archiveOld: true, formalities: true, reason: DEGRADED_UPGRADE_REASON }, { upgradeFromTier: fromTier });
+        results.push({ ...row, fromTier });
+      } catch (error) {
+        parseError(error, `[${client.clientId}] degraded upgrade failed`, false);
+        results.push({ clientId: client.clientId, fromTier, status: 'failed' });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Tier-1 rules applied to the CURRENT (in-use) account, from stored state only: CMS never probes
+   * a live main (a second connection on a non-renewable session). A stale harsh verdict does not
+   * count as cleared (tier 1 would re-probe it; we cannot).
+   */
+  private currentMeetsTier1(client: Client, state: Awaited<ReturnType<ClientService['readMainState']>>): boolean {
+    const buffer = state.buffer;
+    if (!buffer || state.dead || state.userExpired) return false;
+    const now = Date.now();
+    const markerUntil = client.degraded?.limitedUntil ? new Date(client.degraded.limitedUntil).getTime() : 0;
+    const docUntil = buffer.limitedUntil ? new Date(buffer.limitedUntil).getTime() : 0;
+    const createdAt = (buffer as { createdAt?: Date | string }).createdAt;
+    return buffer.clientId === client.clientId
+      && buffer.status === 'active'
+      && buffer.warmupPhase === WarmupPhase.SESSION_ROTATED
+      && (buffer.channels ?? 0) >= MIN_CHANNELS_FOR_MATURING
+      && (!createdAt || new Date(createdAt).getTime() <= now - 15 * 24 * 60 * 60 * 1000)
+      && buffer.spamStatus !== 'harsh'
+      && docUntil <= now
+      && markerUntil <= now;
+  }
+
+  /** Pool-refill pass: swap a SpamBot-limited (alive, not degraded) main once a tier-1 buffer exists. */
+  private async refillLimitedMains(clients: Client[], all: Client[]): Promise<SwapMaintenanceResult[]> {
+    const results: SwapMaintenanceResult[] = [];
+    const today = ClientHelperUtils.getTodayDateString();
+    let attempts = 0;
+    for (const client of clients) {
+      if (attempts >= POOL_REFILL_MAX_PER_RUN) break;
+      try {
+        const decision = await this.passDecision('refill', client, all);
+        if (decision.kind !== 'due') {
+          results.push({ clientId: client.clientId, status: decision.kind === 'stopped' ? 'stopped' : 'skipped_cooldown', attempts: decision.attempts });
+          continue;
+        }
+        // Cheap pre-check (no probe, no notice): only ask setupClient when a tier-1 row exists.
+        const busy = await this.busyCandidateMobiles(client.clientId, client.mobile);
+        const spare = await this.bufferClientService.executeQuery(
+          { ...this.buildEligibleBufferQuery(client.clientId, { $nin: busy }), availableDate: { $lte: today } },
+          undefined,
+          1,
+        );
+        if (!spare.length) continue;
+        attempts++;
+        results.push(await this.runPassAttempt('refill', client, all, decision,
+          { days: 0, archiveOld: true, formalities: true, reason: POOL_REFILL_REASON }, {}));
+      } catch (error) {
+        parseError(error, `[${client.clientId}] pool refill failed`, false);
+        results.push({ clientId: client.clientId, status: 'failed' });
+      }
+    }
+    return results;
+  }
+
+  /** Mobiles that may never be a swap candidate for `clientId` (see handleSetupClient). */
+  private async busyCandidateMobiles(clientId: string, existingMobile: string): Promise<string[]> {
+    const busy = new Set<string>([existingMobile]);
+    for (const mobile of this.telegramService.getActiveClientSetupMobiles()) busy.add(mobile);
+    for (const client of await this.findAll()) {
+      if (client.clientId !== clientId && client.mobile) busy.add(client.mobile);
+    }
+    return [...busy];
+  }
+
+  /** True when `mobile` has an in-flight setup registered by a different client. */
+  private setupOwnedByAnotherClient(mobile: string, clientId: string): boolean {
+    const setup = this.telegramService.getActiveClientSetup(mobile);
+    return !!setup && setup.newMobile === mobile && setup.clientId !== clientId;
+  }
+
+  /** The clientId whose live main is `mobile`, ANY client including the caller (fresh read, no cache). */
+  private async clientUsingMobile(mobile: string): Promise<string | null> {
+    try {
+      const owner = await this.clientModel.findOne({ mobile }, { clientId: 1, mobile: 1 }).lean<Pick<Client, 'clientId' | 'mobile'>>().exec();
+      return owner && owner.mobile === mobile ? owner.clientId : null;
+    } catch (error) {
+      this.logger.warn(`Could not check the owner of ${mobile}: ${parseError(error, '', false).message}`);
+      // Unknown owner: treat as taken, so a failure path never touches a possibly-live main.
+      return 'unknown';
+    }
+  }
+
+  /** The degraded plan of THIS client's in-flight cutover of `mobile` (never another client's). */
+  private degradedPlanFor(clientId: string, mobile: string): DegradedSwapPlan | null {
+    const plan = this.degradedPlans.get(`${clientId}:${mobile}`);
+    return plan && plan.clientId === clientId ? plan : null;
+  }
+
+  /**
+   * Daily summary: every degraded client, plus clients with zero tier-1-eligible spares (the next
+   * dead account there would go degraded). Sends nothing when both lists are empty.
+   */
+  async sendDegradedSummary(): Promise<{ degraded: number; emptyPools: number; stuck: number }> {
+    const degraded = await this.findDegradedClients();
+    // Rescue / refill episodes at the hard stop, still on the same main (a new main ends the episode).
+    const stuck = (await this.clientModel.find({ 'swapRetry.stoppedAt': { $ne: null } }).lean<Client[]>().exec())
+      .filter((c) => c.swapRetry?.stoppedAt && c.swapRetry.mobile === c.mobile);
+    const today = ClientHelperUtils.getTodayDateString();
+    const emptyPools: string[] = [];
+    for (const client of await this.findAll()) {
+      const spares = await this.bufferClientService.executeQuery(
+        { ...this.buildEligibleBufferQuery(client.clientId, { $ne: client.mobile }), availableDate: { $lte: today } },
+        undefined,
+        1,
+      );
+      if (!spares.length) emptyPools.push(client.clientId);
+    }
+    if (!degraded.length && !emptyPools.length && !stuck.length) return { degraded: 0, emptyPools: 0, stuck: 0 };
+    const tables: NotificationTable[] = [];
+    if (degraded.length) {
+      tables.push({
+        title: 'Degraded clients',
+        columns: ['Client', 'Tier', 'Mobile', 'Since', 'Limited until'],
+        rows: degraded.map((c) => [
+          c.clientId,
+          String(c.degraded?.tier ?? '?'),
+          last4(c.mobile),
+          c.degraded?.since ? new Date(c.degraded.since).toISOString().slice(0, 10) : '?',
+          c.degraded?.limitedUntil ? new Date(c.degraded.limitedUntil).toISOString().slice(0, 10) : (c.degraded?.tier === 4 ? 'indefinite' : '-'),
+        ]),
+      });
+    }
+    if (emptyPools.length) {
+      tables.push({ title: 'No eligible spare (pool empty)', columns: ['Client'], rows: emptyPools.map((id) => [id]) });
+    }
+    if (stuck.length) {
+      tables.push({
+        title: 'Stuck (retries stopped until the pool changes)',
+        columns: ['Client', 'Pass', 'Mobile', 'Tries', 'Stopped'],
+        rows: stuck.map((c) => [
+          c.clientId,
+          c.swapRetry!.pass,
+          last4(c.mobile),
+          String(c.swapRetry!.attempts),
+          new Date(c.swapRetry!.stoppedAt!).toISOString().slice(0, 16),
+        ]),
+      });
+    }
+    const deadStuck = stuck.some((c) => c.swapRetry?.pass === 'rescue');
+    await this.notify({
+      severity: deadStuck || degraded.some((c) => c.degraded?.tier === 4) ? 'error' : 'warning',
+      title: 'Degraded daily',
+      summary: `${degraded.length} degraded client(s); ${emptyPools.length} client(s) with no eligible spare; ${stuck.length} stuck client(s)`,
+      tables,
+    });
+    return { degraded: degraded.length, emptyPools: emptyPools.length, stuck: stuck.length };
   }
 
   private async assertDistinctUserBackupSession(mobile: string, activeSession: string): Promise<User> {

@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { Document } from 'mongoose';
 import { canonicalizeMobile } from '../../shared/mobile-utils';
+import type { ClientDeadMainState, ClientDegradedState, ClientSwapRetryState, SwapLease } from '../degraded-swap';
 
 export type ClientDocument = Client & Document;
 
@@ -108,6 +109,54 @@ export class Client {
     @ApiProperty({ description: 'Profile pic URL pool', required: false })
     @Prop({ required: false, type: [String], default: [] })
     profilePics: string[];
+
+    @ApiProperty({
+        description: 'Set while the client runs on a degraded-swap account (tier 2-4); cleared by the next tier-1 swap. Not returned by masked endpoints.',
+        required: false,
+        type: Object,
+    })
+    @Prop({ required: false, type: Object, default: undefined })
+    degraded?: ClientDegradedState | null;
+
+    @ApiProperty({
+        description: 'Rescue / pool-refill episode of the swap-maintenance job (attempts, next try, hard stop). Not returned by masked endpoints.',
+        required: false,
+        type: Object,
+    })
+    @Prop({ required: false, type: Object, default: undefined })
+    swapRetry?: ClientSwapRetryState | null;
+
+    @ApiProperty({
+        description: 'Set when tg-aut (the live session) reported the current main dead via /setupClient; the only evidence the rescue pass acts on. Cleared by the next swap or mobile change. Not returned by masked endpoints.',
+        required: false,
+        type: Object,
+    })
+    @Prop({ required: false, type: Object, default: undefined })
+    deadMain?: ClientDeadMainState | null;
+
+    @ApiProperty({
+        description: 'Cross-process setupClient lease (owner host:pid:uuid, until). Not returned by masked endpoints.',
+        required: false,
+        type: Object,
+    })
+    @Prop({ required: false, type: Object, default: undefined })
+    swapLease?: SwapLease | null;
+
+    @ApiProperty({
+        description: 'Time of the last setupClient cutover. Reports without reportedMobile are ignored for SWAP_REPORT_GRACE_MS after it (they may come from the replaced process). Not returned by masked endpoints.',
+        required: false,
+        type: Date,
+    })
+    @Prop({ required: false, type: Date, default: undefined })
+    swappedAt?: Date | null;
+
+    @ApiProperty({
+        description: 'Time of the last session-only change by update(). Reports for the same mobile are ignored for SWAP_REPORT_GRACE_MS after it (the running process may still hold the old session). Cleared by a cutover. Not returned by masked endpoints.',
+        required: false,
+        type: Date,
+    })
+    @Prop({ required: false, type: Date, default: undefined })
+    sessionChangedAt?: Date | null;
 
 }
 

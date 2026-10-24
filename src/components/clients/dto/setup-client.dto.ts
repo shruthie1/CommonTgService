@@ -39,4 +39,16 @@ export class SetupClientQueryDto {
     @IsOptional()
     @IsString()
     reason?: string;
+
+    @ApiPropertyOptional({
+        description: 'The mobile the calling tg-aut process runs on. When present and not the client\'s current main, CMS answers stale_report and does nothing (a late report from a replaced process). Not validated strictly: an unparseable value counts as absent.',
+    })
+    // Never a 400: a repeated param (Express array) takes its first element; any other non-string is absent.
+    @IsOptional()
+    @Transform(({ value }: TransformFnParams) => {
+        const first = Array.isArray(value) ? value[0] : value;
+        return typeof first === 'string' ? first : undefined;
+    })
+    @IsString()
+    reportedMobile?: string;
 }

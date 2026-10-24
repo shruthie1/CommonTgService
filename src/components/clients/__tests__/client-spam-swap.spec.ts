@@ -25,7 +25,7 @@ describe('spam-aware setupClient swap', () => {
     };
     const svc = new ClientService(
       clientModel as any,
-      { setActiveClientSetup: jest.fn(), clearActiveClientSetup: jest.fn() } as any,
+      { setActiveClientSetup: jest.fn(), clearActiveClientSetup: jest.fn(), getActiveClientSetup: jest.fn(), getActiveClientSetupMobiles: jest.fn(() => []) } as any,
       bufferClientService,
       { search: jest.fn(), update: jest.fn(), expireAccount: jest.fn() } as any,
     );
@@ -54,8 +54,10 @@ describe('spam-aware setupClient swap', () => {
       bufferClientService.executeQuery.mockResolvedValue([]);
       await (makeService() as any).handleSetupClient('c1', { days: 0, archiveOld: false, formalities: false, reason: 'FROZEN_METHOD_INVALID' });
 
-      expect(bufferClientService.executeQuery).toHaveBeenCalledTimes(2);
-      for (const [query] of bufferClientService.executeQuery.mock.calls) {
+      // Calls 1-2 are tier 1 (due + permanent-future). A dead reason then scans the degraded tiers
+      // 3 and 4 (calls 3-4), which deliberately select limited / harsh accounts (degraded-swap spec).
+      expect(bufferClientService.executeQuery).toHaveBeenCalledTimes(4);
+      for (const [query] of bufferClientService.executeQuery.mock.calls.slice(0, 2)) {
         const [notHarsh, notLimited] = query.$and;
         expect(notHarsh.$or).toEqual(expect.arrayContaining([
           { spamStatus: { $ne: 'harsh' } }, { spamCheckedAt: { $lte: expect.any(Date) } },

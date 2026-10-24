@@ -23,7 +23,7 @@ describe('ClientService session separation safeguards', () => {
     }) {
         return new ClientService(
             overrides?.clientModel || ({} as any),
-            overrides?.telegramService || { createNewSession: jest.fn() },
+            overrides?.telegramService || { createNewSession: jest.fn(), getActiveClientSetup: jest.fn(), getActiveClientSetupMobiles: jest.fn(() => []) },
             overrides?.bufferClientService || {
                 executeQuery: jest.fn(),
                 createOrUpdate: jest.fn(),
@@ -232,6 +232,8 @@ describe('ClientService session separation safeguards', () => {
         const telegramService = {
             setActiveClientSetup: jest.fn(),
             clearActiveClientSetup: jest.fn(),
+            getActiveClientSetup: jest.fn(),
+            getActiveClientSetupMobiles: jest.fn(() => []),
         };
         const service = makeService({ clientModel, bufferClientService, telegramService });
         (service as any).isInitialized = true;
