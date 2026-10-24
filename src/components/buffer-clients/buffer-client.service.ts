@@ -57,6 +57,22 @@ import {
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
+import type { AvailabilityNeeds } from '../shared/base-client.service';
+import {
+    allocateByNeed,
+    BufferSupplyConfig,
+    BufferSupplyConfigResult,
+    CapClassifiableDoc,
+    CapCountedKind,
+    CapExclusionReason,
+    classifyBufferForCap,
+    classifyOptionsFromConfig,
+    computeClientSupplyTarget,
+    computeFleetEnrollmentBudget,
+    engineWeeklyCeiling,
+    LEGACY_HEALTHY_CAP,
+    readBufferSupplyConfig,
+} from './buffer-supply';
 
 type ClientCount = { _id: string; count: number };
 type EnrollmentDecision = {
@@ -72,9 +88,45 @@ type EnrollmentDecision = {
     priority: number;
     replenishmentWindows: WindowNeed[];
     shortTermWindows: WindowNeed[];
+    supply?: Record<string, unknown>;
     wouldEnroll?: number;
     cappedReason?: string | null;
     blockedReason?: string;
+};
+type BufferSupplyPlanEntry = {
+    clientId: string;
+    counted: number;
+    countedByKind: Record<CapCountedKind, number>;
+    excluded: Partial<Record<CapExclusionReason, number>>;
+    /** Graduated mobiles without a trusted SpamBot verdict (never checked / stale free). */
+    needsSpamCheck: string[];
+    consumed: number;
+    ratePerDay: number;
+    target: number;
+    cap: number;
+    windowNeed: number;
+    need: number;
+    allocated: number;
+    priority: number;
+    reason: string;
+    availability: AvailabilityNeeds;
+};
+export type BufferSupplyPlan = {
+    mode: BufferSupplyConfig['mode'];
+    invalidConfig: string[];
+    config: BufferSupplyConfig;
+    fleet: {
+        budget: number;
+        weeklyRemaining: number | null;
+        pipelineCapacity: number | null;
+        pipelineRemaining: number | null;
+        enrolledLast7d: number | null;
+        fleetWarming: number | null;
+        weeklyCeiling: number | null;
+    };
+    entries: BufferSupplyPlanEntry[];
+    countedPerClient: Map<string, number>;
+    capPerClient: Map<string, number>;
 };
 type ClientNeed = { clientId: string; totalNeeded: number; priority: number };
 type Allocation = { clientId: string; allocated: number; priority: number };
@@ -232,6 +284,183 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // progressing. Only permanent Telegram failures (via failedAttempts / deactivateClient)
         // remove an account — never elapsed time.
         return true;
+    }
+
+    /** BUFFER_SUPPLY_* config (process.env = the Mongo configuration doc), fail-closed to legacy. */
+    getBufferSupplyConfig(): BufferSupplyConfigResult {
+        return readBufferSupplyConfig(
+            process.env,
+            engineWeeklyCeiling(this.MAX_SENSITIVE_ACTIONS_PER_CYCLE, this.WARMUP_RUNS_PER_DAY),
+        );
+    }
+
+    /**
+     * Per-client enrolment plan. Dynamic mode: count only usable-now-or-soon accounts
+     * (classifyBufferForCap), size each client's target to its own recent swaps, and share the run's
+     * enrolment budget (bounded by the warmup engine ceiling) by need. Legacy mode reproduces the
+     * pre-2026-10-24 computation exactly (old cap counting, cap 20, window need, priority order).
+     */
+    async buildBufferSupplyPlan(clients: Array<Pick<Client, 'clientId'>>, now: number = Date.now()): Promise<BufferSupplyPlan> {
+        const { config, invalid } = this.getBufferSupplyConfig();
+        const operationalFloor = this.config.operationalChannelThreshold ?? 200;
+        const classifyOptions = classifyOptionsFromConfig(config, operationalFloor, this.MAX_FAILED_ATTEMPTS);
+        const assigned = await this.bufferClientModel
+            .find(
+                { clientId: { $exists: true, $ne: null }, status: 'active' },
+                {
+                    mobile: 1, clientId: 1, warmupPhase: 1, channels: 1, failedUpdateAttempts: 1, inUse: 1,
+                    spamStatus: 1, limitedUntil: 1, spamCheckedAt: 1,
+                },
+            )
+            .exec() as unknown as Array<CapClassifiableDoc & { mobile?: string; clientId?: string }>;
+
+        const countedPerClient = new Map<string, number>();
+        const capPerClient = new Map<string, number>();
+        const perClient = new Map<string, {
+            counted: Record<CapCountedKind, number>;
+            excluded: Partial<Record<CapExclusionReason, number>>;
+            needsSpamCheck: string[];
+        }>();
+        let fleetWarming = 0;
+        for (const doc of assigned) {
+            if (!doc.clientId) continue;
+            let bucket = perClient.get(doc.clientId);
+            if (!bucket) {
+                bucket = { counted: { usable: 0, limited_soon: 0, pipeline: 0 }, excluded: {}, needsSpamCheck: [] };
+                perClient.set(doc.clientId, bucket);
+            }
+            if (config.mode === 'legacy') {
+                if (this.isHealthyBufferClientForCap(doc as Partial<BufferClientDocument>, now)) {
+                    countedPerClient.set(doc.clientId, (countedPerClient.get(doc.clientId) || 0) + 1);
+                }
+                continue;
+            }
+            const verdict = classifyBufferForCap(doc, now, classifyOptions);
+            if ('kind' in verdict) {
+                bucket.counted[verdict.kind] += 1;
+                countedPerClient.set(doc.clientId, (countedPerClient.get(doc.clientId) || 0) + 1);
+                if (verdict.kind === 'pipeline') fleetWarming += 1;
+            } else {
+                const reason = verdict.reason;
+                bucket.excluded[reason] = (bucket.excluded[reason] || 0) + 1;
+                // Never-checked / stale-free graduates get their SpamBot check on the swap path
+                // (setupClient probes every candidate without a fresh free verdict); listed so ops can see them.
+                if ((reason === 'never_checked' || reason === 'stale_free') && doc.mobile) {
+                    bucket.needsSpamCheck.push(doc.mobile);
+                }
+            }
+        }
+
+        const consumedPerClient = new Map<string, number>();
+        let enrolledLast7d = 0;
+        if (config.mode === 'dynamic') {
+            const since = new Date(now - config.consumptionWindowDays * this.ONE_DAY_MS);
+            // Swap-outs per client: setupClient stamps lastUsed on the replaced main whether it returns
+            // to the pool or is inactivated, so any-status docs with a recent lastUsed = recent swaps.
+            const consumedRows: ClientCount[] = await this.bufferClientModel.aggregate<ClientCount>([
+                { $match: { clientId: { $exists: true, $ne: null }, lastUsed: { $gte: since } } },
+                { $group: { _id: '$clientId', count: { $sum: 1 } } },
+            ]);
+            for (const row of consumedRows || []) consumedPerClient.set(row._id, row.count);
+            enrolledLast7d = await this.bufferClientModel.countDocuments({ enrolledAt: { $gte: new Date(now - 7 * this.ONE_DAY_MS) } });
+        }
+
+        const entries: BufferSupplyPlanEntry[] = [];
+        for (const client of clients) {
+            const availability = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
+            const counted = countedPerClient.get(client.clientId) || 0;
+            const bucket = perClient.get(client.clientId) || { counted: { usable: 0, limited_soon: 0, pipeline: 0 }, excluded: {}, needsSpamCheck: [] };
+            if (config.mode === 'legacy') {
+                const cap = LEGACY_HEALTHY_CAP;
+                const remaining = Math.max(0, cap - counted);
+                const need = Math.min(availability.totalNeeded, remaining);
+                capPerClient.set(client.clientId, cap);
+                entries.push({
+                    clientId: client.clientId, counted, countedByKind: bucket.counted, excluded: bucket.excluded,
+                    needsSpamCheck: [], consumed: 0, ratePerDay: 0, target: this.config.minTotalClients, cap,
+                    windowNeed: availability.totalNeeded, need, allocated: 0, priority: availability.priority,
+                    reason: need < availability.totalNeeded
+                        ? `${availability.calculationReason}; capped to remaining healthy capacity ${remaining}/${cap}`
+                        : availability.calculationReason,
+                    availability,
+                });
+                continue;
+            }
+            const consumed = consumedPerClient.get(client.clientId) || 0;
+            const target = computeClientSupplyTarget({ consumed, counted }, config);
+            const remaining = Math.max(0, target.cap - counted);
+            const need = Math.min(remaining, Math.max(target.need, availability.totalNeeded));
+            capPerClient.set(client.clientId, target.cap);
+            entries.push({
+                clientId: client.clientId, counted, countedByKind: bucket.counted, excluded: bucket.excluded,
+                needsSpamCheck: bucket.needsSpamCheck, consumed, ratePerDay: target.ratePerDay, target: target.target,
+                cap: target.cap, windowNeed: availability.totalNeeded, need, allocated: 0, priority: availability.priority,
+                reason: `supply ${counted}/${target.target} (cap ${target.cap}; ${consumed} swaps in ${config.consumptionWindowDays}d)`,
+                availability,
+            });
+        }
+
+        let fleet: BufferSupplyPlan['fleet'];
+        if (config.mode === 'legacy') {
+            // Old allocation: priority order, first come first served up to the per-run maximum.
+            let left = this.config.maxNewClientsPerTrigger;
+            for (const entry of [...entries].sort((a, b) => a.priority - b.priority)) {
+                if (left <= 0) break;
+                if (entry.need <= 0) continue;
+                entry.allocated = Math.min(entry.need, left);
+                left -= entry.allocated;
+            }
+            fleet = { budget: this.config.maxNewClientsPerTrigger, weeklyRemaining: null, pipelineCapacity: null, pipelineRemaining: null, enrolledLast7d: null, fleetWarming: null, weeklyCeiling: null };
+        } else {
+            const budget = computeFleetEnrollmentBudget({
+                maxNewPerRun: this.config.maxNewClientsPerTrigger,
+                weeklyCeiling: config.fleetWeeklyCeiling,
+                enrolledLast7d,
+                fleetWarming,
+                leadTimeDays: config.leadTimeDays,
+            });
+            const allocation = allocateByNeed(entries.map((e) => ({ clientId: e.clientId, need: e.need, target: e.target })), budget.budget);
+            for (const entry of entries) entry.allocated = allocation.get(entry.clientId) || 0;
+            fleet = { ...budget, enrolledLast7d, fleetWarming, weeklyCeiling: config.fleetWeeklyCeiling };
+        }
+
+        // Dynamic enrolment order = most-starved first (allocation order is by need share, then need).
+        // Legacy keeps the old priority order.
+        const ordered = config.mode === 'legacy' ? [...entries].sort((a, b) => a.priority - b.priority) : [...entries].sort((a, b) =>
+            (b.allocated / Math.max(1, b.target)) - (a.allocated / Math.max(1, a.target))
+            || b.need - a.need
+            || a.priority - b.priority
+            || a.clientId.localeCompare(b.clientId));
+        return { mode: config.mode, invalidConfig: invalid, config, fleet, entries: ordered, countedPerClient, capPerClient };
+    }
+
+    /** Ops audit line per client + one fleet line. grep "Buffer supply plan". */
+    private logBufferSupplyPlan(plan: BufferSupplyPlan): void {
+        if (plan.invalidConfig.length) {
+            this.logger.warn(`Buffer supply config invalid, using legacy enrolment: ${plan.invalidConfig.join(', ')}`);
+        }
+        for (const entry of plan.entries) {
+            this.logger.info(`[${entry.clientId}] Buffer supply plan`, {
+                mode: plan.mode,
+                counted: entry.counted,
+                countedByKind: entry.countedByKind,
+                excluded: entry.excluded,
+                needsSpamCheck: entry.needsSpamCheck,
+                consumed: entry.consumed,
+                ratePerDay: Number(entry.ratePerDay.toFixed(2)),
+                target: entry.target,
+                cap: entry.cap,
+                windowNeed: entry.windowNeed,
+                need: entry.need,
+                allocated: entry.allocated,
+            });
+        }
+        this.logger.info('Buffer supply plan (fleet)', {
+            mode: plan.mode,
+            ...plan.fleet,
+            totalNeed: plan.entries.reduce((sum, e) => sum + e.need, 0),
+            totalAllocated: plan.entries.reduce((sum, e) => sum + e.allocated, 0),
+        });
     }
 
     // ---- Abstract implementations ----
@@ -1093,70 +1322,54 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
             .exec();
 
-        const healthyBufferClientsPerClient = new Map<string, number>();
-        for (const doc of assignedBufferClients) {
-            if (!doc.clientId) continue;
-            if (!this.isHealthyBufferClientForCap(doc, now)) continue;
-            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
-        }
-
+        const plan = await this.buildBufferSupplyPlan(clients, now);
         const perClientDecisions: EnrollmentDecision[] = [];
-        const clientsNeedingBufferClients: ClientNeed[] = [];
-
-        for (const client of clients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
-            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
-
+        const allocations: Allocation[] = [];
+        let totalSlotsNeeded = 0;
+        for (const entry of plan.entries) {
+            const availabilityNeeds = entry.availability;
+            const remainingCapacity = Math.max(0, entry.cap - entry.counted);
             const decision: EnrollmentDecision = {
-                clientId: client.clientId,
-                healthyCount,
-                healthyCap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+                clientId: entry.clientId,
+                healthyCount: entry.counted,
+                healthyCap: entry.cap,
                 remainingCapacity,
                 readyActive: availabilityNeeds.readyActive,
                 warmingPipeline: availabilityNeeds.warmingPipeline,
                 totalActive: availabilityNeeds.totalActive,
-                totalNeeded: availabilityNeeds.totalNeeded,
-                calculationReason: availabilityNeeds.calculationReason,
+                totalNeeded: entry.need,
+                calculationReason: entry.reason,
                 priority: availabilityNeeds.priority,
                 replenishmentWindows: availabilityNeeds.replenishmentWindowNeeds,
                 shortTermWindows: availabilityNeeds.windowNeeds,
+                supply: {
+                    countedByKind: entry.countedByKind,
+                    excluded: entry.excluded,
+                    needsSpamCheck: entry.needsSpamCheck,
+                    consumed: entry.consumed,
+                    ratePerDay: entry.ratePerDay,
+                    target: entry.target,
+                    windowNeed: entry.windowNeed,
+                },
+                wouldEnroll: entry.allocated,
             };
-
-            if (availabilityNeeds.totalNeeded > 0 && remainingCapacity > 0) {
-                const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
-                decision.wouldEnroll = cappedNeeded;
-                decision.cappedReason = cappedNeeded < availabilityNeeds.totalNeeded
-                    ? `capped from ${availabilityNeeds.totalNeeded} to ${cappedNeeded} by healthy cap`
-                    : null;
-                clientsNeedingBufferClients.push({
-                    clientId: client.clientId,
-                    totalNeeded: cappedNeeded,
-                    priority: availabilityNeeds.priority,
-                });
-            } else if (availabilityNeeds.totalNeeded > 0) {
-                decision.wouldEnroll = 0;
-                decision.blockedReason = `healthy cap reached (${healthyCount}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT})`;
+            const wanted = Math.max(entry.windowNeed, plan.mode === 'dynamic' ? Math.max(0, entry.target - entry.counted) : 0);
+            if (entry.allocated > 0) {
+                decision.cappedReason = entry.allocated < entry.need
+                    ? `capped from ${entry.need} to ${entry.allocated} by the fleet enrolment budget`
+                    : entry.need < wanted ? `capped from ${wanted} to ${entry.need} by healthy cap` : null;
+                allocations.push({ clientId: entry.clientId, allocated: entry.allocated, priority: entry.priority });
+                totalSlotsNeeded += entry.allocated;
+            } else if (wanted > 0 && remainingCapacity <= 0) {
+                decision.blockedReason = `healthy cap reached (${entry.counted}/${entry.cap})`;
+            } else if (entry.need > 0) {
+                decision.blockedReason = `fleet enrolment budget exhausted (${plan.fleet.budget} this run)`;
             } else {
-                decision.wouldEnroll = 0;
                 decision.blockedReason = 'no deficit in replenishment windows';
             }
-
             perClientDecisions.push(decision);
         }
-
-        // Simulate global cap
-        clientsNeedingBufferClients.sort((a, b) => a.priority - b.priority);
-        let totalSlotsNeeded = 0;
-        const allocations: Allocation[] = [];
-        for (const clientNeed of clientsNeedingBufferClients) {
-            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
-            if (allocated > 0) {
-                totalSlotsNeeded += allocated;
-                allocations.push({ clientId: clientNeed.clientId, allocated, priority: clientNeed.priority });
-            }
-            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
-        }
+        const clientsNeedingBufferClients = plan.entries.filter((entry) => entry.need > 0);
 
         // Check eligible user pool
         const promoteClients = await this.promoteClientService.findAll();
@@ -1184,9 +1397,13 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return {
             maxNewClientsPerTrigger: this.config.maxNewClientsPerTrigger,
             minTotalClients: this.config.minTotalClients,
-            healthyCapPerClient: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+            healthyCapPerClient: plan.mode === 'legacy' ? LEGACY_HEALTHY_CAP : Object.fromEntries(plan.capPerClient),
+            supplyMode: plan.mode,
+            supplyConfig: plan.config,
+            supplyConfigInvalid: plan.invalidConfig,
+            fleetBudget: plan.fleet,
             totalClientsNeedingEnrollment: clientsNeedingBufferClients.length,
-            totalSlotsRequested: clientsNeedingBufferClients.reduce((s, c) => s + c.totalNeeded, 0),
+            totalSlotsRequested: clientsNeedingBufferClients.reduce((s, c) => s + c.need, 0),
             totalSlotsAllocated: totalSlotsNeeded,
             eligibleUsersAvailable: eligibleUserCount.length,
             wouldCreate: Math.min(totalSlotsNeeded, eligibleUserCount.length),
@@ -1456,13 +1673,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             ...allBufferClientMobiles,
         ].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
-        const healthyBufferClientsPerClient = new Map<string, number>();
-        for (const doc of assignedBufferClients) {
-            if (!doc.clientId) continue;
-            if (!this.isHealthyBufferClientForCap(doc, now)) continue;
-            healthyBufferClientsPerClient.set(doc.clientId, (healthyBufferClientsPerClient.get(doc.clientId) || 0) + 1);
-        }
-
         let totalUpdates = 0;
         const updatedEntries: CheckEntry[] = [];
         this.logger.debug(`Checking buffer clients, good IDs count: ${goodIds.length}`);
@@ -1561,51 +1771,21 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             }
         }
 
-        // Dynamic availability: add new buffer clients if needed
-        const clientNeedingBufferClients: Array<{
-            clientId: string;
-            totalNeeded: number;
-            windowNeeds: Array<{ window: string; available: number; needed: number; targetDate: string; minRequired: number }>;
-            totalActive: number;
-            totalNeededForCount: number;
-            calculationReason: string;
-            priority: number;
-        }> = [];
-
-        for (const client of clients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(client.clientId);
-            if (availabilityNeeds.totalNeeded <= 0) continue;
-
-            const healthyCount = healthyBufferClientsPerClient.get(client.clientId) || 0;
-            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - healthyCount);
-            if (remainingCapacity <= 0) {
-                this.logger.debug(`Skipping dynamic buffer enrollment for ${client.clientId}: healthy pool already at cap`, {
-                    healthyCount,
-                    cap: this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
-                    requested: availabilityNeeds.totalNeeded,
-                });
-                continue;
-            }
-
-            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
-            clientNeedingBufferClients.push({
-                clientId: client.clientId,
-                ...availabilityNeeds,
-                totalNeeded: cappedNeeded,
-                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
-                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT}`
-                    : availabilityNeeds.calculationReason,
-            });
-        }
-
-        clientNeedingBufferClients.sort((a, b) => a.priority - b.priority);
-
-        let totalSlotsNeeded = 0;
-        for (const clientNeed of clientNeedingBufferClients) {
-            const allocated = Math.min(clientNeed.totalNeeded, this.config.maxNewClientsPerTrigger - totalSlotsNeeded);
-            if (allocated > 0) totalSlotsNeeded += allocated;
-            if (totalSlotsNeeded >= this.config.maxNewClientsPerTrigger) break;
-        }
+        // Supply-follows-demand enrolment (docs/design/2026-10-24-dynamic-buffer-supply.md). The plan
+        // is computed after warmup so it sees this run's phase changes; it logs every client's
+        // counted / excluded / target / need and the fleet engine budget.
+        const supplyPlan = await this.buildBufferSupplyPlan(clients, now);
+        this.logBufferSupplyPlan(supplyPlan);
+        const clientNeedingBufferClients = supplyPlan.entries
+            .filter((entry) => entry.allocated > 0)
+            .map((entry) => ({
+                clientId: entry.clientId,
+                ...entry.availability,
+                totalNeeded: entry.allocated,
+                calculationReason: entry.reason,
+                priority: entry.priority,
+            }));
+        const totalSlotsNeeded = clientNeedingBufferClients.reduce((sum, entry) => sum + entry.totalNeeded, 0);
 
         let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] } = {
             createdCount: 0,
@@ -1614,7 +1794,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         };
         if (clientNeedingBufferClients.length > 0 && totalSlotsNeeded > 0) {
             try {
-                dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, healthyBufferClientsPerClient);
+                dynamicCreateResult = await this.addNewUserstoBufferClientsDynamic([], goodIds, clientNeedingBufferClients, supplyPlan.countedPerClient, supplyPlan.capPerClient);
             } catch (error) {
                 const errMsg = parseError(error, 'addNewUserstoBufferClientsDynamic').message;
                 this.logger.error(`Dynamic buffer enrollment failed: ${errMsg}`);
@@ -1628,6 +1808,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             dynamicCreateResult.attemptedCount,
             updatedEntries,
             dynamicCreateResult.createdEntries,
+            supplyPlan,
         );
     }
 
@@ -1915,6 +2096,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             priority: number;
         }>,
         bufferClientsPerClient?: Map<string, number>,
+        capPerClient?: Map<string, number>,
     ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] }> {
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
 
@@ -1944,7 +2126,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
         for (const clientNeed of clientsNeedingBufferClients) {
             const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
-            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT - currentHealthyCount);
+            const clientCap = capPerClient?.get(clientNeed.clientId) ?? this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT;
+            const remainingCapacity = Math.max(0, clientCap - currentHealthyCount);
             const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
             for (let i = 0; i < cappedNeed; i++) {
                 assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
@@ -2134,6 +2317,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         attemptedCount: number,
         updatedEntries: CheckEntry[],
         createdEntries: CheckEntry[],
+        supplyPlan?: BufferSupplyPlan,
     ): Promise<void> {
         const distribution = await this.getBufferClientDistribution();
         const summary = buildCheckSummaryNotification({
@@ -2151,11 +2335,37 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 createdEntries,
                 perClientLimit: 10,
             });
+        const supplyTable = supplyPlan ? this.buildSupplyPlanTable(supplyPlan) : null;
+        if (supplyTable) (summary.tables ??= []).push(supplyTable);
         const eventsTable = eventsToTable(currentNoticeBatch()?.drain() ?? [], 'Events');
         if (eventsTable) (summary.tables ??= []).push(eventsTable);
         await sendNoticeBatched(
             (input) => this.botsService.sendMessageByCategory(ChannelCategory.ACCOUNT_NOTIFICATIONS, input, undefined, false),
             summary,
         );
+    }
+
+    /** Per-client supply audit for the run summary: what counted, what was excluded and why, the target and the enrolment. */
+    buildSupplyPlanTable(plan: BufferSupplyPlan): { title: string; columns: string[]; rows: string[][] } | null {
+        if (!plan.entries.length) return null;
+        const rows = plan.entries.map((e) => [
+            e.clientId,
+            `${e.counted} (${e.countedByKind.usable}f/${e.countedByKind.limited_soon}l/${e.countedByKind.pipeline}w)`,
+            String(e.excluded.harsh || 0),
+            String((e.excluded.never_checked || 0) + (e.excluded.stale_free || 0)),
+            String(e.consumed),
+            `${e.target}/${e.cap}`,
+            String(e.need),
+            String(e.allocated),
+        ]);
+        const fleet = plan.fleet;
+        const budgetNote = plan.mode === 'legacy'
+            ? `legacy${plan.invalidConfig.length ? `, bad config: ${plan.invalidConfig.join(',')}` : ''}`
+            : `budget ${fleet.budget}, 7d enrolled ${fleet.enrolledLast7d}/${fleet.weeklyCeiling}, warming ${fleet.fleetWarming}/${fleet.pipelineCapacity}`;
+        return {
+            title: `Supply plan (${budgetNote})`,
+            columns: ['Client', 'Counted f/l/w', 'Harsh', 'Unchecked', 'Swaps', 'Target/Cap', 'Need', 'Enrol'],
+            rows,
+        };
     }
 }

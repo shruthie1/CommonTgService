@@ -115,6 +115,7 @@ describe('BufferClientService coverage', () => {
     });
 
     afterEach(async () => {
+        delete process.env.BUFFER_SUPPLY_MODE;
         await BufferClientModel.deleteMany({});
         await promoteClientService.model.deleteMany({});
         jest.restoreAllMocks();
@@ -815,6 +816,8 @@ describe('BufferClientService coverage', () => {
         });
 
         it('reports blocked reason when no deficit', async () => {
+            // Legacy enrolment contract (BUFFER_SUPPLY_MODE=legacy = the config rollback path).
+            process.env.BUFFER_SUPPLY_MODE = 'legacy';
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
                 totalNeeded: 0, readyActive: 5, warmingPipeline: 0, totalActive: 5,
                 calculationReason: 'ok', priority: 1, replenishmentWindowNeeds: [], windowNeeds: [],
@@ -1760,6 +1763,8 @@ describe('BufferClientService coverage', () => {
         });
 
         it('caps the enrollment when deficit exceeds remaining capacity', async () => {
+            // Legacy enrolment contract (BUFFER_SUPPLY_MODE=legacy = the config rollback path).
+            process.env.BUFFER_SUPPLY_MODE = 'legacy';
             // 18 ready docs → remainingCapacity 2; deficit 5 → capped to 2.
             for (let i = 0; i < 18; i++) {
                 await service.create(makeBufferClientData({
@@ -1860,6 +1865,8 @@ describe('BufferClientService coverage', () => {
         });
 
         it('caps the dynamic enrollment need to the remaining healthy capacity (line 1336)', async () => {
+            // Legacy enrolment contract (BUFFER_SUPPLY_MODE=legacy = the config rollback path).
+            process.env.BUFFER_SUPPLY_MODE = 'legacy';
             // 18 healthy ready docs → remaining capacity 2; calc deficit 5 → capped to 2 (T-branch).
             for (let i = 0; i < 18; i++) {
                 await service.create(makeBufferClientData({

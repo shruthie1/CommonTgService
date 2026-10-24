@@ -168,6 +168,7 @@ describe('Service flow reliability', () => {
     });
 
     afterEach(() => {
+        delete process.env.BUFFER_SUPPLY_MODE;
         jest.restoreAllMocks();
         jest.clearAllMocks();
     });
@@ -918,6 +919,9 @@ describe('Service flow reliability', () => {
     });
 
     test('checkBufferClients does not enroll beyond the healthy per-client cap', async () => {
+        // Legacy enrolment contract (BUFFER_SUPPLY_MODE=legacy = the config rollback path). In dynamic
+        // mode these never-SpamBot-checked graduates do not count (buffer-supply.spec.ts).
+        process.env.BUFFER_SUPPLY_MODE = 'legacy';
         const cappedDocs = Array.from({ length: 20 }, (_, index) => ({
             mobile: `910cap${index}`,
             clientId: 'client-1',
@@ -970,6 +974,8 @@ describe('Service flow reliability', () => {
     });
 
     test('checkBufferClients ignores unhealthy warmup docs when applying the per-client cap', async () => {
+        // Legacy enrolment contract (BUFFER_SUPPLY_MODE=legacy = the config rollback path).
+        process.env.BUFFER_SUPPLY_MODE = 'legacy';
         const staleDocs = Array.from({ length: 25 }, (_, index) => ({
             mobile: `910stale${index}`,
             clientId: 'client-1',
@@ -1026,6 +1032,7 @@ describe('Service flow reliability', () => {
                     totalNeeded: 4,
                 }),
             ],
+            expect.any(Map),
             expect.any(Map),
         );
     });
