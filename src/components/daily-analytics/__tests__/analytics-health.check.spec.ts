@@ -93,7 +93,7 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     ...['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29'].map((d) => ({ d, n: '1000' })),
     { d: '2026-10-30', n: String(yesterday) },
   ];
-  const ok = (sql: string) => (sql.includes('promotion_send') ? sends(900) : [{ n: '42' }]);
+  const ok = (sql: string) => (sql.includes('analytics_daily_parity') ? [] : sql.includes('promotion_send') ? sends(900) : [{ n: '42' }]);
 
   it('istDay: 02:30 IST on 10-31 => yesterday 10-30', () => {
     expect(istDay(NOW, -1)).toBe('2026-10-30');
@@ -106,12 +106,51 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     expect(notify).not.toHaveBeenCalled();
     expect(queries.every((q) => /^\s*SELECT/i.test(q.sql))).toBe(true);
     expect(queries[0].params).toEqual(['2026-10-23T00:00:00+05:30', '2026-10-31T00:00:00+05:30']);
-    expect(queries.map((q) => q.sql.match(/FROM (\w+)/)![1])).toEqual(['promotion_send', 'daily_client', 'daily_mobile']);
+    expect(queries.map((q) => q.sql.match(/FROM (\w+)/)![1])).toEqual(['promotion_send', 'daily_client', 'daily_mobile', 'analytics_daily_parity']);
     expect(queries[2].params).toEqual(['2026-10-30']);
+    expect(queries[3]).toEqual({ sql: 'SELECT * FROM analytics_daily_parity($1::date)', params: ['2026-10-30'] });
+  });
+
+  it('daily parity rows => one alert summarising mismatches by check kind', async () => {
+    const parityRows = [
+      { check_name: 'client_vs_mobile', client_id: 'shruthi1', namespace: 'tg-aut', counter: 'revenue', expected: '500', actual: '450' },
+      { check_name: 'client_vs_mobile', client_id: 'shruthi1', namespace: 'tg-aut', counter: 'payers', expected: '3', actual: '2' },
+      { check_name: 'client_vs_mobile', client_id: 'kavya1', namespace: 'promote-clients', counter: 'sent', expected: '10', actual: '9' },
+      { check_name: 'sends_vs_client', client_id: 'kavya1', namespace: null, counter: 'sent', expected: '12', actual: '10' },
+    ];
+    const { check, notify, queries } = build((sql) => (sql.includes('analytics_daily_parity') ? parityRows : ok(sql)));
+    const problems = await check.run(NOW);
+    expect(problems).toEqual([
+      'daily parity client_vs_mobile: 3 mismatched row(s) across 2 client(s)',
+      'daily parity sends_vs_client: 1 mismatched row(s) across 1 client(s)',
+    ]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0][0].fields).toContainEqual({ label: 'parity mismatches', value: '4' });
+    expect(queries.every((q) => /^\s*SELECT/i.test(q.sql))).toBe(true);
+  });
+
+  it('client_vs_mobile parity rows are ignored before DAILY_MOBILE_FROM_DAY (daily_mobile empty then)', async () => {
+    delete process.env.DAILY_MOBILE_FROM_DAY;
+    const { check, notify } = build((sql) =>
+      sql.includes('analytics_daily_parity') ? [{ check_name: 'client_vs_mobile', client_id: 'c1', counter: 'sent', expected: '5', actual: '0' }] : ok(sql),
+    );
+    expect(await check.run(NOW)).toEqual([]);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('analytics_daily_parity missing (42883) => skipped quietly: no alert, no retry', async () => {
+    const { check, notify, sleep } = build((sql) =>
+      sql.includes('analytics_daily_parity')
+        ? { error: { kind: 'query', message: 'function analytics_daily_parity(date) does not exist', code: '42883' } }
+        : ok(sql),
+    );
+    expect(await check.run(NOW)).toEqual([]);
+    expect(notify).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it('drop below 50% of median => one alert naming the day and the problem', async () => {
-    const { check, notify } = build((sql) => (sql.includes('promotion_send') ? sends(300) : [{ n: '42' }]));
+    const { check, notify } = build((sql) => (sql.includes('promotion_send') ? sends(300) : ok(sql)));
     const problems = await check.run(NOW);
     expect(problems).toEqual(['promotion_send has 300 rows, below 50% of the trailing 7-day median 1000']);
     expect(notify).toHaveBeenCalledTimes(1);
@@ -119,7 +158,7 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
   });
 
   it('missing yesterday row in promotion_send counts as 0', async () => {
-    const { check } = build((sql) => (sql.includes('promotion_send') ? sends(0).slice(0, 7) : [{ n: '42' }]));
+    const { check } = build((sql) => (sql.includes('promotion_send') ? sends(0).slice(0, 7) : ok(sql)));
     expect(await check.run(NOW)).toEqual(['promotion_send has 0 rows']);
   });
 

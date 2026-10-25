@@ -15,6 +15,8 @@ export const PROBE_RETRY_DELAY_MS = 60_000;
 export const ANALYTICS_HEALTH_CATEGORY = ChannelCategory.CLIENT_UPDATES;
 /** SQLSTATE undefined_table. */
 const UNDEFINED_TABLE = '42P01';
+/** SQLSTATE undefined_function: analytics_daily_parity() not installed (maintain.sql not applied). */
+const UNDEFINED_FUNCTION = '42883';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -36,6 +38,39 @@ export interface AnalyticsHealthInput {
   dailyMobileRows?: number;
   /** DAILY_MOBILE_FROM_DAY at collection time; unset = no daily_mobile check. */
   dailyMobileFromDay?: string;
+  /**
+   * Rows of `analytics_daily_parity(day)` (one per mismatch). Undefined when not available (function
+   * missing, 42883, or a table it reads missing, 42P01, which has its own message).
+   */
+  parityRows?: AnalyticsParityRow[];
+}
+
+export interface AnalyticsParityRow {
+  check_name: string;
+  client_id?: string | null;
+  namespace?: string | null;
+  counter?: string | null;
+  expected?: string | number | null;
+  actual?: string | number | null;
+}
+
+/**
+ * Parity mismatches per check kind. `client_vs_mobile` is ignored before DAILY_MOBILE_FROM_DAY (or
+ * when it is unset): daily_mobile is empty then, so every daily_client cell would "mismatch".
+ */
+export function summariseParity(input: AnalyticsHealthInput): Map<string, { rows: number; clients: Set<string> }> {
+  const out = new Map<string, { rows: number; clients: Set<string> }>();
+  const fromDay = input.dailyMobileFromDay;
+  const mobileLive = !!fromDay && input.day >= fromDay;
+  for (const r of input.parityRows ?? []) {
+    const kind = String(r.check_name ?? 'unknown');
+    if (kind === 'client_vs_mobile' && !mobileLive) continue;
+    const entry = out.get(kind) ?? { rows: 0, clients: new Set<string>() };
+    entry.rows += 1;
+    if (r.client_id) entry.clients.add(String(r.client_id));
+    out.set(kind, entry);
+  }
+  return out;
 }
 
 export function median(values: number[]): number {
@@ -66,6 +101,9 @@ export function decideAnalyticsHealth(input: AnalyticsHealthInput): string[] {
   const fromDay = input.dailyMobileFromDay;
   if (fromDay && input.day >= fromDay && !missing.has('daily_mobile') && (input.dailyMobileRows ?? 0) === 0) {
     problems.push('daily_mobile has 0 rows');
+  }
+  for (const [kind, { rows, clients }] of summariseParity(input)) {
+    problems.push(`daily parity ${kind}: ${rows} mismatched row(s) across ${clients.size} client(s)`);
   }
   return problems;
 }
@@ -162,6 +200,20 @@ export class AnalyticsHealthCheck {
         input.dailyMobileRows = Number(dm.rows[0]?.n) || 0;
       }
     }
+
+    // analytics_daily_parity (analytics/maintain.sql): one row per counter where daily_client,
+    // daily_mobile and promotion_send disagree for `day`. Missing function = skipped quietly.
+    const parity = await this.probe<AnalyticsParityRow>('SELECT * FROM analytics_daily_parity($1::date)', [day]);
+    if ('error' in parity) {
+      if (parity.error.code === UNDEFINED_FUNCTION || parity.error.code === UNDEFINED_TABLE) {
+        this.logger.log(`Analytics daily parity skipped for ${day}: ${parity.error.message} [${parity.error.code}]`);
+      } else {
+        const stop = failed('analytics_daily_parity', parity.error);
+        if (stop) return stop;
+      }
+    } else {
+      input.parityRows = parity.rows;
+    }
     return input;
   }
 
@@ -185,7 +237,7 @@ export class AnalyticsHealthCheck {
     const problems = decideAnalyticsHealth(input);
     if (!problems.length) {
       this.logger.log(
-        `Analytics health OK for ${input.day}: promotion_send=${input.promotionSendRows} daily_client=${input.dailyClientRows} daily_mobile=${input.dailyMobileRows ?? 'n/a'}`,
+        `Analytics health OK for ${input.day}: promotion_send=${input.promotionSendRows} daily_client=${input.dailyClientRows} daily_mobile=${input.dailyMobileRows ?? 'n/a'} parity_rows=${input.parityRows?.length ?? 'n/a'}`,
       );
       return problems;
     }
@@ -199,6 +251,7 @@ export class AnalyticsHealthCheck {
         { label: '7-day median', value: String(median(input.trailingPromotionSendRows ?? [])) },
         { label: 'daily_client', value: String(input.dailyClientRows ?? 'n/a') },
         { label: 'daily_mobile', value: String(input.dailyMobileRows ?? 'n/a') },
+        { label: 'parity mismatches', value: String(input.parityRows?.length ?? 'n/a') },
       ],
       details: problems,
     }).catch((err) => {
