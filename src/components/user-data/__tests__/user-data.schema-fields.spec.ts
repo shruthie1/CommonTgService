@@ -57,6 +57,41 @@ describe('UserData schema field contract', () => {
         expect(await raw('c4')).not.toHaveProperty('evilField');
     });
 
+    // Data-model review 2026-10-25 §5.6: tg-aut writes these three; CMS mongoose writes stripped them.
+    const CYCLE = {
+        cycleVideoBase: 10,
+        cyclePaid: 350,
+        callProgress: { v7: { positionSec: 42, durationSec: 300, updatedAt: 1760000600000, completed: false } },
+    };
+
+    it('keeps the tg-aut cycle/call-progress fields on create', async () => {
+        await service.create({ ...base('c6'), ...CYCLE } as any);
+        const row: any = await raw('c6');
+        for (const [k, v] of Object.entries(CYCLE)) expect(row[k]).toEqual(v);
+    });
+
+    it('keeps the tg-aut cycle/call-progress fields on update', async () => {
+        await service.create(base('c7') as any);
+        await service.update('p1', 'c7', { ...CYCLE } as any);
+        const row: any = await raw('c7');
+        for (const [k, v] of Object.entries(CYCLE)) expect(row[k]).toEqual(v);
+    });
+
+    it('does not materialise the cycle fields on a plain create', async () => {
+        await service.create(base('c8') as any);
+        const row: any = await raw('c8');
+        for (const k of Object.keys(CYCLE)) expect(row).not.toHaveProperty(k);
+    });
+
+    it('declares no standalone clientId index (clientId_chatId covers it)', async () => {
+        const declared = UserDataSchema.indexes().map(([key, opts]) => ({ key, name: (opts as any)?.name }));
+        expect(declared).not.toContainEqual(expect.objectContaining({ key: { clientId: 1 } }));
+        expect(declared).toContainEqual({ key: { clientId: 1, chatId: 1 }, name: 'clientId_chatId' });
+        const built = (await model.collection.indexes()).map((i: any) => i.name);
+        expect(built).not.toContain('clientId_1');
+        expect(built).toContain('clientId_chatId');
+    });
+
     it('does not persist an undeclared field on update', async () => {
         await service.create(base('c5') as any);
         await service.update('p1', 'c5', { evilField: 'x' } as any);

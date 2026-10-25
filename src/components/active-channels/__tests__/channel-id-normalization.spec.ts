@@ -112,7 +112,8 @@ describe('CMS channelId normalization', () => {
 
             const [filter, update] = (findOneAndUpdate.mock.calls as any)[0];
             expect(filter).toEqual({ channelId: '222' });
-            expect(update.$set).toEqual({ title: 'ok', canSendMsgs: true });
+            // nameDenied is derived (not caller-supplied): recomputed whenever title/username is written.
+            expect(update.$set).toEqual({ title: 'ok', canSendMsgs: true, nameDenied: false });
             expect(update.$set).not.toHaveProperty('_id');
             expect(update.$set).not.toHaveProperty('channelId');
             expect(update.$set).not.toHaveProperty('bogusField');

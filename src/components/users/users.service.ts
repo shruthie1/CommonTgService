@@ -28,6 +28,16 @@ import { BufferClientService } from '../buffer-clients/buffer-client.service';
 import { PromoteClientService } from '../promote-clients/promote-client.service';
 import { escapeTelegramHtml } from '../../utils/rich-message';
 
+/**
+ * Recency order for the several `users` docs one mobile can have (a number re-registers after
+ * expiry; live 2026-10-25: 12,394 mobiles with >1 doc, up to 26). `mobile_1` is NOT unique, so a
+ * bare `findOne({ mobile })` returns whichever doc the index/natural order yields. Most recently
+ * updated first, lowest _id as a stable tiebreak (bulk updateMany paths give duplicates identical
+ * updatedAt). Same order as search(). Single-doc reads go through findOneCanonical(), which also
+ * prefers a non-expired doc.
+ */
+export const USER_RECENCY_SORT = { updatedAt: -1, _id: 1 } as const;
+
 /** A short card: heading, linked @username and name, then tap-to-copy mobile and 2FA password. */
 /** Plain multi-line account-login notice (owner, 2026-10-18): one "Label: value" line per known fact. */
 export function accountLoginHtml(user: { username?: string; firstName?: string; lastName?: string; password?: string }, mobile: string): string {
@@ -665,7 +675,8 @@ export class UsersService {
     } catch {
       return [];
     }
-    const docs = await this.userModel.find({ mobile: canonicalMobile }).sort({ updatedAt: -1 }).limit(50).exec();
+    // _id tiebreak: duplicates written by one updateMany share updatedAt, so updatedAt alone is not a total order.
+    const docs = await this.userModel.find({ mobile: canonicalMobile }).sort({ updatedAt: -1, _id: 1 }).limit(50).exec();
     const withSession = docs.filter(d => d.session && String(d.session).trim());
     const ordered = [...withSession, ...docs.filter(d => !withSession.includes(d))];
     return ordered.map(d => d.toJSON());
@@ -687,7 +698,7 @@ export class UsersService {
     // that already exists under any of mobile/tgId/session — check all three before inserting.
     const conflictQuery = { $or: [{ mobile: canonicalMobile }, { tgId }, { session }] };
     try {
-      const existing = await this.userModel.findOne(conflictQuery).exec();
+      const existing = await this.findOneCanonical(conflictQuery, q => q.exec());
       if (existing) return existing.toJSON();
 
       const created = await this.userModel.findOneAndUpdate(
@@ -711,7 +722,7 @@ export class UsersService {
       // by all three keys (not just tgId) so we resolve to the real conflicting doc rather than
       // returning null when the collision was on mobile or session.
       this.logger.warn(`backfillFromPool: upsert for ${canonicalMobile} raced or conflicted: ${error instanceof Error ? error.message : String(error)}`);
-      const fallback = await this.userModel.findOne(conflictQuery).exec();
+      const fallback = await this.findOneCanonical(conflictQuery, q => q.exec());
       return fallback ? fallback.toJSON() : null;
     }
   }
@@ -747,7 +758,8 @@ export class UsersService {
 
   async toggleStar(mobile: string): Promise<{ mobile: string; starred: boolean }> {
     const canonicalMobile = this.canonicalMobile(mobile);
-    const user = await this.userModel.findOne({ mobile: canonicalMobile }).select('mobile starred').exec();
+    // Canonical doc decides the current value; the write below then applies it to every doc.
+    const user = await this.findOneCanonical({ mobile: canonicalMobile }, q => q.select('mobile starred').exec());
     if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
     const newVal = !user.starred;
     await this.userModel.updateMany({ mobile: canonicalMobile }, { $set: { starred: newVal } }).exec();
@@ -1136,13 +1148,28 @@ export class UsersService {
 
   async getUserRelationships(mobile: string) {
     const canonicalMobile = this.canonicalMobile(mobile);
-    const user = await this.userModel
-      .findOne({ mobile: canonicalMobile })
-      .select('mobile firstName lastName tgId relationships')
-      .lean()
-      .exec();
+    const user = await this.findOneCanonical(
+      { mobile: canonicalMobile },
+      q => q.select('mobile firstName lastName tgId relationships').lean().exec(),
+    );
     if (!user) throw new NotFoundException(`User with mobile ${mobile} not found`);
     return user;
+  }
+
+  /**
+   * Deterministic single-doc read over a filter that can match several docs of one account (mobile
+   * is not unique): the newest non-expired doc (expired missing/false), else the newest of any
+   * status. `finish` adds select/lean/exec to the query.
+   */
+  private async findOneCanonical<R>(
+    filter: QueryFilter<UserDocument>,
+    finish: (query: ReturnType<Model<UserDocument>['findOne']>) => Promise<R>,
+  ): Promise<R | null> {
+    const live = await finish(
+      this.userModel.findOne({ $and: [filter, { expired: { $ne: true } }] } as QueryFilter<UserDocument>).sort(USER_RECENCY_SORT),
+    );
+    if (live) return live;
+    return finish(this.userModel.findOne(filter).sort(USER_RECENCY_SORT));
   }
 
   private canonicalMobile(mobile: string): string {

@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import * as mongoose from 'mongoose';
 import { Document } from 'mongoose';
 
 export type UserDataDocument = UserData & Document;
@@ -70,8 +71,12 @@ export class UserData {
      * on insert by tg-aut for rows created from 2026-08-15 onward. Absent on historical rows —
      * absence means "not known", never a value. Reads prefer a client-owned row and fall back to
      * the persona row, so both eras coexist without a destructive migration.
+     *
+     * No single-field index: `clientId_chatId` (declared below, also created by tg-db) has clientId
+     * as its prefix and serves every clientId-only query. The old `index: true` kept recreating a
+     * redundant `clientId_1` (4 ops vs 320,228 on clientId_chatId, 72 h to 2026-10-25).
      */
-    @Prop({ required: false, index: true })
+    @Prop({ required: false })
     clientId?: string;
 
     @Prop({ required: true, default: 0 })
@@ -138,6 +143,25 @@ export class UserData {
     @Prop({ type: Number, required: false })
     lastPaidAt?: number;
 
+    /**
+     * `videos.length` when the current service cycle started (tg-aut startServiceCycle). Service-limit
+     * checks count `videos.length - cycleVideoBase`; vcui reads it from /userdata (callEligibility.ts).
+     */
+    @Prop({ type: Number, required: false })
+    cycleVideoBase?: number;
+
+    /** Paid level of the current service cycle (tg-aut startServiceCycle / service-completion). */
+    @Prop({ type: Number, required: false })
+    cyclePaid?: number;
+
+    /**
+     * Per-video resume state keyed by videoId: { positionSec, durationSec|null, updatedAt, completed }
+     * (tg-aut in-house calls, written as `callProgress.<videoId>`). Mixed: keys are dynamic.
+     * default undefined so legacy rows are not stamped with {}.
+     */
+    @Prop({ type: mongoose.Schema.Types.Mixed, required: false, default: undefined })
+    callProgress?: Record<string, { positionSec: number; durationSec: number | null; updatedAt: number; completed: boolean }>;
+
 }
 
 export const UserDataSchema = SchemaFactory.createForClass(UserData);
@@ -146,3 +170,6 @@ export const UserDataSchema = SchemaFactory.createForClass(UserData);
 // Declaring the existing production index here keeps CommonTgService's schema contract
 // aligned without changing the live index definition.
 UserDataSchema.index({ chatId: 1, profile: 1 }, { unique: true, name: 'chatId_Profile' });
+// Same spec and name as tg-db UserDataRepository.ensureIndexes (live, non-unique); serves the
+// clientId-owned row lookup and clientId-only queries.
+UserDataSchema.index({ clientId: 1, chatId: 1 }, { name: 'clientId_chatId' });

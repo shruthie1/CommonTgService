@@ -82,9 +82,27 @@ export class Channel {
   @Prop({ type: Date, required: false })
   joinRequestSeenAt?: Date;
 
+  // Join-selection name deny-list verdict, computed on every write that can change title/username
+  // (see ../channel-name-deny.ts). Absent on docs not written since 2026-10-25: the read falls
+  // back to the regexes for those, so absent means "not computed", never "allowed".
+  @ApiProperty({ required: false, type: Boolean })
+  @Prop({ type: Boolean, required: false })
+  nameDenied?: boolean;
+
   // REMOVED starred / score — neither has a writer or reader in the channel
   // lifecycle. Keeping Mongoose defaults here recreated obsolete fields on
   // every new document after cleanup.
 }
 
 export const ChannelSchema = SchemaFactory.createForClass(Channel);
+
+// Supports getActiveChannels' $match (canSendMsgs: true, participantsCount > 1000). Partial, so it
+// holds only those candidates: 25,885 of 100,210 docs on 2026-10-25 (the current plan scans
+// username_1 over 52,103 docs). Built by autoIndex on the next CMS start; ~26k numeric keys.
+ChannelSchema.index(
+  { participantsCount: -1 },
+  {
+    name: 'join_candidates_participants',
+    partialFilterExpression: { canSendMsgs: true, participantsCount: { $gt: 1000 } },
+  },
+);

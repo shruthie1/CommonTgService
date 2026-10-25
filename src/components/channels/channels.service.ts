@@ -10,6 +10,7 @@ import { getBotsServiceInstance } from '../../utils';
 import { buildDurableChannelUpsertPipeline, isOperatorBan } from '../../utils/telegram-utils/durable-channel-upsert';
 import { normalizeTelegramChannelId } from '../../utils/telegram-utils/channel-live-facts';
 import { ChannelIntelligenceReadService } from '../active-channels/channel-intelligence-read.service';
+import { channelNameAllowedFilter, computeChannelNameDenied, NAME_DENIED_PIPELINE_STAGE } from './channel-name-deny';
 
 @Injectable()
 export class ChannelsService {
@@ -49,6 +50,7 @@ export class ChannelsService {
     const createdChannel = new this.ChannelModel({
       ...createChannelDto,
       channelId: this.channelKey(createChannelDto.channelId),
+      nameDenied: computeChannelNameDenied(createChannelDto.title, createChannelDto.username),
     });
     return createdChannel.save();
   }
@@ -102,7 +104,8 @@ export class ChannelsService {
       return {
         updateOne: {
           filter: { channelId: this.channelKey(dto.channelId) },
-          update: buildDurableChannelUpsertPipeline(setFields, defaults, dto),
+          // Last stage recomputes nameDenied from the merged title/username (see channel-name-deny).
+          update: [...buildDurableChannelUpsertPipeline(setFields, defaults, dto), NAME_DENIED_PIPELINE_STAGE],
           upsert: true,
         },
       };
@@ -150,6 +153,13 @@ export class ChannelsService {
     if (isOperatorBan(existing) && update.banned === false) delete update.banned;
     if (update.private === true || update.forbidden === true || update.banned === true) {
       update.canSendMsgs = false;
+    }
+    // `!== undefined`, not `in`: mongoose drops undefined from $set, so an undefined title/username leaves the stored
+    // value in place and the verdict must be computed from the stored one.
+    if (update.title !== undefined || update.username !== undefined) {
+      const title = update.title !== undefined ? update.title : existing?.title;
+      const username = update.username !== undefined ? update.username : existing?.username;
+      update.nameDenied = computeChannelNameDenied(title, username);
     }
     const updatedChannel = await this.ChannelModel.findOneAndUpdate(
       { channelId: this.channelKey(channelId) },
@@ -268,26 +278,11 @@ export class ChannelsService {
           //     ]
           // },
           {
-            '$and': [
-              {
-                title: {
-                  $exists: true,
-                  $type: "string",
-                  $ne: '',
-                  '$not': { '$regex': /online|realestat|propert|freefire|bgmi|promo|agent|board|design|realt|clas|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i }
-                }
-              },
-              {
-                username:
-                {
-                  $exists: true,
-                  $type: "string",
-                  $ne: '',
-                  '$not': { '$regex': /online|freefire|bgmi|promo|agent|realestat|propert|board|design|realt|clas|PROFIT|wholesale|retail|topper|exam|motivat|medico|shop|follower|insta|traini|cms|cma|subject|currency|color|amity|game|gamin|like|earn|popcorn|TANISHUV|bitcoin|crypto|mall|work|folio|health|civil|win|casino|shop|promot|english|invest|fix|money|book|anim|angime|support|cinema|bet|predic|study|youtube|sub|open|trad|cric|quot|exch|movie|search|film|offer|ott|deal|quiz|academ|insti|talkies|screen|series|webser/i }
-                }
-              },
-            ]
+            title: { $exists: true, $type: "string", $ne: '' },
+            username: { $exists: true, $type: "string", $ne: '' },
           },
+          // Name deny-list: precomputed `nameDenied` when present, regex fallback for legacy docs.
+          channelNameAllowedFilter(),
           {
             channelId: { '$nin': notIds },
             participantsCount: { $gt: 1000 },

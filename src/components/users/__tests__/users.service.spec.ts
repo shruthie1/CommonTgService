@@ -490,6 +490,65 @@ describe('UsersService (real Mongo)', () => {
         });
     });
 
+    // ── deterministic single-doc reads keyed by mobile (data-model review 2026-10-25 §5.3) ──
+    // mobile_1 is not unique (up to 26 docs per mobile live). Seed the duplicates RAW, oldest
+    // _id/natural position first, so an unsorted findOne would return the stale doc.
+    describe('canonical doc per mobile', () => {
+        const M = '919999000090';
+        const now = Date.now();
+        async function raw(doc: Record<string, any>) {
+            await model.collection.insertOne({
+                tgId: `tg-${Math.random().toString(36).slice(2)}`,
+                session: `sess-${Math.random().toString(36).slice(2)}`,
+                mobile: M,
+                ...doc,
+            });
+        }
+
+        test('toggleStar reads the non-expired doc even when an expired one is newer and first', async () => {
+            await raw({ expired: true, starred: true, updatedAt: new Date(now) });
+            await raw({ expired: false, starred: false, updatedAt: new Date(now - 3600_000) });
+            const r = await service.toggleStar(M);
+            expect(r.starred).toBe(true);
+            const all = await model.find({ mobile: M }).lean();
+            expect(all.map((d: any) => d.starred)).toEqual([true, true]);
+        });
+
+        test('getUserRelationships returns the non-expired doc', async () => {
+            await raw({ expired: true, relationships: { score: 1 }, updatedAt: new Date(now) });
+            await raw({ expired: false, relationships: { score: 9 }, updatedAt: new Date(now - 3600_000) });
+            const r: any = await service.getUserRelationships(M);
+            expect(r.relationships.score).toBe(9);
+        });
+
+        test('getUserRelationships prefers the newest among non-expired docs', async () => {
+            await raw({ relationships: { score: 2 }, updatedAt: new Date(now - 7200_000) });
+            await raw({ expired: false, relationships: { score: 7 }, updatedAt: new Date(now) });
+            const r: any = await service.getUserRelationships(M);
+            expect(r.relationships.score).toBe(7);
+        });
+
+        test('findByMobileAnyStatus breaks an updatedAt tie by lowest _id, not natural order', async () => {
+            const same = new Date(now);
+            const lo = new mongoose.Types.ObjectId('000000000000000000000001');
+            const hi = new mongoose.Types.ObjectId('ffffffffffffffffffffffff');
+            await raw({ _id: hi, tgId: 'tg-hi', updatedAt: same });
+            await raw({ _id: lo, tgId: 'tg-lo', updatedAt: same });
+            for (let i = 0; i < 3; i++) {
+                const docs: any[] = await service.findByMobileAnyStatus(M);
+                expect(docs[0].tgId).toBe('tg-lo');
+            }
+        });
+
+        test('backfillFromPool returns the non-expired existing doc for the mobile', async () => {
+            await raw({ expired: true, firstName: 'stale', updatedAt: new Date(now) });
+            await raw({ expired: false, firstName: 'live', updatedAt: new Date(now - 3600_000) });
+            const r: any = await service.backfillFromPool({ mobile: M, tgId: 'tg-new', session: 'sess-new' });
+            expect(r.firstName).toBe('live');
+            expect(await model.countDocuments({ mobile: M })).toBe(2);
+        });
+    });
+
     describe('delete', () => {
         test('found → expireAccount cascade', async () => {
             await seedUser({ tgId: 'del-1', mobile: '919999000040' });
