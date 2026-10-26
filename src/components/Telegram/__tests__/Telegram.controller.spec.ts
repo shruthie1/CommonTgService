@@ -50,7 +50,7 @@ function makeService(): any {
         updatePrivacy: jest.fn().mockResolvedValue('priv'),
         updatePrivacyBatch: jest.fn().mockResolvedValue('privbatch'),
         getAuths: jest.fn().mockResolvedValue({ authorizations: [] }),
-        removeOtherAuths: jest.fn().mockResolvedValue('removed'),
+        removeExternalLoginSessions: jest.fn().mockResolvedValue('removed'),
         createNewSession: jest.fn().mockResolvedValue('session'),
         getSessionInfo: jest.fn().mockResolvedValue({ session: 1 }),
         terminateSession: jest.fn().mockResolvedValue('terminated'),
@@ -227,7 +227,7 @@ describe('security / session routes', () => {
         await controller.terminateSession('m', { hash: 'h', type: 'app' });
         await controller.getConnectionStatus();
         await controller.getSecurityStatus('m');
-        expect(service.removeOtherAuths).toHaveBeenCalled();
+        expect(service.removeExternalLoginSessions).toHaveBeenCalled();
     });
 });
 

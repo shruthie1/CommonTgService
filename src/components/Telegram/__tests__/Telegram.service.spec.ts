@@ -126,7 +126,7 @@ function makeFakeManager(overrides: Record<string, any> = {}) {
         updateProfile: jest.fn().mockResolvedValue(undefined),
         forwardMessages: jest.fn().mockResolvedValue('bulk'),
         getAuths: jest.fn().mockResolvedValue({ authorizations: [{ current: true, dateCreated: 1700000000, dateActive: 1700000001 }] }),
-        removeOtherAuths: jest.fn().mockResolvedValue(undefined),
+        removeExternalLoginSessions: jest.fn().mockResolvedValue(undefined),
         createGroupOrChannel: jest.fn().mockResolvedValue({ chats: [{ id: { toString: () => 'g1' } }] }),
         updateGroupSettings: jest.fn().mockResolvedValue('gset'),
         scheduleMessageSend: jest.fn().mockResolvedValue('scheduled'),
@@ -778,7 +778,7 @@ describe('TelegramService — connection management', () => {
     });
 });
 
-describe('TelegramService — getAuths / removeOtherAuths', () => {
+describe('TelegramService — getAuths / removeExternalLoginSessions', () => {
     // notifbot() (via logbots) requires BOT_TOKENS to be configured.
     let prevBotTokens: string | undefined;
     beforeAll(() => { prevBotTokens = process.env.BOT_TOKENS; process.env.BOT_TOKENS = 'tok1'; });
@@ -798,9 +798,9 @@ describe('TelegramService — getAuths / removeOtherAuths', () => {
         expect(auths).toEqual({});
     });
 
-    test('removeOtherAuths sends success notification', async () => {
+    test('removeExternalLoginSessions sends success notification', async () => {
         const { svc } = makeService();
-        expect(await svc.removeOtherAuths('m')).toBe('Removed other authorizations');
+        expect(await svc.removeExternalLoginSessions('m')).toBe('Removed other authorizations');
         expect(sendBotNotice).toHaveBeenCalledWith(
             'notif',
             expect.objectContaining({ severity: 'success', title: 'Remove auths', fields: expect.arrayContaining([{ label: 'Mobile', value: 'm' }]) }),
@@ -808,9 +808,9 @@ describe('TelegramService — getAuths / removeOtherAuths', () => {
         );
     });
 
-    test('removeOtherAuths sends failure notification and rethrows', async () => {
-        const { svc } = makeService({ removeOtherAuths: jest.fn().mockRejectedValue(new Error('auth fail')) });
-        await expect(svc.removeOtherAuths('m')).rejects.toThrow('auth fail');
+    test('removeExternalLoginSessions sends failure notification and rethrows', async () => {
+        const { svc } = makeService({ removeExternalLoginSessions: jest.fn().mockRejectedValue(new Error('auth fail')) });
+        await expect(svc.removeExternalLoginSessions('m')).rejects.toThrow('auth fail');
         expect(sendBotNotice).toHaveBeenCalledWith(
             'notif',
             expect.objectContaining({ severity: 'error', title: 'Remove failed', details: 'auth fail' }),
@@ -818,9 +818,9 @@ describe('TelegramService — getAuths / removeOtherAuths', () => {
         );
     });
 
-    test('removeOtherAuths handles non-Error rejection', async () => {
-        const { svc } = makeService({ removeOtherAuths: jest.fn().mockRejectedValue('stringErr') });
-        await expect(svc.removeOtherAuths('m')).rejects.toBe('stringErr');
+    test('removeExternalLoginSessions handles non-Error rejection', async () => {
+        const { svc } = makeService({ removeExternalLoginSessions: jest.fn().mockRejectedValue('stringErr') });
+        await expect(svc.removeExternalLoginSessions('m')).rejects.toBe('stringErr');
     });
 });
 

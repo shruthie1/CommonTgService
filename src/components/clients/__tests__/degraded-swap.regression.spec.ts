@@ -536,7 +536,7 @@ const rows: Row[] = [
       expect(fx.tg.setActiveClientSetup).toHaveBeenCalledTimes(1);
       expect(c.status).toBe('cooldown');
     } },
-  { id: 'DS-92', name: 'no removeOtherAuths anywhere on these paths (rescue + upgrade swap; source check)',
+  { id: 'DS-92', name: 'no removeExternalLoginSessions anywhere on these paths (rescue + upgrade swap; source check)',
     setup: async (fx) => {
       await fx.world({ degraded: degradedState(3) }, { mainBuffer: limited(3) }); await fx.addBuffer(T1);
       await fx.addClient('dead0', '919000990000', { deadMain: deadMain('919000990000') }, RETIRED);
@@ -545,10 +545,10 @@ const rows: Row[] = [
     run: (fx) => maintain(fx),
     expect: (out, fx) => {
       expect(out.rescue[0].status).toBe('swapped'); expect(out.upgrade[0].status).toBe('swapped');
-      expect(fx.removeOtherAuths).not.toHaveBeenCalled();
-      expect(fx.tg.removeOtherAuths).not.toHaveBeenCalled();
+      expect(fx.removeExternalLoginSessions).not.toHaveBeenCalled();
+      expect(fx.tg.removeExternalLoginSessions).not.toHaveBeenCalled();
       for (const f of ['../client.service.ts', '../degraded-swap.ts']) {
-        expect(fs.readFileSync(path.join(__dirname, f), 'utf8')).not.toMatch(/removeOtherAuths/);
+        expect(fs.readFileSync(path.join(__dirname, f), 'utf8')).not.toMatch(/removeExternalLoginSessions/);
       }
     } },
   { id: 'DS-93', name: 'a degraded plan is only ever applied to its own client (plans keyed by clientId + mobile, D3)',

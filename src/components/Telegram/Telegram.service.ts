@@ -617,10 +617,10 @@ export class TelegramService implements OnModuleDestroy {
         return auths;
     }
 
-    async removeOtherAuths(mobile: string) {
+    async removeExternalLoginSessions(mobile: string) {
         const telegramClient = await connectionManager.getClient(mobile);
         try {
-            await telegramClient.removeOtherAuths();
+            await telegramClient.removeExternalLoginSessions();
             this.logger.info(mobile, 'Removed other authorizations');
             await sendBotNotice('notif', {
                 severity: 'success',

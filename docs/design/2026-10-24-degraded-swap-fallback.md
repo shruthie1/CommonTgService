@@ -96,7 +96,7 @@ the query and the probe is skipped before and again after the probe.
   mobile now belongs to another client (a fresh `clients` read; a read error counts as taken).
 - Unchanged: the per-client in-flight lock (`setupInFlightMap`, which coalesces concurrent
   requests), the 4-min cooldown, the `deployKey` restart, the uptime map refresh
-  (`performPostUpdateTasks`) and the bot notices. No `removeOtherAuths` on any of these paths.
+  (`performPostUpdateTasks`) and the bot notices. No `removeExternalLoginSessions` on any of these paths.
 - **Cross-process leases (review 2).** `cms` (the job) and `ums` / `ums-test` (HTTP
   `/setupClient`) share Mongo, not memory. Every `setupClient` run (HTTP and job passes) first
   takes `clients.swapLease {owner: host:pid:uuid, until}` with one atomic `findOneAndUpdate`
@@ -435,7 +435,7 @@ and HTTP are faked). DS-J01 is in `src/control-plane/jobs/scheduled-jobs.service
 | DS-89 | Concurrency / safety | setPrimaryInUse throws inside the transaction | client write and tier-2 reassign rolled back | `-t "DS-89 "` |
 | DS-90 | Concurrency / safety | deployKey restart fails after commit | "Restart failed" notice; data committed | `-t "DS-90 "` |
 | DS-91 | Concurrency / safety | two concurrent dead handoffs | one selection, one cutover, second gets cooldown | `-t "DS-91 "` |
-| DS-92 | Concurrency / safety | source of the swap paths | no `removeOtherAuths` call | `-t "DS-92 "` |
+| DS-92 | Concurrency / safety | source of the swap paths | no `removeExternalLoginSessions` call | `-t "DS-92 "` |
 | DS-93 | Concurrency / safety | plans for two clients in flight | each cutover uses only its own plan | `-t "DS-93 "` |
 | DS-94 | Concurrency / safety | `updateClientSession` for a setup owned by another client | ConflictException | `-t "DS-94 "` |
 | DS-95 | Notification | dead main, nothing anywhere, repeated requests | one critical "No buffer" | `-t "DS-95 "` |

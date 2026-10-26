@@ -66,7 +66,7 @@ export interface WarmupAction {
     | 'organic_only'        // just perform organic activity, no admin changes
     | 'set_privacy'         // organic + privacy update
     | 'set_2fa'             // organic + set 2FA (early — secure the account)
-    | 'remove_other_auths'  // organic + revoke other sessions (AFTER 2FA is set)
+    | 'remove_external_login_sessions'  // organic + revoke other sessions (AFTER 2FA is set)
     | 'delete_photos'       // organic + delete profile photos
     | 'update_name_bio'     // organic + update name/bio
     | 'update_username'     // organic + set/clear username
@@ -91,7 +91,7 @@ const WARMUP_PHASE_PRIORITY: Record<WarmupPhaseType, number> = {
 };
 
 const WARMUP_ACTION_PRIORITY: Partial<Record<WarmupAction['action'], number>> = {
-    remove_other_auths: 2000,
+    remove_external_login_sessions: 2000,
     set_2fa: 1000,
     update_username: 1500,
     update_name_bio: 1000,
@@ -102,7 +102,7 @@ const WARMUP_ACTION_PRIORITY: Partial<Record<WarmupAction['action'], number>> = 
 const WARMUP_FAIR_AGING_ACTIONS: ReadonlySet<WarmupAction['action']> = new Set([
     'set_privacy',
     'set_2fa',
-    'remove_other_auths',
+    'remove_external_login_sessions',
     'delete_photos',
     'update_name_bio',
     'update_username',
@@ -257,9 +257,9 @@ export function getWarmupPhaseAction(
         return { phase: WarmupPhase.ENROLLED, action: 'wait', organicIntensity: 'light' };
     }
 
-    // Phase: SETTLING (sub-steps: set_privacy → set_2fa → remove_other_auths)
+    // Phase: SETTLING (sub-steps: set_privacy → set_2fa → remove_external_login_sessions)
     // Order matters: privacy first (lightweight), then 2FA (secures account),
-    // then removeOtherAuths (revokes user's sessions — safe because 2FA is already set)
+    // then removeExternalLoginSessions (revokes user's sessions — safe because 2FA is already set)
     if (phase === WarmupPhase.SETTLING) {
         const privacyDone = ClientHelperUtils.getTimestamp(doc.privacyUpdatedAt) > 0;
         const twoFADone = ClientHelperUtils.getTimestamp(doc.twoFASetAt) > 0;
@@ -278,10 +278,10 @@ export function getWarmupPhaseAction(
             return { phase: WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'medium' };
         }
 
-        // Sub-step 3: Remove other auths (requires 2FA done 2+ days ago)
+        // Sub-step 3: Remove external login sessions (requires 2FA done 2+ days ago)
         if (!authsRemoved) {
             if (daysSince(doc.twoFASetAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
-                return { phase: WarmupPhase.SETTLING, action: 'remove_other_auths', organicIntensity: 'medium' };
+                return { phase: WarmupPhase.SETTLING, action: 'remove_external_login_sessions', organicIntensity: 'medium' };
             }
             return { phase: WarmupPhase.SETTLING, action: 'organic_only', organicIntensity: 'light' };
         }
@@ -347,7 +347,7 @@ export function getWarmupPhaseAction(
         }
         if (!twoFADone) return { phase, action: 'organic_only', organicIntensity: 'medium' };
         if (!authsRemoved && daysSince(doc.twoFASetAt) >= MIN_DAYS_BETWEEN_IDENTITY_STEPS) {
-            return { phase, action: 'remove_other_auths', organicIntensity: 'medium' };
+            return { phase, action: 'remove_external_login_sessions', organicIntensity: 'medium' };
         }
         if (!authsRemoved) return { phase, action: 'organic_only', organicIntensity: 'light' };
         return null;

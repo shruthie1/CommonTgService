@@ -800,7 +800,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         }
     }
 
-    // ---- Promote-specific: Enrollment (redesigned — no 2FA, no removeOtherAuths, no profile changes) ----
+    // ---- Promote-specific: Enrollment (redesigned — no 2FA, no removeExternalLoginSessions, no profile changes) ----
 
     async setAsPromoteClient(
         mobile: string,
@@ -1309,7 +1309,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 return false;
             }
 
-            // No removeOtherAuths, no set2fa — just get channel info and enroll
+            // No removeExternalLoginSessions, no set2fa — just get channel info and enroll
             const channels = await channelInfo(telegramClient.client, true);
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
 

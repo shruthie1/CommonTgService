@@ -473,8 +473,8 @@ import { Dialog } from 'telegram/tl/custom/dialog';
 
         // ---- Auth / Session operations ----
 
-        async removeOtherAuths(): Promise<void> {
-            return authOps.removeOtherAuths(this.ctx);
+        async removeExternalLoginSessions(): Promise<void> {
+            return authOps.removeExternalLoginSessions(this.ctx);
         }
 
         async getAuths(): Promise<Api.account.Authorizations> {

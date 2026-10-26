@@ -380,7 +380,7 @@ describe('ConnectionManager', () => {
     test('cleanup does NOT destroy a STALE but healthy autoDisconnect:false client (long-held op)', async () => {
         // A client acquired with autoDisconnect:false is explicitly "keep alive — I'm using it".
         // lastUsed is only stamped at acquisition, so a warmup op held >10min (organic activity)
-        // looks stale. Destroying it mid-operation breaks 2FA/removeOtherAuths and can trip a
+        // looks stale. Destroying it mid-operation breaks 2FA/removeExternalLoginSessions and can trip a
         // false permanent account expiry. autoDisconnect:false must opt out of idle/stale cleanup.
         const cm: any = connectionManager;
         const destroy = jest.fn().mockResolvedValue(undefined);

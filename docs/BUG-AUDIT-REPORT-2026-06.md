@@ -236,7 +236,7 @@ no error. **Fix:** isNaN guards matching the sibling /top-interacted endpoint.
 ### 35. 🔴 connection-manager: cleanup/forceCleanup destroyed in-use clients (session-survival)
 `lastUsed` is only stamped at acquisition, never refreshed; a warmup op held with
 `autoDisconnect:false` for >10 min (organic activity) looked stale and got torn down
-mid-operation (breaks 2FA/removeOtherAuths; risks FALSE permanent account expiry).
+mid-operation (breaks 2FA/removeExternalLoginSessions; risks FALSE permanent account expiry).
 `forceCleanup` also evicted oldest-by-`lastUsed` (= the busiest). **Fix:** `isStale` applies
 only to `autoDisconnect:true`; `forceCleanup` evicts disposable tiers
 (errored → auto-disconnect → disconnected) before in-use keep-alive clients.

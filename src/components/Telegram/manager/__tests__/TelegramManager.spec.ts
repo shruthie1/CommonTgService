@@ -111,11 +111,11 @@ describe('TelegramManager delegations', () => {
         expect(channelOps.joinChannel).toHaveBeenCalledWith(expect.anything(), 'c');
     });
 
-    test('removeOtherAuths delegates to authOps', async () => {
-        (authOps.removeOtherAuths as jest.Mock).mockResolvedValue(undefined);
+    test('removeExternalLoginSessions delegates to authOps', async () => {
+        (authOps.removeExternalLoginSessions as jest.Mock).mockResolvedValue(undefined);
         const mgr = new TelegramManager('', '900');
-        await mgr.removeOtherAuths();
-        expect(authOps.removeOtherAuths).toHaveBeenCalled();
+        await mgr.removeExternalLoginSessions();
+        expect(authOps.removeExternalLoginSessions).toHaveBeenCalled();
     });
 
     test('getDialogs calls client.getDialogs directly', async () => {

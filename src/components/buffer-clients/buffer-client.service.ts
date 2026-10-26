@@ -1241,7 +1241,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
     }
 
-    // ---- Buffer-specific: Enrollment (redesigned — no 2FA, no removeOtherAuths, no createNewSession) ----
+    // ---- Buffer-specific: Enrollment (redesigned — no 2FA, no removeExternalLoginSessions, no createNewSession) ----
 
     async setAsBufferClient(
         mobile: string,
@@ -1554,7 +1554,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                     return acc;
                 }, {} as Record<string, number>),
                 sampleNeedingPrivacy: settlingDetails.filter(s => s.action === 'set_privacy').slice(0, 5),
-                sampleNeedingRemoveAuths: settlingDetails.filter(s => s.action === 'remove_other_auths').slice(0, 5),
+                sampleNeedingRemoveAuths: settlingDetails.filter(s => s.action === 'remove_external_login_sessions').slice(0, 5),
             },
             skippedBySlotLimit: simSkipped.filter(s => s.reason === 'slot_limit_reached').slice(0, 10),
         };
@@ -1933,7 +1933,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
     }
 
-    // ---- Buffer-specific: Create buffer client from user (redesigned — no removeOtherAuths, no 2FA, no new session) ----
+    // ---- Buffer-specific: Create buffer client from user (redesigned — no removeExternalLoginSessions, no 2FA, no new session) ----
 
     /**
      * Check if a mobile is already enrolled in any collection (buffer, promote, or active client).
@@ -1973,7 +1973,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 return false;
             }
 
-            // No removeOtherAuths, no set2fa, no createNewSession
+            // No removeExternalLoginSessions, no set2fa, no createNewSession
             // Just get channel info and enroll
             const channels = await channelInfo(telegramClient.client, true);
             await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));

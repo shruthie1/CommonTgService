@@ -374,7 +374,7 @@ export function getExpectedAuthFingerprint(
 
 // Auths matching any of these criteria are treated as "ours" and never revoked.
 // Keeps operator-owned sessions (Singapore VPS, OnePlus 11 handsets, CLI/desktop tools,
-// app names like likki/rams/sru/shru/hanslnz) alive through removeOtherAuths.
+// app names like likki/rams/sru/shru/hanslnz) alive through removeExternalLoginSessions.
 // Derive our apiIds directly from the credentials array — always in sync.
 const OUR_API_IDS: ReadonlySet<number> = new Set(API_CREDENTIALS.map(c => c.apiId));
 

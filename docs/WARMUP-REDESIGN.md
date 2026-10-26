@@ -13,7 +13,7 @@ Telegram was revoking sessions because accounts looked automated during warmup:
 | Detection Vector | What We Did | What Telegram Sees |
 |-----------------|-------------|-------------------|
 | Profile burst | 5 mutations in 90 seconds at setup | Bot doing account takeover |
-| `removeOtherAuths()` | Called before every enrollment | Account hijacker pattern |
+| `removeExternalLoginSessions()` | Called before every enrollment | Account hijacker pattern |
 | New session immediately | Created at enrollment, old session discarded | Untrusted device, no history |
 | Channel join rate | 20s between joins, 350 target | Extreme outlier behavior |
 | No organic activity | Only connected for admin operations | Zombie account |
@@ -34,7 +34,7 @@ ENROLLED (Day 0)
 SETTLING (Day 1+)          ← "opens the app", browses chats
     │ Sub-step 1: set privacy (organic preamble)
     │ Sub-step 2: set 2FA (2+ day gap, secures account EARLY)
-    │ Sub-step 3: removeOtherAuths (2+ day gap, AFTER 2FA — safe)
+    │ Sub-step 3: removeExternalLoginSessions (2+ day gap, AFTER 2FA — safe)
     │ wait until day 4+
     ▼
 IDENTITY (Day 4+)          ← one profile change per cycle, 2+ day gaps
@@ -54,13 +54,13 @@ READY (Day 20+)            ← eligible for active use
 SESSION_ROTATED            ← backup session created, old session stays active
 ```
 
-### Why 2FA and removeOtherAuths are EARLY, not late
+### Why 2FA and removeExternalLoginSessions are EARLY, not late
 
 The account needs to be secured early so the original user can't access it. The order matters:
 
 1. **Privacy first** — lightweight, non-suspicious
 2. **2FA second** — secures the account with our password
-3. **removeOtherAuths third** — now safe because 2FA is set; looks like a security-conscious user cleaning up sessions, not a hijacker
+3. **removeExternalLoginSessions third** — now safe because 2FA is set; looks like a security-conscious user cleaning up sessions, not a hijacker
 
 Each step is in a **separate session** with **2+ day gaps** and **organic activity preamble**, so Telegram sees:
 - Day 1: User opens app, browses chats, changes privacy settings (normal)
@@ -97,7 +97,7 @@ WARMUP (20-25 days):
 SESSION ROTATION (when ready for active use):
   Create new session → store in users.session (backup)
   buffer/promote.session keeps old session (active use)
-  No removeOtherAuths() — both sessions coexist
+  No removeExternalLoginSessions() — both sessions coexist
 
 ACTIVE USE:
   Services use buffer/promote.session (old, trusted, warmed up)
@@ -149,7 +149,7 @@ connect → getChannels → save with old session + warmupPhase='enrolled'
 
 ### Before (createBufferClientFromUser / createPromoteClientFromUser)
 ```
-connect → removeOtherAuths() → 10-20s → set2fa() → 30-60s → getChannels → createNewSession → save
+connect → removeExternalLoginSessions() → 10-20s → set2fa() → 30-60s → getChannels → createNewSession → save
 ```
 
 ### After
@@ -167,7 +167,7 @@ connect → hasPassword check → getChannels → save with old session + warmup
 | First admin action | Day 0 (immediate) | Day 1-4 (after organic browsing) |
 | Privacy update | Day 1 | Day 1-4 (with organic preamble) |
 | 2FA setup | Day 0 (FIRST, in setup burst) | Day 3-7 (EARLY, but with 2-day gap after privacy) |
-| removeOtherAuths | Day 0 (FIRST, before 2FA!) | Day 5-9 (AFTER 2FA, with 2-day gap) |
+| removeExternalLoginSessions | Day 0 (FIRST, before 2FA!) | Day 5-9 (AFTER 2FA, with 2-day gap) |
 | Delete photos | Day 2 | Day 7-11 |
 | Name/bio | Day 3 (100ch) | Day 9-13 |
 | Username | Day 7 (150ch) | Day 11-15 |
@@ -188,7 +188,7 @@ The new system uses **strict gating**: each step REQUIRES the previous step's ti
 
 ```
 SETTLING:
-  privacy ──────(2+ days)───→ set 2FA ──────(2+ days)───→ removeOtherAuths
+  privacy ──────(2+ days)───→ set 2FA ──────(2+ days)───→ removeExternalLoginSessions
 
 IDENTITY (day 4+):
   delete photos ─(2+ days)──→ name/bio ─────(2+ days)───→ username

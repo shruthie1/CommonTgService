@@ -105,7 +105,7 @@ export function classifyBufferForCap(doc: CapClassifiableDoc, now: number, opts:
 /**
  * Warmup engine ceiling (accounts that can START warmup per week without changing any warmup cap):
  * MAX_SENSITIVE_ACTIONS_PER_CYCLE (5) x WARMUP_RUNS_PER_DAY (4) x 7 days / sensitive actions per
- * account (set_2fa, remove_other_auths, update_username = 3) = 46.67 -> 46. Config can only lower it.
+ * account (set_2fa, remove_external_login_sessions, update_username = 3) = 46.67 -> 46. Config can only lower it.
  */
 export const SENSITIVE_ACTIONS_PER_ACCOUNT = 3;
 export function engineWeeklyCeiling(maxSensitivePerRun: number, runsPerDay: number): number {

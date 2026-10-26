@@ -47,7 +47,7 @@ Generic abstract class parameterized by the document type (`BufferClientDocument
 | **Helpers** | `safeUnregisterClient()`, `handleError()`, `updateUser2FAStatus()` |
 | **Maps** | `safeSetJoinChannelMap()`, `safeSetLeaveChannelMap()`, `removeFromJoinMap()`, `removeFromLeaveMap()`, `clearJoinMap()`, `clearLeaveMap()` |
 | **Health** | `performHealthCheck()` — uses organic activity instead of SetPrivacy |
-| **Warmup steps** | `updatePrivacySettings()`, `set2fa()`, `removeOtherAuths()`, `deleteProfilePhotos()`, `updateProfilePhotos()` |
+| **Warmup steps** | `updatePrivacySettings()`, `set2fa()`, `removeExternalLoginSessions()`, `deleteProfilePhotos()`, `updateProfilePhotos()` |
 | **Warmup engine** | `processClient()` — reads phase from `getWarmupPhaseAction()`, executes one action per cycle |
 | **Backfill** | `backfillTimestamps()` |
 | **Channel queues** | `joinChannelQueue()`, `processJoinChannelInterval()`, `processJoinChannelSequentially()`, `leaveChannelQueue()`, `processLeaveChannelInterval()`, `processLeaveChannelSequentially()`, `clearJoinChannelInterval()`, `clearLeaveChannelInterval()` |
@@ -148,12 +148,12 @@ ENROLLED:
   if daysSinceEnrolled >= 1 + jitter → SETTLING (set_privacy)
   else → wait
 
-SETTLING (sub-steps: privacy → 2FA → removeOtherAuths):
+SETTLING (sub-steps: privacy → 2FA → removeExternalLoginSessions):
   if privacy NOT done → set_privacy
   if privacy done < 2 days ago → organic_only
   if privacy done 2+ days AND 2FA NOT done → set_2fa
   if 2FA done < 2 days ago → organic_only
-  if 2FA done 2+ days AND auths NOT removed → remove_other_auths
+  if 2FA done 2+ days AND auths NOT removed → remove_external_login_sessions
   if ALL settling done AND daysSinceEnrolled >= 4 + jitter → IDENTITY (delete_photos)
   else → organic_only
 
@@ -280,7 +280,7 @@ Main warmup processor, called from `checkBufferClients` / `checkPromoteClients`:
     - update_username → abstract (buffer: set username, promote: clear username)
     - upload_photo → organic + upload 1 photo from pool
     - set_2fa → organic + set2fa() (during settling, stamps twoFASetAt)
-    - remove_other_auths → organic + removeOtherAuths() (during settling, after 2FA)
+    - remove_external_login_sessions → organic + removeExternalLoginSessions() (during settling, after 2FA)
     - advance_to_ready → mark warmupPhase='ready' (requires day 20+ floor)
     - join_channels → no-op (handled by separate joinChannel* flow)
 11. Sleep 15-25s (final delay)
@@ -308,7 +308,7 @@ npx jest 'src/components/shared/__tests__'
 | Area | Tests | What's covered |
 |------|-------|---------------|
 | ENROLLED phase | 6 | Jitter effects, missing enrolledAt/createdAt, fallback to createdAt |
-| SETTLING phase | 7 | Privacy, 2FA, removeOtherAuths sub-steps with 2-day gaps, advancing to identity |
+| SETTLING phase | 7 | Privacy, 2FA, removeExternalLoginSessions sub-steps with 2-day gaps, advancing to identity |
 | IDENTITY phase | 7 | Each sub-step, 2-day gaps, advancing to growing |
 | GROWING phase | 5 | Below target, at target but early, transitioning to maturing |
 | MATURING phase | 2 | Upload photo, advance to ready |

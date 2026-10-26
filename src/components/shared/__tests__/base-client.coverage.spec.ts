@@ -170,7 +170,7 @@ class TestBaseService extends BaseClientService<BaseClientDocument> {
         deleteProfilePhotos: (d: any, c: any, f: number) => (this as any).deleteProfilePhotos(d, c, f),
         updateProfilePhotos: (d: any, c: any, f: number) => (this as any).updateProfilePhotos(d, c, f),
         set2fa: (d: any, f: number) => (this as any).set2fa(d, f),
-        removeOtherAuths: (d: any, f: number) => (this as any).removeOtherAuths(d, f),
+        removeExternalLoginSessions: (d: any, f: number) => (this as any).removeExternalLoginSessions(d, f),
         performHealthCheck: (m: string, l: number, n: number) => (this as any).performHealthCheck(m, l, n),
         logIfLongWarming: (d: any, n: number) => (this as any).logIfLongWarming(d, n),
         getEffectiveUpdatesCap: (n: number) => (this as any).getEffectiveUpdatesCap(n),
@@ -221,7 +221,7 @@ function makeTgManager(overrides: any = {}) {
         updateProfilePic: jest.fn(async () => undefined),
         hasPassword: jest.fn(async () => false),
         set2fa: jest.fn(async () => undefined),
-        removeOtherAuths: jest.fn(async () => undefined),
+        removeExternalLoginSessions: jest.fn(async () => undefined),
         leaveChannels: jest.fn(async () => ({ successCount: 1, skipCount: 0 })),
         ...overrides,
     };
@@ -694,9 +694,9 @@ describe('set2fa & 2FA password verification', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// removeOtherAuths
+// removeExternalLoginSessions
 // ════════════════════════════════════════════════════════════════════════════
-describe('removeOtherAuths', () => {
+describe('removeExternalLoginSessions', () => {
     const doc: any = { mobile: '919990000050', tgId: 'tg-50', warmupPhase: WarmupPhase.SETTLING };
 
     test('success path', async () => {
@@ -704,22 +704,22 @@ describe('removeOtherAuths', () => {
         const tg = makeTgManager();
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const n = await service.pub.removeOtherAuths(doc, 0);
+        const n = await service.pub.removeExternalLoginSessions(doc, 0);
         expect(n).toBe(1);
-        expect(tg.removeOtherAuths).toHaveBeenCalled();
+        expect(tg.removeExternalLoginSessions).toHaveBeenCalled();
         expect(service.updateMock).toHaveBeenCalledWith('919990000050', expect.objectContaining({ otherAuthsRemovedAt: expect.any(Date) }));
     });
 
     test('a self-check failure from a CONNECTION teardown (no revocation token) retries, does NOT permanently deactivate', async () => {
         // Regression guard for the lock-removal race: a concurrent join round can destroy the shared
-        // per-mobile client mid removeOtherAuths, so getMe() throws a plain connection error wrapped as
+        // per-mobile client mid removeExternalLoginSessions, so getMe() throws a plain connection error wrapped as
         // "Session self-check failed: ...not connected". That must NOT be treated as a revocation — a
         // healthy warming account would be irreversibly lost. It should increment failures and retry.
         const service = new TestBaseService();
-        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('Session self-check failed after removeOtherAuths: Error: not connected'); }) });
+        const tg = makeTgManager({ removeExternalLoginSessions: jest.fn(async () => { throw new Error('Session self-check failed after removeExternalLoginSessions: Error: not connected'); }) });
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const n = await service.pub.removeOtherAuths(doc, 1);
+        const n = await service.pub.removeExternalLoginSessions(doc, 1);
         expect(n).toBe(0);
         expect(service.updateStatusMock).not.toHaveBeenCalled();        // NOT deactivated
         expect(service.updateMock).toHaveBeenCalledWith('919990000050', expect.objectContaining({ failedUpdateAttempts: 2 }));
@@ -729,10 +729,10 @@ describe('removeOtherAuths', () => {
         // A genuine revocation surfaces via the self-check as "Session self-check failed: ...SESSION_REVOKED".
         // isPermanentError matches the SESSION_REVOKED token by boundary, so this correctly stays permanent.
         const service = new TestBaseService();
-        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('Session self-check failed after removeOtherAuths: RPCError: SESSION_REVOKED (401)'); }) });
+        const tg = makeTgManager({ removeExternalLoginSessions: jest.fn(async () => { throw new Error('Session self-check failed after removeExternalLoginSessions: RPCError: SESSION_REVOKED (401)'); }) });
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const n = await service.pub.removeOtherAuths(doc, 0);
+        const n = await service.pub.removeExternalLoginSessions(doc, 0);
         expect(n).toBe(0);
         expect(service.updateStatusMock).toHaveBeenCalledWith('919990000050', 'inactive', expect.any(String));
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalled();
@@ -740,10 +740,10 @@ describe('removeOtherAuths', () => {
 
     test('transient error increments failures without deactivating', async () => {
         const service = new TestBaseService();
-        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('TIMEOUT'); }) });
+        const tg = makeTgManager({ removeExternalLoginSessions: jest.fn(async () => { throw new Error('TIMEOUT'); }) });
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const n = await service.pub.removeOtherAuths(doc, 1);
+        const n = await service.pub.removeExternalLoginSessions(doc, 1);
         expect(n).toBe(0);
         expect(service.updateMock).toHaveBeenCalledWith('919990000050', expect.objectContaining({ failedUpdateAttempts: 2 }));
         expect(service.updateStatusMock).not.toHaveBeenCalled();
@@ -751,10 +751,10 @@ describe('removeOtherAuths', () => {
 
     test('permanent (non self-check) error deactivates', async () => {
         const service = new TestBaseService();
-        const tg = makeTgManager({ removeOtherAuths: jest.fn(async () => { throw new Error('USER_DEACTIVATED'); }) });
+        const tg = makeTgManager({ removeExternalLoginSessions: jest.fn(async () => { throw new Error('USER_DEACTIVATED'); }) });
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue(tg as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
-        const n = await service.pub.removeOtherAuths(doc, 0);
+        const n = await service.pub.removeExternalLoginSessions(doc, 0);
         expect(n).toBe(0);
         expect(service.updateStatusMock).toHaveBeenCalledWith('919990000050', 'inactive', expect.any(String));
     });
@@ -2758,7 +2758,7 @@ describe('isSensitiveWarmupAction (sub-cap classifier)', () => {
     test('classifies the high-risk actions as sensitive', () => {
         const s = new TestBaseService();
         expect(s.pub.isSensitiveWarmupAction('set_2fa')).toBe(true);
-        expect(s.pub.isSensitiveWarmupAction('remove_other_auths')).toBe(true);
+        expect(s.pub.isSensitiveWarmupAction('remove_external_login_sessions')).toBe(true);
         expect(s.pub.isSensitiveWarmupAction('update_username')).toBe(true);
     });
 

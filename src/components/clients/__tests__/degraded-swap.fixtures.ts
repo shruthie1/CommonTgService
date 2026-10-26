@@ -46,7 +46,7 @@ export class FakeTelegram {
   hasActiveClientSetup = jest.fn(() => this.setups.size > 0);
   clearActiveClientSetup = jest.fn((m: string) => { this.setups.delete(m); });
   updatePrivacyforDeletedAccount = jest.fn(async () => undefined);
-  removeOtherAuths = jest.fn(async () => undefined);
+  removeExternalLoginSessions = jest.fn(async () => undefined);
 }
 
 export type Fixture = Awaited<ReturnType<typeof makeFixture>>;
@@ -66,8 +66,8 @@ export async function makeFixture(connection: Connection, mocks: FixtureMocks) {
   const users = new Map<string, any>();
   const docsOf = (mobile: string): any[] => { const u = users.get(mobile); return u ? (Array.isArray(u) ? u : [u]) : []; };
   const tg = new FakeTelegram();
-  const removeOtherAuths = jest.fn();
-  mocks.connection.getClient.mockImplementation(async () => ({ getMe: async () => ({ username: 'tguser' }), removeOtherAuths }));
+  const removeExternalLoginSessions = jest.fn();
+  mocks.connection.getClient.mockImplementation(async () => ({ getMe: async () => ({ username: 'tguser' }), removeExternalLoginSessions }));
   mocks.connection.unregisterClient.mockResolvedValue(undefined);
   mocks.fetch.mockResolvedValue({ ok: true });
   mocks.probe.mockImplementation(async (mobile: string) => defaultProbe(await bufferModel.findOne({ mobile }).lean()));
@@ -105,7 +105,7 @@ export async function makeFixture(connection: Connection, mocks: FixtureMocks) {
   jest.spyOn(svc, 'performPostUpdateTasks').mockImplementation(() => undefined);
 
   const fx = {
-    svc, clientModel, bufferModel, users, tg, buffer, usersService, mocks, connection, removeOtherAuths,
+    svc, clientModel, bufferModel, users, tg, buffer, usersService, mocks, connection, removeExternalLoginSessions,
     notices: () => mocks.notice.mock.calls.map(([, input]: any[]) => input),
     titles: () => mocks.notice.mock.calls.map(([, input]: any[]) => input.title as string),
     count: (title: string) => mocks.notice.mock.calls.filter(([, input]: any[]) => input.title === title).length,

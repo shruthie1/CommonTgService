@@ -105,7 +105,7 @@ describe('getWarmupPhaseAction', () => {
         });
     });
 
-    // ======= SETTLING PHASE (privacy → 2FA → removeOtherAuths) =======
+    // ======= SETTLING PHASE (privacy → 2FA → removeExternalLoginSessions) =======
 
     describe('SETTLING phase', () => {
         test('settling, privacy NOT done → set_privacy', () => {
@@ -137,7 +137,7 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('set_2fa');
         });
 
-        test('settling, 2FA done yesterday → organic_only (need 2-day gap for removeOtherAuths)', () => {
+        test('settling, 2FA done yesterday → organic_only (need 2-day gap for removeExternalLoginSessions)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: daysAgo(5, now),
@@ -148,7 +148,7 @@ describe('getWarmupPhaseAction', () => {
             expect(result.action).toBe('organic_only');
         });
 
-        test('settling, 2FA done 3 days ago → remove_other_auths', () => {
+        test('settling, 2FA done 3 days ago → remove_external_login_sessions', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: daysAgo(7, now),
@@ -156,10 +156,10 @@ describe('getWarmupPhaseAction', () => {
                 twoFASetAt: daysAgo(3, now),
             });
             const result = getWarmupPhaseAction(doc, now);
-            expect(result.action).toBe('remove_other_auths');
+            expect(result.action).toBe('remove_external_login_sessions');
         });
 
-        test('settling, all done, auth cleanup 3 days ago → advance to identity (delete_photos)', () => {
+        test('settling, all done, external login cleanup 3 days ago → advance to identity (delete_photos)', () => {
             const doc = makeDoc({
                 warmupPhase: WarmupPhase.SETTLING,
                 enrolledAt: daysAgo(7, now),
@@ -592,16 +592,16 @@ describe('getWarmupPhaseAction', () => {
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('set_2fa');
             doc.twoFASetAt = new Date(simNow);
 
-            // Day 5: organic_only (need 2 day gap for removeOtherAuths)
+            // Day 5: organic_only (need 2 day gap for removeExternalLoginSessions)
             simNow = enrolledAt.getTime() + 5 * ONE_DAY_MS;
             expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
 
-            // Day 6.5: remove_other_auths (2FA was 2.5+ days ago)
+            // Day 6.5: remove_external_login_sessions (2FA was 2.5+ days ago)
             simNow = enrolledAt.getTime() + 6.5 * ONE_DAY_MS;
-            expect(getWarmupPhaseAction(doc, simNow).action).toBe('remove_other_auths');
+            expect(getWarmupPhaseAction(doc, simNow).action).toBe('remove_external_login_sessions');
             doc.otherAuthsRemovedAt = new Date(simNow);
 
-            // Day 9.5: auth cleanup has cooled down for 3 days → delete_photos
+            // Day 9.5: external login cleanup has cooled down for 3 days → delete_photos
             simNow = enrolledAt.getTime() + 9.5 * ONE_DAY_MS;
             result = getWarmupPhaseAction(doc, simNow);
             expect(result.action).toBe('delete_photos');
@@ -883,7 +883,7 @@ describe('Normal phases unaffected by catch-up', () => {
             otherAuthsRemovedAt: daysAgo(3, now),
         });
         const result = getWarmupPhaseAction(doc, now);
-        // All settling done and auth cleanup cooled down → should transition to identity
+        // All settling done and external login cleanup cooled down → should transition to identity
         expect(result.phase).toBe(WarmupPhase.IDENTITY);
         expect(result.action).toBe('delete_photos');
     });

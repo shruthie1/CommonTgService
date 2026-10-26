@@ -20,7 +20,7 @@ import { MailReader } from '../../../../IMap/IMap';
 import {
     set2fa,
     isOwnAuth,
-    removeOtherAuths,
+    removeExternalLoginSessions,
     getAuths,
     getLastActiveTime,
     getLastForeignActiveDate,
@@ -194,11 +194,11 @@ describe('isOwnAuth', () => {
     });
 });
 
-describe('removeOtherAuths', () => {
+describe('removeExternalLoginSessions', () => {
     afterEach(() => jest.restoreAllMocks());
 
     test('throws without client', async () => {
-        await expect(removeOtherAuths(makeCtx(null))).rejects.toThrow('Client is not initialized');
+        await expect(removeExternalLoginSessions(makeCtx(null))).rejects.toThrow('Client is not initialized');
     });
 
     test('keeps own auths, revokes others, verifies survival', async () => {
@@ -209,7 +209,7 @@ describe('removeOtherAuths', () => {
             .mockResolvedValueOnce(undefined) // ResetAuthorization
             .mockResolvedValueOnce({ authorizations: [own] }); // after-cleanup GetAuthorizations
         const ctx = makeCtx({ invoke, getMe: jest.fn().mockResolvedValue({ phone: '900' }) });
-        await removeOtherAuths(ctx);
+        await removeExternalLoginSessions(ctx);
         // ResetAuthorization invoked for the "other" auth
         expect(invoke.mock.calls[1][0]).toBeInstanceOf(Api.account.ResetAuthorization);
     });
@@ -220,7 +220,7 @@ describe('removeOtherAuths', () => {
             invoke: jest.fn().mockResolvedValue({ authorizations: [own] }),
             getMe: jest.fn().mockResolvedValue(null),
         });
-        await expect(removeOtherAuths(ctx)).rejects.toThrow(/Session self-check failed/);
+        await expect(removeExternalLoginSessions(ctx)).rejects.toThrow(/Session self-check failed/);
     });
 
     test('throws when revocation fails or others remain', async () => {
@@ -231,7 +231,7 @@ describe('removeOtherAuths', () => {
             .mockRejectedValueOnce(new Error('reset failed')) // ResetAuthorization fails -> failedCount++
             .mockResolvedValueOnce({ authorizations: [own, other] }); // still has other
         const ctx = makeCtx({ invoke, getMe: jest.fn().mockResolvedValue({ phone: '900' }) });
-        await expect(removeOtherAuths(ctx)).rejects.toThrow(/removeOtherAuths incomplete/);
+        await expect(removeExternalLoginSessions(ctx)).rejects.toThrow(/removeExternalLoginSessions incomplete/);
     });
 });
 

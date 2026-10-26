@@ -19,7 +19,7 @@ export function isOwnAuth(mobile: string, auth: Api.Authorization): boolean {
     return isAuthFingerprintMatch(mobile, auth);
 }
 
-export async function removeOtherAuths(ctx: TgContext): Promise<void> {
+export async function removeExternalLoginSessions(ctx: TgContext): Promise<void> {
     if (!ctx.client) throw new Error('Client is not initialized');
     const result = await ctx.client.invoke(new Api.account.GetAuthorizations());
     const authSummary = result.authorizations.map(formatAuthForLog);
@@ -29,7 +29,7 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
     let failedCount = 0;
     const failedAuths: string[] = [];
 
-    ctx.logger.info(ctx.phoneNumber, `Auth cleanup starting: total=${result.authorizations.length}`, authSummary);
+    ctx.logger.info(ctx.phoneNumber, `External login cleanup starting: total=${result.authorizations.length}`, authSummary);
 
     for (const auth of result.authorizations) {
         if (isOwnAuth(ctx.phoneNumber, auth)) {
@@ -62,7 +62,7 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
         await sleep(2000 + Math.random() * 3000); // Pause between revocations
     }
 
-    ctx.logger.info(ctx.phoneNumber, `Auth cleanup attempted: kept=${keptCount}, revoked=${revokedCount}, failed=${failedCount}`, {
+    ctx.logger.info(ctx.phoneNumber, `External login cleanup attempted: kept=${keptCount}, revoked=${revokedCount}, failed=${failedCount}`, {
         failedAuths,
     });
 
@@ -70,23 +70,23 @@ export async function removeOtherAuths(ctx: TgContext): Promise<void> {
     try {
         const me = await ctx.client.getMe();
         if (!me) {
-            throw new Error('Session verification failed after removeOtherAuths — getMe returned null');
+            throw new Error('Session verification failed after removeExternalLoginSessions — getMe returned null');
         }
-        ctx.logger.info(ctx.phoneNumber, `Session verified alive after auth cleanup (user: ${me.phone})`);
+        ctx.logger.info(ctx.phoneNumber, `Session verified alive after external login cleanup (user: ${me.phone})`);
     } catch (verifyError) {
-        ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeOtherAuths!', verifyError);
-        throw new Error(`Session self-check failed after removeOtherAuths: ${verifyError}`);
+        ctx.logger.error(ctx.phoneNumber, 'CRITICAL: Our session may have been revoked during removeExternalLoginSessions!', verifyError);
+        throw new Error(`Session self-check failed after removeExternalLoginSessions: ${verifyError}`);
     }
 
     const afterResult = await ctx.client.invoke(new Api.account.GetAuthorizations());
     const remainingOtherAuths = afterResult.authorizations.filter((auth) => !isOwnAuth(ctx.phoneNumber, auth));
-    ctx.logger.info(ctx.phoneNumber, `Auth cleanup verified: total=${afterResult.authorizations.length}, remainingOther=${remainingOtherAuths.length}`, {
+    ctx.logger.info(ctx.phoneNumber, `External login cleanup verified: total=${afterResult.authorizations.length}, remainingOther=${remainingOtherAuths.length}`, {
         authorizations: afterResult.authorizations.map(formatAuthForLog),
     });
 
     if (failedCount > 0 || remainingOtherAuths.length > 0) {
         throw new Error(
-            `removeOtherAuths incomplete: failed=${failedCount}, remainingOther=${remainingOtherAuths.length}, remaining=${remainingOtherAuths.map(formatAuthForLog).join('; ')}`,
+            `removeExternalLoginSessions incomplete: failed=${failedCount}, remainingOther=${remainingOtherAuths.length}, remaining=${remainingOtherAuths.map(formatAuthForLog).join('; ')}`,
         );
     }
 }

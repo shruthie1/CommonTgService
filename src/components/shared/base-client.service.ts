@@ -281,7 +281,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly MAX_ORGANIC_ACTIONS_PER_CYCLE = 5;
 
     protected static readonly SENSITIVE_WARMUP_ACTIONS: ReadonlySet<string> = new Set([
-        'set_2fa', 'remove_other_auths', 'update_username',
+        'set_2fa', 'remove_external_login_sessions', 'update_username',
     ]);
 
     /**
@@ -1344,14 +1344,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * Called AFTER 2FA is set (so account is secured first).
      * Wrapped in organic activity to look like a security-conscious user.
      */
-    protected async removeOtherAuths(doc: TDoc, failedAttempts: number): Promise<number> {
+    protected async removeExternalLoginSessions(doc: TDoc, failedAttempts: number): Promise<number> {
         const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
         try {
             await performOrganicActivity(telegramClient, 'medium');
 
-            // removeOtherAuths now includes post-revocation self-check (getMe).
+            // removeExternalLoginSessions now includes post-revocation self-check (getMe).
             // If our session was accidentally revoked, it throws.
-            await telegramClient.removeOtherAuths();
+            await telegramClient.removeExternalLoginSessions();
             await sleep(ClientHelperUtils.gaussianRandom(30000, 5000, 20000, 40000));
 
             await this.update(doc.mobile, {
@@ -1379,11 +1379,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // must NOT permanently lose a healthy account. A real revocation still carries a permanent
             // token in the message and is caught here; a hiccup just retries next cycle.
             if (isPermanentError(errorDetails)) {
-                this.logger.error(`Session permanently lost for ${doc.mobile} during removeOtherAuths — marking inactive`);
+                this.logger.error(`Session permanently lost for ${doc.mobile} during removeExternalLoginSessions — marking inactive`);
                 const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
                 const deactivated = await this.deactivateClient(doc.mobile, reason, { permanent: true });
                 this.sendAccountNotice(
-                    this.warmupNotice('critical', 'Session lost', doc.mobile, [{ label: 'Cause', value: 'revoked during auth cleanup', code: false }, { label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], undefined, errorMsg?.substring(0, 120))
+                    this.warmupNotice('critical', 'Session lost', doc.mobile, [{ label: 'Cause', value: 'revoked during external login cleanup', code: false }, { label: 'Result', value: deactivated ? 'inactivated' : 'inactivate FAILED', code: false }], undefined, errorMsg?.substring(0, 120))
                 );
             }
             return 0;
@@ -1712,21 +1712,21 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'set_2fa' : null };
 
-                case 'remove_other_auths':
-                    this.logger.log(`Starting remove_other_auths for ${doc.mobile}`, {
+                case 'remove_external_login_sessions':
+                    this.logger.log(`Starting remove_external_login_sessions for ${doc.mobile}`, {
                         phase: warmupAction.phase,
                         twoFASetAt: doc.twoFASetAt || null,
                         otherAuthsRemovedAt: doc.otherAuthsRemovedAt || null,
                         failedAttempts,
                     });
-                    updateCount = await this.removeOtherAuths(doc, failedAttempts);
+                    updateCount = await this.removeExternalLoginSessions(doc, failedAttempts);
                     if (updateCount === 0) {
                         this.sendAccountNotice(
-                            this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'remove_other_auths', code: false }, { label: 'Fails', value: failedAttempts + 1, code: false }])
+                            this.warmupNotice('warning', 'Warmup failed', doc.mobile, [{ label: 'Step', value: 'remove_external_login_sessions', code: false }, { label: 'Fails', value: failedAttempts + 1, code: false }])
                         );
                     }
-                    this.logger.log(`Finished remove_other_auths for ${doc.mobile}: updateCount=${updateCount}`);
-                    return { updateCount, updateSummary: updateCount > 0 ? 'remove_other_auths' : null };
+                    this.logger.log(`Finished remove_external_login_sessions for ${doc.mobile}: updateCount=${updateCount}`);
+                    return { updateCount, updateSummary: updateCount > 0 ? 'remove_external_login_sessions' : null };
 
                 case 'rotate_session':
                     updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;

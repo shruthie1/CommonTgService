@@ -5,7 +5,7 @@
  *
  * Organized by:
  * 1. processClient — all 13 exit paths
- * 2. TG operation handlers — set2fa, removeOtherAuths, privacy, photos, etc.
+ * 2. TG operation handlers — set2fa, removeExternalLoginSessions, privacy, photos, etc.
  * 3. Health check & session rotation
  * 4. Availability & enrollment decisions
  * 5. Priority & ordering
@@ -373,8 +373,8 @@ describe('processClient — all exit paths', () => {
         expect(result.updateSummary).toBe('set_2fa');
     });
 
-    test('EXIT 10: action=remove_other_auths → calls removeOtherAuths', async () => {
-        jest.spyOn(service as any, 'removeOtherAuths').mockResolvedValue(1);
+    test('EXIT 10: action=remove_external_login_sessions → calls removeExternalLoginSessions', async () => {
+        jest.spyOn(service as any, 'removeExternalLoginSessions').mockResolvedValue(1);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
             enrolledAt: daysAgo(10, mockNow),
@@ -382,11 +382,11 @@ describe('processClient — all exit paths', () => {
             twoFASetAt: daysAgo(5, mockNow),
         });
         const result = await service.processClient(doc, { clientId: 'c1' } as Client);
-        expect(result.updateSummary).toBe('remove_other_auths');
+        expect(result.updateSummary).toBe('remove_external_login_sessions');
     });
 
-    test('EXIT 10: action=remove_other_auths failure → sends failure notification', async () => {
-        jest.spyOn(service as any, 'removeOtherAuths').mockResolvedValue(0);
+    test('EXIT 10: action=remove_external_login_sessions failure → sends failure notification', async () => {
+        jest.spyOn(service as any, 'removeExternalLoginSessions').mockResolvedValue(0);
         const doc = makeDoc({
             warmupPhase: WarmupPhase.SETTLING,
             enrolledAt: daysAgo(10, mockNow),
@@ -789,7 +789,7 @@ describe('Catch-up — full settling→identity chain in growing/maturing', () =
         expect(result.action).toBe('update_username');
     });
 
-    test('growing: 2FA done 1 day ago → organic_only (need 2 day gap for removeOtherAuths)', () => {
+    test('growing: 2FA done 1 day ago → organic_only (need 2 day gap for removeExternalLoginSessions)', () => {
         const doc = {
             warmupPhase: WarmupPhase.GROWING,
             enrolledAt: daysAgo(15, now),
@@ -803,7 +803,7 @@ describe('Catch-up — full settling→identity chain in growing/maturing', () =
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 5. Security operations — set2fa, removeOtherAuths, verifyOurPassword
+// 5. Security operations — set2fa, removeExternalLoginSessions, verifyOurPassword
 // ════════════════════════════════════════════════════════════════════════════
 
 describe('set2fa branches', () => {
@@ -903,20 +903,20 @@ describe('set2fa branches', () => {
     });
 });
 
-describe('removeOtherAuths branches', () => {
+describe('removeExternalLoginSessions branches', () => {
     afterEach(() => { jest.restoreAllMocks(); });
 
     test('success → sets otherAuthsRemovedAt, returns 1', async () => {
         const service = new TestBaseService();
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-            removeOtherAuths: jest.fn().mockResolvedValue(undefined),
+            removeExternalLoginSessions: jest.fn().mockResolvedValue(undefined),
             getDialogs: jest.fn().mockResolvedValue([]),
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
         jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
-        const result = await (service as any).removeOtherAuths(doc, 0);
+        const result = await (service as any).removeExternalLoginSessions(doc, 0);
         expect(result).toBe(1);
         expect(service.updateMock).toHaveBeenCalledWith(
             doc.mobile,
@@ -927,7 +927,7 @@ describe('removeOtherAuths branches', () => {
     test('session_revoked error → marks inactive with critical notification', async () => {
         const service = new TestBaseService();
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-            removeOtherAuths: jest.fn().mockRejectedValue(new Error('session_revoked')),
+            removeExternalLoginSessions: jest.fn().mockRejectedValue(new Error('session_revoked')),
             getDialogs: jest.fn().mockResolvedValue([]),
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
@@ -935,7 +935,7 @@ describe('removeOtherAuths branches', () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
-        const result = await (service as any).removeOtherAuths(doc, 0);
+        const result = await (service as any).removeExternalLoginSessions(doc, 0);
         expect(result).toBe(0);
         // A real revocation token (session_revoked) is still permanently deactivated — now via the
         // precise isPermanentError path (reason built by buildPermanentAccountReason), not the old
@@ -954,7 +954,7 @@ describe('removeOtherAuths branches', () => {
     test('auth_key_unregistered error → marks inactive', async () => {
         const service = new TestBaseService();
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-            removeOtherAuths: jest.fn().mockRejectedValue(new Error('auth_key_unregistered')),
+            removeExternalLoginSessions: jest.fn().mockRejectedValue(new Error('auth_key_unregistered')),
             getDialogs: jest.fn().mockResolvedValue([]),
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
@@ -962,7 +962,7 @@ describe('removeOtherAuths branches', () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
-        const result = await (service as any).removeOtherAuths(doc, 0);
+        const result = await (service as any).removeExternalLoginSessions(doc, 0);
         expect(result).toBe(0);
         expect(updateStatusSpy).toHaveBeenCalled();
     });
@@ -970,7 +970,7 @@ describe('removeOtherAuths branches', () => {
     test('transient error → increments failures, does NOT mark inactive', async () => {
         const service = new TestBaseService();
         jest.spyOn(connectionManager, 'getClient').mockResolvedValue({
-            removeOtherAuths: jest.fn().mockRejectedValue(new Error('TIMEOUT')),
+            removeExternalLoginSessions: jest.fn().mockRejectedValue(new Error('TIMEOUT')),
             getDialogs: jest.fn().mockResolvedValue([]),
             getContacts: jest.fn().mockResolvedValue([]),
         } as any);
@@ -978,7 +978,7 @@ describe('removeOtherAuths branches', () => {
         const updateStatusSpy = jest.spyOn(service, 'updateStatus');
 
         const doc = makeDoc({ warmupPhase: WarmupPhase.SETTLING });
-        const result = await (service as any).removeOtherAuths(doc, 1);
+        const result = await (service as any).removeExternalLoginSessions(doc, 1);
         expect(result).toBe(0);
         expect(updateStatusSpy).not.toHaveBeenCalled();
         expect(service.updateMock).toHaveBeenCalledWith(
@@ -1180,15 +1180,15 @@ describe('Full lifecycle simulation — jitter=3', () => {
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('set_2fa');
         doc.twoFASetAt = new Date(simNow);
 
-        // Day 10: remove_other_auths (2FA was 2.5 days ago)
+        // Day 10: remove_external_login_sessions (2FA was 2.5 days ago)
         simNow = enrolledAt.getTime() + 10 * ONE_DAY_MS;
-        expect(getWarmupPhaseAction(doc, simNow).action).toBe('remove_other_auths');
+        expect(getWarmupPhaseAction(doc, simNow).action).toBe('remove_external_login_sessions');
         doc.otherAuthsRemovedAt = new Date(simNow);
 
-        // Day 10: auth cleanup just happened, wait before identity changes.
+        // Day 10: external login cleanup just happened, wait before identity changes.
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('organic_only');
 
-        // Day 13.5: auth cleanup cooled down, advance to identity.
+        // Day 13.5: external login cleanup cooled down, advance to identity.
         simNow = enrolledAt.getTime() + 13.5 * ONE_DAY_MS;
         expect(getWarmupPhaseAction(doc, simNow).action).toBe('delete_photos');
         doc.warmupPhase = WarmupPhase.IDENTITY;
@@ -1356,18 +1356,18 @@ describe('Real MongoDB: full warmup lifecycle', () => {
             { returnDocument: 'after' },
         ))!;
 
-        // Day 7.5: 2FA 2.5d ago → remove_other_auths
+        // Day 7.5: 2FA 2.5d ago → remove_external_login_sessions
         action = getWarmupPhaseAction(client, enrolledAt.getTime() + 7.5 * ONE_DAY_MS);
-        expect(action.action).toBe('remove_other_auths');
+        expect(action.action).toBe('remove_external_login_sessions');
 
-        // Step 4: Remove other auths
+        // Step 4: Remove external login sessions
         client = (await BufferClientModel.findOneAndUpdate(
             { mobile: client.mobile },
             { $set: { otherAuthsRemovedAt: new Date(enrolledAt.getTime() + 8 * ONE_DAY_MS) } },
             { returnDocument: 'after' },
         ))!;
 
-        // Day 11: auth cleanup cooled down → identity (delete_photos)
+        // Day 11: external login cleanup cooled down → identity (delete_photos)
         action = getWarmupPhaseAction(client, enrolledAt.getTime() + 11 * ONE_DAY_MS);
         expect(action.action).toBe('delete_photos');
         expect(action.phase).toBe(WarmupPhase.IDENTITY);

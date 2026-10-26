@@ -101,7 +101,7 @@ Warmup is driven by:
 1. `enrolled`
    Wait until `1 + jitter` days.
 2. `settling`
-   `set_privacy` -> wait 2+ days -> `set_2fa` -> wait 2+ days -> `remove_other_auths`
+   `set_privacy` -> wait 2+ days -> `set_2fa` -> wait 2+ days -> `remove_external_login_sessions`
 3. `identity`
    `delete_photos` -> wait 2+ days -> `update_name_bio` -> wait 2+ days -> `update_username`
 4. `growing`

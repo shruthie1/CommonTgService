@@ -80,7 +80,7 @@ type SimAccount = {
 const ACTION_STAMP: Record<string, keyof SimAccount> = {
     set_privacy: 'privacyUpdatedAt',
     set_2fa: 'twoFASetAt',
-    remove_other_auths: 'otherAuthsRemovedAt',
+    remove_external_login_sessions: 'otherAuthsRemovedAt',
     delete_photos: 'profilePicsDeletedAt',
     update_name_bio: 'nameBioUpdatedAt',
     update_username: 'usernameUpdatedAt',

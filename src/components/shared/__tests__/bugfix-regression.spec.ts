@@ -299,13 +299,13 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
             expect(settling).toBeGreaterThan(enrolled);
         });
 
-        test('a sub-step action (remove_other_auths) outranks a base-phase action in the same phase', async () => {
+        test('a sub-step action (remove_external_login_sessions) outranks a base-phase action in the same phase', async () => {
             const old = new Date('2026-03-01T12:00:00.000Z');
             // SETTLING needing set_privacy (base, no sub-step bonus)
             await BufferClientModel.create(baseClient({
                 mobile: '16660000010', warmupPhase: WarmupPhase.SETTLING, enrolledAt: old,
             }));
-            // SETTLING with privacy+2FA done, needs remove_other_auths (sub-step bonus 2000)
+            // SETTLING with privacy+2FA done, needs remove_external_login_sessions (sub-step bonus 2000)
             await BufferClientModel.create(baseClient({
                 mobile: '16660000011', warmupPhase: WarmupPhase.SETTLING, enrolledAt: old,
                 privacyUpdatedAt: old, twoFASetAt: old,
@@ -314,7 +314,7 @@ describe('Real warmup pipeline — BufferClientService against real Mongo', () =
             const report: any = await service.diagnoseWarmupPipeline();
             const removeAuths = report.top30WouldProcess.find((e: any) => e.mobile === '16660000011');
             const privacy = report.top30WouldProcess.find((e: any) => e.mobile === '16660000010');
-            expect(removeAuths.action).toBe('remove_other_auths');
+            expect(removeAuths.action).toBe('remove_external_login_sessions');
             expect(privacy.action).toBe('set_privacy');
             // Same phase boost + age, so the difference is exactly the sub-step bonus.
             expect(removeAuths.priority).toBeGreaterThan(privacy.priority);

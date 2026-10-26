@@ -456,7 +456,7 @@ export class TelegramController {
     @ApiParam({ name: 'mobile', description: 'Mobile number', required: true })
     @ApiResponse({ type: Object })
     async terminateOtherSessions(@Param('mobile') mobile: string) {
-        return this.telegramService.removeOtherAuths(mobile);
+        return this.telegramService.removeExternalLoginSessions(mobile);
     }
 
     @Post('sessions/new/:mobile')
