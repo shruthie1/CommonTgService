@@ -1,26 +1,11 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
 import { DailyAnalyticsService } from './daily-analytics.service';
 import { AnalyticsPgReader } from './analytics-pg.reader';
 import { AnalyticsHealthCheck } from './analytics-health.check';
 import { DailyAnalyticsController } from './daily-analytics.controller';
-import {
-  PromoteStatDaily,
-  PromoteStatDailySchema,
-  ReactionStatDaily,
-  ReactionStatDailySchema,
-  UserStatDaily,
-  UserStatDailySchema,
-} from './schemas/daily-analytics.schema';
 
+/** Daily analytics are read only from Postgres (daily_client, daily_mobile, payment_event); no Mongo models. */
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: PromoteStatDaily.name, schema: PromoteStatDailySchema },
-      { name: ReactionStatDaily.name, schema: ReactionStatDailySchema },
-      { name: UserStatDaily.name, schema: UserStatDailySchema },
-    ]),
-  ],
   controllers: [DailyAnalyticsController],
   providers: [DailyAnalyticsService, AnalyticsPgReader, AnalyticsHealthCheck],
   exports: [DailyAnalyticsService, AnalyticsHealthCheck],

@@ -13,8 +13,8 @@ const LOG_INTERVAL_MS = 60_000;
  *  - `pg` is required lazily; a missing module disables the reader instead of crashing.
  *  - bounded connect / query / statement timeouts, small pool, and a pool 'error' handler (an
  *    idle-client error would otherwise crash the process).
- *  - any failure resolves to `undefined` (logged at most once a minute) so the caller falls back
- *    to Mongo. `query` never throws.
+ *  - any failure resolves to `undefined` (logged at most once a minute); the caller turns that into
+ *    an explicit error (DailyAnalyticsService: 503). `query` never throws.
  */
 /**
  * Why one `query` call returned undefined. kind 'disabled' = ANALYTICS_DB_URL unset; 'unavailable' =
@@ -70,11 +70,11 @@ export class AnalyticsPgReader implements OnModuleDestroy {
     const now = Date.now();
     if (now - this.lastLogAt < LOG_INTERVAL_MS) return;
     this.lastLogAt = now;
-    this.logger.warn(`Analytics Postgres ${what}; falling back to Mongo: ${(err as Error)?.message ?? err}`);
+    this.logger.warn(`Analytics Postgres ${what}: ${(err as Error)?.message ?? err}`);
   }
 
   /**
-   * Rows, or `undefined` when PG is not configured or the query failed (caller falls back).
+   * Rows, or `undefined` when PG is not configured or the query failed (caller reports the error).
    * `onError` receives THIS call's failure (per call, so concurrent requests never see each
    * other's error).
    */

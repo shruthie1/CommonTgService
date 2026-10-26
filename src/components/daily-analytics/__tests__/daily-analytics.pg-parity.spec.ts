@@ -1,6 +1,7 @@
 /**
- * Parity: the Postgres path must return the same totals as the Mongo path for days both cover
- * (revenue excluded - Mongo's is inflated and no longer reported).
+ * Parity: the Postgres answers must equal the totals of prod-shaped Mongo *StatsDaily copies for the
+ * days both cover (revenue excluded - Mongo's is inflated and never reported). The service no longer
+ * reads Mongo; the Mongo copies are only the oracle, summed in this file.
  *
  * Opt-in (needs a local Postgres with analytics/schema.sql applied and prod-shaped copies):
  *   TEST_PG_URL=postgres://postgres:e2e@127.0.0.1:55432/postgres \
@@ -11,27 +12,47 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { AnalyticsPgReader } from '../analytics-pg.reader';
-import { DailyAnalyticsService } from '../daily-analytics.service';
-import { fakeModel } from './fake-models';
+import { DailyAnalyticsService, DailyMetric } from '../daily-analytics.service';
 
 const URL_ = process.env.TEST_PG_URL;
 const DIR = process.env.PARITY_DIR;
 const maybe = URL_ && DIR ? describe : describe.skip;
 
-maybe('PG vs Mongo parity (prod-shaped data)', () => {
+const FIELDS: Record<DailyMetric, string[]> = {
+  promote: ['sent', 'success', 'failed', 'banned'],
+  reaction: ['success', 'failed', 'restricted', 'floods'],
+  user: ['newUsers', 'active', 'paid'],
+};
+const FILES: Record<DailyMetric, string> = {
+  promote: 'promoteStatsDaily.json',
+  reaction: 'reactionStatsDaily.json',
+  user: 'userStatsDaily.json',
+};
+
+maybe('PG vs Mongo-copy parity (prod-shaped data)', () => {
   const load = (f: string) => JSON.parse(fs.readFileSync(path.join(DIR!, f), 'utf8'));
   let client: any;
   let pgSvc: DailyAnalyticsService;
-  let mongoSvc: DailyAnalyticsService;
-  let ttlMongoSvc: DailyAnalyticsService;
   let reader: AnalyticsPgReader;
-  // "Today" is 2026-10-10 IST, so the window is 2026-09-20 .. 10-10 and Mongo's retention cutoff is
-  // 2026-09-28: 09-20..09-27 must come from Postgres, 09-28.. from Mongo. The oracle is Mongo over the
-  // FULL prod copy (09-20..10-01 complete; 10-02 was copied mid-day into supabase = the 'partial until
-  // repair' case, which the hybrid correctly ignores because 10-02 is inside Mongo retention).
+  // "Today" is 2026-10-10 IST, so the window is 2026-09-20 .. 10-10. The oracle is the FULL prod
+  // Mongo copy, limited to the days the supabase copy has complete (09-20..10-01; 10-02 was copied
+  // mid-day).
   const DAYS = 21;
-  const CUTOFF = '2026-09-28';
+  const LAST_COMPLETE = '2026-10-01';
   const stripRevenue = (rows: any[]) => rows.map(({ revenue, revenueSource, ...rest }) => rest);
+
+  /** Mongo-copy sums per key (date or clientId) over the given dates. */
+  const oracle = (m: DailyMetric, key: 'date' | 'clientId', dates: string[]) => {
+    const set = new Set(dates);
+    const out = new Map<string, Record<string, number>>();
+    for (const d of load(FILES[m]) as any[]) {
+      if (!set.has(d.date)) continue;
+      const t = out.get(d[key]) || Object.fromEntries(FIELDS[m].map((f) => [f, 0]));
+      for (const f of FIELDS[m]) t[f] += Number(d[f]) || 0;
+      out.set(d[key], t);
+    }
+    return out;
+  };
 
   beforeAll(async () => {
     const { Client } = require('pg');
@@ -46,15 +67,9 @@ maybe('PG vs Mongo parity (prod-shaped data)', () => {
         cols.map((c) => (c === 'day' ? String(r[c]).slice(0, 10) : r[c])),
       );
     }
-    const files = ['promoteStatsDaily.json', 'reactionStatsDaily.json', 'userStatsDaily.json'];
-    const models = files.map((f) => fakeModel(load(f))) as any[];
-    // What Mongo would still hold on 2026-10-10: only days inside its TTL window.
-    const recentOnly = files.map((f) => fakeModel(load(f).filter((d: any) => d.date >= CUTOFF))) as any[];
     process.env.ANALYTICS_DB_URL = URL_;
     reader = new AnalyticsPgReader();
-    pgSvc = new DailyAnalyticsService(recentOnly[0], recentOnly[1], recentOnly[2], reader);
-    ttlMongoSvc = new DailyAnalyticsService(recentOnly[0], recentOnly[1], recentOnly[2], { query: async () => undefined } as any);
-    mongoSvc = new DailyAnalyticsService(models[0], models[1], models[2], { query: async () => undefined } as any);
+    pgSvc = new DailyAnalyticsService(reader);
   });
   beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-10T12:00:00Z').getTime()));
   afterEach(() => jest.restoreAllMocks());
@@ -64,22 +79,22 @@ maybe('PG vs Mongo parity (prod-shaped data)', () => {
     delete process.env.ANALYTICS_DB_URL;
   });
 
-  it.each(['promote', 'reaction', 'user'] as const)('%s: dailyTotals identical per day', async (m) => {
-    const pg: any[] = (await pgSvc.dailyTotals(m, DAYS)) as any;
-    const mongo: any[] = (await mongoSvc.dailyTotals(m, DAYS)) as any;
-    expect(pg).toHaveLength(DAYS);
-    expect(stripRevenue(pg)).toEqual(stripRevenue(mongo));
-    // proves Postgres actually supplied the old days: TTL-trimmed Mongo alone has zeros there
-    const ttlOnly: any[] = (await ttlMongoSvc.dailyTotals(m, DAYS)) as any;
-    expect(ttlOnly[0]).not.toEqual(pg[0]);
+  it.each(['promote', 'reaction', 'user'] as const)('%s: dailyTotals identical per complete day', async (m) => {
+    const pg: any[] = stripRevenue((await pgSvc.dailyTotals(m, DAYS)) as any[]).filter((r) => r.date <= LAST_COMPLETE);
+    const want = oracle(m, 'date', pg.map((r) => r.date));
+    expect(pg.length).toBeGreaterThan(10);
+    expect(pg).toEqual(pg.map((r) => ({ date: r.date, ...(want.get(r.date) || Object.fromEntries(FIELDS[m].map((f) => [f, 0]))) })));
     expect(Object.values(pg[0]).some((v) => typeof v === 'number' && v > 0)).toBe(true);
   });
 
-  it.each(['promote', 'reaction', 'user'] as const)('%s: byClient identical', async (m) => {
-    const pg = await pgSvc.byClient(m, DAYS);
-    const mongo = await mongoSvc.byClient(m, DAYS);
+  it.each(['promote', 'reaction', 'user'] as const)('%s: byClient identical over complete days', async (m) => {
+    // 12 days ending 10-01 (09-20..10-01, all complete); the oracle sums the same dates.
+    jest.spyOn(Date, 'now').mockReturnValue(new Date(`${LAST_COMPLETE}T12:00:00Z`).getTime());
+    const pg = stripRevenue((await pgSvc.byClient(m, 12)) as any[]);
+    const dates = ((await pgSvc.dailyTotals(m, 12)) as any[]).map((r) => r.date);
+    const want = oracle(m, 'clientId', dates);
     expect(pg.length).toBeGreaterThan(10);
-    expect(stripRevenue(pg as any[])).toEqual(stripRevenue(mongo as any[]));
+    expect(pg).toEqual([...want.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([clientId, t]) => ({ clientId, ...t })));
   });
 
   it('real payment_event: IST day bucketing, excludes cheat/negative, per-client join', async () => {

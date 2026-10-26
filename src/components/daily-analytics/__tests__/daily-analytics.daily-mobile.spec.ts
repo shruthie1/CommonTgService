@@ -1,10 +1,10 @@
 /**
- * DAILY_ANALYTICS_SOURCE=pg once Mongo *StatsDaily writes stop: per-mobile reads (byMobile, rows)
- * come from Postgres daily_mobile for days >= DAILY_MOBILE_FROM_DAY, in the exact Mongo shape.
+ * Per-mobile reads (byMobile, rows) come from Postgres daily_mobile for EVERY day of the window,
+ * in the historical response shape. DAILY_ANALYTICS_SOURCE / DAILY_MOBILE_FROM_DAY do not change
+ * that (the latter is only used by AnalyticsHealthCheck).
  */
-import { Logger } from '@nestjs/common';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { DailyAnalyticsService, dailyMobileFromDay } from '../daily-analytics.service';
-import { fakeModel } from './fake-models';
 
 const NOW = new Date('2026-10-26T06:00:00Z'); // 11:30 IST on 2026-10-26
 
@@ -42,25 +42,8 @@ function dailyMobile(sql: string, params: unknown[]) {
 }
 
 function build(opts: { pg?: (sql: string, params: unknown[]) => any[] | undefined; error?: string } = {}) {
-  // Mongo still has old days (10-23) plus a stale/partial copy of 10-26 that must NOT be read in pg mode.
-  const promote = fakeModel([
-    { date: '2026-10-23', clientId: 'a', namespace: 'promote-clients', mobile: 'm1', sent: 5, success: 1, failed: 4, banned: 3 },
-    { date: '2026-10-26', clientId: 'a', namespace: 'promote-clients', mobile: 'm1', sent: 999, success: 999 },
-  ]);
-  const reaction = fakeModel([
-    { date: '2026-10-23', clientId: 'a', namespace: 'tg-aut', mobile: 'm9', success: 1, failed: 1 },
-    { date: '2026-10-26', clientId: 'a', namespace: 'tg-aut', mobile: 'm9', success: 999 },
-  ]);
-  const user = fakeModel([
-    { date: '2026-10-23', clientId: 'a', namespace: 'tg-aut', mobile: 'm9', newUsers: 1, active: 1, paid: 1, revenue: 500 },
-    { date: '2026-10-26', clientId: 'a', namespace: 'tg-aut', mobile: 'm9', newUsers: 999, active: 999, paid: 999, revenue: 999 },
-  ]);
   const queries: { sql: string; params: unknown[] }[] = [];
-  const handler = opts.pg ?? ((sql: string, params: unknown[]) => {
-    if (sql.includes('FROM daily_mobile')) return dailyMobile(sql, params);
-    if (sql.includes('FROM promotion_send')) return [{ client_id: 'a', mobile: 'm1', sent: '6', success: '2', failed: '4', banned: '1' }];
-    return undefined;
-  });
+  const handler = opts.pg ?? ((sql: string, params: unknown[]) => (sql.includes('FROM daily_mobile') ? dailyMobile(sql, params) : undefined));
   const pg = {
     isEnabled: () => true,
     query: jest.fn(async (sql: string, params: unknown[], onError?: (e: any) => void) => {
@@ -70,15 +53,13 @@ function build(opts: { pg?: (sql: string, params: unknown[]) => any[] | undefine
       return rows;
     }),
   };
-  const svc = new DailyAnalyticsService(promote as any, reaction as any, user as any, pg as any);
+  const svc = new DailyAnalyticsService(pg as any);
   return { svc, pg, queries };
 }
 
-describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () => {
+describe('DailyAnalyticsService: daily_mobile', () => {
   beforeEach(() => {
     jest.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
-    process.env.DAILY_ANALYTICS_SOURCE = 'pg';
-    process.env.DAILY_MOBILE_FROM_DAY = '2026-10-24';
   });
   afterEach(() => {
     delete process.env.DAILY_ANALYTICS_SOURCE;
@@ -86,7 +67,8 @@ describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () =
     jest.restoreAllMocks();
   });
 
-  it('DAILY_MOBILE_FROM_DAY env: valid YYYY-MM-DD only, read at call time', () => {
+  it('dailyMobileFromDay (used by AnalyticsHealthCheck): valid YYYY-MM-DD only, read at call time', () => {
+    process.env.DAILY_MOBILE_FROM_DAY = '2026-10-24';
     expect(dailyMobileFromDay()).toBe('2026-10-24');
     for (const bad of ['', '2026-13-01', '2026-02-30', '24-10-2026', 'yesterday', '2026-10-24T00:00']) {
       process.env.DAILY_MOBILE_FROM_DAY = bad;
@@ -97,35 +79,26 @@ describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () =
   });
 
   describe.each([
-    ['unset', undefined],
-    ['invalid', '2026-10-32'],
-  ])('DAILY_MOBILE_FROM_DAY %s => daily_mobile disabled, pg mode exactly as before', (_label, value) => {
-    beforeEach(() => {
-      if (value === undefined) delete process.env.DAILY_MOBILE_FROM_DAY;
-      else process.env.DAILY_MOBILE_FROM_DAY = value;
-    });
-    it('user/reaction byMobile and rows: Mongo, no Postgres query, no source tag', async () => {
-      const { svc, pg } = build();
-      const byMobile: any[] = await svc.byMobile('user', 2);
-      const rows: any[] = await svc.rows('reaction', 2);
-      expect(pg.query).not.toHaveBeenCalled();
-      expect(byMobile).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 999, active: 999, paid: 999, revenue: 0, revenueSource: 'unavailable' }]);
-      expect(rows).toEqual([{ date: '2026-10-26', clientId: 'a', namespace: 'tg-aut', mobile: 'm9', success: 999 }]);
-    });
-    it('promote byMobile without namespace: promotion_send for the whole window (no cap), never daily_mobile', async () => {
+    ['no env', {}],
+    ['DAILY_MOBILE_FROM_DAY inside the window', { DAILY_ANALYTICS_SOURCE: 'pg', DAILY_MOBILE_FROM_DAY: '2026-10-26' }],
+  ])('%s: the env never splits the window', (_label, env: Record<string, string>) => {
+    beforeEach(() => Object.assign(process.env, env));
+    it('byMobile and rows ask daily_mobile for every day of the window', async () => {
       const { svc, queries } = build();
-      const rows = await svc.byMobile('promote', 4);
-      expect(rows).toEqual([{ clientId: 'a', mobile: 'm1', sent: 6, success: 2, failed: 4, banned: 1 }]);
-      expect(queries.map((q) => q.params)).toEqual([['2026-10-23T00:00:00+05:30']]);
-      expect(queries.some((q) => q.sql.includes('daily_mobile'))).toBe(false);
+      await svc.byMobile('promote', 4);
+      await svc.rows('user', 4);
+      expect(queries.map((q) => q.params[0])).toEqual([
+        ['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26'],
+        ['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26'],
+      ]);
+      expect(queries.every((q) => q.sql.includes('FROM daily_mobile'))).toBe(true);
     });
   });
 
-  describe('byMobile, window fully on/after DAILY_MOBILE_FROM_DAY', () => {
-    it('user: from daily_mobile, Mongo shape (no revenue from Mongo), Mongo never read', async () => {
+  describe('byMobile', () => {
+    it('user: Mongo-era shape, revenue 0 + unavailable', async () => {
       const { svc } = build();
-      const rows = await svc.byMobile('user', 2);
-      expect(rows).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, revenueSource: 'unavailable' }]);
+      expect(await svc.byMobile('user', 2)).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, revenueSource: 'unavailable' }]);
     });
 
     it('reaction with a namespace: namespace filter goes to daily_mobile', async () => {
@@ -135,7 +108,7 @@ describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () =
       expect(queries[0].params).toEqual([['2026-10-25', '2026-10-26'], 'tg-aut']);
     });
 
-    it('promote (no namespace): daily_mobile, not promotion_send; Mongo binary order (B before a); zero rows dropped', async () => {
+    it('promote (no namespace): daily_mobile, never promotion_send; binary order (B before a); zero rows dropped', async () => {
       const { svc, queries } = build();
       const rows = await svc.byMobile('promote', 2);
       expect(rows).toEqual([
@@ -145,16 +118,21 @@ describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () =
       expect(queries.some((q) => q.sql.includes('promotion_send'))).toBe(false);
     });
 
-    it('promote with namespace + clientId: served from daily_mobile (was Mongo-only)', async () => {
+    it('promote with namespace + clientId', async () => {
       const { svc, queries } = build();
       const rows = await svc.byMobile('promote', 1, 'a', 'promote-clients');
       expect(rows).toEqual([{ clientId: 'a', mobile: 'm1', sent: 10, success: 4, failed: 6, banned: 1 }]);
-      expect(queries[0].sql).toContain('FROM daily_mobile');
+      expect(queries[0].params).toEqual([['2026-10-26'], 'a', 'promote-clients']);
+    });
+
+    it('days with no daily_mobile rows contribute nothing (no other source)', async () => {
+      const { svc } = build();
+      expect(await svc.byMobile('user', 60, 'nobody')).toEqual([]);
     });
   });
 
-  describe('rows, window fully on/after DAILY_MOBILE_FROM_DAY', () => {
-    it('promote rows: Mongo doc shape (date, namespace, clientId, mobile, profile, Mongo counter names), sorted', async () => {
+  describe('rows', () => {
+    it('promote rows: date, namespace, clientId, mobile, profile, counter names; sorted', async () => {
       const { svc } = build();
       expect(await svc.rows('promote', 2)).toEqual([
         { date: '2026-10-25', namespace: 'promote-clients', clientId: 'a', mobile: 'm1', profile: 'shruthi', sent: 20, success: 8, failed: 12, banned: 2 },
@@ -170,57 +148,29 @@ describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () =
       ]);
       expect(queries[0].params).toEqual([['2026-10-26'], 'a', 'm9']);
     });
-  });
 
-  describe('window straddling DAILY_MOBILE_FROM_DAY: days before keep the previous source', () => {
-    it('user byMobile: Mongo for 10-23 + daily_mobile for 10-24..26, summed per mobile', async () => {
-      const { svc, queries } = build();
-      const rows = await svc.byMobile('user', 4); // 10-23 .. 10-26
-      expect(rows).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 4, active: 5, paid: 2, revenue: 0, revenueSource: 'unavailable' }]);
-      expect(queries[0].params[0]).toEqual(['2026-10-24', '2026-10-25', '2026-10-26']);
-    });
-
-    it('promote byMobile (no namespace, window >= PROMOTION_SEND_FROM_DAY): promotion_send capped before daily_mobile', async () => {
-      const { svc, queries } = build();
-      const rows = await svc.byMobile('promote', 4);
-      expect(rows).toEqual([
-        { clientId: 'B', mobile: 'm2', sent: 7, success: 7, failed: 0, banned: 0 },
-        { clientId: 'a', mobile: 'm1', sent: 36, success: 14, failed: 22, banned: 4 },
-      ]);
-      const ps = queries.find((q) => q.sql.includes('FROM promotion_send'))!;
-      expect(ps.params).toEqual(['2026-10-23T00:00:00+05:30', '2026-10-24T00:00:00+05:30']);
-      expect(ps.sql).toMatch(/ts < \$2::timestamptz/);
-    });
-
-    it('reaction rows: Mongo rows for 10-23 first, then daily_mobile rows', async () => {
+    it('reaction rows over a window that includes days before any daily_mobile row', async () => {
       const { svc } = build();
-      const rows: any[] = await svc.rows('reaction', 4, undefined, 'tg-aut');
-      expect(rows.map((r) => [r.date, r.success, r.failed])).toEqual([
-        ['2026-10-23', 1, 1],
-        ['2026-10-26', 0, 2],
-      ]);
+      const rows: any[] = await svc.rows('reaction', 30, undefined, 'tg-aut');
+      expect(rows.map((r) => [r.date, r.success, r.failed])).toEqual([['2026-10-26', 0, 2]]);
     });
   });
 
-  describe('Postgres failure in pg mode: Mongo answer, warned and tagged', () => {
+  describe('Postgres failure: ServiceUnavailableException with the reader error', () => {
     it.each([
-      ['byMobile user', (s: DailyAnalyticsService) => s.byMobile('user', 2)],
-      ['byMobile promote', (s: DailyAnalyticsService) => s.byMobile('promote', 4)],
-      ['rows reaction', (s: DailyAnalyticsService) => s.rows('reaction', 2)],
+      ['byMobile', (s: DailyAnalyticsService) => s.byMobile('user', 2)],
+      ['rows', (s: DailyAnalyticsService) => s.rows('reaction', 2)],
       ['dailyTotals', (s: DailyAnalyticsService) => s.dailyTotals('promote', 2)],
       ['byClient', (s: DailyAnalyticsService) => s.byClient('promote', 2)],
-    ])('%s', async (_name, call) => {
-      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    ])('%s', async (name, call) => {
       const { svc } = build({ pg: () => undefined, error: 'connect ETIMEDOUT' });
-      const rows: any[] = (await call(svc)) as any;
-      expect(rows.length).toBeGreaterThan(0);
-      expect(rows.every((r) => r.source === 'mongo-fallback')).toBe(true);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('connect ETIMEDOUT [ETIMEDOUT]'));
+      const err: any = await call(svc).then(() => undefined, (e) => e);
+      expect(err).toBeInstanceOf(ServiceUnavailableException);
+      expect(err.getStatus()).toBe(503);
+      expect(err.message).toBe(`daily-analytics ${name}: Postgres unavailable: connect ETIMEDOUT [ETIMEDOUT]`);
     });
 
-    it('concurrent failing requests each log THEIR OWN error (no shared reader state)', async () => {
-      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const promote = fakeModel([{ date: '2026-10-26', clientId: 'a', namespace: 'promote-clients', mobile: 'm1', sent: 1 }]);
+    it('concurrent failing requests each report THEIR OWN error (no shared reader state)', async () => {
       const pg = {
         query: jest.fn(async (sql: string, _p: unknown[], onError?: (e: any) => void) => {
           // daily_mobile fails slowly with A; daily_client fails fast with B, after A's call started.
@@ -230,35 +180,10 @@ describe('DailyAnalyticsService: daily_mobile (DAILY_ANALYTICS_SOURCE=pg)', () =
           return undefined;
         }),
       };
-      const svc = new DailyAnalyticsService(promote as any, fakeModel([]) as any, fakeModel([]) as any, pg as any);
-      await Promise.all([svc.byMobile('promote', 1), svc.dailyTotals('promote', 1)]);
-      const lines = warn.mock.calls.map((c) => String(c[0]));
-      expect(lines.find((l) => l.includes('byMobile'))).toContain('error A');
-      expect(lines.find((l) => l.includes('dailyTotals'))).toContain('error B');
-    });
-
-    it('promotion_send failing in a straddling window falls back for the whole window (no half answer)', async () => {
-      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      const { svc } = build({ pg: (sql, p) => (sql.includes('promotion_send') ? undefined : dailyMobile(sql, p)) });
-      const rows: any[] = await svc.byMobile('promote', 4);
-      expect(rows).toEqual([expect.objectContaining({ clientId: 'a', mobile: 'm1', sent: 1004, source: 'mongo-fallback' })]);
-    });
-  });
-
-  describe('hybrid mode unchanged (regression guard; passes on old code by design)', () => {
-    beforeEach(() => { delete process.env.DAILY_ANALYTICS_SOURCE; });
-    it('byMobile/rows stay on Mongo, never query daily_mobile, no source tag', async () => {
-      const { svc, pg } = build();
-      const byMobile: any[] = await svc.byMobile('user', 2);
-      const rows: any[] = await svc.rows('promote', 2);
-      expect(pg.query).not.toHaveBeenCalled();
-      expect(byMobile[0]).toEqual({ clientId: 'a', mobile: 'm9', newUsers: 999, active: 999, paid: 999, revenue: 0, revenueSource: 'unavailable' });
-      expect(rows.every((r) => !('source' in r))).toBe(true);
-    });
-    it('PG failure in hybrid mode: no source tag (unchanged)', async () => {
-      const { svc } = build({ pg: () => undefined });
-      const rows: any[] = await svc.dailyTotals('promote', 15);
-      expect(rows.every((r) => !('source' in r))).toBe(true);
+      const svc = new DailyAnalyticsService(pg as any);
+      const [a, b] = await Promise.allSettled([svc.byMobile('promote', 1), svc.dailyTotals('promote', 1)]);
+      expect((a as PromiseRejectedResult).reason.message).toContain('byMobile: Postgres unavailable: error A');
+      expect((b as PromiseRejectedResult).reason.message).toContain('dailyTotals: Postgres unavailable: error B');
     });
   });
 });
