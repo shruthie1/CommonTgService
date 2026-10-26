@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 import { sleep, TotalList } from 'telegram/Helpers';
 import { Api } from 'telegram/tl';
@@ -489,6 +489,12 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getPaymentStats(chatId: string, profile: string) {
+    // Both params scope the userData filters below. A missing chatId reaches Mongo as
+    // {"profile":{"$exists":true}} (mongoose drops undefined keys): every user's rows, with the
+    // stale-row reset writing to them. vcui always sends both (from its /:profile/:chatId route).
+    if (!isNonBlankString(chatId) || !isNonBlankString(profile)) {
+      throw new BadRequestException('chatId and profile are required');
+    }
     const resp = {
       paid: 0,
       demoGiven: 0,
@@ -950,8 +956,14 @@ export class AppService implements OnModuleInit, OnModuleDestroy {
     if (!profile) {
       profile = clientId?.replace(/\d/g, '');
     }
-    const chatId = body.chatId;
-    return await this.userDataService.update(profile, chatId, body);
+    const chatId = body?.chatId;
+    // (profile, chatId) is the row filter: a missing chatId used to reach Mongo as {profile} and
+    // overwrite an arbitrary user's row; a missing profile crashed in the clientId lookup (500).
+    const chatIdValid = isNonBlankString(chatId) || (typeof chatId === 'number' && Number.isFinite(chatId));
+    if (!isNonBlankString(profile) || !chatIdValid) {
+      throw new BadRequestException('profile (or clientId) and body.chatId are required');
+    }
+    return await this.userDataService.update(profile, body.chatId, body);
   }
 
   async updateUserConfig(
@@ -1298,4 +1310,8 @@ function getReadableTimeDifference(ms1: number, ms2: number): string {
   if (secs > 0 || result.length === 0) result.push(`${secs}s`);
 
   return result.join(' ');
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
