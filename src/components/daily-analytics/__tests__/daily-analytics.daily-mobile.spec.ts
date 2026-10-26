@@ -1,10 +1,9 @@
 /**
  * Per-mobile reads (byMobile, rows) come from Postgres daily_mobile for EVERY day of the window,
- * in the historical response shape. DAILY_ANALYTICS_SOURCE / DAILY_MOBILE_FROM_DAY do not change
- * that (the latter is only used by AnalyticsHealthCheck).
+ * in the historical response shape. No config splits the window.
  */
 import { ServiceUnavailableException } from '@nestjs/common';
-import { DailyAnalyticsService, dailyMobileFromDay } from '../daily-analytics.service';
+import { DailyAnalyticsService } from '../daily-analytics.service';
 
 const NOW = new Date('2026-10-26T06:00:00Z'); // 11:30 IST on 2026-10-26
 
@@ -31,7 +30,7 @@ function dailyMobile(sql: string, params: unknown[]) {
       for (const [, col, alias] of sums) t[alias] += r[col];
       g.set(k, t);
     }
-    // pg returns bigint as strings, in collation order (lowercase-first here, unlike Mongo).
+    // pg returns bigint as strings, in collation order (lowercase-first here; the service re-sorts by binary order).
     return [...g.values()].map((t) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])));
   }
   const aliases = [...sql.matchAll(/([a-z_]+) AS "(\w+)"/g)].filter(([, col]) => col !== 'day');
@@ -62,27 +61,10 @@ describe('DailyAnalyticsService: daily_mobile', () => {
     jest.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
   });
   afterEach(() => {
-    delete process.env.DAILY_ANALYTICS_SOURCE;
-    delete process.env.DAILY_MOBILE_FROM_DAY;
     jest.restoreAllMocks();
   });
 
-  it('dailyMobileFromDay (used by AnalyticsHealthCheck): valid YYYY-MM-DD only, read at call time', () => {
-    process.env.DAILY_MOBILE_FROM_DAY = '2026-10-24';
-    expect(dailyMobileFromDay()).toBe('2026-10-24');
-    for (const bad of ['', '2026-13-01', '2026-02-30', '24-10-2026', 'yesterday', '2026-10-24T00:00']) {
-      process.env.DAILY_MOBILE_FROM_DAY = bad;
-      expect(dailyMobileFromDay()).toBeUndefined();
-    }
-    process.env.DAILY_MOBILE_FROM_DAY = ' 2026-11-01 ';
-    expect(dailyMobileFromDay()).toBe('2026-11-01');
-  });
-
-  describe.each([
-    ['no env', {}],
-    ['DAILY_MOBILE_FROM_DAY inside the window', { DAILY_ANALYTICS_SOURCE: 'pg', DAILY_MOBILE_FROM_DAY: '2026-10-26' }],
-  ])('%s: the env never splits the window', (_label, env: Record<string, string>) => {
-    beforeEach(() => Object.assign(process.env, env));
+  describe('the window is never split', () => {
     it('byMobile and rows ask daily_mobile for every day of the window', async () => {
       const { svc, queries } = build();
       await svc.byMobile('promote', 4);
@@ -96,7 +78,7 @@ describe('DailyAnalyticsService: daily_mobile', () => {
   });
 
   describe('byMobile', () => {
-    it('user: Mongo-era shape, revenue 0 + unavailable', async () => {
+    it('user: historical shape, revenue 0 + unavailable', async () => {
       const { svc } = build();
       expect(await svc.byMobile('user', 2)).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, revenueSource: 'unavailable' }]);
     });

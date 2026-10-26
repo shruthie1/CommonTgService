@@ -4,27 +4,13 @@ import { AnalyticsPgError, AnalyticsPgReader } from './analytics-pg.reader';
 export type DailyMetric = 'promote' | 'reaction' | 'user';
 
 /**
- * userStatsDaily.revenue is $inc'd on every credit event and is measured ~3.31x inflated, so it is
- * never reported. `revenue` stays in the response (number, same key) but is sourced only from
- * Postgres payment_event, which has data from this IST day onward. Otherwise it is 0 and
- * `revenueSource` says so: 'payment_event' | 'payment_event_partial' (window starts before
- * REVENUE_FROM_DAY) | 'unavailable' (0 means "unknown", not "no revenue").
+ * `revenue` (number, same key as before) is sourced only from Postgres payment_event, which has
+ * data from this IST day onward. Otherwise it is 0 and `revenueSource` says so: 'payment_event' |
+ * 'payment_event_partial' (window starts before REVENUE_FROM_DAY) | 'unavailable' (0 means
+ * "unknown", not "no revenue").
  */
 export const REVENUE_FROM_DAY = '2026-10-04';
 export type RevenueSource = 'payment_event' | 'payment_event_partial' | 'unavailable';
-/**
- * DAILY_MOBILE_FROM_DAY (env, read on every call; the Mongo `configuration` doc lands in process.env)
- * = first IST day Postgres daily_mobile is complete. This service no longer reads it (every day of
- * every per-mobile answer comes from daily_mobile); only AnalyticsHealthCheck uses it, to skip
- * daily_client-vs-daily_mobile parity rows before that day. Unset or not a valid YYYY-MM-DD = undefined.
- */
-export const DAILY_MOBILE_FROM_DAY_ENV = 'DAILY_MOBILE_FROM_DAY';
-export function dailyMobileFromDay(): string | undefined {
-  const v = (process.env[DAILY_MOBILE_FROM_DAY_ENV] || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
-  const d = new Date(`${v}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : undefined;
-}
 /** Collects the first Postgres error of ONE public call (per call: no shared state between requests). */
 type PgCtx = { error?: AnalyticsPgError };
 

@@ -3,7 +3,6 @@ import { ChannelCategory } from '../bots/channel-category.enum';
 import type { RichNotificationInput } from '../../utils/rich-message';
 import { tryGetBotsServiceInstance } from '../../utils/bot.service.instance';
 import { AnalyticsPgError, AnalyticsPgReader } from './analytics-pg.reader';
-import { dailyMobileFromDay } from './daily-analytics.service';
 
 /** Alert when yesterday's promotion_send rows fall below this share of the trailing 7-day median. */
 export const PROMOTION_SEND_MIN_MEDIAN_RATIO = 0.5;
@@ -34,10 +33,7 @@ export interface AnalyticsHealthInput {
   /** promotion_send rows for each of the ANALYTICS_HEALTH_TRAILING_DAYS days before `day`. */
   trailingPromotionSendRows?: number[];
   dailyClientRows?: number;
-  /** Undefined when not queried (DAILY_MOBILE_FROM_DAY unset, or `day` before it). */
   dailyMobileRows?: number;
-  /** DAILY_MOBILE_FROM_DAY at collection time; unset = no daily_mobile check. */
-  dailyMobileFromDay?: string;
   /**
    * Rows of `analytics_daily_parity(day)` (one per mismatch). Undefined when not available (function
    * missing, 42883, or a table it reads missing, 42P01, which has its own message).
@@ -55,16 +51,13 @@ export interface AnalyticsParityRow {
 }
 
 /**
- * Parity mismatches per check kind. `client_vs_mobile` is ignored before DAILY_MOBILE_FROM_DAY (or
- * when it is unset): daily_mobile is empty then, so every daily_client cell would "mismatch".
+ * Parity mismatches per check kind. Every kind counts, `client_vs_mobile` included: daily_mobile has
+ * full coverage from 2026-10-23 and only yesterday is checked.
  */
 export function summariseParity(input: AnalyticsHealthInput): Map<string, { rows: number; clients: Set<string> }> {
   const out = new Map<string, { rows: number; clients: Set<string> }>();
-  const fromDay = input.dailyMobileFromDay;
-  const mobileLive = !!fromDay && input.day >= fromDay;
   for (const r of input.parityRows ?? []) {
     const kind = String(r.check_name ?? 'unknown');
-    if (kind === 'client_vs_mobile' && !mobileLive) continue;
     const entry = out.get(kind) ?? { rows: 0, clients: new Set<string>() };
     entry.rows += 1;
     if (r.client_id) entry.clients.add(String(r.client_id));
@@ -98,10 +91,7 @@ export function decideAnalyticsHealth(input: AnalyticsHealthInput): string[] {
     }
   }
   if (!missing.has('daily_client') && (input.dailyClientRows ?? 0) === 0) problems.push('daily_client has 0 rows');
-  const fromDay = input.dailyMobileFromDay;
-  if (fromDay && input.day >= fromDay && !missing.has('daily_mobile') && (input.dailyMobileRows ?? 0) === 0) {
-    problems.push('daily_mobile has 0 rows');
-  }
+  if (!missing.has('daily_mobile') && (input.dailyMobileRows ?? 0) === 0) problems.push('daily_mobile has 0 rows');
   for (const [kind, { rows, clients }] of summariseParity(input)) {
     problems.push(`daily parity ${kind}: ${rows} mismatched row(s) across ${clients.size} client(s)`);
   }
@@ -152,8 +142,7 @@ export class AnalyticsHealthCheck {
     const day = istDay(now, -1);
     const first = istDay(now, -1 - ANALYTICS_HEALTH_TRAILING_DAYS);
     const today = istDay(now, 0);
-    const fromDay = dailyMobileFromDay();
-    const input: AnalyticsHealthInput = { day, missingTables: [], dailyMobileFromDay: fromDay };
+    const input: AnalyticsHealthInput = { day, missingTables: [] };
     /** undefined = continue with this table's rows; otherwise the input to return now. */
     const failed = (table: string, error: AnalyticsPgError): AnalyticsHealthInput | undefined => {
       if (error.kind === 'disabled') return { day, disabled: true };
@@ -191,14 +180,12 @@ export class AnalyticsHealthCheck {
       input.dailyClientRows = Number(dc.rows[0]?.n) || 0;
     }
 
-    if (fromDay && day >= fromDay) {
-      const dm = await this.probe<{ n: string }>('SELECT count(*)::bigint AS n FROM daily_mobile WHERE day = $1::date', [day]);
-      if ('error' in dm) {
-        const stop = failed('daily_mobile', dm.error);
-        if (stop) return stop;
-      } else {
-        input.dailyMobileRows = Number(dm.rows[0]?.n) || 0;
-      }
+    const dm = await this.probe<{ n: string }>('SELECT count(*)::bigint AS n FROM daily_mobile WHERE day = $1::date', [day]);
+    if ('error' in dm) {
+      const stop = failed('daily_mobile', dm.error);
+      if (stop) return stop;
+    } else {
+      input.dailyMobileRows = Number(dm.rows[0]?.n) || 0;
     }
 
     // analytics_daily_parity (analytics/maintain.sql): one row per counter where daily_client,

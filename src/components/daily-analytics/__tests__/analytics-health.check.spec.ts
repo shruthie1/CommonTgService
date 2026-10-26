@@ -9,7 +9,7 @@ import {
 } from '../analytics-health.check';
 
 const TRAILING = [1000, 1100, 900, 1200, 1000, 950, 1050]; // median 1000
-const healthy = { day: '2026-10-30', promotionSendRows: 980, trailingPromotionSendRows: TRAILING, dailyClientRows: 40, dailyMobileRows: 120, dailyMobileFromDay: '2026-10-24' };
+const healthy = { day: '2026-10-30', promotionSendRows: 980, trailingPromotionSendRows: TRAILING, dailyClientRows: 40, dailyMobileRows: 120 };
 
 describe('decideAnalyticsHealth (injected numbers)', () => {
   it('healthy day => no problems', () => {
@@ -35,10 +35,8 @@ describe('decideAnalyticsHealth (injected numbers)', () => {
   it('daily_client 0 rows', () => {
     expect(decideAnalyticsHealth({ ...healthy, dailyClientRows: 0 })).toEqual(['daily_client has 0 rows']);
   });
-  it('daily_mobile 0 rows alerts only when DAILY_MOBILE_FROM_DAY is set and has passed', () => {
+  it('daily_mobile 0 rows alerts, like daily_client', () => {
     expect(decideAnalyticsHealth({ ...healthy, dailyMobileRows: 0 })).toEqual(['daily_mobile has 0 rows']);
-    expect(decideAnalyticsHealth({ ...healthy, day: '2026-10-23', dailyMobileRows: undefined })).toEqual([]);
-    expect(decideAnalyticsHealth({ ...healthy, dailyMobileFromDay: undefined, dailyMobileRows: undefined })).toEqual([]);
   });
   it('PG unreachable short-circuits every count check', () => {
     expect(decideAnalyticsHealth({ day: '2026-10-30', pgError: 'connect ETIMEDOUT' })).toEqual(['Postgres unreachable: connect ETIMEDOUT']);
@@ -61,12 +59,10 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
   const NOW = new Date('2026-10-30T21:00:00Z').getTime();
   const ECONN = { kind: 'query', message: 'connect ECONNREFUSED', code: 'ECONNREFUSED' };
   beforeEach(() => {
-    process.env.DAILY_MOBILE_FROM_DAY = '2026-10-24';
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
   });
   afterEach(() => {
-    delete process.env.DAILY_MOBILE_FROM_DAY;
     jest.restoreAllMocks();
   });
 
@@ -129,13 +125,12 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     expect(queries.every((q) => /^\s*SELECT/i.test(q.sql))).toBe(true);
   });
 
-  it('client_vs_mobile parity rows are ignored before DAILY_MOBILE_FROM_DAY (daily_mobile empty then)', async () => {
-    delete process.env.DAILY_MOBILE_FROM_DAY;
+  it('a client_vs_mobile parity row for yesterday alerts with no config at all', async () => {
     const { check, notify } = build((sql) =>
       sql.includes('analytics_daily_parity') ? [{ check_name: 'client_vs_mobile', client_id: 'c1', counter: 'sent', expected: '5', actual: '0' }] : ok(sql),
     );
-    expect(await check.run(NOW)).toEqual([]);
-    expect(notify).not.toHaveBeenCalled();
+    expect(await check.run(NOW)).toEqual(['daily parity client_vs_mobile: 1 mismatched row(s) across 1 client(s)']);
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 
   it('analytics_daily_parity missing (42883) => skipped quietly: no alert, no retry', async () => {
@@ -162,18 +157,10 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     expect(await check.run(NOW)).toEqual(['promotion_send has 0 rows']);
   });
 
-  it('DAILY_MOBILE_FROM_DAY unset => daily_mobile never queried or checked', async () => {
-    delete process.env.DAILY_MOBILE_FROM_DAY;
-    const { check, queries } = build((sql) => (sql.includes('daily_mobile') ? [{ n: '0' }] : ok(sql)));
-    expect(await check.run(NOW)).toEqual([]);
-    expect(queries.some((q) => q.sql.includes('daily_mobile'))).toBe(false);
-  });
-
-  it('yesterday before DAILY_MOBILE_FROM_DAY => daily_mobile not queried', async () => {
-    process.env.DAILY_MOBILE_FROM_DAY = '2026-10-31';
-    const { check, queries } = build(ok);
-    await check.run(NOW);
-    expect(queries.some((q) => q.sql.includes('daily_mobile'))).toBe(false);
+  it('daily_mobile is always queried; 0 rows for yesterday alerts with no config at all', async () => {
+    const { check, queries } = build((sql) => (sql.includes('FROM daily_mobile') ? [{ n: '0' }] : ok(sql)));
+    expect(await check.run(NOW)).toEqual(['daily_mobile has 0 rows']);
+    expect(queries.some((q) => q.sql.includes('FROM daily_mobile'))).toBe(true);
   });
 
   it('ANALYTICS_DB_URL unset => logged and skipped: no alert, no retry', async () => {
