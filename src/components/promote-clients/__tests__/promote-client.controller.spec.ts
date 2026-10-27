@@ -176,6 +176,19 @@ describe('PromoteClientController', () => {
     expect(stub.findAll).toHaveBeenCalledWith('active');
   });
 
+  it('SetAsPromoteClient: GET kept, additive POST twin on the same path delegates identically (D9)', async () => {
+    const { PATH_METADATA, METHOD_METADATA } = require('@nestjs/common/constants');
+    const { RequestMethod } = require('@nestjs/common');
+    const proto = PromoteClientController.prototype as any;
+    expect(Reflect.getMetadata(PATH_METADATA, proto.setAsPromoteClient)).toBe('SetAsPromoteClient/:mobile');
+    expect(Reflect.getMetadata(METHOD_METADATA, proto.setAsPromoteClient)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(PATH_METADATA, proto.setAsPromoteClientPost)).toBe('SetAsPromoteClient/:mobile');
+    expect(Reflect.getMetadata(METHOD_METADATA, proto.setAsPromoteClientPost)).toBe(RequestMethod.POST);
+    stub.setAsPromoteClient.mockResolvedValue('ok');
+    await expect((controller as any).setAsPromoteClientPost('111', 'cid')).resolves.toBe('ok');
+    expect(stub.setAsPromoteClient).toHaveBeenCalledWith('111', 'cid');
+  });
+
   it('setAsPromoteClient → delegates with and without clientId', async () => {
     stub.setAsPromoteClient.mockResolvedValue('ok');
     await controller.setAsPromoteClient('111', 'cid');

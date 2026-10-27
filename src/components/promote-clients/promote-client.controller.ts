@@ -126,6 +126,19 @@ export class PromoteClientController {
     return this.clientService.setAsPromoteClient(mobile, clientId);
   }
 
+  // Additive POST twin of the GET above (pool-onboarding D9: buffer's SetAsBufferClient is POST).
+  // The GET stays; retiring it is owner-gated (Q6). Same auth as the GET (API key / IP).
+  @Post('SetAsPromoteClient/:mobile')
+  @ApiOperation({ summary: 'Enroll a user as a promote client (POST)', description: 'Same as GET SetAsPromoteClient/:mobile; a mutating verb for a mutating call.' })
+  @ApiParam({ name: 'mobile', description: 'User mobile number', type: String })
+  @ApiQuery({ name: 'clientId', required: false, description: 'Client ID to assign promote client to (auto-assigned if omitted)', type: String })
+  @ApiOkResponse({ schema: { type: 'string'} })
+  @ApiBadRequestResponse({ description: 'The user was not found or is already an active main client.' })
+  @ApiConflictResponse({ description: 'A promote client record already exists for this mobile.' })
+  async setAsPromoteClientPost(@Param('mobile') mobile: string, @Query('clientId') clientId?: string) {
+    return this.clientService.setAsPromoteClient(mobile, clientId);
+  }
+
   @Get('mobile/:mobile')
   @ApiOperation({ summary: 'Get promote client by mobile' })
   @ApiParam({ name: 'mobile', description: 'Promote client mobile number', type: String })
