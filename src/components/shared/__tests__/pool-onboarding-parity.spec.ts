@@ -67,7 +67,7 @@ export const CURRENT = {
         joinSweepExcludesPrimaryMobiles: true,     // D37
         joinSweepSleepsPerAccount: 1,       // D38 (owner-gated pacing)
         joinSweepErrorWipesQueues: false,   // D39
-        manualBulkEnrolCapsFromZero: true,  // D10
+        manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
     },
     promote: {
         operationalFloor: 230,
@@ -87,7 +87,7 @@ export const CURRENT = {
         joinSweepExcludesPrimaryMobiles: false,
         joinSweepSleepsPerAccount: 4,
         joinSweepErrorWipesQueues: false,   // M11
-        manualBulkEnrolCapsFromZero: true,
+        manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
     },
 };
 
@@ -230,6 +230,35 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
             expect(rejected).toHaveLength(1);
             expect(rejected[0].reason).toMatchObject({ status: 400 });
+        });
+    });
+
+    describe('M12 promote enrolment budget', () => {
+        test('scheduled promote run hands the batch no more than the weekly engine budget', async () => {
+            const svc: any = h.promote;
+            // 45 enrolled in the last 7 days (all inactive so they do not count as healthy supply):
+            // weekly ceiling 46 -> 1 slot left this week.
+            await h.models.promote.insertMany(Array.from({ length: 45 }, (_, i) => poolDoc('promote', {
+                mobile: `9195000${String(i).padStart(5, '0')}`, status: 'inactive', enrolledAt: new Date(Date.now() - 864e5),
+            })));
+            jest.spyOn(svc, 'processClient').mockResolvedValue({ updateCount: 0 });
+            jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 });
+            const dyn = jest.spyOn(svc, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({ createdCount: 0, attemptedCount: 0, createdEntries: [] });
+            jest.spyOn(svc, 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
+
+            await svc._checkPromoteClientsInternal();
+
+            const needs = dyn.mock.calls[0][2] as any[];
+            expect(needs.reduce((sum, n) => sum + n.totalNeeded, 0)).toBe(1);
+        });
+
+        test('with budget to spare the scheduled promote run is unchanged (need 3 -> 3)', async () => {
+            const svc: any = h.promote;
+            jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 });
+            const dyn = jest.spyOn(svc, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({ createdCount: 0, attemptedCount: 0, createdEntries: [] });
+            jest.spyOn(svc, 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
+            await svc._checkPromoteClientsInternal();
+            expect((dyn.mock.calls[0][2] as any[]).map((n) => n.totalNeeded)).toEqual([3]);
         });
     });
 
@@ -485,11 +514,33 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             await svc[pool === 'buffer' ? 'addNewUserstoBufferClients' : 'addNewUserstoPromoteClients']([], [], [CLIENT_ID]);
 
             const [, , needs, counted, caps] = dyn.mock.calls[0] as any[];
-            expect(needs.map((n: any) => [n.clientId, n.totalNeeded])).toEqual([[CLIENT_ID, 3]]);
             if (want.manualBulkEnrolCapsFromZero) {
+                expect(needs.map((n: any) => [n.clientId, n.totalNeeded])).toEqual([[CLIENT_ID, 3]]);
                 expect(counted).toBeUndefined();
                 expect(caps).toBeUndefined();
+            } else {
+                // Same plan as the scheduled run: live counts (and buffer's dynamic caps) are passed.
+                expect(counted).toBeInstanceOf(Map);
+                if (pool === 'buffer') expect(caps).toBeInstanceOf(Map);
+                expect(needs.every((n: any) => n.clientId === CLIENT_ID && n.totalNeeded > 0)).toBe(true);
             }
+        });
+
+        test('manual bulk enrol: a client already at its cap gets nothing (D10, red/green)', async () => {
+            const svc = h.services[pool];
+            const cap = pool === 'buffer' ? 60 : want.legacyHealthyCap;
+            await h.models[pool].insertMany(Array.from({ length: cap }, (_, i) => poolDoc(pool, {
+                mobile: `9194000${String(i).padStart(5, '0')}`, warmupPhase: WarmupPhase.SETTLING,
+            })));
+            jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 });
+            const dyn = jest.spyOn(svc, pool === 'buffer' ? 'addNewUserstoBufferClientsDynamic' : 'addNewUserstoPromoteClientsDynamic')
+                .mockResolvedValue({ createdCount: 0, attemptedCount: 0, createdEntries: [] });
+            await svc[pool === 'buffer' ? 'addNewUserstoBufferClients' : 'addNewUserstoPromoteClients']([], [], [CLIENT_ID]);
+            const passed = dyn.mock.calls.length === 0 ? 0 : (dyn.mock.calls[0][2] as any[]).reduce((sum, n) => sum + n.totalNeeded, 0);
+            const capOf = dyn.mock.calls.length === 0 ? cap : ((dyn.mock.calls[0][4] as Map<string, number> | undefined)?.get(CLIENT_ID) ?? want.legacyHealthyCap);
+            const counted = dyn.mock.calls.length === 0 ? cap : ((dyn.mock.calls[0][3] as Map<string, number> | undefined)?.get(CLIENT_ID) ?? 0);
+            // Whatever reaches the batch must not be able to push the client past its cap.
+            expect(Math.min(passed, Math.max(0, capOf - counted))).toBe(0);
         });
     });
 });

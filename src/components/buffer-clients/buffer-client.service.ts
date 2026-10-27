@@ -1972,27 +1972,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         badIds: string[],
         goodIds: string[],
         clientsNeedingBufferClients: string[] = [],
-        bufferClientsPerClient?: Map<string, number>,
+        _bufferClientsPerClient?: Map<string, number>,
     ) {
-        const clientNeedingDynamic: Array<{
-            clientId: string;
-            totalNeeded: number;
-            windowNeeds: Array<{ window: string; available: number; needed: number; targetDate: string; minRequired: number }>;
-            totalActive: number;
-            totalNeededForCount: number;
-            calculationReason: string;
-            priority: number;
-        }> = [];
-
-        for (const clientId of clientsNeedingBufferClients) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeeds(clientId);
-            if (availabilityNeeds.totalNeeded > 0) {
-                clientNeedingDynamic.push({ clientId, ...availabilityNeeds });
-            }
-        }
-
-        clientNeedingDynamic.sort((a, b) => a.priority - b.priority);
-        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, clientNeedingDynamic, bufferClientsPerClient);
+        // Manual bulk enrol uses the same supply plan as the scheduled run, restricted to the
+        // requested clients: dynamic per-client cap counted from the live pool + fleet engine
+        // budget (tracker D10). It used to cap at a fixed 20 counted from 0, with no budget.
+        const plan = await this.buildBufferSupplyPlan(clientsNeedingBufferClients.map((clientId) => ({ clientId })));
+        this.logBufferSupplyPlan(plan);
+        const needs = plan.entries
+            .filter((entry) => entry.allocated > 0)
+            .map((entry) => ({
+                clientId: entry.clientId,
+                ...entry.availability,
+                totalNeeded: entry.allocated,
+                calculationReason: entry.reason,
+                priority: entry.priority,
+            }));
+        if (needs.length === 0) return;
+        await this.addNewUserstoBufferClientsDynamic(badIds, goodIds, needs, plan.countedPerClient, plan.capPerClient);
     }
 
     async addNewUserstoBufferClientsDynamic(

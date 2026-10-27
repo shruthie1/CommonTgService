@@ -53,14 +53,14 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | operator override or same as auto-enrol? | — | owner-gated (Q7) | |
 | D8 | `setAs*` clientId | required (controller :161,168) | optional, auto-assign (:825-841) | P/I | profile flag | M7 | todo | |
 | D9 | `setAs*` HTTP verb | POST | GET (controller :118) | D/A | add POST, keep GET | M7 | owner-gated (Q6) for retiring GET | |
-| D10 | manual bulk enrol bypasses the cap | `addNewUserstoBufferClients` (:2059-2084) uses window need, no counted/cap map -> cap 20 counted from 0, no fleet budget | **re-verified:** promote manual (:1393-1418) also passes no counts -> cap 30 counted from 0 (the input said it matched scheduled; it does not) | D/A | manual path uses the same plan/caps as the scheduled run, both pools | M6 | todo | |
+| D10 | manual bulk enrol bypasses the cap | `addNewUserstoBufferClients` (:2059-2084) uses window need, no counted/cap map -> cap 20 counted from 0, no fleet budget | **re-verified:** promote manual (:1393-1418) also passes no counts -> cap 30 counted from 0 (the input said it matched scheduled; it does not) | D/A | manual path uses the same plan/caps/budget as the scheduled run, both pools | M12 | done | M12 |
 | D11 | `badIds` parameter never used | :2086-2100 | :1420-1433 | D/A | part of the bulk-enrol request body; keep the parameter (contract) | — | won't-fix | |
-| D12 | need calculation / fleet budget | dynamic plan (:303-437, buffer-supply.ts) | legacy window + cap 30 (:1214-1238), no engine budget | P/I + ? | promote gets the engine budget only if it does not cut supply sharply (measure) | M12 | todo | |
+| D12 | need calculation / fleet budget | dynamic plan (:303-437, buffer-supply.ts) | legacy window + cap 30 (:1214-1238), no engine budget | P/I + ? | promote gets the same engine budget (`computeFleetEnrollmentBudget`, own engine ceiling 46/wk, lead 30d). **Measured 2026-10-27 (read-only Mongo):** promote enrolledLast7d 29, fleetWarming 51 -> budget today 10 = per-run max; max rolling-7d promote enrolments over the last 30d = 30 < 46, so the budget would not have cut any run in 30 days. Not owner-gated. Method choice (legacy windows vs dynamic) stays Q1 | M12 | done | M12 |
 | D13 | per-client cap | dynamic or 20 (buffer-supply.ts:115,150) | 30 (:62) | P/I | profile value (`legacyHealthyCap`) | M4 | done | 3b36a819 |
 | D14 | healthy-for-cap | `isHealthyBufferClientForCap` (:268-288) | `isHealthyPromoteClientForCap` (:143-160) | D/A (copy), I (floor) | one function `isHealthyForLegacyCap`, floor from profile | M4 | done | 3b36a819 |
 | D15 | spam-limit state | schema + supply shift | none | P/? | — | — | deferred to master-plan W-A (Q4) | |
 | D16 | config block | :476-493 | :123-141 | P/I + ? | floor/minTotal/pacing read from the profile, values unchanged | M4 | done (pacing values owner-gated Q3) | 3b36a819 |
-| D17 | promote `totalSlotsNeeded` loop is a dead calculation | — | :1242-1256 | D/A | remove the dead math, keep the `>0` gate semantics | M6 | todo | |
+| D17 | promote `totalSlotsNeeded` loop is a dead calculation | — | :1242-1256 | D/A | replaced by the priority-order budget allocation | M12 | done | M12 |
 | D18 | fields on auto-enrol | :1989-2022 | + `lastActive` ISO (:1323-1356) | D/I | port `docExtras` (promote `lastActive`) | M5 | done | 67061500 |
 | D19 | promote `lastActive`: ISO (auto) vs `'default'` (setAs, :850) | — | :850 vs :1325 | D/A | value read by tg-platform promote selection? not checked; keep | — | owner-gated (Q10) | |
 | D20 | `create()` default `message` | none (:816-826) | `'Account is functioning properly'` (:469-481) | D/A | harmless; keep | — | won't-fix | |
@@ -82,7 +82,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D36 | join candidate tiering | :232-266 | :604-638 | D/I | one function | M11 | todo | |
 | D37 | join sweep primary exclusion / clientId scope | :1846-1854 | :914-924 | D/I | profile flag | M11 | todo | |
 | D38 | join sweep pacing | 1 gap/account (:1916) | 3 extra 5-8s sleeps + gap (:941-952, 983) | D/? | session-safety pacing; kept exactly | — | owner-gated (Q3) | |
-| D39 | promote join sweep catch-all wipes every queued join | none | :997-1004 | D/A | log and rethrow, keep the queues (buffer behaviour) | M11 | done | M11 |
+| D39 | promote join sweep catch-all wipes every queued join | none | :997-1004 | D/A | log and rethrow, keep the queues (buffer behaviour) | M11 | done | 5dd802f2 |
 | D40 | `refillJoinQueue` copy | :1139-1221 | :640-710 (leave delay differs) | D/I+A | leave delays are pacing (Q3); exclusion via profile | M11 | todo (pacing owner-gated Q3) | |
 | D41 | schedules / minute offsets | scheduled-jobs.service.ts:99,107-109,140-144 | :160,165-167,189-191 | P/I | keep exactly | — | won't-fix | |
 | D42 | warmup failure backoff / deactivate cascade | base | same | S/I | — | — | done (shared) | |
