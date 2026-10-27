@@ -44,8 +44,8 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 
 | ID | Aspect | Buffer (file:line) | Promote (file:line) | Kind/Intent | Decision | Step | Status | Commit |
 |---|---|---|---|---|---|---|---|---|
-| D1 | `users` candidate filter | buffer-client.service.ts:2111-2121 | promote-client.service.ts:1444-1454 | D/I (identical) | one shared query + batch loop (`shared/onboarding/candidate-source.ts`) | M6 | done | M6 |
-| D2 | goodIds exclusion set | :1663-1674 | :1105-1113 | D/I | one shared builder (`buildEnrolmentExclusions`) for the two run paths | M6 | done | M6 |
+| D1 | `users` candidate filter | buffer-client.service.ts:2111-2121 | promote-client.service.ts:1444-1454 | D/I (identical) | one shared query + batch loop (`shared/onboarding/candidate-source.ts`) | M6 | done | a12103bf |
+| D2 | goodIds exclusion set | :1663-1674 | :1105-1113 | D/I | one shared builder (`buildEnrolmentExclusions`) for the two run paths | M6 | done | a12103bf |
 | D3 | who decides buffer vs promote | first scheduler, lowest tgId | same | ?/? | no code exists; do not invent a rule | — | owner-gated (Q1) | |
 | D4 | pre-enrol probe (hasPassword, channelInfo) | :1966-1978 | :1303-1313 (no debug log on 2FA skip) | D/I | one enrolment function (`shared/onboarding/enrolment.ts`) | M5 | done | 67061500 |
 | D5 | cross-pool dedup is in-process only | :1942-1952, 2005-2024 | :1279-1289, 1339-1358 | D/I | Mongo-backed claim | M13 | todo | |
@@ -82,7 +82,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D36 | join candidate tiering | :232-266 | :604-638 | D/I | one function | M11 | todo | |
 | D37 | join sweep primary exclusion / clientId scope | :1846-1854 | :914-924 | D/I | profile flag | M11 | todo | |
 | D38 | join sweep pacing | 1 gap/account (:1916) | 3 extra 5-8s sleeps + gap (:941-952, 983) | D/? | session-safety pacing; kept exactly | — | owner-gated (Q3) | |
-| D39 | promote join sweep catch-all wipes every queued join | none | :997-1004 | D/A | log and rethrow, keep the queues (buffer behaviour) | M11 | todo | |
+| D39 | promote join sweep catch-all wipes every queued join | none | :997-1004 | D/A | log and rethrow, keep the queues (buffer behaviour) | M11 | done | M11 |
 | D40 | `refillJoinQueue` copy | :1139-1221 | :640-710 (leave delay differs) | D/I+A | leave delays are pacing (Q3); exclusion via profile | M11 | todo (pacing owner-gated Q3) | |
 | D41 | schedules / minute offsets | scheduled-jobs.service.ts:99,107-109,140-144 | :160,165-167,189-191 | P/I | keep exactly | — | won't-fix | |
 | D42 | warmup failure backoff / deactivate cascade | base | same | S/I | — | — | done (shared) | |

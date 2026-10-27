@@ -999,11 +999,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             return `Initiated Joining channels for ${joinSet.size} | Queued for leave: ${leaveSet.size}`;
             } catch (error) {
+                // Same as the buffer sweep: report and rethrow, but keep every other account's
+                // queued joins/leaves (one unexpected error used to wipe the whole promote queue).
                 this.logger.error('Unexpected error during joinchannelForPromoteClients:', error);
-                this.joinChannelMap.clear();
-                this.leaveChannelMap.clear();
-                this.clearJoinChannelInterval();
-                this.clearLeaveChannelInterval();
                 throw new Error('Failed to initiate channel joining process');
             }
         } finally {

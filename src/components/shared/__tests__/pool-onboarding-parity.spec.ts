@@ -86,7 +86,7 @@ export const CURRENT = {
         warmupRunHealthChecksSessionRotated: false,
         joinSweepExcludesPrimaryMobiles: false,
         joinSweepSleepsPerAccount: 4,
-        joinSweepErrorWipesQueues: true,
+        joinSweepErrorWipesQueues: false,   // M11
         manualBulkEnrolCapsFromZero: true,
     },
 };
