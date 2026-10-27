@@ -125,3 +125,16 @@ export class ActiveChannel {
 }
 
 export const ActiveChannelSchema = SchemaFactory.createForClass(ActiveChannel);
+
+// Supports getActiveChannels' $match (canSendMsgs: true, participantsCount > 600; the 600 is
+// ActiveChannelsService.MIN_PARTICIPANTS_COUNT). Mirrors channels.join_candidates_participants.
+// Without it the planner drives the scan with the `channelId: { $nin }` exclusion over the whole
+// channelId_1 index (54,751 keys / 54,531 docs, ~2.1 s on prod 2026-10-28). Partial, so it holds
+// only the 17,966 of 47,572 docs that can match. Built by autoIndex on the next CMS start.
+ActiveChannelSchema.index(
+  { participantsCount: -1 },
+  {
+    name: 'join_candidates_participants',
+    partialFilterExpression: { canSendMsgs: true, participantsCount: { $gt: 600 } },
+  },
+);
