@@ -437,7 +437,12 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 tgId: 'tg-919100000063', session: 'sess-919100000063', availableDate: expect.any(String), channels: 3,
                 clientId: CLIENT_ID, status: 'active', message: 'Enrolled for warmup', lastUsed: null, warmupPhase: WarmupPhase.ENROLLED,
             });
-            expect(doc.lastActive).toBe(B ? undefined : 'default');
+            // Q10 (owner 2026-10-27): promote writes a real ISO date like its auto-enrol, never 'default'.
+            if (B) expect(doc.lastActive).toBeUndefined();
+            else {
+                expect(doc.lastActive).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+                expect(Math.abs(Date.parse(doc.lastActive) - Date.now())).toBeLessThan(60_000);
+            }
             expect(pacing).toEqual(['7500/1250/5000/10000', '3.5/2/0/7']); // pacing sleep (both pools since Q3), then warmup jitter
 
             // Permanent Telegram error: source user retired with the pool's reason, HTTP error rethrown.

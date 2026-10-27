@@ -79,8 +79,12 @@ export interface SetAsProfile {
     userNotFoundMessage: string;
     alreadyExistsMessage: string;
     successMessage: string;
-    /** Pool-only fields on the stored doc (promote: lastActive 'default', Q10). */
-    docExtras: Readonly<Record<string, unknown>>;
+    /**
+     * Write `lastActive` (ISO date, the moment of enrolment) on the stored doc, like promote's
+     * auto-enrol. Promote only (buffer docs have no lastActive). Was the literal 'default' until
+     * owner Q10 (2026-10-27); no reader compared it to 'default'.
+     */
+    stampLastActive: boolean;
     /** parseError context; null = none. Shows in the HTTP message for errors without errorMessage. */
     errorContext: string | null;
     permanentErrorReason: string;
@@ -145,7 +149,7 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         userNotFoundMessage: 'user not found',
         alreadyExistsMessage: 'BufferClient already exist',
         successMessage: 'Client enrolled as buffer successfully',
-        docExtras: Object.freeze({}),
+        stampLastActive: false,
         errorContext: 'Failed to set as Buffer Client',
         permanentErrorReason: 'Permanent error during buffer enrollment',
     }),
@@ -179,7 +183,7 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         userNotFoundMessage: 'User not found',
         alreadyExistsMessage: 'PromoteClient already exists',
         successMessage: 'Client enrolled as promote successfully',
-        docExtras: Object.freeze({ lastActive: 'default' }),
+        stampLastActive: true, // Q10 2026-10-27 (was lastActive: 'default')
         errorContext: null,
         permanentErrorReason: 'Permanent error during promote enrollment',
     }),

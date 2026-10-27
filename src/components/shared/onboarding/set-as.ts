@@ -2,7 +2,7 @@
  * Operator enrolment (`setAsBufferClient` / `setAsPromoteClient`) for both pools
  * (pool-onboarding D8). Every per-pool difference is a PoolProfile.setAs value holding today's
  * behaviour: response messages, the buffer-only pacing draw after channel info, promote's
- * `lastActive: 'default'`, clientId auto-assign, and the parseError context.
+ * real `lastActive` date (Q10), clientId auto-assign, and the parseError context.
  *
  * Telegram: connect -> getChannelInfo -> (pacing) -> unregister. No login, session or auth change.
  */
@@ -94,7 +94,7 @@ export async function setAsPoolClient(
 
         const poolDoc = {
             tgId: user.tgId,
-            ...cfg.docExtras,
+            ...(cfg.stampLastActive ? { lastActive: new Date().toISOString() } : {}),
             session: sourceSession, // Use old trusted session directly
             mobile: canonicalMobile,
             availableDate,

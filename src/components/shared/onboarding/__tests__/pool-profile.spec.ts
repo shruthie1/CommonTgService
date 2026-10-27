@@ -10,7 +10,7 @@ describe('pool profiles (M4)', () => {
             setAs: {
                 entityName: 'BufferClient', userNotFoundMessage: 'user not found', alreadyExistsMessage: 'BufferClient already exist',
                 successMessage: 'Client enrolled as buffer successfully',
-                docExtras: {}, errorContext: 'Failed to set as Buffer Client', permanentErrorReason: 'Permanent error during buffer enrollment',
+                stampLastActive: false, errorContext: 'Failed to set as Buffer Client', permanentErrorReason: 'Permanent error during buffer enrollment',
             },
             joinSweep: {
                 activeSetupMessage: 'Active client setup exists, skipping', startLog: 'Starting join channel process for buffer clients',
@@ -27,7 +27,7 @@ describe('pool profiles (M4)', () => {
             setAs: {
                 entityName: 'PromoteClient', userNotFoundMessage: 'User not found', alreadyExistsMessage: 'PromoteClient already exists',
                 successMessage: 'Client enrolled as promote successfully',
-                docExtras: { lastActive: 'default' }, errorContext: null, permanentErrorReason: 'Permanent error during promote enrollment',
+                stampLastActive: true, errorContext: null, permanentErrorReason: 'Permanent error during promote enrollment',
             },
             joinSweep: {
                 activeSetupMessage: 'Active client setup exists, skipping promotion', startLog: 'Starting join channel process',
