@@ -1,6 +1,6 @@
 # Pool onboarding unification (buffer + promote)
 
-**Date:** 2026-10-27. **Status:** every row closed 2026-10-27: done, owner-gated, deferred to the master plan, or won't-fix (tracker below is the source of truth). Owner answers of 2026-10-27 applied the same day (Q1 planner, Q2, Q3, Q6, Q8, Q9, Q10, per-run health-check cap); only D7 (Q7) stays owner-gated.
+**Date:** 2026-10-27. **Status:** every row closed 2026-10-27: done, deferred to the master plan, or won't-fix (tracker below is the source of truth). Owner answers of 2026-10-27 applied the same day (Q1 planner, Q2, Q3, Q6, Q7/D7, Q8, Q9, Q10, per-run health-check cap); no row is owner-gated.
 **Input:** divergence analysis of 2026-10-27 (44 rows, M0-M13), every row re-verified against `master` @ `852f0d2a` before work started. Line numbers below are from that commit.
 **Related:** `2026-10-26-account-lifecycle-firmup-master-plan.md` (W-A..W-F, another workstream; not edited here). Rows that plan owns are marked `deferred to master-plan W-x` and their code is left alone.
 
@@ -17,7 +17,7 @@ No new logins or sessions, no `removeOtherAuths`/`ResetAuthorizations`, no new k
 ```
 shared/onboarding/
   pool-profile.ts     PoolProfile + BUFFER_PROFILE / PROMOTE_PROFILE (pure data, today's values)
-  candidate-source.ts users query + goodIds (one copy)
+  candidate-source.ts users query + goodIds + eligibility filter (one copy; also used by setAs*, D7)
   enrolment.ts        probe (hasPassword, channelInfo) -> dedup -> lock -> write -> notice (one copy)
   pool-claim.ts       cross-process one-pool-per-mobile guard backed by Mongo (M13)
   set-as.ts           operator enrolment setAs* (D8)
@@ -78,8 +78,8 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D4 | pre-enrol probe (hasPassword, channelInfo) | :1966-1978 | :1303-1313 (no debug log on 2FA skip) | D/I | one enrolment function (`shared/onboarding/enrolment.ts`) | M5 | done | 67061500 |
 | D5 | cross-pool dedup is in-process only | :1942-1952, 2005-2024 | :1279-1289, 1339-1358 | D/I | Mongo-backed claim (`shared/onboarding/pool-claim.ts`): new collection `poolEnrolmentClaims`, one doc per mobile `{mobile, pool, at}`, unique index `mobile_unique` (additive). Taken inside the in-process lock by auto-enrol, both `setAs*` and both `create()`; the other pool is refused while its claim is younger than 60 s; release sets `at` to epoch (never deletes). Live data 2026-10-27: 0 dual-pool mobiles, so no existing doc is refused | M13 | done | 38b842bc |
 | D6 | `setAs*` cross-pool guard | refuses mains + promote (:1262-1273) | refuses mains only (:818-823); neither takes the lock | D/**A** | promote also refuses buffer; both take the lock and re-check inside it | M1 | done | 5b30cad5 |
-| D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | code shared (D8, `shared/onboarding/set-as.ts`): adding auto-enrol's 2FA/activity checks to the operator path is a policy decision, one place to change. Owner 2026-10-27: not covered by the 2026-10-27 answers (their "Q7 keep as is" names no classifier, which is this doc's Q1/D3, so it was applied to D3); stays owner-gated | — | owner-gated (Q7; code shared) | f1bf4fc0 |
-| D8 | `setAs*` body / clientId | required (controller :161,168); 5-10 s pacing draw after channel info | optional, auto-assign (:825-841); no draw; `lastActive:'default'` | P/I | one shared body `shared/onboarding/set-as.ts`; per-pool values in `PoolProfile.setAs` (messages, `postChannelInfoSleep`, `docExtras`, `errorContext`, `permanentErrorReason`) + `setAsRequiresClientId`. Characterisation (messages, stored doc, pacing draws, permanent/plain errors, clientId omitted) green before and after. Pacing value owner-gated Q3, `lastActive` Q10 | M7b | done | f1bf4fc0 |
+| D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | Owner 2026-10-27 (D7: yes): `setAs*` (buffer, promote GET + POST) passes the same eligibility filter as auto-enrolment: the shared `enrolmentEligibilityFilter` in `shared/onboarding/candidate-source.ts` (not expired, `twoFA: false`, `lastActive` before the 90-day cutoff, `totalChats > 150`), queried in Mongo before any Telegram connect; a miss is HTTP 400 `Mobile X is not eligible for <Entity>: <reasons>`. Not added: auto-enrol's `hasPassword()` probe (it needs a Telegram connect) | D7 | done | 02880d63 |
+| D8 | `setAs*` body / clientId | required (controller :161,168); 5-10 s pacing draw after channel info | optional, auto-assign (:825-841); no draw; `lastActive:'default'` | P/I | one shared body `shared/onboarding/set-as.ts`; per-pool values in `PoolProfile.setAs` (messages, `postChannelInfoSleep`, `docExtras`, `errorContext`, `permanentErrorReason`) + `setAsRequiresClientId`. Characterisation (messages, stored doc, pacing draws, permanent/plain errors, clientId omitted) green before and after. Since 2026-10-27: pacing shared (Q3, 5d3dcb66), `lastActive` ISO via `stampLastActive` (Q10, 127fde03), eligibility filter (D7, 02880d63) | M7b | done | f1bf4fc0 |
 | D9 | `setAs*` HTTP verb | POST | GET (controller :118) | D/A | additive `POST promoteclients/SetAsPromoteClient/:mobile` (same handler body, same API-key/IP auth: not an ignore or origin-only path); GET kept. Red/green controller test. Owner 2026-10-27: Q6 keep GET + POST | D9 | done (Q6: keep both) | 56278ceb |
 | D10 | manual bulk enrol bypasses the cap | `addNewUserstoBufferClients` (:2059-2084) uses window need, no counted/cap map -> cap 20 counted from 0, no fleet budget | **re-verified:** promote manual (:1393-1418) also passes no counts -> cap 30 counted from 0 (the input said it matched scheduled; it does not) | D/A | manual path uses the same plan/caps/budget as the scheduled run, both pools | M12 | done | 2d209907 |
 | D11 | `badIds` parameter never used | :2086-2100 | :1420-1433 | D/A | part of the bulk-enrol request body; keep the parameter (contract) | — | won't-fix | |
@@ -139,7 +139,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | Q2 | health-check promote `session_rotated` in the warmup run within the per-run cap, smaller promote share | D32, D34 done | 48b831bc (cap 9d404340) |
 | Q3 | one pacing set, the slower of each pair | D16, D38, D40, D45 done | 5d3dcb66 |
 | Q6 | keep GET + POST | D9 done | 56278ceb |
-| Q7 | not answered as worded: the answer "Q7 keep as is (no classifier)" matches Q1's classification part and was applied to D3; D7 (setAs filters) stays owner-gated | D7 owner-gated | — |
+| Q7 | "keep as is (no classifier)" was Q1's classification part (applied to D3); D7 answered separately: yes, `setAs*` applies the auto-enrol eligibility filter before any Telegram connect | D7 done | 02880d63 |
 | Q8 | 15 days for both | D44 done | tg-platform fef4006; 26e7191f |
 | Q9 | archives as is | D46 won't-fix | — |
 | Q10 | no `'default'` reader; setAs writes a real date | D19 done | 127fde03 |
