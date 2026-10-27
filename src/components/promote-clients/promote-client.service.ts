@@ -539,47 +539,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         return updatedUser;
     }
 
-    async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<PromoteClientDocument> {
-        const updateData: UpdatePromoteClientDto = { status };
-        if (message) updateData.message = message;
-        if (status === 'inactive') {
-            updateData.inUse = false;
-        }
-        try {
-            const updated = await this.update(mobile, updateData);
-            this.logger.log(`Promote client ${mobile} status updated to ${status}`);
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                {
-                    title: 'Promote status',
-                    fields: [
-                        { label: 'Mobile', value: mobile },
-                        { label: 'New status', value: status, code: false },
-                        { label: 'Reason', value: message || '-', code: false },
-                    ],
-                }
-            ).catch((error) => this.logger.error(`Failed to send promote status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
-            return updated;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to update promote client ${mobile} status to ${status}: ${errorMessage}`);
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                {
-                    severity: 'error',
-                    title: 'Status failed',
-                    fields: [
-                        { label: 'Mobile', value: mobile },
-                        { label: 'Attempted status', value: status, code: false },
-                        { label: 'Reason', value: message || '-', code: false },
-                        { label: 'Error', value: errorMessage.substring(0, 120), code: false },
-                    ],
-                },
-            ).catch((notifyError) => this.logger.error(`Failed to send promote status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
-            throw error;
-        }
-    }
-
     /**
      * Two-tier join candidate selection (ported from BufferClientService 2026-08-27).
      *
@@ -704,29 +663,6 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     async updateLastUsed(mobile: string): Promise<PromoteClient> {
         return this.update(mobile, { lastUsed: new Date() });
-    }
-
-    async markAsInactive(mobile: string, reason: string): Promise<PromoteClientDocument | null> {
-        try {
-            // Idempotent: if there's no promote record, or it's already inactive,
-            // do nothing. Keeps the expireAccount cascade cheap and avoids a
-            // duplicate "Status Update" notification when the originating pool was
-            // already deactivated by deactivateClient.
-            const existing = await this.findOne(mobile, false);
-            if (!existing || existing.status === 'inactive') {
-                return existing;
-            }
-            this.logger.log(`Marking promote client ${mobile} as inactive: ${reason}`);
-            return await this.updateStatus(mobile, 'inactive', reason);
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(`Failed to mark promote client ${mobile} as inactive: ${errorMessage}`);
-            return null;
-        }
-    }
-
-    async markAsActive(mobile: string, message: string = 'Account is functioning properly'): Promise<PromoteClient> {
-        return this.updateStatus(mobile, 'active', message);
     }
 
     async createOrUpdate(mobile: string, createOrUpdateUserDto: CreatePromoteClientDto | UpdatePromoteClientDto): Promise<PromoteClient> {

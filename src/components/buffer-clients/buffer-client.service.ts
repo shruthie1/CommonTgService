@@ -953,47 +953,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         }
     }
 
-    async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<BufferClientDocument> {
-        const updateData: UpdateBufferClientDto = { status };
-        if (message) updateData.message = message;
-        if (status === 'inactive') {
-            updateData.inUse = false;
-        }
-        try {
-            const updated = await this.update(mobile, updateData);
-            this.logger.log(`Buffer client ${mobile} status updated to ${status}`);
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                {
-                    title: 'Buffer status',
-                    fields: [
-                        { label: 'Mobile', value: mobile },
-                        { label: 'New status', value: status, code: false },
-                        { label: 'Reason', value: message || '-', code: false },
-                    ],
-                }
-            ).catch((error) => this.logger.error(`Failed to send buffer status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
-            return updated;
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            this.logger.error(`Failed to update buffer client ${mobile} status to ${status}: ${errorMessage}`);
-            this.botsService.sendMessageByCategory(
-                ChannelCategory.ACCOUNT_NOTIFICATIONS,
-                {
-                    severity: 'error',
-                    title: 'Status failed',
-                    fields: [
-                        { label: 'Mobile', value: mobile },
-                        { label: 'Attempted status', value: status, code: false },
-                        { label: 'Reason', value: message || '-', code: false },
-                        { label: 'Error', value: errorMessage.substring(0, 120), code: false },
-                    ],
-                },
-            ).catch((notifyError) => this.logger.error(`Failed to send buffer status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
-            throw error;
-        }
-    }
-
     /**
      * Degraded swap tier 2: move a same-persona sibling's spare buffer to `toClientId`. Matches only
      * an active, not-in-use record still owned by `fromClientId`, so a buffer the sibling took in
@@ -1204,29 +1163,6 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return added;
     }
 
-
-    async markAsActive(mobile: string, message: string = 'Account is functioning properly'): Promise<BufferClientDocument> {
-        return this.updateStatus(mobile, 'active', message);
-    }
-
-    async markAsInactive(mobile: string, reason: string): Promise<BufferClientDocument | null> {
-        try {
-            // Idempotent: if there's no buffer record, or it's already inactive,
-            // do nothing. This keeps the expireAccount cascade cheap and avoids a
-            // duplicate "Status Update" notification when the originating pool was
-            // already deactivated by deactivateClient.
-            const existing = await this.findOne(mobile, false);
-            if (!existing || existing.status === 'inactive') {
-                return existing;
-            }
-            this.logger.log(`Marking buffer client ${mobile} as inactive: ${reason}`);
-            return await this.updateStatus(mobile, 'inactive', reason);
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            this.logger.error(`Failed to mark buffer client ${mobile} as inactive: ${errorMessage}`);
-            return null;
-        }
-    }
 
     // ---- Buffer-specific: Enrollment (redesigned — no 2FA, no removeExternalLoginSessions, no createNewSession) ----
 

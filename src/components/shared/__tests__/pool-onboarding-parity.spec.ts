@@ -447,6 +447,55 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             expect((claim as any).at.getTime()).toBe(0);
         });
 
+        test('updateStatus / markAs*: stored fields and notices (D43, characterisation)', async () => {
+            const label = pool === 'buffer' ? 'Buffer' : 'Promote';
+            const bots = (h.services[pool] as any).botsService.sendMessageByCategory as jest.Mock;
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000040', inUse: true }));
+
+            await h.services[pool].markAsInactive('919100000040', 'gone');
+            let doc = await h.models[pool].findOne({ mobile: '919100000040' }).lean<any>();
+            expect(doc).toMatchObject({ status: 'inactive', inUse: false, message: 'gone' });
+            expect(bots.mock.calls).toEqual([[ 'ACCOUNT_NOTIFICATIONS', {
+                title: `${label} status`,
+                fields: [
+                    { label: 'Mobile', value: '919100000040' },
+                    { label: 'New status', value: 'inactive', code: false },
+                    { label: 'Reason', value: 'gone', code: false },
+                ],
+            } ]]);
+
+            // Idempotent: already inactive or missing -> no write, no notice.
+            bots.mockClear();
+            expect(await h.services[pool].markAsInactive('919100000040', 'again')).toMatchObject({ message: 'gone' });
+            expect(await h.services[pool].markAsInactive('919100000049', 'none')).toBeNull();
+            expect(bots).not.toHaveBeenCalled();
+
+            await h.services[pool].markAsActive('919100000040');
+            doc = await h.models[pool].findOne({ mobile: '919100000040' }).lean<any>();
+            expect(doc).toMatchObject({ status: 'active', inUse: false, message: 'Account is functioning properly' });
+
+            // updateStatus without a message keeps the stored message and notices '-'.
+            bots.mockClear();
+            await h.services[pool].updateStatus('919100000040', 'active');
+            doc = await h.models[pool].findOne({ mobile: '919100000040' }).lean<any>();
+            expect(doc.message).toBe('Account is functioning properly');
+            expect(bots.mock.calls[0][1].fields[2]).toEqual({ label: 'Reason', value: '-', code: false });
+
+            // Failure: error notice, then rethrow.
+            bots.mockClear();
+            await expect(h.services[pool].updateStatus('919100000048', 'inactive', 'x')).rejects.toBeDefined();
+            expect(bots.mock.calls).toHaveLength(1);
+            expect(bots.mock.calls[0][1]).toMatchObject({
+                severity: 'error', title: 'Status failed',
+                fields: [
+                    { label: 'Mobile', value: '919100000048' },
+                    { label: 'Attempted status', value: 'inactive', code: false },
+                    { label: 'Reason', value: 'x', code: false },
+                    { label: 'Error', code: false },
+                ],
+            });
+        });
+
         test('create(): caller-supplied lifecycle fields (D21)', async () => {
             const rotatedAt = new Date('2026-09-01T00:00:00Z');
             await h.services[pool].create({

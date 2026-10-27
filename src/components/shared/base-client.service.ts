@@ -563,11 +563,71 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     /** Update a document by mobile */
     abstract update(mobile: string, updateDto: BaseClientUpdate): Promise<TDoc>;
 
-    /** Mark as inactive */
-    abstract markAsInactive(mobile: string, reason: string): Promise<TDoc | null>;
+    // ---- Status (pool-onboarding M7: was two identical copies, differing only in the pool label) ----
 
-    /** Update status */
-    abstract updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc>;
+    /** Update status; notifies ACCOUNT_NOTIFICATIONS on success and failure, rethrows on failure. */
+    async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc> {
+        const pool = this.clientType;
+        const Pool = pool === 'buffer' ? 'Buffer' : 'Promote';
+        const updateData: BaseClientUpdate = { status };
+        if (message) updateData.message = message;
+        if (status === 'inactive') {
+            updateData.inUse = false;
+        }
+        try {
+            const updated = await this.update(mobile, updateData);
+            this.logger.log(`${Pool} client ${mobile} status updated to ${status}`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                {
+                    title: `${Pool} status`,
+                    fields: [
+                        { label: 'Mobile', value: mobile },
+                        { label: 'New status', value: status, code: false },
+                        { label: 'Reason', value: message || '-', code: false },
+                    ],
+                }
+            ).catch((error) => this.logger.error(`Failed to send ${pool} status success notification for ${mobile}: ${error instanceof Error ? error.message : String(error)}`));
+            return updated;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to update ${pool} client ${mobile} status to ${status}: ${errorMessage}`);
+            this.botsService.sendMessageByCategory(
+                ChannelCategory.ACCOUNT_NOTIFICATIONS,
+                {
+                    severity: 'error',
+                    title: 'Status failed',
+                    fields: [
+                        { label: 'Mobile', value: mobile },
+                        { label: 'Attempted status', value: status, code: false },
+                        { label: 'Reason', value: message || '-', code: false },
+                        { label: 'Error', value: errorMessage.substring(0, 120), code: false },
+                    ],
+                },
+            ).catch((notifyError) => this.logger.error(`Failed to send ${pool} status failure notification for ${mobile}: ${notifyError instanceof Error ? notifyError.message : String(notifyError)}`));
+            throw error;
+        }
+    }
+
+    async markAsActive(mobile: string, message: string = 'Account is functioning properly'): Promise<TDoc> {
+        return this.updateStatus(mobile, 'active', message);
+    }
+
+    /** Idempotent: no record, or already inactive -> no write and no duplicate notice (expireAccount cascade). */
+    async markAsInactive(mobile: string, reason: string): Promise<TDoc | null> {
+        try {
+            const existing = await this.findOne(mobile, false);
+            if (!existing || existing.status === 'inactive') {
+                return existing;
+            }
+            this.logger.log(`Marking ${this.clientType} client ${mobile} as inactive: ${reason}`);
+            return await this.updateStatus(mobile, 'inactive', reason);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Failed to mark ${this.clientType} client ${mobile} as inactive: ${errorMessage}`);
+            return null;
+        }
+    }
 
     /** Re-query DB for mobiles below channelTarget not yet daily-capped. Populate joinChannelMap. Respects joinScopeClientId if set. */
     abstract refillJoinQueue(clientId?: string | null): Promise<number>;
