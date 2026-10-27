@@ -822,6 +822,12 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const clientMobiles = clients.map((client) => client?.mobile);
         if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile))) throw new BadRequestException('Number is an Active Client');
 
+        // Cross-pool guard (same as setAsBufferClient): one account in BOTH pools = two live
+        // sessions on one Telegram account => SESSION_REVOKED (permanent loss).
+        if (await this.bufferClientService.existsByMobile(canonicalMobile)) {
+            throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in bufferClients; refusing to create a cross-pool PromoteClient`);
+        }
+
         // Auto-assign clientId if not provided — pick the client with fewest promote clients
         let targetClientId = clientId;
         if (!targetClientId && clients.length > 0) {
@@ -858,20 +864,28 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 lastUsed: null,
             };
 
-            await this.promoteClientModel
-                .findOneAndUpdate(
-                    { mobile: canonicalMobile },
-                    {
-                        $set: {
-                            ...promoteClient,
-                            warmupPhase: WarmupPhase.ENROLLED,
-                            warmupJitter: ClientHelperUtils.generateWarmupJitter(),
-                            enrolledAt: new Date(),
-                        }
-                    },
-                    { returnDocument: 'after', upsert: true },
-                )
-                .exec();
+            // Same per-mobile lock + re-check as auto-enrolment: a concurrent buffer enrolment of
+            // this mobile may have landed while we were on Telegram.
+            await withEnrollmentLock(canonicalMobile, async () => {
+                const already = await this.isMobileEnrolledAnywhere(canonicalMobile);
+                if (already && already !== 'promoteClients') {
+                    throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${already}; refusing to create a cross-pool PromoteClient`);
+                }
+                await this.promoteClientModel
+                    .findOneAndUpdate(
+                        { mobile: canonicalMobile },
+                        {
+                            $set: {
+                                ...promoteClient,
+                                warmupPhase: WarmupPhase.ENROLLED,
+                                warmupJitter: ClientHelperUtils.generateWarmupJitter(),
+                                enrolledAt: new Date(),
+                            }
+                        },
+                        { returnDocument: 'after', upsert: true },
+                    )
+                    .exec();
+            });
         } catch (error) {
             const errorDetails = parseError(error);
             // Retire permanently dead accounts at the source (cascades to pools)

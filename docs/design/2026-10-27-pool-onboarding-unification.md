@@ -49,7 +49,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D3 | who decides buffer vs promote | first scheduler, lowest tgId | same | ?/? | no code exists; do not invent a rule | — | owner-gated (Q1) | |
 | D4 | pre-enrol probe (hasPassword, channelInfo) | :1966-1978 | :1303-1313 (no debug log on 2FA skip) | D/I | one enrolment function | M5 | todo | |
 | D5 | cross-pool dedup is in-process only | :1942-1952, 2005-2024 | :1279-1289, 1339-1358 | D/I | Mongo-backed claim | M13 | todo | |
-| D6 | `setAs*` cross-pool guard | refuses mains + promote (:1262-1273) | refuses mains only (:818-823); neither takes the lock | D/**A** | promote also refuses buffer; both take the lock | M1 | todo | |
+| D6 | `setAs*` cross-pool guard | refuses mains + promote (:1262-1273) | refuses mains only (:818-823); neither takes the lock | D/**A** | promote also refuses buffer; both take the lock and re-check inside it | M1 | done | M1 |
 | D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | operator override or same as auto-enrol? | — | owner-gated (Q7) | |
 | D8 | `setAs*` clientId | required (controller :161,168) | optional, auto-assign (:825-841) | P/I | profile flag | M7 | todo | |
 | D9 | `setAs*` HTTP verb | POST | GET (controller :118) | D/A | add POST, keep GET | M7 | owner-gated (Q6) for retiring GET | |

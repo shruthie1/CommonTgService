@@ -77,7 +77,7 @@ export const CURRENT = {
         maxNewClientsPerTrigger: 10,
         legacyHealthyCap: 30,
         autoEnrolDocExtras: ['lastActive'],
-        setAsChecksOtherPool: false,
+        setAsChecksOtherPool: true,         // M1
         setAsSleepsAfterChannelInfo: false,
         setAsRequiresClientId: false,
         removeCanonicalisesMobile: true,
@@ -205,6 +205,32 @@ describe('pool onboarding parity (buffer vs promote)', () => {
     const poolDoc = (pool: Pool, extra: Record<string, unknown> = {}) => ({
         tgId: `tg-${extra.mobile}`, session: `sess-${extra.mobile}`, lastActive: 'default', availableDate: '2026-10-01',
         channels: 50, clientId: CLIENT_ID, status: 'active', warmupPhase: WarmupPhase.SETTLING, ...extra,
+    });
+
+    describe('cross-pool invariants (both pools at once)', () => {
+        test('M1: concurrent setAsBufferClient + setAsPromoteClient for one mobile leaves exactly one pool doc', async () => {
+            addUser('919100000020');
+            // Barrier: neither connect returns until both calls have passed their up-front checks,
+            // which is the real race (the Telegram round-trip sits between check and write).
+            const base = (connectionManager.getClient as jest.Mock).getMockImplementation()!;
+            let arrived = 0;
+            let release!: () => void;
+            const bothArrived = new Promise<void>((resolve) => { release = resolve; });
+            (connectionManager.getClient as jest.Mock).mockImplementation(async (mobile: string, opts: unknown) => {
+                arrived += 1;
+                if (arrived === 2) release();
+                await bothArrived;
+                return base(mobile, opts);
+            });
+            const results = await Promise.allSettled([setAs('buffer', '919100000020'), setAs('promote', '919100000020')]);
+            expect(arrived).toBe(2);
+            const docs = (await h.models.buffer.countDocuments({ mobile: '919100000020' }))
+                + (await h.models.promote.countDocuments({ mobile: '919100000020' }));
+            expect(docs).toBe(1);
+            const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+            expect(rejected).toHaveLength(1);
+            expect(rejected[0].reason).toMatchObject({ status: 400 });
+        });
     });
 
     describe.each(['buffer', 'promote'] as Pool[])('%s', (pool) => {

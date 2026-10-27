@@ -1289,16 +1289,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 message: 'Enrolled for warmup',
                 lastUsed: null,
             };
-            await this.bufferClientModel
-                .findOneAndUpdate({ mobile: canonicalMobile }, {
-                    $set: {
-                        ...bufferClient,
-                        warmupPhase: WarmupPhase.ENROLLED,
-                        warmupJitter: ClientHelperUtils.generateWarmupJitter(),
-                        enrolledAt: new Date(),
-                    }
-                }, { returnDocument: 'after', upsert: true })
-                .exec();
+            // Same per-mobile lock + re-check as auto-enrolment: a concurrent promote enrolment of
+            // this mobile may have landed while we were on Telegram.
+            await withEnrollmentLock(canonicalMobile, async () => {
+                const already = await this.isMobileEnrolledAnywhere(canonicalMobile);
+                if (already && already !== 'bufferClients') {
+                    throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${already}; refusing to create a cross-pool BufferClient`);
+                }
+                await this.bufferClientModel
+                    .findOneAndUpdate({ mobile: canonicalMobile }, {
+                        $set: {
+                            ...bufferClient,
+                            warmupPhase: WarmupPhase.ENROLLED,
+                            warmupJitter: ClientHelperUtils.generateWarmupJitter(),
+                            enrolledAt: new Date(),
+                        }
+                    }, { returnDocument: 'after', upsert: true })
+                    .exec();
+            });
         } catch (error) {
             const errorDetails = parseError(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             // Retire permanently dead accounts at the source (cascades to pools)
