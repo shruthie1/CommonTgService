@@ -10,6 +10,8 @@
  * byte-identical per pool.
  */
 const ledger: string[] = [];
+/** Every pacing value requested via ClientHelperUtils.gaussianRandom, as `mean/sd/min/max`. */
+const pacing: string[] = [];
 
 jest.mock('telegram/Helpers', () => {
     const actual = jest.requireActual('telegram/Helpers');
@@ -44,6 +46,7 @@ import { connectionManager } from '../../Telegram/utils/connection-manager';
 import { channelInfo } from '../../../utils/telegram-utils/channelinfo';
 import { WarmupPhase } from '../base-client.service';
 import { __resetEnrollmentLocks } from '../enrollment-lock';
+import { ClientHelperUtils } from '../client-helper.utils';
 
 type Pool = 'buffer' | 'promote';
 
@@ -94,6 +97,11 @@ export const CURRENT = {
     },
 };
 
+const SETAS_PERMANENT_ERROR: Record<Pool, { message: string; status: number }> = {
+    buffer: { message: 'USER_DEACTIVATED_BAN', status: 500 },
+    promote: { message: 'USER_DEACTIVATED_BAN', status: 500 },
+};
+
 const MAIN_MOBILE = '919000000001';
 const CLIENT_ID = 'c1';
 
@@ -117,6 +125,11 @@ describe('pool onboarding parity (buffer vs promote)', () => {
 
     beforeAll(async () => {
         mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+        const realGaussian = ClientHelperUtils.gaussianRandom.bind(ClientHelperUtils);
+        jest.spyOn(ClientHelperUtils, 'gaussianRandom').mockImplementation((...args: number[]) => {
+            pacing.push(args.join('/'));
+            return (realGaussian as (...a: number[]) => number)(...args);
+        });
         connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'poolParity' }).asPromise();
         bufferModel = connection.model('ParityBuffer', BufferClientSchema);
         promoteModel = connection.model('ParityPromote', PromoteClientSchema);
@@ -132,6 +145,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
         ledger.length = 0;
+        pacing.length = 0;
         __resetEnrollmentLocks();
         await bufferModel.deleteMany({});
         await promoteModel.deleteMany({});
@@ -378,6 +392,55 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 : ['getClient:919100000004', 'getChannelInfo:919100000004', 'unregister:919100000004']);
             const doc = await h.models[pool].findOne({ mobile: '919100000004' }).lean<any>();
             expect(doc).toMatchObject({ warmupPhase: WarmupPhase.ENROLLED, clientId: CLIENT_ID, status: 'active', channels: 3 });
+        });
+
+        test('setAs*: messages, stored doc, pacing values and errors (D8/D9, characterisation)', async () => {
+            const B = pool === 'buffer';
+            await expect(setAs(pool, '919100000060')).rejects.toMatchObject({ message: B ? 'user not found' : 'User not found', status: 400 });
+            addUser('919100000061', { session: '  ' });
+            await expect(setAs(pool, '919100000061')).rejects.toMatchObject({
+                message: `User session missing; cannot create ${B ? 'BufferClient' : 'PromoteClient'}`, status: 400 });
+            addUser('919100000062');
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000062' }));
+            await expect(setAs(pool, '919100000062')).rejects.toMatchObject({
+                message: B ? 'BufferClient already exist' : 'PromoteClient already exists', status: 409 });
+
+            addUser('919100000063');
+            pacing.length = 0;
+            expect(await setAs(pool, '919100000063')).toBe(B ? 'Client enrolled as buffer successfully' : 'Client enrolled as promote successfully');
+            const doc = await h.models[pool].findOne({ mobile: '919100000063' }).lean<any>();
+            expect(doc).toMatchObject({
+                tgId: 'tg-919100000063', session: 'sess-919100000063', availableDate: expect.any(String), channels: 3,
+                clientId: CLIENT_ID, status: 'active', message: 'Enrolled for warmup', lastUsed: null, warmupPhase: WarmupPhase.ENROLLED,
+            });
+            expect(doc.lastActive).toBe(B ? undefined : 'default');
+            expect(pacing).toEqual(B ? ['7500/1250/5000/10000', '3.5/2/0/7'] : ['3.5/2/0/7']); // pacing sleep (buffer only), then warmup jitter
+
+            // Permanent Telegram error: source user retired with the pool's reason, HTTP error rethrown.
+            addUser('919100000064');
+            (h.telegramService.getChannelInfo as jest.Mock).mockImplementationOnce(async () => { throw Object.assign(new Error('USER_DEACTIVATED_BAN'), { errorMessage: 'USER_DEACTIVATED_BAN' }); });
+            const err = await setAs(pool, '919100000064').catch((e) => e);
+            expect(err.constructor.name).toBe('HttpException');
+            expect(h.usersService.expireAccount).toHaveBeenCalledWith('919100000064', B ? 'Permanent error during buffer enrollment' : 'Permanent error during promote enrollment');
+            expect({ message: err.message, status: err.status }).toEqual(SETAS_PERMANENT_ERROR[pool]);
+            expect(await h.models[pool].countDocuments({ mobile: '919100000064' })).toBe(0);
+
+            // A plain error (no errorMessage): the HTTP message carries the parseError prefix, which only buffer passes.
+            addUser('919100000067');
+            (h.telegramService.getChannelInfo as jest.Mock).mockImplementationOnce(async () => { throw new Error('boom'); });
+            const plain = await setAs(pool, '919100000067').catch((e) => e);
+            expect(String(plain.message)).toMatch(/ :: boom$/);
+            expect(String(plain.message).includes(' - Failed to set as Buffer Client 919100000067 :: ')).toBe(B);
+        });
+
+        test('setAs*: clientId omitted (D8, characterisation)', async () => {
+            h.clients.push({ clientId: 'c2', mobile: '919000000002' });
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000065', clientId: CLIENT_ID }));
+            addUser('919100000066');
+            await (pool === 'buffer' ? h.buffer.setAsBufferClient('919100000066', undefined as any) : h.promote.setAsPromoteClient('919100000066'));
+            const doc = await h.models[pool].findOne({ mobile: '919100000066' }).lean<any>();
+            // buffer: the controller requires clientId; the service stores what it is given. promote: fewest active -> c2.
+            expect(doc.clientId ?? null).toBe(pool === 'buffer' ? null : 'c2');
         });
 
         test('setAs*: a mobile already in the other pool (D6)', async () => {

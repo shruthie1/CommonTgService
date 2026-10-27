@@ -8,12 +8,22 @@ describe('pool profiles (M4)', () => {
             minTotalClients: 10, maxNewClientsPerTrigger: 10, channelTarget: 350,
             pacing: { clientProcessingDelayMs: 10000, leaveChannelIntervalMs: 120000 },
             excludePrimaryMobiles: true, setAsRequiresClientId: true, terminalPhasesInWarmupRun: [WarmupPhase.SESSION_ROTATED],
+            setAs: {
+                entityName: 'BufferClient', userNotFoundMessage: 'user not found', alreadyExistsMessage: 'BufferClient already exist',
+                successMessage: 'Client enrolled as buffer successfully', postChannelInfoSleep: { mean: 7500, sd: 1250, min: 5000, max: 10000 },
+                docExtras: {}, errorContext: 'Failed to set as Buffer Client', permanentErrorReason: 'Permanent error during buffer enrollment',
+            },
         });
         expect(PROMOTE_PROFILE).toEqual({
             kind: 'promote', collection: 'promoteClients', label: 'Promote', operationalFloor: 230, legacyHealthyCap: 30,
             minTotalClients: 12, maxNewClientsPerTrigger: 10, channelTarget: 350,
             pacing: { clientProcessingDelayMs: 8000, leaveChannelIntervalMs: 60000 },
             excludePrimaryMobiles: false, setAsRequiresClientId: false, terminalPhasesInWarmupRun: [],
+            setAs: {
+                entityName: 'PromoteClient', userNotFoundMessage: 'User not found', alreadyExistsMessage: 'PromoteClient already exists',
+                successMessage: 'Client enrolled as promote successfully', postChannelInfoSleep: null,
+                docExtras: { lastActive: 'default' }, errorContext: null, permanentErrorReason: 'Permanent error during promote enrollment',
+            },
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);
         expect(Object.isFrozen(PROMOTE_PROFILE.pacing)).toBe(true);

@@ -60,6 +60,7 @@ import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { withPoolClaim } from '../shared/onboarding/pool-claim';
 import { BUFFER_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
+import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
 import { buildEnrolmentExclusions, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
 import type { AvailabilityNeeds } from '../shared/base-client.service';
 import {
@@ -950,76 +951,24 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         clientId: string,
         availableDate: string = ClientHelperUtils.getTodayDateString()
     ) {
-        const canonicalMobile = this.canonicalMobile(mobile);
-        const user = (await this.usersService.search({ mobile: canonicalMobile, expired: false }))[0];
-        if (!user) throw new BadRequestException('user not found');
-        const sourceSession = user.session?.trim();
-        if (!sourceSession) {
-            throw new BadRequestException('User session missing; cannot create BufferClient');
-        }
+        return setAsPoolClient(this.setAsPort(), mobile, clientId, availableDate);
+    }
 
-        const isExist = await this.findOne(canonicalMobile, false);
-        if (isExist) throw new ConflictException('BufferClient already exist');
-
-        const clients = await this.clientService.findAll();
-        const clientMobiles = clients.map((client) => client?.mobile);
-        if (clientMobiles.some((clientMobile) => this.mobilesMatch(clientMobile, canonicalMobile))) throw new BadRequestException('Number is an Active Client');
-
-        // Cross-pool guard: refuse to enroll a mobile that already lives in the promote
-        // pool. Running one account as BOTH a buffer and a promote client produces two
-        // concurrent live sessions on one Telegram account => SESSION_REVOKED (permanent
-        // account loss — the #1 operational risk). `create()` enforces this via
-        // isMobileEnrolledAnywhere; this operator-facing path must too.
-        if (await this.promoteClientService.existsByMobile(canonicalMobile)) {
-            throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in promoteClients; refusing to create a cross-pool BufferClient`);
-        }
-
-        const telegramClient = await connectionManager.getClient(canonicalMobile, { autoDisconnect: false });
-        try {
-            // Only get channel info — no 2FA, no profile changes, no new session
-            const channels = await this.telegramService.getChannelInfo(canonicalMobile, true);
-            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
-
-            const bufferClient: CreateBufferClientDto = {
-                tgId: user.tgId,
-                session: sourceSession, // Use old trusted session directly
-                mobile: canonicalMobile,
-                availableDate,
-                channels: channels.ids.length,
-                clientId,
-                status: 'active',
-                message: 'Enrolled for warmup',
-                lastUsed: null,
-            };
-            // Same per-mobile lock + re-check as auto-enrolment: a concurrent promote enrolment of
-            // this mobile may have landed while we were on Telegram.
-            await withEnrollmentLock(canonicalMobile, () => this.withPoolClaimOrRefuse(canonicalMobile, async () => {
-                const already = await this.isMobileEnrolledAnywhere(canonicalMobile);
-                if (already && already !== 'bufferClients') {
-                    throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${already}; refusing to create a cross-pool BufferClient`);
-                }
-                await this.bufferClientModel
-                    .findOneAndUpdate({ mobile: canonicalMobile }, {
-                        $set: {
-                            ...bufferClient,
-                            warmupPhase: WarmupPhase.ENROLLED,
-                            warmupJitter: ClientHelperUtils.generateWarmupJitter(),
-                            enrolledAt: new Date(),
-                        }
-                    }, { returnDocument: 'after', upsert: true })
-                    .exec();
-            }));
-        } catch (error) {
-            const errorDetails = parseError(error, `Failed to set as Buffer Client ${canonicalMobile}`);
-            // Retire permanently dead accounts at the source (cascades to pools)
-            if (isPermanentError(errorDetails)) {
-                try { await this.usersService.expireAccount(canonicalMobile, 'Permanent error during buffer enrollment'); } catch { }
-            }
-            throw new HttpException(errorDetails.message, errorDetails.status);
-        } finally {
-            await this.safeUnregisterClient(canonicalMobile);
-        }
-        return 'Client enrolled as buffer successfully';
+    private setAsPort(): SetAsPort {
+        return {
+            profile: BUFFER_PROFILE,
+            model: this.model as unknown as Model<any>,
+            usersService: this.usersService,
+            clientService: this.clientService,
+            telegramService: this.telegramService,
+            canonicalMobile: (m) => this.canonicalMobile(m),
+            mobilesMatch: (a, b) => this.mobilesMatch(a, b),
+            findOne: (m, t) => this.findOne(m, t),
+            otherPoolExistsByMobile: (m) => this.promoteClientService.existsByMobile(m),
+            isMobileEnrolledAnywhere: (m) => this.isMobileEnrolledAnywhere(m),
+            withPoolClaimOrRefuse: (m, fn) => this.withPoolClaimOrRefuse(m, fn),
+            safeUnregisterClient: (m) => this.safeUnregisterClient(m),
+        };
     }
 
     // ---- Diagnostic: dry-run enrollment decision ----

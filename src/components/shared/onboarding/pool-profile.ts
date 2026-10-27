@@ -9,6 +9,24 @@ import { WarmupPhase, type WarmupPhaseType } from '../warmup-phases';
 
 export type PoolKind = 'buffer' | 'promote';
 
+/** A ClientHelperUtils.gaussianRandom(mean, sd, min, max) pacing draw, in ms. */
+export interface GaussianPacing { mean: number; sd: number; min: number; max: number }
+
+/** setAs* (operator enrolment) per-pool values. Messages are API responses: keep them exact. */
+export interface SetAsProfile {
+    entityName: 'BufferClient' | 'PromoteClient';
+    userNotFoundMessage: string;
+    alreadyExistsMessage: string;
+    successMessage: string;
+    /** Pacing draw after the channel-info read (buffer only today; owner-gated Q3). */
+    postChannelInfoSleep: GaussianPacing | null;
+    /** Pool-only fields on the stored doc (promote: lastActive 'default', Q10). */
+    docExtras: Readonly<Record<string, unknown>>;
+    /** parseError context; null = none. Shows in the HTTP message for errors without errorMessage. */
+    errorContext: string | null;
+    permanentErrorReason: string;
+}
+
 export interface PoolProfile {
     kind: PoolKind;
     /** Mongo collection name, used in cross-pool messages ("already enrolled in X"). */
@@ -33,6 +51,7 @@ export interface PoolProfile {
     setAsRequiresClientId: boolean;
     /** Terminal phases the warmup run still processes (owner-gated Q2). */
     terminalPhasesInWarmupRun: WarmupPhaseType[];
+    setAs: Readonly<SetAsProfile>;
 }
 
 export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -48,6 +67,16 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
     excludePrimaryMobiles: true,
     setAsRequiresClientId: true,
     terminalPhasesInWarmupRun: [WarmupPhase.SESSION_ROTATED],
+    setAs: Object.freeze({
+        entityName: 'BufferClient',
+        userNotFoundMessage: 'user not found',
+        alreadyExistsMessage: 'BufferClient already exist',
+        successMessage: 'Client enrolled as buffer successfully',
+        postChannelInfoSleep: Object.freeze({ mean: 7500, sd: 1250, min: 5000, max: 10000 }),
+        docExtras: Object.freeze({}),
+        errorContext: 'Failed to set as Buffer Client',
+        permanentErrorReason: 'Permanent error during buffer enrollment',
+    }),
 }) as Readonly<PoolProfile>;
 
 export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -63,6 +92,16 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
     excludePrimaryMobiles: false,
     setAsRequiresClientId: false,
     terminalPhasesInWarmupRun: [],
+    setAs: Object.freeze({
+        entityName: 'PromoteClient',
+        userNotFoundMessage: 'User not found',
+        alreadyExistsMessage: 'PromoteClient already exists',
+        successMessage: 'Client enrolled as promote successfully',
+        postChannelInfoSleep: null,
+        docExtras: Object.freeze({ lastActive: 'default' }),
+        errorContext: null,
+        permanentErrorReason: 'Permanent error during promote enrollment',
+    }),
 }) as Readonly<PoolProfile>;
 
 /**
