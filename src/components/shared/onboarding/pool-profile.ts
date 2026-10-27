@@ -103,7 +103,7 @@ export interface PoolProfile {
     excludePrimaryMobiles: boolean;
     /** setAs* needs an explicit clientId (promote auto-assigns the client with the fewest). */
     setAsRequiresClientId: boolean;
-    /** Terminal phases the warmup run still processes (owner-gated Q2). */
+    /** Terminal phases the warmup run still processes (health check first). Both session_rotated since Q2 (2026-10-27). */
     terminalPhasesInWarmupRun: WarmupPhaseType[];
     setAs: Readonly<SetAsProfile>;
     joinSweep: Readonly<JoinSweepProfile>;
@@ -125,6 +125,11 @@ export interface WarmupRunProfile {
      * (buffer-supply.ts), promote = legacy windows capped per client + engine budget (M12).
      */
     supplyPlanner: 'dynamic-supply' | 'legacy-windows-engine-budget';
+    /**
+     * This pool's share of HEALTH_CHECK_CONNECTIONS_PER_RUN in its warmup run (session_rotated
+     * checks). Promote: a few per run (owner Q2, 2026-10-27), never-checked/oldest first.
+     */
+    healthCheckShare: number;
 }
 
 export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -157,7 +162,7 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}',
         wrapError: null,
     }),
-    warmupRun: Object.freeze({ logGoodIdsCount: true, supplyPlanner: 'dynamic-supply' }),
+    warmupRun: Object.freeze({ logGoodIdsCount: true, supplyPlanner: 'dynamic-supply', healthCheckShare: HEALTH_CHECK_CONNECTIONS_PER_RUN }),
     consumerMinAgeDays: 15,
 }) as Readonly<PoolProfile>;
 
@@ -172,7 +177,7 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
     channelTarget: 350,
     excludePrimaryMobiles: false,
     setAsRequiresClientId: false,
-    terminalPhasesInWarmupRun: [],
+    terminalPhasesInWarmupRun: [WarmupPhase.SESSION_ROTATED],
     setAs: Object.freeze({
         entityName: 'PromoteClient',
         userNotFoundMessage: 'User not found',
@@ -191,7 +196,7 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
         wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
     }),
-    warmupRun: Object.freeze({ logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget' }),
+    warmupRun: Object.freeze({ logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget', healthCheckShare: 4 }),
     consumerMinAgeDays: 7,
 }) as Readonly<PoolProfile>;
 

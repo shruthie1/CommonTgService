@@ -92,12 +92,12 @@ export const CURRENT = {
         removeCanonicalisesMobile: true,
         removeInvalidMobileIsBadRequest: true, // M2
         createKeepsCallerLifecycle: false,
-        warmupRunHealthChecksSessionRotated: false,
+        warmupRunHealthChecksSessionRotated: true, // Q2 2026-10-27 (was false)
         joinSweepExcludesPrimaryMobiles: false,
         joinSweepSleepsPerAccount: 4,
         joinSweepErrorWipesQueues: false,   // M11
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
-        warmupRunHealthCheckConnects: 0,    // no session_rotated in the promote warmup run (Q2)
+        warmupRunHealthCheckConnects: 4,    // Q2 2026-10-27: promote share of the per-run cap (was 0)
     },
 };
 

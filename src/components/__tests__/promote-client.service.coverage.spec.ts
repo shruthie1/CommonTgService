@@ -1801,7 +1801,7 @@ describe('PromoteClientService coverage', () => {
             expect((await service.findOne('15553900001'))!.warmupPhase).toBe(WarmupPhase.SESSION_ROTATED);
         });
 
-        it('does not health-check a SESSION_ROTATED account in normal maintenance', async () => {
+        it('health-checks a SESSION_ROTATED account in normal maintenance and skips it on a failed check (Q2, 2026-10-27)', async () => {
             await service.create(makePromoteClientData({
                 mobile: '15553900002', status: 'active', clientId: 'test-client-1', inUse: false,
                 warmupPhase: 'session_rotated', lastUsed: null, lastChecked: new Date('2020-01-01'),
@@ -1814,7 +1814,7 @@ describe('PromoteClientService coverage', () => {
             const processSpy = jest.spyOn(service as any, 'processClient');
             usersService.search.mockResolvedValue([]);
             await service.checkPromoteClients();
-            expect(healthSpy).not.toHaveBeenCalled();
+            expect(healthSpy).toHaveBeenCalledWith('15553900002', expect.any(Number), expect.any(Number));
             expect(processSpy).not.toHaveBeenCalled();
         });
 

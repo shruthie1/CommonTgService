@@ -17,13 +17,13 @@ describe('pool profiles (M4)', () => {
                 scopesByClientId: true, logPreparedSweep: true, errorContext: 'JoinChannelErr',
                 resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}', wrapError: null,
             },
-            warmupRun: { logGoodIdsCount: true, supplyPlanner: 'dynamic-supply' },
+            warmupRun: { logGoodIdsCount: true, supplyPlanner: 'dynamic-supply', healthCheckShare: 20 },
             consumerMinAgeDays: 15,
         });
         expect(PROMOTE_PROFILE).toEqual({
             kind: 'promote', collection: 'promoteClients', label: 'Promote', operationalFloor: 230, legacyHealthyCap: 30,
             minTotalClients: 12, maxNewClientsPerTrigger: 10, channelTarget: 350,
-            excludePrimaryMobiles: false, setAsRequiresClientId: false, terminalPhasesInWarmupRun: [],
+            excludePrimaryMobiles: false, setAsRequiresClientId: false, terminalPhasesInWarmupRun: [WarmupPhase.SESSION_ROTATED], // Q2 2026-10-27
             setAs: {
                 entityName: 'PromoteClient', userNotFoundMessage: 'User not found', alreadyExistsMessage: 'PromoteClient already exists',
                 successMessage: 'Client enrolled as promote successfully',
@@ -35,7 +35,7 @@ describe('pool profiles (M4)', () => {
                 resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
                 wrapError: { log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' },
             },
-            warmupRun: { logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget' },
+            warmupRun: { logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget', healthCheckShare: 4 }, // Q2: a few per run
             consumerMinAgeDays: 7,
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);

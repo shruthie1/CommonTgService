@@ -540,7 +540,7 @@ describe('Service flow reliability', () => {
         expect(processSpy).not.toHaveBeenCalled();
     });
 
-    test('checkPromoteClients leaves session-rotated accounts to the promotion runtime', async () => {
+    test('checkPromoteClients health-checks session-rotated accounts before processing them (Q2, 2026-10-27)', async () => {
         const rotatedDoc = {
             mobile: '90003',
             clientId: 'client-1',
@@ -581,8 +581,8 @@ describe('Service flow reliability', () => {
 
         await service.checkPromoteClients();
 
-        expect(healthSpy).not.toHaveBeenCalled();
-        expect(processSpy).not.toHaveBeenCalled();
+        expect(healthSpy).toHaveBeenCalledWith('90003', 0, expect.any(Number));
+        expect(processSpy).toHaveBeenCalledTimes(1);
     });
 
     test('checkPromoteClients skips ready accounts while continuing older warming accounts', async () => {

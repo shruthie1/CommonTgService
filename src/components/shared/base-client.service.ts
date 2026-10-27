@@ -951,7 +951,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 continue;
             }
             // READY -> SESSION_ROTATED is handled only by the paced ready-rotation scheduler; terminal
-            // phases enter this run only when the pool lists them (buffer: session_rotated, Q2).
+            // phases enter this run only when the pool lists them (both pools: session_rotated, Q2).
             if ((warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED)
                 && !profile.terminalPhasesInWarmupRun.includes(warmupPhase)) continue;
             // Use the COMPUTED warmup phase for priority so enrolled accounts whose state machine
@@ -968,7 +968,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         // accounts keep their priority slots but are handed out oldest-checked first, so the ones a
         // full run defers go first next run.
         this.orderSessionRotatedOldestCheckedFirst(toProcess);
-        const healthCheckCap = HEALTH_CHECK_CONNECTIONS_PER_RUN;
+        const healthCheckCap = Math.min(HEALTH_CHECK_CONNECTIONS_PER_RUN, profile.warmupRun.healthCheckShare);
         let healthCheckConnects = 0;
         let healthChecksDeferred = 0;
 
