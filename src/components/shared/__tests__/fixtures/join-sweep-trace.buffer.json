@@ -1,0 +1,155 @@
+{
+  "sweep": {
+    "result": "Buffer Join queued for: 2, Leave queued for: 1",
+    "ledger": [
+      "sleep",
+      "getClient:919100000073",
+      "channelInfo:919100000073",
+      "unregister:919100000073",
+      "sleep",
+      "getClient:919100000072",
+      "channelInfo:919100000072",
+      "unregister:919100000072",
+      "sleep",
+      "getClient:919100000071",
+      "channelInfo:919100000071",
+      "unregister:919100000071",
+      "sleep",
+      "getClient:919100000070",
+      "channelInfo:919100000070",
+      "unregister:919100000070",
+      "sleep"
+    ],
+    "sleepMs": [
+      7500,
+      10734,
+      10734,
+      10734,
+      6617
+    ],
+    "gaussian": [
+      "12500/1500/10000/15000",
+      "12500/1500/10000/15000",
+      "12500/1500/10000/15000",
+      "7500/750/6000/9000",
+      "12500/1250/10000/15000"
+    ],
+    "timers": [
+      5000,
+      11028
+    ],
+    "fetchCalls": [
+      [
+        "919100000073",
+        3,
+        25
+      ],
+      [
+        "919100000070",
+        3,
+        25
+      ]
+    ],
+    "joinQueue": [
+      "919100000070",
+      "919100000073"
+    ],
+    "leaveQueue": [
+      "919100000071"
+    ],
+    "docs": [
+      {
+        "mobile": "919000000001",
+        "channels": 50,
+        "status": "active"
+      },
+      {
+        "mobile": "919100000070",
+        "channels": 3,
+        "status": "active"
+      },
+      {
+        "mobile": "919100000071",
+        "channels": 70,
+        "status": "active"
+      },
+      {
+        "mobile": "919100000072",
+        "channels": 80,
+        "status": "inactive"
+      },
+      {
+        "mobile": "919100000073",
+        "channels": 3,
+        "status": "active"
+      }
+    ]
+  },
+  "refill": {
+    "result": 2,
+    "ledger": [
+      "getClient:919100000073",
+      "channelInfo:919100000073",
+      "unregister:919100000073",
+      "getClient:919100000071",
+      "channelInfo:919100000071",
+      "unregister:919100000071",
+      "getClient:919100000070",
+      "channelInfo:919100000070",
+      "unregister:919100000070"
+    ],
+    "sleepMs": [],
+    "gaussian": [
+      "6500/1000/5000/8000"
+    ],
+    "timers": [
+      5323
+    ],
+    "fetchCalls": [
+      [
+        "919100000073",
+        3,
+        25
+      ],
+      [
+        "919100000070",
+        3,
+        25
+      ]
+    ],
+    "joinQueue": [
+      "919100000070",
+      "919100000073"
+    ],
+    "leaveQueue": [
+      "919100000071"
+    ],
+    "docs": [
+      {
+        "mobile": "919000000001",
+        "channels": 50,
+        "status": "active"
+      },
+      {
+        "mobile": "919100000070",
+        "channels": 3,
+        "status": "active"
+      },
+      {
+        "mobile": "919100000071",
+        "channels": 70,
+        "status": "active"
+      },
+      {
+        "mobile": "919100000072",
+        "channels": 80,
+        "status": "inactive"
+      },
+      {
+        "mobile": "919100000073",
+        "channels": 3,
+        "status": "active"
+      }
+    ]
+  }
+}

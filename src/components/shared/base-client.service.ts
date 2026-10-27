@@ -34,6 +34,7 @@ import type { NotificationSeverity, RichNotificationField, RichNotificationInput
 import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../utils/notice-batch';
 import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
+import { BUFFER_PROFILE, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
 import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
 import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-normalizer';
@@ -875,8 +876,303 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
     }
 
+    // ---- Join sweep + queue refill (pool-onboarding D36/D37/D40: one implementation; every
+    // per-pool difference is a PoolProfile.joinSweep value holding today's behaviour) ----
+
+    /** Today's per-pool values (shared/onboarding/pool-profile.ts). */
+    protected get poolProfile(): Readonly<PoolProfile> {
+        return this.clientType === 'buffer' ? BUFFER_PROFILE : PROMOTE_PROFILE;
+    }
+
+    /** Resolve one pacing draw to milliseconds (see PacingDraw). */
+    protected drawPacing(draw: PacingDraw): number {
+        if (draw.kind === 'fixed') return draw.ms;
+        const base = draw.addProcessingDelay ? this.config.clientProcessingDelay : 0;
+        if (draw.kind === 'gaussian') {
+            return ClientHelperUtils.gaussianRandom(base + draw.mean, draw.sd, base + draw.min, base + draw.max);
+        }
+        return base + draw.base + Math.random() * draw.spread;
+    }
+
+    private async paceIf(draw: PacingDraw | null): Promise<void> {
+        if (draw) await sleep(this.drawPacing(draw));
+    }
+
+    protected async getPrimaryClientMobiles(clientId?: string | null): Promise<Set<string>> {
+        const clients = await this.clientService.findAll();
+        const primaryClientMobiles = new Set(
+            clients
+                .filter((client) => !!client.mobile && (!clientId || client.clientId === clientId))
+                .map((client) => client.mobile),
+        );
+        this.logger.debug('Resolved primary client mobiles for buffer guards', {
+            clientId: clientId || 'all',
+            count: primaryClientMobiles.size,
+        });
+        return primaryClientMobiles;
+    }
+
+    protected isPrimaryClientMobile(mobile: string, primaryClientMobiles: Set<string>): boolean {
+        return !!mobile && primaryClientMobiles.has(mobile);
+    }
+
+    /**
+     * Recovery accounts are already terminal but cannot be selected by the runtime until they
+     * reach the pool floor. Put them ahead of new warmup accounts without changing which accounts
+     * are eligible or increasing any Telegram activity limits. Within a tier, closest to target first.
+     */
+    protected async findPrioritizedJoinCandidates(query: Record<string, unknown>): Promise<TDoc[]> {
+        const model = this.model as unknown as Model<any>;
+        const limit = this.config.maxMapSize;
+        const operationalFloor = this.config.operationalChannelThreshold ?? this.poolProfile.operationalFloor;
+        const recoveryQuery = {
+            ...query,
+            warmupPhase: { $in: [WarmupPhase.READY, WarmupPhase.SESSION_ROTATED] },
+            channels: { $lt: operationalFloor },
+        };
+
+        const recoveryQueryResult = model
+            .find(recoveryQuery)
+            .sort({ channels: -1 })
+            .limit(limit);
+        const recoveryCandidates = await this.resolveJoinCandidateQuery(recoveryQueryResult);
+        if (recoveryCandidates.length >= limit) return recoveryCandidates;
+
+        const recoveryMobiles = new Set(recoveryCandidates.map((candidate) => candidate.mobile));
+        const standardQueryResult = model
+            .find(query)
+            .sort({ channels: -1 })
+            .limit(limit);
+        const standardCandidates = await this.resolveJoinCandidateQuery(standardQueryResult);
+
+        return [
+            ...recoveryCandidates,
+            ...standardCandidates.filter((candidate) => !recoveryMobiles.has(candidate.mobile)),
+        ].slice(0, limit);
+    }
+
+    private async resolveJoinCandidateQuery(query: unknown): Promise<TDoc[]> {
+        const executable = query as { exec?: () => Promise<TDoc[]> };
+        return typeof executable.exec === 'function'
+            ? executable.exec()
+            : Promise.resolve(query as TDoc[]);
+    }
+
     /** Re-query DB for mobiles below channelTarget not yet daily-capped. Populate joinChannelMap. Respects joinScopeClientId if set. */
-    abstract refillJoinQueue(clientId?: string | null): Promise<number>;
+    async refillJoinQueue(clientId?: string | null): Promise<number> {
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) return 0;
+        if (this.telegramService.hasActiveClientSetup()) return 0;
+
+        this.resetDailyJoinCountersIfNeeded();
+        const profile = this.poolProfile;
+        const primaryClientMobiles = profile.excludePrimaryMobiles
+            ? await this.getPrimaryClientMobiles(clientId)
+            : new Set<string>();
+        const excludedMobiles = new Set([
+            ...this.joinChannelMap.keys(),
+            ...primaryClientMobiles,
+        ]);
+
+        const query: Record<string, unknown> = {
+            status: 'active',
+            channels: { $lt: this.config.channelTarget },
+            mobile: { $nin: Array.from(excludedMobiles) },
+            ...this.getJoinCapacityEligibilityFilter(),
+        };
+        if (clientId) query.clientId = clientId;
+        if (profile.joinSweep.logPreparedSweep) {
+            this.logger.debug('Refill join queue query prepared', {
+                clientId: clientId || 'all',
+                excludedCount: excludedMobiles.size,
+            });
+        }
+
+        const eligible = await this.findPrioritizedJoinCandidates(query);
+
+        let added = 0;
+        let leaveAdded = 0;
+        for (const doc of eligible) {
+            if (this.isPrimaryClientMobile(doc.mobile, primaryClientMobiles)) {
+                this.logger.debug(`Skipping refill candidate ${doc.mobile}: it is the live client mobile`);
+                continue;
+            }
+            if (this.isMobileDailyCapped(doc.mobile)) continue;
+            // Hoisted so the catch can hand the live client to buildPermanentAccountReason —
+            // freeze metadata (freeze_until_date / appeal_url) can only be read from Telegram
+            // while the connection is still open.
+            let client: TelegramManager | null = null;
+            try {
+                client = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+                const channels = await channelInfo(client.client, true);
+                await this.update(doc.mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(doc, channels.ids.length)) continue;
+
+                if (channels.canSendFalseCount < 10) {
+                    const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(doc.mobile);
+                    const channelsToJoin = await this.fetchJoinCandidates(doc.mobile, channels.ids.length, remaining, this.getJoinedChannelIdsFromInfo(channels));
+                    if (channelsToJoin.length === 0) continue;
+
+                    if (this.safeSetJoinChannelMap(doc.mobile, channelsToJoin)) {
+                        added++;
+                    }
+                } else if (!this.leaveChannelMap.has(doc.mobile)) {
+                    if (this.queueLeaveChannelsIfAllowed(doc, channels.canSendFalseChats)) {
+                        leaveAdded++;
+                    }
+                }
+            } catch (error) {
+                const errorDetails = parseError(error, `RefillJoinQueueErr: ${doc.mobile}`);
+                if (isPermanentError(errorDetails)) {
+                    // Pass the live client: without it buildPermanentAccountReason short-circuits and
+                    // the freeze window is lost. Measured 2026-09-05: 0 of 433 frozen accounts had
+                    // freeze_until captured because this path omitted the client.
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
+                    await this.deactivateClient(doc.mobile, reason, { permanent: true });
+                }
+            } finally {
+                await this.safeUnregisterClient(doc.mobile);
+            }
+        }
+
+        if (added > 0) {
+            this.logger.log(`Refilled join queue with ${added} ${this.clientType} clients`);
+        }
+        if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
+            this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(profile.joinSweep.refillLeaveQueueStart));
+        }
+
+        return added;
+    }
+
+    /** The scheduled/API join sweep (joinchannelForBufferClients / joinchannelForPromoteClients). */
+    protected async runJoinSweep(skipExisting: boolean, clientId?: string): Promise<string> {
+        const cfg = this.poolProfile.joinSweep;
+        if (this.telegramService.hasActiveClientSetup()) {
+            return cfg.activeSetupMessage;
+        }
+        // Don't destroy in-flight joins — skip if still processing
+        if (this.isJoinChannelProcessing || this.isLeaveChannelProcessing) {
+            this.logger.warn('Join/leave processing still in progress, skipping re-entry');
+            return 'Join/leave still processing, skipped';
+        }
+        // Dedicated prepare-join reentrancy guard: two concurrent prepare sweeps (cron + API/manual)
+        // must not overlap.
+        if (this.isPrepareJoinChannelsProcessing) {
+            return 'Join-channel prepare already running, skipped';
+        }
+        this.isPrepareJoinChannelsProcessing = true;
+
+        this.logger.log(cfg.startLog);
+        try {
+            // Store clientId scope so refills stay within the same client
+            if (cfg.scopesByClientId) this.joinScopeClientId = clientId || null;
+            const primaryClientMobiles = this.poolProfile.excludePrimaryMobiles
+                ? await this.getPrimaryClientMobiles(clientId)
+                : new Set<string>();
+            const preservedMobiles = await this.prepareJoinChannelRefresh(skipExisting);
+            if (!cfg.wrapError) return await this.joinSweepAccounts(clientId, preservedMobiles, primaryClientMobiles);
+            try {
+                return await this.joinSweepAccounts(clientId, preservedMobiles, primaryClientMobiles);
+            } catch (error) {
+                // Report and rethrow, but keep every other account's queued joins/leaves.
+                this.logger.error(cfg.wrapError.log, error);
+                throw new Error(cfg.wrapError.message);
+            }
+        } finally {
+            this.isPrepareJoinChannelsProcessing = false;
+        }
+    }
+
+    private async joinSweepAccounts(clientId: string | undefined, preservedMobiles: Set<string>, primaryClientMobiles: Set<string>): Promise<string> {
+        const cfg = this.poolProfile.joinSweep;
+        const query: Record<string, unknown> = {
+            channels: { $lt: this.config.channelTarget },
+            mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
+            status: 'active',
+            ...this.getJoinCapacityEligibilityFilter(),
+        };
+        if (clientId) query.clientId = clientId;
+        if (cfg.logPreparedSweep) {
+            this.logger.info('Prepared buffer join-channel sweep', {
+                clientId: clientId || 'all',
+                preservedCount: preservedMobiles.size,
+                primaryClientCount: primaryClientMobiles.size,
+            });
+        }
+
+        // Recovery-first: terminal accounts below the runtime floor must not lose their join slots.
+        const clients = await this.findPrioritizedJoinCandidates(query);
+
+        const joinSet = new Set<string>();
+        const leaveSet = new Set<string>();
+
+        for (let i = 0; i < clients.length; i++) {
+            const document = clients[i];
+            const mobile = document.mobile;
+            // Same guard as refillJoinQueue: a capped mobile can't join today, so don't connect it.
+            if (this.isMobileDailyCapped(mobile)) continue;
+            // Hoisted so the catch can hand the live client to buildPermanentAccountReason.
+            let client: TelegramManager | null = null;
+
+            try {
+                client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
+                await this.paceIf(cfg.afterConnect);
+                const channels = await channelInfo(client.client, true);
+                await this.paceIf(cfg.afterChannelInfo);
+                await this.update(mobile, { channels: channels.ids.length });
+                if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
+                    continue;
+                }
+
+                if (channels.canSendFalseCount < 10) {
+                    const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
+                    await this.paceIf(cfg.beforeFetchCandidates);
+                    // activeChannels below 220, channels above; skips pending join requests, approval-only last.
+                    const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(mobile);
+                    const result = await this.fetchJoinCandidates(mobile, channels.ids.length, remaining, excludedIds);
+
+                    if (!this.joinChannelMap.has(mobile)) {
+                        if (this.safeSetJoinChannelMap(mobile, result)) {
+                            joinSet.add(mobile);
+                        }
+                    }
+                    // No session creation during warmup — use existing old session
+                } else {
+                    if (!this.leaveChannelMap.has(mobile)) {
+                        if (this.queueLeaveChannelsIfAllowed(document, channels.canSendFalseChats)) {
+                            leaveSet.add(mobile);
+                        }
+                    }
+                }
+            } catch (error) {
+                const errorDetails = cfg.errorContext
+                    ? parseError(error, `${cfg.errorContext}: ${mobile}`)
+                    : parseError(error);
+                if (isPermanentError(errorDetails)) {
+                    await this.paceIf(cfg.beforePermanentHandling);
+                    // Pass the live client so the freeze window is captured — see refillJoinQueue.
+                    const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
+                    await this.deactivateClient(mobile, reason, { permanent: true });
+                }
+            } finally {
+                await this.safeUnregisterClient(mobile);
+                if (cfg.gapAfterLastAccount || i < clients.length - 1) {
+                    await sleep(this.drawPacing(cfg.betweenAccounts));
+                }
+            }
+        }
+
+        await sleep(this.drawPacing(cfg.settle));
+
+        if (joinSet.size > 0) {
+            this.createTimeout(() => this.joinChannelQueue(), this.drawPacing(cfg.joinQueueStart));
+        }
+        if (leaveSet.size > 0) {
+            this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(cfg.leaveQueueStart));
+        }
+
+        return cfg.resultTemplate.replace('{join}', String(joinSet.size)).replace('{leave}', String(leaveSet.size));
+    }
 
     // ---- Lifecycle ----
 

@@ -79,11 +79,11 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D33 | primary-mobile skip uses `===` | :1696 | n/a | P/I | stored mobiles are canonical (schema setter); keep | — | won't-fix | |
 | D34 | promote SESSION_ROTATED never health-checked by the warmup run | warmup run + `updateInfo` | `updateInfo` only | D/A | adds Telegram connections to accounts that get none today | M10 | owner-gated (Q2) | |
 | D35 | diagnostics endpoints | :1317, :1417 | none | D/A | observability only; not needed for unification | — | won't-fix | |
-| D36 | join candidate tiering | :232-266 | :604-638 | D/I | one function | M11 | todo | |
-| D37 | join sweep primary exclusion / clientId scope | :1846-1854 | :914-924 | D/I | profile flag | M11 | todo | |
-| D38 | join sweep pacing | 1 gap/account (:1916) | 3 extra 5-8s sleeps + gap (:941-952, 983) | D/? | session-safety pacing; kept exactly | — | owner-gated (Q3) | |
+| D36 | join candidate tiering | :232-266 | :604-638 | D/I | one `findPrioritizedJoinCandidates` in `BaseClientService` (fallback floor = `profile.operationalFloor`, 200/230 as before). Golden trace (candidate order incl. recovery tier) identical before/after | M11b | done | M11b |
+| D37 | join sweep primary exclusion / clientId scope | :1846-1854 | :914-924 | D/I | one sweep `runJoinSweep`; `profile.excludePrimaryMobiles` and `joinSweep.scopesByClientId` hold today's values. Golden trace pins buffer skipping the main, promote connecting it | M11b | done | M11b |
+| D38 | join sweep pacing | 1 gap/account (:1916) | 3 extra 5-8s sleeps + gap (:941-952, 983) | D/? | code shared (M11b): every sleep, gap, settle and queue-start timer is a `PoolProfile.joinSweep` `PacingDraw` with today's exact value; golden trace pins each duration. Unifying the VALUES is the owner decision | Q3 | owner-gated (value; code shared) | M11b |
 | D39 | promote join sweep catch-all wipes every queued join | none | :997-1004 | D/A | log and rethrow, keep the queues (buffer behaviour) | M11 | done | 5dd802f2 |
-| D40 | `refillJoinQueue` copy | :1139-1221 | :640-710 (leave delay differs) | D/I+A | leave delays are pacing (Q3); exclusion via profile | M11 | todo (pacing owner-gated Q3) | |
+| D40 | `refillJoinQueue` copy | :1139-1221 | :640-710 (leave delay differs) | D/I+A | one `refillJoinQueue` in `BaseClientService`; primary exclusion via profile; leave-queue start = `joinSweep.refillLeaveQueueStart` (buffer gaussian 6500/1000/5000-8000, promote 5000+U(0,3000) as before). Golden trace identical. Unifying the delay VALUE is Q3 | M11b | done | M11b |
 | D41 | schedules / minute offsets | scheduled-jobs.service.ts:99,107-109,140-144 | :160,165-167,189-191 | P/I | keep exactly | — | won't-fix | |
 | D42 | warmup failure backoff / deactivate cascade | base | same | S/I | — | — | done (shared) | |
 | D43 | `updateStatus` / `markAsInactive` copies | :969-1007, 1225-1242 | :549-602, 716-733 | D/A | **re-verified:** identical modulo names; one shared implementation in `BaseClientService` (label from `clientType`); characterisation test (fields, notices, idempotence, failure) green before and after | M7 | done | 279960d8 |

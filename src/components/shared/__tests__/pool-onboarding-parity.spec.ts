@@ -12,10 +12,12 @@
 const ledger: string[] = [];
 /** Every pacing value requested via ClientHelperUtils.gaussianRandom, as `mean/sd/min/max`. */
 const pacing: string[] = [];
+/** Every sleep duration requested, in order. */
+const sleepMs: unknown[] = [];
 
 jest.mock('telegram/Helpers', () => {
     const actual = jest.requireActual('telegram/Helpers');
-    return { ...actual, sleep: jest.fn(async () => { ledger.push('sleep'); }) };
+    return { ...actual, sleep: jest.fn(async (ms?: unknown) => { ledger.push('sleep'); sleepMs.push(ms); }) };
 });
 jest.mock('../../../utils/fetchWithTimeout', () => ({ fetchWithTimeout: jest.fn(async () => ({ ok: true })) }));
 jest.mock('../../../utils/logbots', () => ({ notifbot: jest.fn(() => 'https://example.test/bot') }));
@@ -146,6 +148,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
         jest.clearAllMocks();
         ledger.length = 0;
         pacing.length = 0;
+        sleepMs.length = 0;
         __resetEnrollmentLocks();
         await bufferModel.deleteMany({});
         await promoteModel.deleteMany({});
@@ -701,6 +704,55 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 ? 1 + (accounts - 1) * perAccount + 1
                 : 1 + accounts * perAccount + 1;
             expect(ledger.filter((e) => e === 'sleep').length).toBe(expectedSleeps);
+        });
+
+        test('join sweep + refill: golden trace of Telegram calls, sleeps, draws, timers and writes (D36/D37/D40, characterisation)', async () => {
+            const svc = h.services[pool];
+            const rnd = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+            const timers: number[] = [];
+            jest.spyOn(svc, 'createTimeout').mockImplementation(((_cb: unknown, ms: number) => { timers.push(ms); return undefined; }) as any);
+            const fetchCalls: unknown[] = [];
+            jest.spyOn(svc, 'fetchJoinCandidates').mockImplementation(async (...args: any[]) => {
+                fetchCalls.push(args);
+                return [{ channelId: `ch-${args[0]}`, username: `u${args[0]}`, title: 't', participantsCount: 5000, canSendMsgs: true }];
+            });
+            (channelInfo as jest.Mock).mockImplementation(async (client: { mobile: string }) => {
+                ledger.push(`channelInfo:${client.mobile}`);
+                if (client.mobile === '919100000072') throw Object.assign(new Error('USER_DEACTIVATED_BAN'), { errorMessage: 'USER_DEACTIVATED_BAN' });
+                if (client.mobile === '919100000071') {
+                    return { chatsArrayLength: 12, canSendTrueCount: 0, canSendFalseCount: 12, ids: Array.from({ length: 70 }, (_, i) => `c${i}`), canSendFalseChats: Array.from({ length: 12 }, (_, i) => `l${i}`) };
+                }
+                return { chatsArrayLength: 3, canSendTrueCount: 3, canSendFalseCount: 0, ids: ['a', 'b', 'c'], canSendFalseChats: [] };
+            });
+            await h.models[pool].create(poolDoc(pool, { mobile: MAIN_MOBILE, warmupPhase: WarmupPhase.GROWING, channels: 50 }));
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000070', warmupPhase: WarmupPhase.GROWING, channels: 60 }));
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000071', warmupPhase: WarmupPhase.GROWING, channels: 70 }));
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000072', warmupPhase: WarmupPhase.GROWING, channels: 80 }));
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000073', warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 150 }));
+
+            const snapshot = async (result: unknown) => {
+                const docs = await h.models[pool].find({}, { _id: 0, mobile: 1, channels: 1, status: 1 }).sort({ mobile: 1 }).lean();
+                const out = {
+                    result, ledger: [...ledger], sleepMs: [...sleepMs], gaussian: [...pacing], timers: [...timers],
+                    fetchCalls: fetchCalls.map((c: any) => [c[0], c[1], c[2]]),
+                    joinQueue: [...svc.joinChannelMap.keys()].sort(), leaveQueue: [...svc.leaveChannelMap.keys()].sort(), docs,
+                };
+                ledger.length = 0; sleepMs.length = 0; pacing.length = 0; timers.length = 0; fetchCalls.length = 0;
+                return out;
+            };
+            try {
+                ledger.length = 0; sleepMs.length = 0; pacing.length = 0;
+                const sweep = await snapshot(await svc[pool === 'buffer' ? 'joinchannelForBufferClients' : 'joinchannelForPromoteClients'](true));
+                svc.joinChannelMap.clear(); svc.leaveChannelMap.clear();
+                await h.models[pool].updateOne({ mobile: '919100000070' }, { $set: { channels: 60 } });
+                const refill = await snapshot(await svc.refillJoinQueue());
+                const trace = { sweep, refill };
+                const file = require('path').join(__dirname, 'fixtures', `join-sweep-trace.${pool}.json`);
+                if (process.env.CAPTURE_JOIN_TRACE) require('fs').writeFileSync(file, JSON.stringify(trace, null, 2) + '\n');
+                expect(JSON.parse(JSON.stringify(trace))).toEqual(JSON.parse(require('fs').readFileSync(file, 'utf8')));
+            } finally {
+                rnd.mockRestore();
+            }
         });
 
         test('join sweep: an unexpected error and the queued joins of other accounts (D39)', async () => {

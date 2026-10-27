@@ -13,6 +13,17 @@ describe('pool profiles (M4)', () => {
                 successMessage: 'Client enrolled as buffer successfully', postChannelInfoSleep: { mean: 7500, sd: 1250, min: 5000, max: 10000 },
                 docExtras: {}, errorContext: 'Failed to set as Buffer Client', permanentErrorReason: 'Permanent error during buffer enrollment',
             },
+            joinSweep: {
+                activeSetupMessage: 'Active client setup exists, skipping', startLog: 'Starting join channel process for buffer clients',
+                scopesByClientId: true, logPreparedSweep: true, afterConnect: null, afterChannelInfo: null, beforeFetchCandidates: null,
+                errorContext: 'JoinChannelErr', beforePermanentHandling: null,
+                betweenAccounts: { kind: 'gaussian', mean: 2500, sd: 1500, min: 0, max: 5000, addProcessingDelay: true }, gapAfterLastAccount: false,
+                settle: { kind: 'gaussian', mean: 7500, sd: 750, min: 6000, max: 9000 },
+                joinQueueStart: { kind: 'uniform', base: 4000, spread: 2000 },
+                leaveQueueStart: { kind: 'gaussian', mean: 12500, sd: 1250, min: 10000, max: 15000 },
+                resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}', wrapError: null,
+                refillLeaveQueueStart: { kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 },
+            },
         });
         expect(PROMOTE_PROFILE).toEqual({
             kind: 'promote', collection: 'promoteClients', label: 'Promote', operationalFloor: 230, legacyHealthyCap: 30,
@@ -23,6 +34,19 @@ describe('pool profiles (M4)', () => {
                 entityName: 'PromoteClient', userNotFoundMessage: 'User not found', alreadyExistsMessage: 'PromoteClient already exists',
                 successMessage: 'Client enrolled as promote successfully', postChannelInfoSleep: null,
                 docExtras: { lastActive: 'default' }, errorContext: null, permanentErrorReason: 'Permanent error during promote enrollment',
+            },
+            joinSweep: {
+                activeSetupMessage: 'Active client setup exists, skipping promotion', startLog: 'Starting join channel process',
+                scopesByClientId: false, logPreparedSweep: false,
+                afterConnect: { kind: 'uniform', base: 5000, spread: 3000 }, afterChannelInfo: { kind: 'uniform', base: 5000, spread: 3000 },
+                beforeFetchCandidates: { kind: 'uniform', base: 5000, spread: 3000 },
+                errorContext: null, beforePermanentHandling: { kind: 'fixed', ms: 1000 },
+                betweenAccounts: { kind: 'uniform', base: 0, spread: 5000, addProcessingDelay: true }, gapAfterLastAccount: true,
+                settle: { kind: 'uniform', base: 6000, spread: 3000 },
+                joinQueueStart: { kind: 'fixed', ms: 2000 }, leaveQueueStart: { kind: 'fixed', ms: 5000 },
+                resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
+                wrapError: { log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' },
+                refillLeaveQueueStart: { kind: 'uniform', base: 5000, spread: 3000 },
             },
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);

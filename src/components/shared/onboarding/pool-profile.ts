@@ -12,6 +12,42 @@ export type PoolKind = 'buffer' | 'promote';
 /** A ClientHelperUtils.gaussianRandom(mean, sd, min, max) pacing draw, in ms. */
 export interface GaussianPacing { mean: number; sd: number; min: number; max: number }
 
+/**
+ * One pacing draw (ms). `addProcessingDelay` adds config.clientProcessingDelay to mean/min/max
+ * (gaussian) or to base (uniform). uniform = base + Math.random() * spread.
+ */
+export type PacingDraw =
+    | { kind: 'gaussian'; mean: number; sd: number; min: number; max: number; addProcessingDelay?: boolean }
+    | { kind: 'uniform'; base: number; spread: number; addProcessingDelay?: boolean }
+    | { kind: 'fixed'; ms: number };
+
+/** Join sweep + queue refill per-pool values (today's exact behaviour; pacing owner-gated Q3). */
+export interface JoinSweepProfile {
+    activeSetupMessage: string;
+    startLog: string;
+    /** The sweep takes a clientId and scopes refills to it (buffer). */
+    scopesByClientId: boolean;
+    /** Emit the 'Prepared buffer join-channel sweep' info log. */
+    logPreparedSweep: boolean;
+    afterConnect: PacingDraw | null;
+    afterChannelInfo: PacingDraw | null;
+    beforeFetchCandidates: PacingDraw | null;
+    /** parseError context prefix (`${errorContext}: ${mobile}`); null = none. */
+    errorContext: string | null;
+    beforePermanentHandling: PacingDraw | null;
+    betweenAccounts: PacingDraw;
+    /** false = no gap after the last account (buffer). */
+    gapAfterLastAccount: boolean;
+    settle: PacingDraw;
+    joinQueueStart: PacingDraw;
+    leaveQueueStart: PacingDraw;
+    /** `{join}` / `{leave}` are replaced with the queued counts. */
+    resultTemplate: string;
+    /** Unexpected errors after the refresh: null = propagate as-is; else log + throw this message. */
+    wrapError: { log: string; message: string } | null;
+    refillLeaveQueueStart: PacingDraw;
+}
+
 /** setAs* (operator enrolment) per-pool values. Messages are API responses: keep them exact. */
 export interface SetAsProfile {
     entityName: 'BufferClient' | 'PromoteClient';
@@ -52,6 +88,7 @@ export interface PoolProfile {
     /** Terminal phases the warmup run still processes (owner-gated Q2). */
     terminalPhasesInWarmupRun: WarmupPhaseType[];
     setAs: Readonly<SetAsProfile>;
+    joinSweep: Readonly<JoinSweepProfile>;
 }
 
 export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -77,6 +114,25 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         errorContext: 'Failed to set as Buffer Client',
         permanentErrorReason: 'Permanent error during buffer enrollment',
     }),
+    joinSweep: Object.freeze({
+        activeSetupMessage: 'Active client setup exists, skipping',
+        startLog: 'Starting join channel process for buffer clients',
+        scopesByClientId: true,
+        logPreparedSweep: true,
+        afterConnect: null,
+        afterChannelInfo: null,
+        beforeFetchCandidates: null,
+        errorContext: 'JoinChannelErr',
+        beforePermanentHandling: null,
+        betweenAccounts: Object.freeze({ kind: 'gaussian', mean: 2500, sd: 1500, min: 0, max: 5000, addProcessingDelay: true }),
+        gapAfterLastAccount: false,
+        settle: Object.freeze({ kind: 'gaussian', mean: 7500, sd: 750, min: 6000, max: 9000 }),
+        joinQueueStart: Object.freeze({ kind: 'uniform', base: 4000, spread: 2000 }),
+        leaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 12500, sd: 1250, min: 10000, max: 15000 }),
+        resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}',
+        wrapError: null,
+        refillLeaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 }),
+    }),
 }) as Readonly<PoolProfile>;
 
 export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -101,6 +157,25 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         docExtras: Object.freeze({ lastActive: 'default' }),
         errorContext: null,
         permanentErrorReason: 'Permanent error during promote enrollment',
+    }),
+    joinSweep: Object.freeze({
+        activeSetupMessage: 'Active client setup exists, skipping promotion',
+        startLog: 'Starting join channel process',
+        scopesByClientId: false,
+        logPreparedSweep: false,
+        afterConnect: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
+        afterChannelInfo: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
+        beforeFetchCandidates: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
+        errorContext: null,
+        beforePermanentHandling: Object.freeze({ kind: 'fixed', ms: 1000 }),
+        betweenAccounts: Object.freeze({ kind: 'uniform', base: 0, spread: 5000, addProcessingDelay: true }),
+        gapAfterLastAccount: true,
+        settle: Object.freeze({ kind: 'uniform', base: 6000, spread: 3000 }),
+        joinQueueStart: Object.freeze({ kind: 'fixed', ms: 2000 }),
+        leaveQueueStart: Object.freeze({ kind: 'fixed', ms: 5000 }),
+        resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
+        wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
+        refillLeaveQueueStart: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
     }),
 }) as Readonly<PoolProfile>;
 
