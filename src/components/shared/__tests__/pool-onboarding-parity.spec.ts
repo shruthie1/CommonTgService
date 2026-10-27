@@ -132,6 +132,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
         __resetEnrollmentLocks();
         await bufferModel.deleteMany({});
         await promoteModel.deleteMany({});
+        await connection.collection('poolEnrolmentClaims').deleteMany({});
 
         const users: Array<Record<string, any>> = [];
         const clients = [{ clientId: CLIENT_ID, mobile: MAIN_MOBILE }];
@@ -419,6 +420,31 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             } else {
                 await expect(attempt).rejects.not.toMatchObject({ status: 400 });
             }
+        });
+
+        test('M13: a live claim held by the other pool\'s process blocks every enrolment write (D5/D6)', async () => {
+            const otherCollection = other(pool) === 'buffer' ? 'bufferClients' : 'promoteClients';
+            const claims = connection.collection('poolEnrolmentClaims');
+            for (const m of ['919100000030', '919100000031', '919100000032']) {
+                await claims.insertOne({ mobile: m, pool: otherCollection, at: new Date() });
+            }
+            addUser('919100000030');
+            addUser('919100000031');
+            const auto = await autoEnrol(pool);
+            expect(auto.createdCount).toBe(0);
+            await expect(setAs(pool, '919100000031')).rejects.toMatchObject({ status: 400 });
+            await expect(h.services[pool].create(poolDoc(pool, { mobile: '919100000032' }))).rejects.toMatchObject({ status: 400 });
+            expect(await h.models[pool].countDocuments({})).toBe(0);
+            // The other process's claims are untouched (never deleted, never taken over while live).
+            expect(await claims.countDocuments({ pool: otherCollection })).toBe(3);
+        });
+
+        test('M13: an own-pool enrolment leaves a released (not deleted) claim', async () => {
+            addUser('919100000033');
+            expect((await autoEnrol(pool)).createdCount).toBe(1);
+            const claim = await connection.collection('poolEnrolmentClaims').findOne({ mobile: '919100000033' });
+            expect(claim).toMatchObject({ pool: pool === 'buffer' ? 'bufferClients' : 'promoteClients' });
+            expect((claim as any).at.getTime()).toBe(0);
         });
 
         test('create(): caller-supplied lifecycle fields (D21)', async () => {

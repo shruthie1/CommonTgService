@@ -14,6 +14,7 @@ import type { parseError } from '../../../utils/parseError';
 import type { RichNotificationInput } from '../../../utils/rich-message';
 import { ClientHelperUtils } from '../client-helper.utils';
 import { withEnrollmentLock } from '../enrollment-lock';
+import { withPoolClaim } from './pool-claim';
 import { WarmupPhase } from '../warmup-phases';
 import type { PoolProfile } from './pool-profile';
 
@@ -95,7 +96,17 @@ export async function enrolPoolClientFromUser(
 
         // Serialize the dedup re-check + write per canonical mobile (across buffer + promote in this
         // process): two live sessions on one account => Telegram SESSION_REVOKED (account loss).
-        const enrolled = await withEnrollmentLock(port.canonicalMobile(document.mobile), async () => {
+        // withPoolClaim adds the cross-process half (buffer enrols on CMS, promote on UMS).
+        const canonical = port.canonicalMobile(document.mobile);
+        const enrolled = await withEnrollmentLock(canonical, async () => {
+            const claim = await withPoolClaim(port.model, canonical, profile.collection, () => writeIfStillFree());
+            if ('heldBy' in claim) {
+                logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: ${claim.heldBy} is enrolling it right now`);
+                return false;
+            }
+            return claim.value;
+        });
+        async function writeIfStillFree(): Promise<boolean> {
             const already = await port.isMobileEnrolledAnywhere(document.mobile);
             if (already && already !== profile.collection) {
                 logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: now enrolled in ${already}`);
@@ -114,7 +125,7 @@ export async function enrolPoolClientFromUser(
                 { returnDocument: 'after', upsert: true },
             ).exec();
             return true;
-        });
+        }
         if (!enrolled) return false;
 
         logger.log(`Created ${profile.label}Client for ${targetClientId} with availability ${targetAvailableDate}`);

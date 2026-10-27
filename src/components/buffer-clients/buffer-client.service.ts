@@ -57,6 +57,7 @@ import {
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
+import { withPoolClaim } from '../shared/onboarding/pool-claim';
 import { BUFFER_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { buildEnrolmentExclusions, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
@@ -792,7 +793,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // account running concurrently across pools causes Telegram SESSION_REVOKED.
         // The check-then-create is serialized per canonical mobile (across buffer + promote
         // services in this process) so two concurrent enrollments can't both pass the check.
-        const result = await withEnrollmentLock(canonicalMobile, async () => {
+        const result = await withEnrollmentLock(canonicalMobile, () => this.withPoolClaimOrRefuse(canonicalMobile, async () => {
             const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
             if (enrolledIn && enrolledIn !== 'bufferClients') {
                 throw new BadRequestException(
@@ -810,7 +811,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 sessionRotatedAt: null,
             };
             return this.bufferClientModel.create({ ...createData });
-        });
+        }));
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.sendAccountNotice(
             {
@@ -1229,6 +1230,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
 
     // ---- Buffer-specific: Enrollment (redesigned — no 2FA, no removeExternalLoginSessions, no createNewSession) ----
 
+    /** Cross-process one-pool-per-mobile claim (shared/onboarding/pool-claim.ts); refuses while the other pool holds it. */
+    private async withPoolClaimOrRefuse<T>(canonicalMobile: string, fn: () => Promise<T>): Promise<T> {
+        const claim = await withPoolClaim(this.model, canonicalMobile, 'bufferClients', fn);
+        if ('heldBy' in claim) {
+            throw new BadRequestException(`Mobile ${canonicalMobile} is being enrolled in ${claim.heldBy} right now; refusing to create a cross-pool BufferClient`);
+        }
+        return claim.value;
+    }
+
     async setAsBufferClient(
         mobile: string,
         clientId: string,
@@ -1277,7 +1287,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             };
             // Same per-mobile lock + re-check as auto-enrolment: a concurrent promote enrolment of
             // this mobile may have landed while we were on Telegram.
-            await withEnrollmentLock(canonicalMobile, async () => {
+            await withEnrollmentLock(canonicalMobile, () => this.withPoolClaimOrRefuse(canonicalMobile, async () => {
                 const already = await this.isMobileEnrolledAnywhere(canonicalMobile);
                 if (already && already !== 'bufferClients') {
                     throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${already}; refusing to create a cross-pool BufferClient`);
@@ -1292,7 +1302,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                         }
                     }, { returnDocument: 'after', upsert: true })
                     .exec();
-            });
+            }));
         } catch (error) {
             const errorDetails = parseError(error, `Failed to set as Buffer Client ${canonicalMobile}`);
             // Retire permanently dead accounts at the source (cascades to pools)

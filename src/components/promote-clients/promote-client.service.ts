@@ -53,6 +53,7 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
+import { withPoolClaim } from '../shared/onboarding/pool-claim';
 import { PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { buildEnrolmentExclusions, runEnrolmentBatch, type ClientEnrolmentNeed } from '../shared/onboarding/candidate-source';
@@ -451,7 +452,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         // account running concurrently across pools causes Telegram SESSION_REVOKED.
         // The check-then-create is serialized per canonical mobile (across buffer + promote
         // services in this process) so two concurrent enrollments can't both pass the check.
-        const result = await withEnrollmentLock(canonicalMobile, async () => {
+        const result = await withEnrollmentLock(canonicalMobile, () => this.withPoolClaimOrRefuse(canonicalMobile, async () => {
             const enrolledIn = await this.isMobileEnrolledAnywhere(canonicalMobile);
             if (enrolledIn && enrolledIn !== 'promoteClients') {
                 throw new BadRequestException(
@@ -471,7 +472,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             };
             const newUser = new this.promoteClientModel(promoteClientData);
             return newUser.save();
-        });
+        }));
         await this.sendAccountNotice(
             {
                 severity: 'success',
@@ -796,6 +797,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
     // ---- Promote-specific: Enrollment (redesigned — no 2FA, no removeExternalLoginSessions, no profile changes) ----
 
+    /** Cross-process one-pool-per-mobile claim (shared/onboarding/pool-claim.ts); refuses while the other pool holds it. */
+    private async withPoolClaimOrRefuse<T>(canonicalMobile: string, fn: () => Promise<T>): Promise<T> {
+        const claim = await withPoolClaim(this.model, canonicalMobile, 'promoteClients', fn);
+        if ('heldBy' in claim) {
+            throw new BadRequestException(`Mobile ${canonicalMobile} is being enrolled in ${claim.heldBy} right now; refusing to create a cross-pool PromoteClient`);
+        }
+        return claim.value;
+    }
+
     async setAsPromoteClient(
         mobile: string,
         clientId?: string,
@@ -860,7 +870,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
 
             // Same per-mobile lock + re-check as auto-enrolment: a concurrent buffer enrolment of
             // this mobile may have landed while we were on Telegram.
-            await withEnrollmentLock(canonicalMobile, async () => {
+            await withEnrollmentLock(canonicalMobile, () => this.withPoolClaimOrRefuse(canonicalMobile, async () => {
                 const already = await this.isMobileEnrolledAnywhere(canonicalMobile);
                 if (already && already !== 'promoteClients') {
                     throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${already}; refusing to create a cross-pool PromoteClient`);
@@ -879,7 +889,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                         { returnDocument: 'after', upsert: true },
                     )
                     .exec();
-            });
+            }));
         } catch (error) {
             const errorDetails = parseError(error);
             // Retire permanently dead accounts at the source (cascades to pools)
