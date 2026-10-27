@@ -55,7 +55,7 @@ import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { withPoolClaim } from '../shared/onboarding/pool-claim';
-import { PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
+import { ONBOARDING_PACING, PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
 import { buildEnrolmentExclusions, runEnrolmentBatch, type ClientEnrolmentNeed } from '../shared/onboarding/candidate-source';
@@ -133,7 +133,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     get config(): ClientConfig {
         return {
             joinChannelInterval: 6 * 60 * 1000,       // Increased from 4min to 6min
-            leaveChannelInterval: PROMOTE_PROFILE.pacing.leaveChannelIntervalMs, // 1 minute (owner-gated Q3)
+            leaveChannelInterval: ONBOARDING_PACING.leaveChannelIntervalMs, // 120 s, shared (Q3)
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,              // 120s (redesigned from 10s)
             channelTarget: PROMOTE_PROFILE.channelTarget, // Must exceed promote mobile selection threshold (230)
@@ -142,7 +142,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             minTotalClients: PROMOTE_PROFILE.minTotalClients,
             maxMapSize: 100,
             cooldownHours: 2,
-            clientProcessingDelay: PROMOTE_PROFILE.pacing.clientProcessingDelayMs, // 8s between clients (owner-gated Q3)
+            clientProcessingDelay: ONBOARDING_PACING.clientProcessingDelayMs, // 10 s, shared (Q3)
             maxChannelJoinsPerDay: 25,
             joinsPerMobilePerRound: 4,
             // promote-clients selects runtime mobiles at >=230 channels.

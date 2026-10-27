@@ -1,4 +1,4 @@
-import { BUFFER_PROFILE, PROMOTE_PROFILE, isHealthyForLegacyCap } from '../pool-profile';
+import { BUFFER_PROFILE, ONBOARDING_PACING, PROMOTE_PROFILE, isHealthyForLegacyCap } from '../pool-profile';
 import { WarmupPhase } from '../../warmup-phases';
 
 describe('pool profiles (M4)', () => {
@@ -6,23 +6,16 @@ describe('pool profiles (M4)', () => {
         expect(BUFFER_PROFILE).toEqual({
             kind: 'buffer', collection: 'bufferClients', label: 'Buffer', operationalFloor: 200, legacyHealthyCap: 20,
             minTotalClients: 10, maxNewClientsPerTrigger: 10, channelTarget: 350,
-            pacing: { clientProcessingDelayMs: 10000, leaveChannelIntervalMs: 120000 },
             excludePrimaryMobiles: true, setAsRequiresClientId: true, terminalPhasesInWarmupRun: [WarmupPhase.SESSION_ROTATED],
             setAs: {
                 entityName: 'BufferClient', userNotFoundMessage: 'user not found', alreadyExistsMessage: 'BufferClient already exist',
-                successMessage: 'Client enrolled as buffer successfully', postChannelInfoSleep: { mean: 7500, sd: 1250, min: 5000, max: 10000 },
+                successMessage: 'Client enrolled as buffer successfully',
                 docExtras: {}, errorContext: 'Failed to set as Buffer Client', permanentErrorReason: 'Permanent error during buffer enrollment',
             },
             joinSweep: {
                 activeSetupMessage: 'Active client setup exists, skipping', startLog: 'Starting join channel process for buffer clients',
-                scopesByClientId: true, logPreparedSweep: true, afterConnect: null, afterChannelInfo: null, beforeFetchCandidates: null,
-                errorContext: 'JoinChannelErr', beforePermanentHandling: null,
-                betweenAccounts: { kind: 'gaussian', mean: 2500, sd: 1500, min: 0, max: 5000, addProcessingDelay: true }, gapAfterLastAccount: false,
-                settle: { kind: 'gaussian', mean: 7500, sd: 750, min: 6000, max: 9000 },
-                joinQueueStart: { kind: 'uniform', base: 4000, spread: 2000 },
-                leaveQueueStart: { kind: 'gaussian', mean: 12500, sd: 1250, min: 10000, max: 15000 },
+                scopesByClientId: true, logPreparedSweep: true, errorContext: 'JoinChannelErr',
                 resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}', wrapError: null,
-                refillLeaveQueueStart: { kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 },
             },
             warmupRun: { logGoodIdsCount: true, supplyPlanner: 'dynamic-supply' },
             consumerMinAgeDays: 15,
@@ -30,31 +23,44 @@ describe('pool profiles (M4)', () => {
         expect(PROMOTE_PROFILE).toEqual({
             kind: 'promote', collection: 'promoteClients', label: 'Promote', operationalFloor: 230, legacyHealthyCap: 30,
             minTotalClients: 12, maxNewClientsPerTrigger: 10, channelTarget: 350,
-            pacing: { clientProcessingDelayMs: 8000, leaveChannelIntervalMs: 60000 },
             excludePrimaryMobiles: false, setAsRequiresClientId: false, terminalPhasesInWarmupRun: [],
             setAs: {
                 entityName: 'PromoteClient', userNotFoundMessage: 'User not found', alreadyExistsMessage: 'PromoteClient already exists',
-                successMessage: 'Client enrolled as promote successfully', postChannelInfoSleep: null,
+                successMessage: 'Client enrolled as promote successfully',
                 docExtras: { lastActive: 'default' }, errorContext: null, permanentErrorReason: 'Permanent error during promote enrollment',
             },
             joinSweep: {
                 activeSetupMessage: 'Active client setup exists, skipping promotion', startLog: 'Starting join channel process',
-                scopesByClientId: false, logPreparedSweep: false,
-                afterConnect: { kind: 'uniform', base: 5000, spread: 3000 }, afterChannelInfo: { kind: 'uniform', base: 5000, spread: 3000 },
-                beforeFetchCandidates: { kind: 'uniform', base: 5000, spread: 3000 },
-                errorContext: null, beforePermanentHandling: { kind: 'fixed', ms: 1000 },
-                betweenAccounts: { kind: 'uniform', base: 0, spread: 5000, addProcessingDelay: true }, gapAfterLastAccount: true,
-                settle: { kind: 'uniform', base: 6000, spread: 3000 },
-                joinQueueStart: { kind: 'fixed', ms: 2000 }, leaveQueueStart: { kind: 'fixed', ms: 5000 },
+                scopesByClientId: false, logPreparedSweep: false, errorContext: null,
                 resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
                 wrapError: { log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' },
-                refillLeaveQueueStart: { kind: 'uniform', base: 5000, spread: 3000 },
             },
             warmupRun: { logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget' },
             consumerMinAgeDays: 7,
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);
-        expect(Object.isFrozen(PROMOTE_PROFILE.pacing)).toBe(true);
+        expect(Object.isFrozen(PROMOTE_PROFILE.joinSweep)).toBe(true);
+    });
+
+    test('Q3 (owner 2026-10-27): one pacing set for both pools, the slower of each former pair', () => {
+        expect(ONBOARDING_PACING).toEqual({
+            clientProcessingDelayMs: 10000,   // buffer 10 s; promote was 8 s
+            leaveChannelIntervalMs: 120000,   // buffer 120 s; promote was 60 s
+            setAsPostChannelInfoSleep: { mean: 7500, sd: 1250, min: 5000, max: 10000 }, // buffer; promote had none
+            joinSweep: {
+                afterConnect: { kind: 'uniform', base: 5000, spread: 3000 },          // promote; buffer had none
+                afterChannelInfo: { kind: 'uniform', base: 5000, spread: 3000 },      // promote; buffer had none
+                beforeFetchCandidates: { kind: 'uniform', base: 5000, spread: 3000 }, // promote; buffer had none
+                beforePermanentHandling: { kind: 'fixed', ms: 1000 },                  // promote; buffer had none
+                betweenAccounts: { kind: 'gaussian', mean: 2500, sd: 1500, min: 0, max: 5000, addProcessingDelay: true },
+                settle: { kind: 'gaussian', mean: 7500, sd: 750, min: 6000, max: 9000 },
+                joinQueueStart: { kind: 'uniform', base: 4000, spread: 2000 },        // buffer (promote fixed 2 s)
+                leaveQueueStart: { kind: 'gaussian', mean: 12500, sd: 1250, min: 10000, max: 15000 }, // buffer (promote fixed 5 s)
+                refillLeaveQueueStart: { kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 },
+            },
+        });
+        expect(Object.isFrozen(ONBOARDING_PACING.joinSweep)).toBe(true);
+        expect('pacing' in BUFFER_PROFILE || 'pacing' in PROMOTE_PROFILE).toBe(false);
     });
 
     test.each([

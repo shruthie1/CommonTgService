@@ -2,8 +2,8 @@
  * Per-pool onboarding profile (docs/design/2026-10-27-pool-onboarding-unification.md).
  *
  * Holds ONLY the intentional differences between the buffer and promote pools, as data, so the
- * shared onboarding code reads one object instead of two pasted copies. Values are today's exact
- * values; pacing values are owner-gated (tracker Q3) and must not be changed here casually.
+ * shared onboarding code reads one object instead of two pasted copies. Pacing is NOT per pool:
+ * both pools use ONBOARDING_PACING (owner Q3, 2026-10-27).
  */
 import { WarmupPhase, type WarmupPhaseType } from '../warmup-phases';
 
@@ -21,7 +21,34 @@ export type PacingDraw =
     | { kind: 'uniform'; base: number; spread: number; addProcessingDelay?: boolean }
     | { kind: 'fixed'; ms: number };
 
-/** Join sweep + queue refill per-pool values (today's exact behaviour; pacing owner-gated Q3). */
+/**
+ * Pacing shared by both pools (owner decision Q3, 2026-10-27): the slower/safer value of each former
+ * buffer/promote pair. Where both drew from the same range and mean (betweenAccounts, settle,
+ * refillLeaveQueueStart) the clipped gaussian is kept: fewer near-minimum gaps than the uniform draw.
+ * Old -> new per pool: docs/design/2026-10-27-pool-onboarding-unification.md (Q3).
+ */
+export const ONBOARDING_PACING = Object.freeze({
+    /** Base delay between accounts (ClientConfig.clientProcessingDelay). Buffer 10 s; promote was 8 s. */
+    clientProcessingDelayMs: 10000,
+    /** Leave-queue interval (ClientConfig.leaveChannelInterval). Buffer 120 s; promote was 60 s. */
+    leaveChannelIntervalMs: 120 * 1000,
+    /** setAs*: sleep after the channel-info read. Buffer 5-10 s; promote had none. */
+    setAsPostChannelInfoSleep: Object.freeze({ mean: 7500, sd: 1250, min: 5000, max: 10000 }) as Readonly<GaussianPacing>,
+    joinSweep: Object.freeze({
+        afterConnect: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }) as PacingDraw,
+        afterChannelInfo: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }) as PacingDraw,
+        beforeFetchCandidates: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }) as PacingDraw,
+        beforePermanentHandling: Object.freeze({ kind: 'fixed', ms: 1000 }) as PacingDraw,
+        /** Gap after every account, the last one included. */
+        betweenAccounts: Object.freeze({ kind: 'gaussian', mean: 2500, sd: 1500, min: 0, max: 5000, addProcessingDelay: true }) as PacingDraw,
+        settle: Object.freeze({ kind: 'gaussian', mean: 7500, sd: 750, min: 6000, max: 9000 }) as PacingDraw,
+        joinQueueStart: Object.freeze({ kind: 'uniform', base: 4000, spread: 2000 }) as PacingDraw,
+        leaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 12500, sd: 1250, min: 10000, max: 15000 }) as PacingDraw,
+        refillLeaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 }) as PacingDraw,
+    }),
+});
+
+/** Join sweep + queue refill per-pool values (pacing is shared: ONBOARDING_PACING.joinSweep). */
 export interface JoinSweepProfile {
     activeSetupMessage: string;
     startLog: string;
@@ -29,23 +56,12 @@ export interface JoinSweepProfile {
     scopesByClientId: boolean;
     /** Emit the 'Prepared buffer join-channel sweep' info log. */
     logPreparedSweep: boolean;
-    afterConnect: PacingDraw | null;
-    afterChannelInfo: PacingDraw | null;
-    beforeFetchCandidates: PacingDraw | null;
     /** parseError context prefix (`${errorContext}: ${mobile}`); null = none. */
     errorContext: string | null;
-    beforePermanentHandling: PacingDraw | null;
-    betweenAccounts: PacingDraw;
-    /** false = no gap after the last account (buffer). */
-    gapAfterLastAccount: boolean;
-    settle: PacingDraw;
-    joinQueueStart: PacingDraw;
-    leaveQueueStart: PacingDraw;
     /** `{join}` / `{leave}` are replaced with the queued counts. */
     resultTemplate: string;
     /** Unexpected errors after the refresh: null = propagate as-is; else log + throw this message. */
     wrapError: { log: string; message: string } | null;
-    refillLeaveQueueStart: PacingDraw;
 }
 
 /** setAs* (operator enrolment) per-pool values. Messages are API responses: keep them exact. */
@@ -54,8 +70,6 @@ export interface SetAsProfile {
     userNotFoundMessage: string;
     alreadyExistsMessage: string;
     successMessage: string;
-    /** Pacing draw after the channel-info read (buffer only today; owner-gated Q3). */
-    postChannelInfoSleep: GaussianPacing | null;
     /** Pool-only fields on the stored doc (promote: lastActive 'default', Q10). */
     docExtras: Readonly<Record<string, unknown>>;
     /** parseError context; null = none. Shows in the HTTP message for errors without errorMessage. */
@@ -76,11 +90,6 @@ export interface PoolProfile {
     minTotalClients: number;
     maxNewClientsPerTrigger: number;
     channelTarget: number;
-    /** Pacing: owner-gated (Q3). */
-    pacing: {
-        clientProcessingDelayMs: number;
-        leaveChannelIntervalMs: number;
-    };
     /** Live main mobiles are kept out of joins/maintenance (a promote doc is never a main). */
     excludePrimaryMobiles: boolean;
     /** setAs* needs an explicit clientId (promote auto-assigns the client with the fewest). */
@@ -118,7 +127,6 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
     minTotalClients: 10,
     maxNewClientsPerTrigger: 10,
     channelTarget: 350,
-    pacing: Object.freeze({ clientProcessingDelayMs: 10000, leaveChannelIntervalMs: 120 * 1000 }),
     excludePrimaryMobiles: true,
     setAsRequiresClientId: true,
     terminalPhasesInWarmupRun: [WarmupPhase.SESSION_ROTATED],
@@ -127,7 +135,6 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         userNotFoundMessage: 'user not found',
         alreadyExistsMessage: 'BufferClient already exist',
         successMessage: 'Client enrolled as buffer successfully',
-        postChannelInfoSleep: Object.freeze({ mean: 7500, sd: 1250, min: 5000, max: 10000 }),
         docExtras: Object.freeze({}),
         errorContext: 'Failed to set as Buffer Client',
         permanentErrorReason: 'Permanent error during buffer enrollment',
@@ -137,19 +144,9 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         startLog: 'Starting join channel process for buffer clients',
         scopesByClientId: true,
         logPreparedSweep: true,
-        afterConnect: null,
-        afterChannelInfo: null,
-        beforeFetchCandidates: null,
         errorContext: 'JoinChannelErr',
-        beforePermanentHandling: null,
-        betweenAccounts: Object.freeze({ kind: 'gaussian', mean: 2500, sd: 1500, min: 0, max: 5000, addProcessingDelay: true }),
-        gapAfterLastAccount: false,
-        settle: Object.freeze({ kind: 'gaussian', mean: 7500, sd: 750, min: 6000, max: 9000 }),
-        joinQueueStart: Object.freeze({ kind: 'uniform', base: 4000, spread: 2000 }),
-        leaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 12500, sd: 1250, min: 10000, max: 15000 }),
         resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}',
         wrapError: null,
-        refillLeaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 }),
     }),
     warmupRun: Object.freeze({ logGoodIdsCount: true, supplyPlanner: 'dynamic-supply' }),
     consumerMinAgeDays: 15,
@@ -164,7 +161,6 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
     minTotalClients: 12,
     maxNewClientsPerTrigger: 10,
     channelTarget: 350,
-    pacing: Object.freeze({ clientProcessingDelayMs: 8000, leaveChannelIntervalMs: 60 * 1000 }),
     excludePrimaryMobiles: false,
     setAsRequiresClientId: false,
     terminalPhasesInWarmupRun: [],
@@ -173,7 +169,6 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         userNotFoundMessage: 'User not found',
         alreadyExistsMessage: 'PromoteClient already exists',
         successMessage: 'Client enrolled as promote successfully',
-        postChannelInfoSleep: null,
         docExtras: Object.freeze({ lastActive: 'default' }),
         errorContext: null,
         permanentErrorReason: 'Permanent error during promote enrollment',
@@ -183,19 +178,9 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         startLog: 'Starting join channel process',
         scopesByClientId: false,
         logPreparedSweep: false,
-        afterConnect: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
-        afterChannelInfo: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
-        beforeFetchCandidates: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
         errorContext: null,
-        beforePermanentHandling: Object.freeze({ kind: 'fixed', ms: 1000 }),
-        betweenAccounts: Object.freeze({ kind: 'uniform', base: 0, spread: 5000, addProcessingDelay: true }),
-        gapAfterLastAccount: true,
-        settle: Object.freeze({ kind: 'uniform', base: 6000, spread: 3000 }),
-        joinQueueStart: Object.freeze({ kind: 'fixed', ms: 2000 }),
-        leaveQueueStart: Object.freeze({ kind: 'fixed', ms: 5000 }),
         resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
         wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
-        refillLeaveQueueStart: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
     }),
     warmupRun: Object.freeze({ logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget' }),
     consumerMinAgeDays: 7,

@@ -15,7 +15,7 @@ import { parseError } from '../../../utils/parseError';
 import { ClientHelperUtils } from '../client-helper.utils';
 import { withEnrollmentLock } from '../enrollment-lock';
 import { WarmupPhase } from '../warmup-phases';
-import type { PoolProfile } from './pool-profile';
+import { ONBOARDING_PACING, type PoolProfile } from './pool-profile';
 
 export interface SetAsPort {
     profile: Readonly<PoolProfile>;
@@ -89,10 +89,8 @@ export async function setAsPoolClient(
     try {
         // Only get channel info — no 2FA, no profile changes, no new session
         const channels = await port.telegramService.getChannelInfo(canonicalMobile, true);
-        if (cfg.postChannelInfoSleep) {
-            const p = cfg.postChannelInfoSleep;
-            await sleep(ClientHelperUtils.gaussianRandom(p.mean, p.sd, p.min, p.max));
-        }
+        const p = ONBOARDING_PACING.setAsPostChannelInfoSleep;
+        await sleep(ClientHelperUtils.gaussianRandom(p.mean, p.sd, p.min, p.max));
 
         const poolDoc = {
             tgId: user.tgId,

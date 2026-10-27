@@ -59,7 +59,7 @@ import {
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { withPoolClaim } from '../shared/onboarding/pool-claim';
-import { BUFFER_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
+import { BUFFER_PROFILE, ONBOARDING_PACING, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
 import { buildEnrolmentExclusions, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
@@ -405,7 +405,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     get config(): ClientConfig {
         return {
             joinChannelInterval: 6 * 60 * 1000,      // 6 minutes
-            leaveChannelInterval: BUFFER_PROFILE.pacing.leaveChannelIntervalMs, // 120 seconds (owner-gated Q3)
+            leaveChannelInterval: ONBOARDING_PACING.leaveChannelIntervalMs, // 120 s, shared (Q3)
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,             // 120s (redesigned from 20s)
             channelTarget: BUFFER_PROFILE.channelTarget, // Must exceed buffer swap threshold (200+)
@@ -414,7 +414,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             minTotalClients: BUFFER_PROFILE.minTotalClients,
             maxMapSize: 100,
             cooldownHours: 2,
-            clientProcessingDelay: BUFFER_PROFILE.pacing.clientProcessingDelayMs, // 10s between clients (owner-gated Q3)
+            clientProcessingDelay: ONBOARDING_PACING.clientProcessingDelayMs, // 10 s, shared (Q3)
             maxChannelJoinsPerDay: 25,
             joinsPerMobilePerRound: 4,
             operationalChannelThreshold: BUFFER_PROFILE.operationalFloor,

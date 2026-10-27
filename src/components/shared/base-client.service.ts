@@ -34,7 +34,7 @@ import type { NotificationSeverity, RichNotificationField, RichNotificationInput
 import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../utils/notice-batch';
 import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
-import { BUFFER_PROFILE, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
+import { BUFFER_PROFILE, ONBOARDING_PACING, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
 import { buildEnrolmentExclusions } from './onboarding/candidate-source';
 import type { CheckEntry } from './check-summary-notification';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
@@ -1028,8 +1028,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return base + draw.base + Math.random() * draw.spread;
     }
 
-    private async paceIf(draw: PacingDraw | null): Promise<void> {
-        if (draw) await sleep(this.drawPacing(draw));
+    private async pace(draw: PacingDraw): Promise<void> {
+        await sleep(this.drawPacing(draw));
     }
 
     protected async getPrimaryClientMobiles(clientId?: string | null): Promise<Set<string>> {
@@ -1172,7 +1172,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.log(`Refilled join queue with ${added} ${this.clientType} clients`);
         }
         if (leaveAdded > 0 && !this.leaveChannelIntervalId) {
-            this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(profile.joinSweep.refillLeaveQueueStart));
+            this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(ONBOARDING_PACING.joinSweep.refillLeaveQueueStart));
         }
 
         return added;
@@ -1219,6 +1219,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     private async joinSweepAccounts(clientId: string | undefined, preservedMobiles: Set<string>, primaryClientMobiles: Set<string>): Promise<string> {
         const cfg = this.poolProfile.joinSweep;
+        const pacing = ONBOARDING_PACING.joinSweep;
         const query: Record<string, unknown> = {
             channels: { $lt: this.config.channelTarget },
             mobile: { $nin: Array.from(new Set([...preservedMobiles, ...primaryClientMobiles])) },
@@ -1250,9 +1251,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
             try {
                 client = await connectionManager.getClient(mobile, { autoDisconnect: false, handler: false });
-                await this.paceIf(cfg.afterConnect);
+                await this.pace(pacing.afterConnect);
                 const channels = await channelInfo(client.client, true);
-                await this.paceIf(cfg.afterChannelInfo);
+                await this.pace(pacing.afterChannelInfo);
                 await this.update(mobile, { channels: channels.ids.length });
                 if (this.isTerminalOperationalAfterRefresh(document, channels.ids.length)) {
                     continue;
@@ -1260,7 +1261,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
                 if (channels.canSendFalseCount < 10) {
                     const excludedIds = this.getJoinedChannelIdsFromInfo(channels);
-                    await this.paceIf(cfg.beforeFetchCandidates);
+                    await this.pace(pacing.beforeFetchCandidates);
                     // activeChannels below 220, channels above; skips pending join requests, approval-only last.
                     const remaining = this.config.maxChannelJoinsPerDay - this.getDailyJoinCount(mobile);
                     const result = await this.fetchJoinCandidates(mobile, channels.ids.length, remaining, excludedIds);
@@ -1283,26 +1284,24 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     ? parseError(error, `${cfg.errorContext}: ${mobile}`)
                     : parseError(error);
                 if (isPermanentError(errorDetails)) {
-                    await this.paceIf(cfg.beforePermanentHandling);
+                    await this.pace(pacing.beforePermanentHandling);
                     // Pass the live client so the freeze window is captured — see refillJoinQueue.
                     const reason = await this.buildPermanentAccountReason(errorDetails.message, client);
                     await this.deactivateClient(mobile, reason, { permanent: true });
                 }
             } finally {
                 await this.safeUnregisterClient(mobile);
-                if (cfg.gapAfterLastAccount || i < clients.length - 1) {
-                    await sleep(this.drawPacing(cfg.betweenAccounts));
-                }
+                await this.pace(pacing.betweenAccounts);
             }
         }
 
-        await sleep(this.drawPacing(cfg.settle));
+        await this.pace(pacing.settle);
 
         if (joinSet.size > 0) {
-            this.createTimeout(() => this.joinChannelQueue(), this.drawPacing(cfg.joinQueueStart));
+            this.createTimeout(() => this.joinChannelQueue(), this.drawPacing(pacing.joinQueueStart));
         }
         if (leaveSet.size > 0) {
-            this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(cfg.leaveQueueStart));
+            this.createTimeout(() => this.leaveChannelQueue(), this.drawPacing(pacing.leaveQueueStart));
         }
 
         return cfg.resultTemplate.replace('{join}', String(joinSet.size)).replace('{leave}', String(leaveSet.size));

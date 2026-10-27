@@ -73,20 +73,20 @@ export const CURRENT = {
         createKeepsCallerLifecycle: false,  // D21 (deferred to master-plan W-E)
         warmupRunHealthChecksSessionRotated: true, // D32/D34 (owner-gated)
         joinSweepExcludesPrimaryMobiles: true,     // D37
-        joinSweepSleepsPerAccount: 1,       // D38 (owner-gated pacing)
+        joinSweepSleepsPerAccount: 4,       // D38, Q3 2026-10-27 (was 1; 3 promote sleeps + gap, gap after the last too)
         joinSweepErrorWipesQueues: false,   // D39
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
     },
     promote: {
         operationalFloor: 230,
         minTotalClients: 12,
-        clientProcessingDelay: 8000,
-        leaveChannelInterval: 60000,
+        clientProcessingDelay: 10000,       // Q3 2026-10-27 (was 8000)
+        leaveChannelInterval: 120000,       // Q3 2026-10-27 (was 60000)
         maxNewClientsPerTrigger: 10,
         legacyHealthyCap: 30,
         autoEnrolDocExtras: ['lastActive'],
         setAsChecksOtherPool: true,         // M1
-        setAsSleepsAfterChannelInfo: false,
+        setAsSleepsAfterChannelInfo: true,  // Q3 2026-10-27 (was false)
         setAsRequiresClientId: false,
         removeCanonicalisesMobile: true,
         removeInvalidMobileIsBadRequest: true, // M2
@@ -417,7 +417,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 clientId: CLIENT_ID, status: 'active', message: 'Enrolled for warmup', lastUsed: null, warmupPhase: WarmupPhase.ENROLLED,
             });
             expect(doc.lastActive).toBe(B ? undefined : 'default');
-            expect(pacing).toEqual(B ? ['7500/1250/5000/10000', '3.5/2/0/7'] : ['3.5/2/0/7']); // pacing sleep (buffer only), then warmup jitter
+            expect(pacing).toEqual(['7500/1250/5000/10000', '3.5/2/0/7']); // pacing sleep (both pools since Q3), then warmup jitter
 
             // Permanent Telegram error: source user retired with the pool's reason, HTTP error rethrown.
             addUser('919100000064');
@@ -696,13 +696,11 @@ describe('pool onboarding parity (buffer vs promote)', () => {
 
             const connected = ledger.filter((e) => e.startsWith('getClient:')).map((e) => e.slice('getClient:'.length));
             expect(connected.includes(MAIN_MOBILE)).toBe(!want.joinSweepExcludesPrimaryMobiles);
-            // Sleeps: 1 in prepareJoinChannelRefresh + per-account sleeps (the last account skips the
-            // inter-account gap on buffer only) + 1 trailing settle sleep.
+            // Sleeps: 1 in prepareJoinChannelRefresh + per-account sleeps (both pools gap after the
+            // last account too since Q3) + 1 trailing settle sleep.
             const accounts = connected.length;
             const perAccount = want.joinSweepSleepsPerAccount;
-            const expectedSleeps = pool === 'buffer'
-                ? 1 + (accounts - 1) * perAccount + 1
-                : 1 + accounts * perAccount + 1;
+            const expectedSleeps = 1 + accounts * perAccount + 1;
             expect(ledger.filter((e) => e === 'sleep').length).toBe(expectedSleeps);
         });
 
