@@ -26,6 +26,43 @@ export function buildEnrolmentExclusions(...groups: Array<Array<string | null | 
     return groups.flat().filter((id): id is string => typeof id === 'string' && id.length > 0);
 }
 
+/** Minimum `users.totalChats` for an enrolment candidate. */
+export const ENROLMENT_MIN_TOTAL_CHATS = 150;
+
+/**
+ * The one auto-enrolment eligibility predicate on a `users` doc, as a Mongo filter: not expired,
+ * no 2FA of ours (`twoFA: false`), owner inactive since `inactiveSince` (YYYY-MM-DD), enough chats.
+ * Used by the scheduled candidate query and by operator setAs* (D7, owner 2026-10-27).
+ */
+export function enrolmentEligibilityFilter(inactiveSince: string) {
+    return {
+        expired: false,
+        twoFA: false,
+        lastActive: { $lt: inactiveSince },
+        totalChats: { $gt: ENROLMENT_MIN_TOTAL_CHATS },
+    };
+}
+
+/**
+ * Human-readable reasons a user fails `enrolmentEligibilityFilter`, for error messages only.
+ * Eligibility itself is decided by the Mongo filter; this only explains a miss.
+ */
+export function enrolmentIneligibilityReasons(
+    user: { expired?: unknown; twoFA?: unknown; lastActive?: unknown; totalChats?: unknown },
+    inactiveSince: string,
+): string[] {
+    const reasons: string[] = [];
+    if (user.expired !== false) reasons.push('account is expired');
+    if (user.twoFA !== false) reasons.push('2FA is already set (twoFA must be false)');
+    if (typeof user.lastActive !== 'string' || !(user.lastActive < inactiveSince)) {
+        reasons.push(`owner active recently (lastActive ${user.lastActive ?? 'missing'}, must be before ${inactiveSince})`);
+    }
+    if (typeof user.totalChats !== 'number' || !(user.totalChats > ENROLMENT_MIN_TOTAL_CHATS)) {
+        reasons.push(`too few chats (totalChats ${user.totalChats ?? 'missing'}, must be > ${ENROLMENT_MIN_TOTAL_CHATS})`);
+    }
+    return reasons;
+}
+
 /** The one `users` candidate query (lowest tgId first). */
 export function findEnrolmentCandidates(
     usersService: { executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number): Promise<CandidateUser[]> },
@@ -34,13 +71,7 @@ export function findEnrolmentCandidates(
     inactiveSince: string,
 ): Promise<CandidateUser[]> {
     return usersService.executeQuery(
-        {
-            mobile: { $nin: goodIds },
-            expired: false,
-            twoFA: false,
-            lastActive: { $lt: inactiveSince },
-            totalChats: { $gt: 150 },
-        },
+        { mobile: { $nin: goodIds }, ...enrolmentEligibilityFilter(inactiveSince) },
         { tgId: 1 },
         limit,
     );

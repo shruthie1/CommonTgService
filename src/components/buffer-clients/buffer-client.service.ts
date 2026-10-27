@@ -828,6 +828,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             isMobileEnrolledAnywhere: (m) => this.isMobileEnrolledAnywhere(m),
             withPoolClaimOrRefuse: (m, fn) => this.withPoolClaimOrRefuse(m, fn),
             safeUnregisterClient: (m) => this.safeUnregisterClient(m),
+            enrolmentInactiveSince: () => ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS),
         };
     }
 

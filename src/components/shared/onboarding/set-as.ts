@@ -4,7 +4,7 @@
  * behaviour: response messages, the buffer-only pacing draw after channel info, promote's
  * real `lastActive` date (Q10), clientId auto-assign, and the parseError context.
  *
- * Telegram: connect -> getChannelInfo -> (pacing) -> unregister. No login, session or auth change.
+ * Before Telegram: the auto-enrol eligibility filter (D7). Telegram: connect -> getChannelInfo -> (pacing) -> unregister. No login, session or auth change.
  */
 import { BadRequestException, ConflictException, HttpException } from '@nestjs/common';
 import type { Model } from 'mongoose';
@@ -15,6 +15,7 @@ import { parseError } from '../../../utils/parseError';
 import { ClientHelperUtils } from '../client-helper.utils';
 import { withEnrollmentLock } from '../enrollment-lock';
 import { WarmupPhase } from '../warmup-phases';
+import { enrolmentEligibilityFilter, enrolmentIneligibilityReasons } from './candidate-source';
 import { ONBOARDING_PACING, type PoolProfile } from './pool-profile';
 
 export interface SetAsPort {
@@ -22,6 +23,7 @@ export interface SetAsPort {
     model: Model<any>;
     usersService: {
         search(filter: { mobile: string; expired: boolean }): Promise<Array<{ tgId?: string; session?: string | null }>>;
+        executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number): Promise<unknown[]>;
         expireAccount(mobile: string, reason: string): Promise<unknown>;
     };
     clientService: { findAll(): Promise<Array<{ clientId: string; mobile: string }>> };
@@ -33,6 +35,8 @@ export interface SetAsPort {
     isMobileEnrolledAnywhere(mobile: string): Promise<string | null>;
     withPoolClaimOrRefuse<T>(mobile: string, fn: () => Promise<T>): Promise<T>;
     safeUnregisterClient(mobile: string): Promise<void>;
+    /** Auto-enrol inactivity cutoff (YYYY-MM-DD): the owner must not have been active since. */
+    enrolmentInactiveSince(): string;
 }
 
 interface ClientCount { _id: string; count: number }
@@ -65,6 +69,17 @@ export async function setAsPoolClient(
     // => SESSION_REVOKED (permanent account loss).
     if (await port.otherPoolExistsByMobile(canonicalMobile)) {
         throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${otherCollection}; refusing to create a cross-pool ${cfg.entityName}`);
+    }
+
+    // D7 (owner 2026-10-27): the operator path passes the same eligibility filter as auto-enrolment,
+    // checked in Mongo before any Telegram connect.
+    const inactiveSince = port.enrolmentInactiveSince();
+    const eligible = await port.usersService.executeQuery(
+        { mobile: canonicalMobile, ...enrolmentEligibilityFilter(inactiveSince) }, { tgId: 1 }, 1,
+    );
+    if (eligible.length === 0) {
+        const reasons = enrolmentIneligibilityReasons(user as Record<string, unknown>, inactiveSince);
+        throw new BadRequestException(`Mobile ${canonicalMobile} is not eligible for ${cfg.entityName}: ${reasons.length > 0 ? reasons.join('; ') : 'does not match the auto-enrol candidate filter'}`);
     }
 
     // Auto-assign clientId when the pool allows it: the client with the fewest active pool docs.

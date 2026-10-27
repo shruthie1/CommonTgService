@@ -418,6 +418,7 @@ describe('BufferClientService coverage', () => {
     describe('setAsBufferClient()', () => {
         it('enrolls an eligible user as a buffer client', async () => {
             usersService.search.mockResolvedValue([{ tgId: 'tg-enroll', session: 'user-session', mobile: '15551400001' }]);
+            usersService.executeQuery.mockResolvedValue([{ tgId: 'tg-enroll' }]); // passes the auto-enrol eligibility filter (D7)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
 
@@ -457,6 +458,7 @@ describe('BufferClientService coverage', () => {
 
         it('expires the account on permanent enrollment error', async () => {
             usersService.search.mockResolvedValue([{ tgId: 'tg', session: 's', mobile: '15551400006' }]);
+            usersService.executeQuery.mockResolvedValue([{ tgId: 'tg' }]); // passes the auto-enrol eligibility filter (D7)
             jest.spyOn(connectionManager, 'getClient').mockResolvedValue({ client: {} } as any);
             jest.spyOn(connectionManager, 'unregisterClient').mockResolvedValue();
             telegramService.getChannelInfo.mockRejectedValue(new Error('SESSION_REVOKED'));

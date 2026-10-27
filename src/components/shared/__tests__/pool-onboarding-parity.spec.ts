@@ -162,8 +162,12 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             search: jest.fn(async (q: { mobile?: string }) => users.filter((u) => !q.mobile || u.mobile === q.mobile)),
             executeQuery: jest.fn(async (q: any, _sort: any, limit?: number) => {
                 const nin: string[] = q?.mobile?.$nin || [];
+                const eq: string | undefined = typeof q?.mobile === 'string' ? q.mobile : undefined;
                 return users
-                    .filter((u) => !nin.includes(u.mobile) && !u.expired && !u.twoFA)
+                    .filter((u) => !nin.includes(u.mobile) && (eq === undefined || u.mobile === eq))
+                    .filter((u) => u.expired === false && u.twoFA === false)
+                    .filter((u) => !q?.lastActive || (typeof u.lastActive === 'string' && u.lastActive < q.lastActive.$lt))
+                    .filter((u) => !q?.totalChats || (typeof u.totalChats === 'number' && u.totalChats > q.totalChats.$gt))
                     .sort((a, b) => String(a.tgId).localeCompare(String(b.tgId)))
                     .slice(0, limit ?? users.length);
             }),
@@ -213,7 +217,7 @@ describe('pool onboarding parity (buffer vs promote)', () => {
     });
 
     const addUser = (mobile: string, extra: Record<string, unknown> = {}) => {
-        h.users.push({ mobile, tgId: `tg-${mobile}`, session: `sess-${mobile}`, expired: false, twoFA: false, ...extra });
+        h.users.push({ mobile, tgId: `tg-${mobile}`, session: `sess-${mobile}`, expired: false, twoFA: false, lastActive: '2020-01-01', totalChats: 200, ...extra });
     };
     const other = (pool: Pool): Pool => (pool === 'buffer' ? 'promote' : 'buffer');
     const autoEnrol = (pool: Pool, need = 1) => {
@@ -416,6 +420,31 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 : ['getClient:919100000004', 'getChannelInfo:919100000004', 'unregister:919100000004']);
             const doc = await h.models[pool].findOne({ mobile: '919100000004' }).lean<any>();
             expect(doc).toMatchObject({ warmupPhase: WarmupPhase.ENROLLED, clientId: CLIENT_ID, status: 'active', channels: 3 });
+        });
+
+        test('D7 (owner 2026-10-27): setAs* refuses a user that fails the auto-enrol eligibility filter, before any Telegram connect', async () => {
+            const B = pool === 'buffer';
+            const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+                ['919100000071', { twoFA: true }, /2FA is already set/],
+                ['919100000072', { lastActive: '2099-01-01' }, /owner active recently \(lastActive 2099-01-01/],
+                ['919100000073', { totalChats: 10 }, /too few chats \(totalChats 10/],
+                ['919100000074', { lastActive: undefined, totalChats: undefined }, /owner active recently.*; too few chats/],
+            ];
+            for (const [mobile, extra, reason] of cases) {
+                addUser(mobile, extra);
+                const err = await setAs(pool, mobile).then(() => null, (e) => e);
+                expect(err).toMatchObject({ status: 400 });
+                expect(err.message).toMatch(new RegExp(`^Mobile ${mobile} is not eligible for ${B ? 'BufferClient' : 'PromoteClient'}: `));
+                expect(err.message).toMatch(reason);
+                expect(await h.models[pool].findOne({ mobile }).lean()).toBeNull();
+            }
+            expect(ledger).toEqual([]); // no connect, channel read or unregister
+            expect((connectionManager.getClient as jest.Mock)).not.toHaveBeenCalled();
+            const q = h.usersService.executeQuery.mock.calls.map((c: any[]) => c[0]);
+            expect(q).toContainEqual({ mobile: '919100000071', expired: false, twoFA: false, lastActive: { $lt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }, totalChats: { $gt: 150 } });
+            // An eligible user still enrols.
+            addUser('919100000075');
+            await expect(setAs(pool, '919100000075')).resolves.toBe(B ? 'Client enrolled as buffer successfully' : 'Client enrolled as promote successfully');
         });
 
         test('setAs*: messages, stored doc, pacing values and errors (D8/D9, characterisation)', async () => {
