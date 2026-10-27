@@ -47,6 +47,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 // ─── TestBaseService ────────────────────────────────────────────────────────
 
 class TestBaseService extends BaseClientService<BaseClientDocument> {
+    protected otherPoolModel(): any { return null; }
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
     public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => null);

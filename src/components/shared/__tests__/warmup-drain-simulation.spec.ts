@@ -28,6 +28,7 @@ import * as path from 'path';
 //    just wires deps + a logger, so null deps are safe — we only exercise the pure cap helpers
 //    and read the real tuning constants. Abstract members are stubbed (never called here). ──
 class CapProbe extends BaseClientService<BaseClientDocument> {
+    protected otherPoolModel(): any { return null; }
     constructor() {
         super(null as any, null as any, null as any, null as any, null as any, null as any, null as any, 'CapProbe');
     }

@@ -69,6 +69,7 @@ const DEFAULT_CONFIG: ClientConfig = {
 
 // Minimal concrete subclass over a real Mongoose model.
 class TestClientService extends BaseClientService<BufferClientDocument> {
+    protected otherPoolModel(): any { return null; }
   constructor(
     private readonly _model: Model<BufferClientDocument>,
     deps: {

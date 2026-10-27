@@ -18,6 +18,9 @@ jest.mock('telegram/Helpers', () => {
 jest.mock('../../../utils/fetchWithTimeout', () => ({ fetchWithTimeout: jest.fn(async () => ({ ok: true })) }));
 jest.mock('../../../utils/logbots', () => ({ notifbot: jest.fn(() => 'https://example.test/bot') }));
 jest.mock('../../../utils/bot-notice', () => ({ sendBotNotice: jest.fn(async () => ({ ok: true })) }));
+jest.mock('../organic-activity', () => ({
+    performOrganicActivity: jest.fn(async (_client: unknown, intensity: string) => { ledger.push(`organic:${intensity}`); }),
+}));
 jest.mock('../../Telegram/utils/connection-manager', () => ({
     connectionManager: {
         getClient: jest.fn(),
@@ -494,6 +497,85 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                     { label: 'Error', code: false },
                 ],
             });
+        });
+
+        const nameBioClient = (overrides: Record<string, unknown> = {}) => ({
+            clientId: CLIENT_ID, dbcoll: 'c1', firstNames: ['Asha', 'Bina'], bufferLastNames: ['Bk'], promoteLastNames: ['Pk'],
+            bios: ['hello'], profilePics: [], ...overrides,
+        }) as any;
+        const nameBioTelegram = (opts: { getMeError?: Error } = {}) => {
+            (connectionManager.getClient as jest.Mock).mockImplementation(async (mobile: string) => {
+                ledger.push(`getClient:${mobile}`);
+                return {
+                    getMe: jest.fn(async () => { if (opts.getMeError) throw opts.getMeError; ledger.push('getMe'); return { firstName: 'Old' }; }),
+                    client: {
+                        invoke: jest.fn(async (req: any) => {
+                            const name = req?.className || req?.constructor?.name;
+                            if (name === 'users.GetFullUser') { ledger.push('GetFullUser'); return { users: [{ lastName: '' }], fullUser: { about: '' } }; }
+                            ledger.push(`${name}:${JSON.stringify({ firstName: req.firstName, lastName: req.lastName, about: req.about })}`);
+                            return true;
+                        }),
+                    },
+                };
+            });
+        };
+
+        test('updateNameAndBio: Telegram ledger, pool surname and stored fields (D30, characterisation)', async () => {
+            nameBioTelegram();
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000050', warmupPhase: WarmupPhase.IDENTITY }));
+            const doc = await h.models[pool].findOne({ mobile: '919100000050' });
+            const surname = pool === 'buffer' ? 'Bk' : 'Pk';
+            const count = await h.services[pool].updateNameAndBio(doc as any, nameBioClient(), 0);
+            expect(count).toBe(2);
+            const stored = await h.models[pool].findOne({ mobile: '919100000050' }).lean<any>();
+            expect(stored.assignedLastName).toBe(surname);
+            expect(stored.assignedBio).toBe('hello');
+            expect(['Asha', 'Bina']).toContain(stored.assignedFirstName);
+            expect(stored.nameBioUpdatedAt).toBeInstanceOf(Date);
+            expect(stored).toMatchObject({ failedUpdateAttempts: 0, lastUpdateFailure: null });
+            expect(ledger).toEqual([
+                'getClient:919100000050', 'organic:medium', 'getMe', 'sleep', 'GetFullUser',
+                'organic:medium', `account.UpdateProfile:${JSON.stringify({ firstName: stored.assignedFirstName, lastName: surname })}`, 'sleep',
+                'organic:light', 'sleep', `account.UpdateProfile:${JSON.stringify({ about: 'hello' })}`,
+                'sleep', 'unregister:919100000050',
+            ]);
+        });
+
+        test('updateNameAndBio: persona taken in the other pool is not reused (D30, characterisation)', async () => {
+            nameBioTelegram();
+            const surname = pool === 'buffer' ? 'Bk' : 'Pk';
+            for (const first of ['Asha', 'Bina']) {
+                ledger.length = 0;
+                await h.models.buffer.deleteMany({}); await h.models.promote.deleteMany({});
+                await h.models[other(pool)].create(poolDoc(other(pool), {
+                    mobile: '919100000052', assignedFirstName: first, assignedLastName: surname, assignedBio: 'hello', assignedProfilePics: [],
+                }));
+                await h.models[pool].create(poolDoc(pool, { mobile: '919100000051', warmupPhase: WarmupPhase.IDENTITY }));
+                const doc = await h.models[pool].findOne({ mobile: '919100000051' });
+                await h.services[pool].updateNameAndBio(doc as any, nameBioClient(), 0);
+                const stored = await h.models[pool].findOne({ mobile: '919100000051' }).lean<any>();
+                expect(stored.assignedFirstName).toBe(first === 'Asha' ? 'Bina' : 'Asha');
+            }
+        });
+
+        test('updateNameAndBio: a Telegram error counts a failure and still unregisters (D30, characterisation)', async () => {
+            nameBioTelegram({ getMeError: new Error('boom') });
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000053', warmupPhase: WarmupPhase.IDENTITY }));
+            const doc = await h.models[pool].findOne({ mobile: '919100000053' });
+            expect(await h.services[pool].updateNameAndBio(doc as any, nameBioClient(), 2)).toBe(0);
+            const stored = await h.models[pool].findOne({ mobile: '919100000053' }).lean<any>();
+            expect(stored.failedUpdateAttempts).toBe(3);
+            expect(stored.lastUpdateFailure).toBeInstanceOf(Date);
+            expect(stored.status).toBe('active');
+            expect(ledger).toEqual(['getClient:919100000053', 'organic:medium', 'unregister:919100000053']);
+        });
+
+        test('updateNameAndBio: no persona pool on the client marks the step done (D30, characterisation)', async () => {
+            nameBioTelegram();
+            await h.models[pool].create(poolDoc(pool, { mobile: '919100000054', warmupPhase: WarmupPhase.IDENTITY }));
+            const doc = await h.models[pool].findOne({ mobile: '919100000054' });
+            expect(await h.services[pool].updateNameAndBio(doc as any, nameBioClient({ firstNames: [], bufferLastNames: [], promoteLastNames: [], bios: [] }), 0)).toBe(1);
+            expect(ledger).toEqual(['getClient:919100000054', 'organic:medium', 'getMe', 'sleep', 'sleep', 'unregister:919100000054']);
         });
 
         test('create(): caller-supplied lifecycle fields (D21)', async () => {

@@ -76,6 +76,7 @@ const telegramClientFactory = (jest.requireMock('telegram').TelegramClient as an
 
 // ─── TestBaseService (mirrors the established pattern) ───────────────────────
 class TestBaseService extends BaseClientService<BaseClientDocument> {
+    protected otherPoolModel(): any { return null; }
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
     public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => ({ mobile: _mobile, status: _status }));

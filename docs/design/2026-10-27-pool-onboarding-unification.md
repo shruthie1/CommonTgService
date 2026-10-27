@@ -73,7 +73,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D27 | recycled mains stamped SESSION_ROTATED directly | client.service.ts:1516-1563 | none | P/I | — | — | deferred to master-plan W-E | |
 | D28 | phase machine, thresholds, jitter | warmup-phases.ts | same | S/I | — | — | done (shared); jitter deferred to master-plan W-D | |
 | D29 | step implementations | base :1042-1420 | same | S/I | — | — | done (shared); deferred to master-plan W-C/W-D | |
-| D30 | `updateNameAndBio` duplicated (~230 lines) | :497-731 | :164-398 | D/A (copy) | **re-verified:** byte-identical except surname field and other-pool service; one shared method | M8 | todo | |
+| D30 | `updateNameAndBio` duplicated (~230 lines) | :497-731 | :164-398 | D/A (copy) | **re-verified:** byte-identical except surname field and other-pool service; one shared method in `BaseClientService` (surname list from `clientType`, `otherPoolModel()` hook, per-pool 'no persona pool' log text kept). Characterisation (Telegram ledger, pool surname, cross-pool dedup, error path, no-pool path) green before and after | M8 | done | M8 |
 | D31 | `updateUsername` set vs clear | :733-781 | :400-434 | P/I | keep both strategies; a "skip clear when already blank" needs a username read we do not store | — | won't-fix | |
 | D32 | which phases the warmup run processes | skips READY (:1713) | skips READY + SESSION_ROTATED (:1151); health branch :1170-1175 dead | D/?/A | keep values; one loop with a profile list | M9 | todo (values owner-gated Q2) | |
 | D33 | primary-mobile skip uses `===` | :1696 | n/a | P/I | stored mobiles are canonical (schema setter); keep | — | won't-fix | |

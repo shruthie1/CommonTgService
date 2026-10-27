@@ -35,6 +35,8 @@ import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../util
 import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
+import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
+import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-normalizer';
 import {
     getWarmupPhaseAction,
     WarmupPhase,
@@ -552,7 +554,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     abstract get config(): ClientConfig;
 
     /** Update name/bio — buffer uses full name, promote uses firstName + petName */
-    abstract updateNameAndBio(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
+    /** The other pool's model (persona dedup reads its active assignments). */
+    protected abstract otherPoolModel(): Model<any>;
 
     /** Update username — buffer sets username, promote clears it */
     abstract updateUsername(doc: TDoc, client: Client, failedAttempts: number): Promise<number>;
@@ -562,6 +565,249 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     /** Update a document by mobile */
     abstract update(mobile: string, updateDto: BaseClientUpdate): Promise<TDoc>;
+
+    /**
+     * Persona name/bio step for both pools (pool-onboarding M8: was two copies differing only in
+     * the surname list and which other pool is read for persona dedup).
+     */
+    async updateNameAndBio(doc: TDoc, client: Client, failedAttempts: number): Promise<number> {
+        const nameBioModel = this.model as unknown as Model<any>; // typing only: lean() results on a generic TDoc
+        const poolLastNames = this.clientType === 'buffer' ? client.bufferLastNames : client.promoteLastNames;
+        const telegramClient = await connectionManager.getClient(doc.mobile, { autoDisconnect: false, handler: false });
+        try {
+            await performOrganicActivity(telegramClient, 'medium');
+
+            const me = await telegramClient.getMe();
+            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
+
+            let updateCount = 0;
+
+            // A pool with pics but no firstNames/lastNames/bios cannot fail the name/bio step.
+            const hasNameBioPool = (client.firstNames?.length > 0) || (poolLastNames?.length > 0) || (client.bios?.length > 0);
+            if ((client.firstNames?.length > 0) || (poolLastNames?.length > 0) || (client.bios?.length > 0) || (client.profilePics?.length > 0)) {
+                // ── PERSONA BRANCH ──────────────────────────────────────────
+                let assignment: Pick<PersonaAssignment, 'assignedFirstName' | 'assignedLastName' | 'assignedBio' | 'assignedProfilePics'> | null = null;
+                let unassignableReason: string | null = null;
+
+                // 1. Check if doc already has a valid assignment (any assigned field set AND pool version matches)
+                const hasValidAssignment = (
+                    doc.assignedFirstName != null ||
+                    doc.assignedLastName != null ||
+                    doc.assignedBio != null
+                );
+
+                if (hasValidAssignment) {
+                    assignment = {
+                        assignedFirstName: doc.assignedFirstName,
+                        assignedLastName: doc.assignedLastName,
+                        assignedBio: doc.assignedBio,
+                        assignedProfilePics: doc.assignedProfilePics,
+                    };
+                } else {
+                    // 2. Atomic assignment via findOneAndUpdate with guard
+                    const pool: PersonaPool = {
+                        firstNames: client.firstNames,
+                        lastNames: poolLastNames || [],
+                        bios: client.bios || [],
+                        profilePics: client.profilePics || [],
+                        dbcoll: client.dbcoll,
+                    };
+
+                    // Query existing assignments for dedup (this pool's collection)
+                    const existingAssignments: Array<{ mobile: string; assignedFirstName: string; assignedLastName?: string; assignedBio?: string; assignedProfilePics?: string[] }> = await nameBioModel.find({
+                        clientId: doc.clientId, status: 'active',
+                        mobile: { $ne: doc.mobile },
+                        $or: [
+                            { assignedFirstName: { $ne: null } },
+                            { assignedLastName: { $ne: null } },
+                            { assignedBio: { $ne: null } },
+                            { 'assignedProfilePics.0': { $exists: true } },
+                        ],
+                    }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
+
+                    // Cross-collection dedup: also fetch the other pool's assignments (best-effort)
+                    try {
+                        const otherPoolAssignments = await this.otherPoolModel().find({
+                            clientId: doc.clientId, status: 'active',
+                            mobile: { $ne: doc.mobile },
+                            $or: [
+                                { assignedFirstName: { $ne: null } },
+                                { assignedLastName: { $ne: null } },
+                                { assignedBio: { $ne: null } },
+                                { 'assignedProfilePics.0': { $exists: true } },
+                            ],
+                        }, { mobile: 1, assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 }).lean();
+                        existingAssignments.push(...otherPoolAssignments);
+                    } catch { /* cross-collection dedup is best-effort */ }
+
+                    const activeClientAssignment = await this.clientService.getActiveClientAssignment(client);
+                    if (activeClientAssignment && activeClientAssignment.mobile !== doc.mobile && !existingAssignments.some(a => a.mobile === activeClientAssignment.mobile)) {
+                        existingAssignments.push(activeClientAssignment);
+                    }
+
+                    const usedKeys = new Set(existingAssignments.map(a => personaKey({
+                        firstName: a.assignedFirstName,
+                        lastName: a.assignedLastName || '',
+                        bio: a.assignedBio || '',
+                        profilePics: a.assignedProfilePics || [],
+                    })));
+
+                    const candidates = generateCandidateCombinations(pool, doc.mobile);
+                    const chosen = candidates.find(c => !usedKeys.has(personaKey(c)));
+
+                    if (!chosen) {
+                        this.logger.warn(`No unique persona candidate available for ${doc.mobile}, falling back to first candidate`);
+                    }
+
+                    const pick = chosen || candidates[0];
+                    if (pick) {
+                        const result = await nameBioModel.findOneAndUpdate(
+                            {
+                                mobile: doc.mobile,
+                                $or: [
+                                    {
+                                        assignedFirstName: null,
+                                        assignedLastName: null,
+                                        assignedBio: null,
+                                        'assignedProfilePics.0': { $exists: false },
+                                    },
+                                ],
+                            },
+                            { $set: {
+                                assignedFirstName: pick.firstName,
+                                assignedLastName: pick.lastName || null,
+                                assignedBio: pick.bio || null,
+                                assignedProfilePics: pick.profilePics,
+                            } },
+                            { returnDocument: 'after' },
+                        );
+
+                        if (result) {
+                            assignment = {
+                                assignedFirstName: result.assignedFirstName,
+                                assignedLastName: result.assignedLastName,
+                                assignedBio: result.assignedBio,
+                                assignedProfilePics: result.assignedProfilePics,
+                            };
+                            this.logger.log(`Assigned persona "${pick.firstName}" to ${doc.mobile}`);
+                        } else {
+                            // Guard not met: another run may have assigned concurrently. Re-read and
+                            // use that assignment if it holds a name/bio; only otherwise is it a failure.
+                            const fresh = await nameBioModel.findOne(
+                                { mobile: doc.mobile },
+                                { assignedFirstName: 1, assignedLastName: 1, assignedBio: 1, assignedProfilePics: 1 },
+                            ).lean();
+                            if (fresh && (fresh.assignedFirstName != null || fresh.assignedLastName != null || fresh.assignedBio != null)) {
+                                assignment = {
+                                    assignedFirstName: fresh.assignedFirstName,
+                                    assignedLastName: fresh.assignedLastName,
+                                    assignedBio: fresh.assignedBio,
+                                    assignedProfilePics: fresh.assignedProfilePics,
+                                };
+                                this.logger.log(`Using concurrently assigned persona for ${doc.mobile}`);
+                            } else {
+                                this.logger.warn(`Atomic persona assignment failed for ${doc.mobile} (guard condition not met)`);
+                                unassignableReason = 'atomic persona assignment guard not met';
+                            }
+                        }
+                    }
+                }
+
+                // 3. Apply persona corrections if we have an assignment
+                const hasAnyAssignment = assignment != null && (
+                    assignment.assignedFirstName != null ||
+                    assignment.assignedLastName != null ||
+                    assignment.assignedBio != null
+                );
+                if (!hasNameBioPool) {
+                    // Pics-only pool: nothing name/bio-shaped exists to apply. Same as no pool.
+                    this.logger.warn(`Persona pool for ${doc.mobile} has no firstNames/lastNames/bios — marking name/bio step done`);
+                    updateCount = 1;
+                } else if (hasAnyAssignment) {
+                    // Read current TG profile state once (needed for lastName and bio checks)
+                    const fullUser: unknown = await telegramClient.client.invoke(new Api.users.GetFullUser({ id: new Api.InputUserSelf() }));
+                    const currentLastName = this.readNestedString(fullUser, ['users', 0, 'lastName']);
+                    const currentBio = this.readNestedString(fullUser, ['fullUser', 'about']);
+
+                    // Check firstName mismatch
+                    const firstNameWrong = assignment?.assignedFirstName != null
+                        && !nameMatchesAssignment(me.firstName || '', assignment.assignedFirstName);
+                    // Check lastName mismatch (only when assignedLastName is non-null)
+                    const lastNameWrong = assignment?.assignedLastName != null
+                        && !lastNameMatches(currentLastName, assignment.assignedLastName);
+
+                    if (firstNameWrong || lastNameWrong) {
+                        const displayFirstName = assignment.assignedFirstName || me.firstName || '';
+                        const displayLastName = assignment.assignedLastName || '';
+                        this.logger.log(`Updating persona name/lastName for ${doc.mobile}`);
+                        await performOrganicActivity(telegramClient, 'medium');
+                        await telegramClient.client.invoke(new Api.account.UpdateProfile({
+                            firstName: displayFirstName,
+                            lastName: displayLastName,
+                        }));
+                        updateCount++;
+                        await sleep(ClientHelperUtils.gaussianRandom(5000, 1000, 3000, 7000));
+                    }
+
+                    // Check and update bio if assignedBio is non-null and mismatches
+                    if (assignment.assignedBio != null && currentBio !== assignment.assignedBio) {
+                        this.logger.log(`Updating persona bio for ${doc.mobile}`);
+                        await performOrganicActivity(telegramClient, 'light');
+                        await sleep(ClientHelperUtils.gaussianRandom(12500, 3000, 8000, 18000));
+                        await telegramClient.client.invoke(new Api.account.UpdateProfile({ about: assignment.assignedBio }));
+                        updateCount++;
+                    }
+
+                    // Assignment resolved — the step is satisfied even if the profile already
+                    // matched and no write was needed.  Without this the account loops on
+                    // update_name_bio forever (nameBioUpdatedAt never stamped, failures never
+                    // incremented, so zombie detection never fires).  Mirrors updateProfilePhotos.
+                    updateCount = Math.max(updateCount, 1);
+                } else if (unassignableReason) {
+                    // The atomic guard did not match and no concurrent name/bio assignment exists:
+                    // a failure, not a silent no-op (otherwise update_name_bio repeats every run).
+                    return await this.recordNameBioStepFailure(doc.mobile, failedAttempts, unassignableReason);
+                } else {
+                    // No candidate could be built: nothing to apply. Same as no pool.
+                    this.logger.warn(`No persona candidate for ${doc.mobile} — marking name/bio step done`);
+                    updateCount = 1;
+                }
+            } else {
+                // No persona pool on client — stamp nameBioUpdatedAt anyway so the
+                // pipeline advances.  Without this the account loops on update_name_bio forever.
+                // (Log text kept per pool as before.)
+                this.logger.warn(this.clientType === 'buffer'
+                    ? `No persona pool for ${doc.mobile} (clientId: ${doc.clientId}) — marking name/bio step done to unblock pipeline`
+                    : `No persona assignment for ${doc.mobile} — marking name/bio step done with current profile`);
+                updateCount = 1;
+            }
+
+            await this.update(doc.mobile, {
+                ...(updateCount > 0 ? { nameBioUpdatedAt: new Date() } : {}),
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: 0,
+                lastUpdateFailure: null,
+                organicActivityAt: new Date(),
+            });
+            this.logger.debug(`Updated name and bio for ${doc.mobile}`);
+            await sleep(ClientHelperUtils.gaussianRandom(40000, 5000, 30000, 50000));
+            return updateCount;
+        } catch (error: unknown) {
+            const errorDetails = this.handleError(error, 'Error updating profile', doc.mobile);
+            await this.update(doc.mobile, {
+                lastUpdateAttempt: new Date(),
+                failedUpdateAttempts: failedAttempts + 1,
+                lastUpdateFailure: new Date(),
+            });
+            if (isPermanentError(errorDetails)) {
+                const reason = await this.buildPermanentAccountReason(errorDetails.message, telegramClient);
+                await this.deactivateClient(doc.mobile, reason, { permanent: true });
+            }
+            return 0;
+        } finally {
+            await this.safeUnregisterClient(doc.mobile);
+        }
+    }
 
     // ---- Status (pool-onboarding M7: was two identical copies, differing only in the pool label) ----
 
