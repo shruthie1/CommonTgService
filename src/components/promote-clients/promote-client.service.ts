@@ -54,6 +54,7 @@ import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
+import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 
 type ClientCount = { _id: string; count: number };
 type PromoteClientQuery = Record<string, unknown>;
@@ -1295,99 +1296,24 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         targetClientId: string,
         availableDate?: string
     ): Promise<boolean> {
-        // Cross-collection check: skip if already enrolled anywhere
-        const enrolledIn = await this.isMobileEnrolledAnywhere(document.mobile);
-        if (enrolledIn) {
-            this.logger.debug(`Skipping ${document.mobile}: already enrolled in ${enrolledIn}`);
-            return false;
-        }
+        return enrolPoolClientFromUser(this.enrolmentPort(), document, targetClientId, availableDate);
+    }
 
-        const telegramClient = await connectionManager.getClient(document.mobile, { autoDisconnect: false });
-
-        try {
-            const hasPassword = await telegramClient.hasPassword();
-            if (hasPassword) {
-                await this.updateUser2FAStatus(document.tgId, document.mobile);
-                return false;
-            }
-
-            // No removeExternalLoginSessions, no set2fa — just get channel info and enroll
-            const channels = await channelInfo(telegramClient.client, true);
-            await sleep(ClientHelperUtils.gaussianRandom(7500, 1250, 5000, 10000));
-
-            const user = (await this.usersService.search({ mobile: document.mobile }))[0];
-            if (!user?.session?.trim()) {
-                this.logger.warn(`Skipping promote enrollment for ${document.mobile}: source user/session missing`);
-                return false;
-            }
-            const targetAvailableDate = availableDate || ClientHelperUtils.getTodayDateString();
-
-            const promoteClient: CreatePromoteClientDto = {
-                tgId: document.tgId,
-                lastActive: new Date().toISOString(),
-                mobile: document.mobile,
-                session: user.session.trim(), // Use old trusted session
-                availableDate: targetAvailableDate,
-                channels: channels.ids.length,
-                clientId: targetClientId,
-                status: 'active',
-                message: 'Enrolled for warmup',
-                lastUsed: null,
-            };
-
-            // Serialize the dedup re-check + write per canonical mobile (across buffer + promote
-            // in this process) so a concurrent buffer enrollment of the same mobile cannot also
-            // land — two live sessions on one account => Telegram SESSION_REVOKED (account loss).
-            const enrolled = await withEnrollmentLock(this.canonicalMobile(document.mobile), async () => {
-                const already = await this.isMobileEnrolledAnywhere(document.mobile);
-                if (already && already !== 'promoteClients') {
-                    this.logger.warn(`Skipping promote enrollment for ${document.mobile}: now enrolled in ${already}`);
-                    return false;
-                }
-                await this.promoteClientModel.findOneAndUpdate(
-                    { mobile: document.mobile },
-                    {
-                        $set: {
-                            ...promoteClient,
-                            warmupPhase: WarmupPhase.ENROLLED,
-                            warmupJitter: ClientHelperUtils.generateWarmupJitter(),
-                            enrolledAt: new Date(),
-                        }
-                    },
-                    { returnDocument: 'after', upsert: true }
-                ).exec();
-                return true;
-            });
-            if (!enrolled) return false;
-
-            // Do NOT mark user as 2FA-enabled here — 2FA is set later during settling phase
-            this.logger.log(`Created PromoteClient for ${targetClientId} with availability ${targetAvailableDate}`);
-            await this.sendAccountNotice(
-                {
-                    severity: 'success',
-                    title: 'Promote enrolled',
-                    fields: [
-                        { label: 'Client ID', value: targetClientId },
-                        { label: 'Mobile', value: document.mobile },
-                        { label: 'Available date', value: targetAvailableDate, code: false },
-                        { label: 'Channels', value: channels.ids.length, code: false },
-                        { label: 'Warmup phase', value: WarmupPhase.ENROLLED, code: false },
-                        { label: 'Source TG ID', value: document.tgId },
-                    ],
-                }
-            );
-            return true;
-        } catch (error: unknown) {
-            const errorDetails = this.handleError(error, 'Error processing client', document.mobile);
-            if (isPermanentError(errorDetails)) {
-                // Retire the source user — cascades to deactivate buffer/promote pool docs
-                try { await this.usersService.expireAccount(document.mobile, errorDetails.message); } catch { }
-            }
-            return false;
-        } finally {
-            await this.safeUnregisterClient(document.mobile);
-            await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
-        }
+    /** Bound view of this service for the shared enrolment pipeline (shared/onboarding/enrolment.ts). */
+    private enrolmentPort(): EnrolmentPort {
+        return {
+            profile: PROMOTE_PROFILE,
+            model: this.model,
+            logger: this.logger,
+            usersService: this.usersService,
+            canonicalMobile: (mobile) => this.canonicalMobile(mobile),
+            isMobileEnrolledAnywhere: (mobile) => this.isMobileEnrolledAnywhere(mobile),
+            updateUser2FAStatus: (tgId, mobile) => this.updateUser2FAStatus(tgId, mobile),
+            sendAccountNotice: (input) => this.sendAccountNotice(input),
+            handleError: (error, context, mobile) => this.handleError(error, context, mobile),
+            safeUnregisterClient: (mobile) => this.safeUnregisterClient(mobile),
+            docExtras: () => ({ lastActive: new Date().toISOString() }),
+        };
     }
 
     // ---- Promote-specific: Pool management ----

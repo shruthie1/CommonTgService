@@ -284,6 +284,45 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             expect(await h.models[pool].countDocuments({})).toBe(0);
         });
 
+        test('auto-enrol: permanent Telegram error retires the source user (D24, characterisation)', async () => {
+            addUser('919100000030');
+            (channelInfo as jest.Mock).mockImplementationOnce(async (client: { mobile: string }) => {
+                ledger.push(`channelInfo:${client.mobile}`);
+                throw new Error('SESSION_REVOKED');
+            });
+            const result = await autoEnrol(pool);
+            expect(result).toEqual({ createdCount: 0, attemptedCount: 1, createdEntries: [] });
+            expect(ledger).toEqual(['getClient:919100000030', 'hasPassword:919100000030', 'channelInfo:919100000030', 'unregister:919100000030', 'sleep']);
+            expect(h.usersService.expireAccount).toHaveBeenCalledTimes(1);
+            expect(h.usersService.expireAccount.mock.calls[0][0]).toBe('919100000030');
+            expect(await h.models[pool].countDocuments({})).toBe(0);
+        });
+
+        test('auto-enrol: other pool lands during the Telegram round-trip -> re-check under the lock skips the write (D5, characterisation)', async () => {
+            addUser('919100000031');
+            (channelInfo as jest.Mock).mockImplementationOnce(async (client: { mobile: string }) => {
+                ledger.push(`channelInfo:${client.mobile}`);
+                await h.models[other(pool)].create(poolDoc(other(pool), { mobile: '919100000031' }));
+                return { chatsArrayLength: 3, canSendTrueCount: 3, canSendFalseCount: 0, ids: ['a'], canSendFalseChats: [] };
+            });
+            const result = await autoEnrol(pool);
+            expect(result.createdCount).toBe(0);
+            expect(ledger).toEqual(['getClient:919100000031', 'hasPassword:919100000031', 'channelInfo:919100000031', 'sleep', 'unregister:919100000031', 'sleep']);
+            expect(await h.models[pool].countDocuments({})).toBe(0);
+            expect(h.services[pool].sendAccountNotice).not.toHaveBeenCalled();
+        });
+
+        test('auto-enrol: success notice (characterisation)', async () => {
+            addUser('919100000032');
+            await autoEnrol(pool);
+            const notice = (h.services[pool].sendAccountNotice as jest.Mock).mock.calls[0][0];
+            expect(notice.title).toBe(pool === 'buffer' ? 'Buffer enrolled' : 'Promote enrolled');
+            expect(notice.fields.map((f: any) => [f.label, f.value])).toEqual([
+                ['Client ID', CLIENT_ID], ['Mobile', '919100000032'], ['Available date', expect.any(String)],
+                ['Channels', 3], ['Warmup phase', WarmupPhase.ENROLLED], ['Source TG ID', 'tg-919100000032'],
+            ]);
+        });
+
         test('setAs*: Telegram ledger and pacing (D6)', async () => {
             addUser('919100000004');
             await setAs(pool, '919100000004');

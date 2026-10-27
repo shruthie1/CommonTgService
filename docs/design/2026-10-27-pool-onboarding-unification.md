@@ -47,7 +47,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D1 | `users` candidate filter | buffer-client.service.ts:2111-2121 | promote-client.service.ts:1444-1454 | D/I (identical) | one shared query | M6 | todo | |
 | D2 | goodIds exclusion set | :1663-1674 | :1105-1113 | D/I | one shared builder | M6 | todo | |
 | D3 | who decides buffer vs promote | first scheduler, lowest tgId | same | ?/? | no code exists; do not invent a rule | — | owner-gated (Q1) | |
-| D4 | pre-enrol probe (hasPassword, channelInfo) | :1966-1978 | :1303-1313 (no debug log on 2FA skip) | D/I | one enrolment function | M5 | todo | |
+| D4 | pre-enrol probe (hasPassword, channelInfo) | :1966-1978 | :1303-1313 (no debug log on 2FA skip) | D/I | one enrolment function (`shared/onboarding/enrolment.ts`) | M5 | done | M5 |
 | D5 | cross-pool dedup is in-process only | :1942-1952, 2005-2024 | :1279-1289, 1339-1358 | D/I | Mongo-backed claim | M13 | todo | |
 | D6 | `setAs*` cross-pool guard | refuses mains + promote (:1262-1273) | refuses mains only (:818-823); neither takes the lock | D/**A** | promote also refuses buffer; both take the lock and re-check inside it | M1 | done | 5b30cad5 |
 | D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | operator override or same as auto-enrol? | — | owner-gated (Q7) | |
@@ -56,18 +56,18 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D10 | manual bulk enrol bypasses the cap | `addNewUserstoBufferClients` (:2059-2084) uses window need, no counted/cap map -> cap 20 counted from 0, no fleet budget | **re-verified:** promote manual (:1393-1418) also passes no counts -> cap 30 counted from 0 (the input said it matched scheduled; it does not) | D/A | manual path uses the same plan/caps as the scheduled run, both pools | M6 | todo | |
 | D11 | `badIds` parameter never used | :2086-2100 | :1420-1433 | D/A | part of the bulk-enrol request body; keep the parameter (contract) | — | won't-fix | |
 | D12 | need calculation / fleet budget | dynamic plan (:303-437, buffer-supply.ts) | legacy window + cap 30 (:1214-1238), no engine budget | P/I + ? | promote gets the engine budget only if it does not cut supply sharply (measure) | M12 | todo | |
-| D13 | per-client cap | dynamic or 20 (buffer-supply.ts:115,150) | 30 (:62) | P/I | profile value (`legacyHealthyCap`) | M4 | done | M4 |
-| D14 | healthy-for-cap | `isHealthyBufferClientForCap` (:268-288) | `isHealthyPromoteClientForCap` (:143-160) | D/A (copy), I (floor) | one function `isHealthyForLegacyCap`, floor from profile | M4 | done | M4 |
+| D13 | per-client cap | dynamic or 20 (buffer-supply.ts:115,150) | 30 (:62) | P/I | profile value (`legacyHealthyCap`) | M4 | done | 3b36a819 |
+| D14 | healthy-for-cap | `isHealthyBufferClientForCap` (:268-288) | `isHealthyPromoteClientForCap` (:143-160) | D/A (copy), I (floor) | one function `isHealthyForLegacyCap`, floor from profile | M4 | done | 3b36a819 |
 | D15 | spam-limit state | schema + supply shift | none | P/? | — | — | deferred to master-plan W-A (Q4) | |
 | D16 | config block | :476-493 | :123-141 | P/I + ? | floor/minTotal/pacing read from the profile, values unchanged | M4 | done (pacing values owner-gated Q3) | M4 |
 | D17 | promote `totalSlotsNeeded` loop is a dead calculation | — | :1242-1256 | D/A | remove the dead math, keep the `>0` gate semantics | M6 | todo | |
-| D18 | fields on auto-enrol | :1989-2022 | + `lastActive` ISO (:1323-1356) | D/I | profile `docExtras` | M5 | todo | |
+| D18 | fields on auto-enrol | :1989-2022 | + `lastActive` ISO (:1323-1356) | D/I | port `docExtras` (promote `lastActive`) | M5 | done | M5 |
 | D19 | promote `lastActive`: ISO (auto) vs `'default'` (setAs, :850) | — | :850 vs :1325 | D/A | value read by tg-platform promote selection? not checked; keep | — | owner-gated (Q10) | |
 | D20 | `create()` default `message` | none (:816-826) | `'Account is functioning properly'` (:469-481) | D/A | harmless; keep | — | won't-fix | |
 | D21 | `create()` overwrites caller lifecycle (`warmupPhase`, `sessionRotatedAt`) | :816-825, reached from `returnOldClientToBufferPool` (client.service.ts:1545,1563) | same (:469-481) | P/A | **not changed here.** Fixing it would let a returning main without a buffer doc land directly in `session_rotated`, which is exactly the dirty re-entry W-E gates. Today's overwrite sends it back through warmup instead. | M3 | deferred to master-plan W-E | |
 | D22 | schema strictness (`clientId`/`session` optional, no status enum on promote) | buffer-client.schema.ts:30-79 | promote-client.schema.ts:27-51 | D/A | tightening a schema can reject existing docs; out of scope | — | won't-fix | |
 | D23 | promote `remove()` raw mobile | canonicalises (:913-916) | `deleteOne({ mobile })` (:754) | D/A | **re-verified:** not a lost delete (the schema `set: canonicalizeMobile` also canonicalises query values; M0 proves `+91...` deletes). Remaining drift: malformed mobile -> 500 not 400; notice shows the raw input. Canonicalise explicitly | M2 | done | 29ba782b |
-| D24 | enrol failure not logged on promote | :2043-2050 | :1378-1384 | D/A | one enrolment function logs for both | M5 | todo | |
+| D24 | enrol failure not logged on promote | :2043-2050 | :1378-1384 | D/A | one enrolment function logs for both (log-only change) | M5 | done | M5 |
 | D25 | session copied from `users.session`, no login | :1991 | :1327 | D/I | — | — | done (already equal) | |
 | D26 | READY -> SESSION_ROTATED | base :1506-1586, 2974-3083 | same | S/I | — | — | done (shared); rotation gate deferred to master-plan W-E | |
 | D27 | recycled mains stamped SESSION_ROTATED directly | client.service.ts:1516-1563 | none | P/I | — | — | deferred to master-plan W-E | |
