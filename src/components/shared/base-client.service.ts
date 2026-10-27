@@ -34,7 +34,7 @@ import type { NotificationSeverity, RichNotificationField, RichNotificationInput
 import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../utils/notice-batch';
 import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
-import { BUFFER_PROFILE, ONBOARDING_PACING, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
+import { BUFFER_PROFILE, HEALTH_CHECK_CONNECTIONS_PER_RUN, ONBOARDING_PACING, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
 import { buildEnrolmentExclusions } from './onboarding/candidate-source';
 import type { CheckEntry } from './check-summary-notification';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
@@ -964,6 +964,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         // Sort by priority (highest first)
         toProcess.sort((a, b) => b.priority - a.priority);
+        // Health-check connects are capped per run (HEALTH_CHECK_CONNECTIONS_PER_RUN): session_rotated
+        // accounts keep their priority slots but are handed out oldest-checked first, so the ones a
+        // full run defers go first next run.
+        this.orderSessionRotatedOldestCheckedFirst(toProcess);
+        const healthCheckCap = HEALTH_CHECK_CONNECTIONS_PER_RUN;
+        let healthCheckConnects = 0;
+        let healthChecksDeferred = 0;
 
         // Self-healing cap: size this run's mutation budget to the live pending backlog so the
         // pool drains toward the target SLA — grows when starved, shrinks when caught up.
@@ -976,8 +983,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (totalUpdates >= effectiveCap) break;
             const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
+                // Cap reached: defer untouched (no write), so the account stays eligible next run.
+                if (healthCheckConnects >= healthCheckCap) {
+                    healthChecksDeferred++;
+                    continue;
+                }
                 const lastChecked = doc.lastChecked ? new Date(doc.lastChecked).getTime() : 0;
                 const healthCheck = await this.performHealthCheck(doc.mobile, lastChecked, now);
+                if (healthCheck.performed !== false) healthCheckConnects++;
                 if (!healthCheck.passed) continue;
             }
             const plannedAction = warmupAction.action; // computed once above; reused here
@@ -1007,7 +1020,29 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             }
         }
 
+        if (healthChecksDeferred > 0) {
+            this.logger.log(`${profile.label} warmup run: health-check cap ${healthCheckCap} reached, ${healthChecksDeferred} session_rotated account(s) deferred to the next run`);
+        }
+
         await hooks.enrolAfterWarmup({ clients, assigned, goodIds, now, totalUpdates, updatedEntries });
+    }
+
+    /**
+     * Re-deal the session_rotated entries of an already priority-sorted list so that, within the
+     * slots they occupy, the least recently checked comes first (never checked = oldest; ties by
+     * last attempt, then the existing order). Other entries keep their positions.
+     */
+    private orderSessionRotatedOldestCheckedFirst(list: Array<{ doc: TDoc }>): void {
+        const slots: number[] = [];
+        list.forEach((entry, i) => { if (entry.doc.warmupPhase === WarmupPhase.SESSION_ROTATED) slots.push(i); });
+        if (slots.length < 2) return;
+        const ts = (v: Date | string | null | undefined) => ClientHelperUtils.getTimestamp(v) || 0;
+        const ordered = slots
+            .map((i, rank) => ({ entry: list[i], rank }))
+            .sort((a, b) => (ts(a.entry.doc.lastChecked) - ts(b.entry.doc.lastChecked))
+                || (ts(a.entry.doc.lastHealthCheckAttemptAt) - ts(b.entry.doc.lastHealthCheckAttemptAt))
+                || (a.rank - b.rank));
+        slots.forEach((slot, k) => { list[slot] = ordered[k].entry; });
     }
 
     // ---- Join sweep + queue refill (pool-onboarding D36/D37/D40: one implementation; every
@@ -1654,7 +1689,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     // ---- Health Check (redesigned: organic activity instead of SetPrivacy) ----
 
-    protected readonly PERIODIC_HEALTH_CHECK_LIMIT = 25;
+    /** Per-run health-check connects (owner 2026-10-27; was 25). */
+    protected readonly PERIODIC_HEALTH_CHECK_LIMIT = HEALTH_CHECK_CONNECTIONS_PER_RUN;
     /** Extra candidates fetched so mobiles that become busy mid-round can be skipped without shrinking the round. */
     protected readonly PERIODIC_HEALTH_CHECK_SPARE = 10;
 
@@ -1671,7 +1707,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * Periodic health-check candidates. Only ready/session_rotated accounts that are not live
      * (inUse) and not busy. Never-checked accounts (lastChecked null/missing; `$lt` never matches
      * those) go first, ordered by last attempt (nulls first) then channels, excluding accounts
-     * attempted in the last 24 h; then accounts last checked more than 5 days ago by channels.
+     * attempted in the last 24 h; then accounts last checked more than 5 days ago, oldest-checked
+     * first (owner 2026-10-27: a capped run defers the newest, so nothing starves).
      */
     protected async selectHealthCheckCandidates(excludedMobiles: Iterable<string>, fetchLimit: number): Promise<TDoc[]> {
         const excluded = Array.from(new Set(excludedMobiles));
@@ -1695,13 +1732,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const stale = neverChecked.length < fetchLimit
             ? await this.model
                 .find({ ...base, lastChecked: { $lt: new Date(now - 5 * this.ONE_DAY_MS) } })
-                .sort({ channels: 1 })
+                .sort({ lastChecked: 1, channels: 1 })
                 .limit(fetchLimit - neverChecked.length)
             : [];
         return [...neverChecked, ...stale];
     }
 
-    /** Runs up to PERIODIC_HEALTH_CHECK_LIMIT health checks; busy mobiles are skipped and do not count. */
+    /**
+     * Opens at most PERIODIC_HEALTH_CHECK_LIMIT health-check connections; busy mobiles and checks that
+     * were not due (no connection) do not count.
+     */
     protected async runPeriodicHealthChecks(extraExcludedMobiles: Iterable<string> = []): Promise<number> {
         const limit = this.PERIODIC_HEALTH_CHECK_LIMIT;
         const clients = await this.selectHealthCheckCandidates(
@@ -1721,8 +1761,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                 await sleep(ClientHelperUtils.gaussianRandom(16000, 2500, 12000, 20000));
             }
             const lastChecked = client.lastChecked ? new Date(client.lastChecked).getTime() : 0;
-            await this.performHealthCheck(client.mobile, lastChecked, now);
-            checked++;
+            const result = await this.performHealthCheck(client.mobile, lastChecked, now);
+            if (result?.performed !== false) checked++;
         }
         return checked;
     }

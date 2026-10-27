@@ -583,7 +583,7 @@ describe('PromoteClientService coverage', () => {
         expect(healthSpy).toHaveBeenCalledWith('15559400001', 0, expect.any(Number));
     });
 
-    it('updateInfo orders never-checked promote clients first, then stale by channels ascending, and skips recently-checked', async () => {
+    it('updateInfo orders never-checked promote clients first, then stale oldest-checked first, and skips recently-checked', async () => {
         await service.create(makePromoteClientData({ mobile: '15559400011', status: 'active', channels: 300, lastChecked: null }));
         await service.create(makePromoteClientData({ mobile: '15559400012', status: 'active', channels: 250, lastChecked: null }));
         await service.create(makePromoteClientData({ mobile: '15559400013', status: 'active', channels: 10, lastChecked: new Date('2020-01-01') }));
@@ -594,10 +594,10 @@ describe('PromoteClientService coverage', () => {
         const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         await service.updateInfo();
         const called = healthSpy.mock.calls.map(([mobile]) => mobile);
-        expect(called).toEqual(['15559400012', '15559400011', '15559400014', '15559400013']);
+        expect(called).toEqual(['15559400012', '15559400011', '15559400013', '15559400014']);
     });
 
-    it('updateInfo keeps the 25 cap, filling it with never-checked promote clients before stale ones', async () => {
+    it('updateInfo keeps the per-run cap (20, owner 2026-10-27), filling it with never-checked promote clients before stale ones', async () => {
         for (let i = 0; i < 26; i++) {
             await service.create(makePromoteClientData({ mobile: `155594010${String(i).padStart(2, '0')}`, status: 'active', channels: 200, lastChecked: null }));
         }
@@ -606,7 +606,7 @@ describe('PromoteClientService coverage', () => {
         const healthSpy = jest.spyOn(service as any, 'performHealthCheck').mockResolvedValue({ passed: true, performed: true });
         await service.updateInfo();
         const called = healthSpy.mock.calls.map(([mobile]) => mobile);
-        expect(called).toHaveLength(25);
+        expect(called).toHaveLength(20);
         expect(called).not.toContain('15559402000');
     });
 
@@ -637,7 +637,7 @@ describe('PromoteClientService coverage', () => {
             expect(calledMobiles(spy).sort()).toEqual(['15559600001', '15559600002', '15559600005']);
         });
 
-        it('H2: mobiles in the join/leave queues are excluded and the 25 slots are filled from the rest', async () => {
+        it('H2: mobiles in the join/leave queues are excluded and the 20 slots (per-run cap) are filled from the rest', async () => {
             for (let i = 0; i < 30; i++) {
                 const mobile = `155596100${String(i).padStart(2, '0')}`;
                 await mkNever(mobile, { channels: i });
@@ -654,11 +654,11 @@ describe('PromoteClientService coverage', () => {
                 (service as any).leaveChannelMap.clear();
             }
             const called = calledMobiles(spy);
-            expect(called).toHaveLength(25);
+            expect(called).toHaveLength(20);
             expect(called).not.toContain('15559610000');
             expect(called).not.toContain('15559610001');
             expect(called).not.toContain('15559610002');
-            expect(called).toContain('15559610027');
+            expect(called).toContain('15559610022');
         });
 
         it('H2: mobiles in an active client setup (new and existing) are excluded', async () => {
@@ -689,9 +689,9 @@ describe('PromoteClientService coverage', () => {
                 (service as any).joinChannelMap.clear();
             }
             const called = calledMobiles(spy);
-            expect(called).toHaveLength(25);
+            expect(called).toHaveLength(20);
             expect(called).not.toContain('15559630001');
-            expect(called).toContain('15559630025');
+            expect(called).toContain('15559630020');
         });
 
         it('M3: the live (inUse) account is never selected', async () => {

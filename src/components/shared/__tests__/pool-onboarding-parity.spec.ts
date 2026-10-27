@@ -76,6 +76,7 @@ export const CURRENT = {
         joinSweepSleepsPerAccount: 4,       // D38, Q3 2026-10-27 (was 1; 3 promote sleeps + gap, gap after the last too)
         joinSweepErrorWipesQueues: false,   // D39
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
+        warmupRunHealthCheckConnects: 20,   // owner 2026-10-27: per-run cap on health-check connects
     },
     promote: {
         operationalFloor: 230,
@@ -96,6 +97,7 @@ export const CURRENT = {
         joinSweepSleepsPerAccount: 4,
         joinSweepErrorWipesQueues: false,   // M11
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
+        warmupRunHealthCheckConnects: 0,    // no session_rotated in the promote warmup run (Q2)
     },
 };
 
@@ -684,6 +686,38 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 expect(processedMobiles).toEqual(['919100000010']);
             }
             expect(ledger.filter((e) => !e.startsWith('sleep'))).toEqual([]);
+        });
+
+        test('warmup run: health-check connects capped per run, the rest deferred oldest-checked-first (owner 2026-10-27)', async () => {
+            const svc = h.services[pool];
+            const day = 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            // 24 session_rotated accounts all due a check: 4 never checked, then lastChecked 30..11 days ago.
+            const mobiles: string[] = [];
+            for (let i = 0; i < 24; i++) {
+                const mobile = `9191000002${String(i).padStart(2, '0')}`;
+                mobiles.push(mobile);
+                await h.models[pool].create(poolDoc(pool, {
+                    mobile, warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 300, enrolledAt: new Date(now - 40 * day),
+                    sessionRotatedAt: new Date(now - 20 * day), lastChecked: i < 4 ? null : new Date(now - (34 - i) * day),
+                }));
+            }
+            jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'test', priority: 1 });
+            jest.spyOn(svc, pool === 'buffer' ? 'addNewUserstoBufferClientsDynamic' : 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({ createdCount: 0, attemptedCount: 0, createdEntries: [] });
+            jest.spyOn(svc, pool === 'buffer' ? 'sendBufferCheckSummaryNotification' : 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
+            const run = async () => {
+                ledger.length = 0;
+                await svc[pool === 'buffer' ? '_checkBufferClientsInternal' : '_checkPromoteClientsInternal']();
+                return ledger.filter((e) => e.startsWith('getClient:')).map((e) => e.slice('getClient:'.length));
+            };
+
+            const cap = want.warmupRunHealthCheckConnects;
+            const first = await run();
+            // Never-checked first, then oldest lastChecked: the newest-checked accounts wait.
+            expect(first).toEqual(mobiles.slice(0, cap));
+            const second = await run();
+            // Checked accounts are no longer due; the deferred ones go next run (nothing starves).
+            expect(second).toEqual(mobiles.slice(cap, cap * 2));
         });
 
         test('join sweep: primary-mobile exclusion and per-account pacing (D37/D38)', async () => {

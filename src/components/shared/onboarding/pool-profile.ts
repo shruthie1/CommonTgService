@@ -48,6 +48,15 @@ export const ONBOARDING_PACING = Object.freeze({
     }),
 });
 
+/**
+ * Per-run cap on Telegram connections opened by health checks (owner 2026-10-27, both pools): the
+ * warmup run's session_rotated checks and the periodic updateInfo run each stop connecting at this
+ * many; the rest wait for the next run, oldest-checked first. Sized from the measured buffer warmup
+ * run (2026-10-27, Mongo lastHealthCheckAttemptAt per run, 17 runs over 12 days: median 11, p75 ~16,
+ * max 27). Also replaces updateInfo's former limit of 25.
+ */
+export const HEALTH_CHECK_CONNECTIONS_PER_RUN = 20;
+
 /** Join sweep + queue refill per-pool values (pacing is shared: ONBOARDING_PACING.joinSweep). */
 export interface JoinSweepProfile {
     activeSetupMessage: string;
