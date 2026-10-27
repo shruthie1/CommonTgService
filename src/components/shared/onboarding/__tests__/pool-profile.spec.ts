@@ -17,7 +17,7 @@ describe('pool profiles (M4)', () => {
                 scopesByClientId: true, logPreparedSweep: true, errorContext: 'JoinChannelErr',
                 resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}', wrapError: null,
             },
-            warmupRun: { logGoodIdsCount: true, healthCheckShare: 20 },
+            warmupRun: { logGoodIdsCount: true, healthCheckShare: 20, capCountsSessionRotated: true }, // P1-1: as before the unification
             consumerMinAgeDays: 15,
         });
         expect(PROMOTE_PROFILE).toEqual({
@@ -35,7 +35,7 @@ describe('pool profiles (M4)', () => {
                 resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
                 wrapError: { log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' },
             },
-            warmupRun: { logGoodIdsCount: false, healthCheckShare: 4 }, // Q2: a few per run
+            warmupRun: { logGoodIdsCount: false, healthCheckShare: 4, capCountsSessionRotated: false }, // Q2: a few per run; P1-1: rotated not in the cap backlog
             consumerMinAgeDays: 15, // Q8 2026-10-27 (tg-platform fef4006)
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);

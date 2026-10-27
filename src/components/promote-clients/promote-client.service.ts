@@ -54,7 +54,7 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
-import { withPoolClaim } from '../shared/onboarding/pool-claim';
+import { describeClaimHolder, withPoolClaim } from '../shared/onboarding/pool-claim';
 import { ONBOARDING_PACING, PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
@@ -396,7 +396,9 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     private async withPoolClaimOrRefuse<T>(canonicalMobile: string, fn: () => Promise<T>): Promise<T> {
         const claim = await withPoolClaim(this.model, canonicalMobile, 'promoteClients', fn);
         if ('heldBy' in claim) {
-            throw new BadRequestException(`Mobile ${canonicalMobile} is being enrolled in ${claim.heldBy} right now; refusing to create a cross-pool PromoteClient`);
+            throw new BadRequestException(claim.concurrent
+                ? `Mobile ${canonicalMobile} is being enrolled by ${describeClaimHolder(claim)} right now; refusing to create a duplicate PromoteClient`
+                : `Mobile ${canonicalMobile} is being enrolled in ${claim.heldBy} right now; refusing to create a cross-pool PromoteClient`);
         }
         return claim.value;
     }

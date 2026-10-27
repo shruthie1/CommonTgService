@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException, OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Model, Document } from 'mongoose';
 import { Channel } from '../channels/schemas/channel.schema';
 import { TelegramService } from '../Telegram/Telegram.service';
@@ -34,6 +34,7 @@ import type { NotificationSeverity, RichNotificationField, RichNotificationInput
 import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../utils/notice-batch';
 import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
+import { ensurePoolClaimIndex, POOL_CLAIM_COLLECTION } from './onboarding/pool-claim';
 import { BUFFER_PROFILE, HEALTH_CHECK_CONNECTIONS_PER_RUN, ONBOARDING_PACING, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
 import { buildEnrolmentExclusions } from './onboarding/candidate-source';
 import type { CheckEntry } from './check-summary-notification';
@@ -233,7 +234,7 @@ export interface WarmupRunContext<TDoc> {
     updatedEntries: CheckEntry[];
 }
 
-export abstract class BaseClientService<TDoc extends BaseClientDocument> implements OnModuleDestroy {
+export abstract class BaseClientService<TDoc extends BaseClientDocument> implements OnModuleInit, OnModuleDestroy {
     protected readonly logger: Logger;
     protected joinChannelMap: Map<string, (Channel | ActiveChannel)[]> = new Map();
     protected leaveChannelMap: Map<string, string[]> = new Map();
@@ -305,7 +306,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * [MIN_UPDATES_PER_CYCLE, MAX_UPDATES_PER_CYCLE]. Pure function of its input — no I/O.
      *
      * @param pendingMutationCount eligible accounts wanting a slot-consuming mutation this run
-     *        (the non-session_rotated set the loop already built).
+     *        (the set the loop already built; session_rotated accounts only where the pool's
+     *        `warmupRun.capCountsSessionRotated` says so: buffer yes, promote no).
      */
     protected getEffectiveUpdatesCap(pendingMutationCount: number): number {
         const pending = Math.max(0, Math.floor(pendingMutationCount || 0));
@@ -974,7 +976,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
         // Self-healing cap: size this run's mutation budget to the live pending backlog so the
         // pool drains toward the target SLA — grows when starved, shrinks when caught up.
-        const effectiveCap = this.getEffectiveUpdatesCap(toProcess.length);
+        const capBacklog = profile.warmupRun.capCountsSessionRotated
+            ? toProcess.length
+            : toProcess.filter((entry) => entry.doc.warmupPhase !== WarmupPhase.SESSION_ROTATED).length;
+        const effectiveCap = this.getEffectiveUpdatesCap(capBacklog);
         let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
         let organicUpdates = 0;   // separate budget so organic no-ops can't monopolize the run
         this.logger.log(`${profile.label} warmup run: ${toProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
@@ -983,6 +988,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             if (totalUpdates >= effectiveCap) break;
             const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
             if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
+                // Same skips as the periodic run (post-review P2-a / P1-2): busy in a join/leave
+                // queue or client setup, or a check that failed within the retry window. Neither
+                // connects, so neither counts against the cap; both stay eligible next run.
+                if (this.getHealthCheckBusyMobiles().has(doc.mobile)) {
+                    this.logger.debug(`Skipping ${pool} warmup health check for ${doc.mobile}: busy in join/leave queue or client setup`);
+                    continue;
+                }
+                if (this.healthCheckFailedRecently(doc, now)) continue;
                 // Cap reached: defer untouched (no write), so the account stays eligible next run.
                 if (healthCheckConnects >= healthCheckCap) {
                     healthChecksDeferred++;
@@ -1029,20 +1042,35 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     /**
      * Re-deal the session_rotated entries of an already priority-sorted list so that, within the
-     * slots they occupy, the least recently checked comes first (never checked = oldest; ties by
-     * last attempt, then the existing order). Other entries keep their positions.
+     * slots they occupy, the least recently checked OR attempted comes first (key = the later of
+     * lastChecked and lastHealthCheckAttemptAt, so an account whose checks keep failing goes behind
+     * the ones not tried lately: post-review P1-2; never touched = oldest; ties keep the existing
+     * order). Other entries keep their positions.
      */
     private orderSessionRotatedOldestCheckedFirst(list: Array<{ doc: TDoc }>): void {
         const slots: number[] = [];
         list.forEach((entry, i) => { if (entry.doc.warmupPhase === WarmupPhase.SESSION_ROTATED) slots.push(i); });
         if (slots.length < 2) return;
         const ts = (v: Date | string | null | undefined) => ClientHelperUtils.getTimestamp(v) || 0;
+        const touched = (doc: TDoc) => Math.max(ts(doc.lastChecked), ts(doc.lastHealthCheckAttemptAt));
         const ordered = slots
             .map((i, rank) => ({ entry: list[i], rank }))
-            .sort((a, b) => (ts(a.entry.doc.lastChecked) - ts(b.entry.doc.lastChecked))
-                || (ts(a.entry.doc.lastHealthCheckAttemptAt) - ts(b.entry.doc.lastHealthCheckAttemptAt))
-                || (a.rank - b.rank));
+            .sort((a, b) => (touched(a.entry.doc) - touched(b.entry.doc)) || (a.rank - b.rank));
         slots.forEach((slot, k) => { list[slot] = ordered[k].entry; });
+    }
+
+    /**
+     * A health check was attempted within HEALTH_CHECK_RETRY_AFTER_MS and did not succeed (the
+     * attempt is later than lastChecked; a success stamps lastChecked just after its attempt).
+     * Such an account is not retried yet (post-review P1-2), same window as the never-checked tier.
+     */
+    protected healthCheckFailedRecently(
+        doc: { lastChecked?: Date | string | null; lastHealthCheckAttemptAt?: Date | string | null },
+        now: number,
+    ): boolean {
+        const attempt = ClientHelperUtils.getTimestamp(doc.lastHealthCheckAttemptAt) || 0;
+        if (!attempt || now - attempt >= this.HEALTH_CHECK_RETRY_AFTER_MS) return false;
+        return attempt > (ClientHelperUtils.getTimestamp(doc.lastChecked) || 0);
     }
 
     // ---- Join sweep + queue refill (pool-onboarding D36/D37/D40: one implementation; every
@@ -1343,6 +1371,19 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     // ---- Lifecycle ----
+
+    /**
+     * Create the cross-process enrolment claim index at startup (post-review P1-3) so a failure
+     * shows in the boot log, not first at an enrolment. Not fatal: enrolment re-checks the index
+     * before any Telegram connect and skips until it exists (a failed attempt is retried).
+     */
+    async onModuleInit(): Promise<void> {
+        try {
+            await ensurePoolClaimIndex(this.model as unknown as Model<any>);
+        } catch (error: unknown) {
+            this.logger.error(`${POOL_CLAIM_COLLECTION} index could not be created; ${this.clientType} enrolments are skipped until it exists: ${(error as Error)?.message ?? String(error)}`);
+        }
+    }
 
     async onModuleDestroy() {
         await this.cleanup();
@@ -1693,6 +1734,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     protected readonly PERIODIC_HEALTH_CHECK_LIMIT = HEALTH_CHECK_CONNECTIONS_PER_RUN;
     /** Extra candidates fetched so mobiles that become busy mid-round can be skipped without shrinking the round. */
     protected readonly PERIODIC_HEALTH_CHECK_SPARE = 10;
+    /** A failed health check is not retried for this long (both runs, every tier). */
+    protected readonly HEALTH_CHECK_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 
     /** Mobiles another job is using right now: join/leave queues and in-flight client setups. */
     protected getHealthCheckBusyMobiles(): Set<string> {
@@ -1707,8 +1750,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * Periodic health-check candidates. Only ready/session_rotated accounts that are not live
      * (inUse) and not busy. Never-checked accounts (lastChecked null/missing; `$lt` never matches
      * those) go first, ordered by last attempt (nulls first) then channels, excluding accounts
-     * attempted in the last 24 h; then accounts last checked more than 5 days ago, oldest-checked
-     * first (owner 2026-10-27: a capped run defers the newest, so nothing starves).
+     * attempted in the last 24 h; then accounts last checked more than 5 days ago, also excluding
+     * those attempted in the last 24 h, least recently attempted first (an attempt older than
+     * lastChecked only exists with it; no attempt stamp = checked before stamps existed = oldest),
+     * then oldest-checked (owner 2026-10-27: a capped run defers the newest, so nothing starves;
+     * post-review P1-2: a check that keeps failing no longer holds the head of the queue).
      */
     protected async selectHealthCheckCandidates(excludedMobiles: Iterable<string>, fetchLimit: number): Promise<TDoc[]> {
         const excluded = Array.from(new Set(excludedMobiles));
@@ -1719,20 +1765,23 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             ...(excluded.length > 0 ? { mobile: { $nin: excluded } } : {}),
         };
         const now = Date.now();
+        const notAttemptedRecently: MongoQuery = {
+            $or: [{ lastHealthCheckAttemptAt: null }, { lastHealthCheckAttemptAt: { $lt: new Date(now - this.HEALTH_CHECK_RETRY_AFTER_MS) } }],
+        };
         const neverChecked = await this.model
             .find({
                 ...base,
                 $and: [
                     { $or: [{ lastChecked: null }, { lastChecked: { $exists: false } }] },
-                    { $or: [{ lastHealthCheckAttemptAt: null }, { lastHealthCheckAttemptAt: { $lt: new Date(now - this.ONE_DAY_MS) } }] },
+                    notAttemptedRecently,
                 ],
             })
             .sort({ lastHealthCheckAttemptAt: 1, channels: 1 })
             .limit(fetchLimit);
         const stale = neverChecked.length < fetchLimit
             ? await this.model
-                .find({ ...base, lastChecked: { $lt: new Date(now - 5 * this.ONE_DAY_MS) } })
-                .sort({ lastChecked: 1, channels: 1 })
+                .find({ ...base, $and: [{ lastChecked: { $lt: new Date(now - 5 * this.ONE_DAY_MS) } }, notAttemptedRecently] })
+                .sort({ lastHealthCheckAttemptAt: 1, lastChecked: 1, channels: 1 })
                 .limit(fetchLimit - neverChecked.length)
             : [];
         return [...neverChecked, ...stale];

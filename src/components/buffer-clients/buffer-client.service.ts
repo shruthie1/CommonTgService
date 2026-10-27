@@ -58,7 +58,7 @@ import {
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
-import { withPoolClaim } from '../shared/onboarding/pool-claim';
+import { describeClaimHolder, withPoolClaim } from '../shared/onboarding/pool-claim';
 import { BUFFER_PROFILE, ONBOARDING_PACING, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
@@ -801,7 +801,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     private async withPoolClaimOrRefuse<T>(canonicalMobile: string, fn: () => Promise<T>): Promise<T> {
         const claim = await withPoolClaim(this.model, canonicalMobile, 'bufferClients', fn);
         if ('heldBy' in claim) {
-            throw new BadRequestException(`Mobile ${canonicalMobile} is being enrolled in ${claim.heldBy} right now; refusing to create a cross-pool BufferClient`);
+            throw new BadRequestException(claim.concurrent
+                ? `Mobile ${canonicalMobile} is being enrolled by ${describeClaimHolder(claim)} right now; refusing to create a duplicate BufferClient`
+                : `Mobile ${canonicalMobile} is being enrolled in ${claim.heldBy} right now; refusing to create a cross-pool BufferClient`);
         }
         return claim.value;
     }

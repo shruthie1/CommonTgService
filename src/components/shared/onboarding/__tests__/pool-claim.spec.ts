@@ -1,6 +1,6 @@
 import mongoose, { Connection, Model, Schema } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { POOL_CLAIM_COLLECTION, POOL_CLAIM_LEASE_MS, withPoolClaim } from '../pool-claim';
+import { describeClaimHolder, ensurePoolClaimIndex, POOL_CLAIM_COLLECTION, POOL_CLAIM_LEASE_MS, withPoolClaim } from '../pool-claim';
 
 describe('withPoolClaim (M13 cross-process claim)', () => {
     let mongod: MongoMemoryServer;
@@ -39,7 +39,7 @@ describe('withPoolClaim (M13 cross-process claim)', () => {
             return 'ok';
         });
         expect(outer).toEqual({ claimed: true, value: 'ok' });
-        expect(await inner).toEqual({ claimed: false, heldBy: 'bufferClients' });
+        expect(await inner).toEqual({ claimed: false, heldBy: 'bufferClients', concurrent: false });
         expect(ran).toEqual(['buffer']);
     });
 
@@ -53,7 +53,7 @@ describe('withPoolClaim (M13 cross-process claim)', () => {
         const t0 = Date.now();
         await connA.collection(POOL_CLAIM_COLLECTION).insertOne({ mobile: '919000000102', pool: 'bufferClients', at: new Date(t0) });
         const blocked = await withPoolClaim(modelB, '919000000102', 'promoteClients', async () => 1, () => t0 + 1000);
-        expect(blocked).toEqual({ claimed: false, heldBy: 'bufferClients' });
+        expect(blocked).toEqual({ claimed: false, heldBy: 'bufferClients', concurrent: false });
         const later = await withPoolClaim(modelB, '919000000102', 'promoteClients', async () => 2, () => t0 + POOL_CLAIM_LEASE_MS + 1);
         expect(later).toEqual({ claimed: true, value: 2 });
     });
@@ -78,5 +78,41 @@ describe('withPoolClaim (M13 cross-process claim)', () => {
     test('a model without a connection (unit fakes) just runs fn', async () => {
         const r = await withPoolClaim({} as any, '919000000105', 'bufferClients', async () => 'x');
         expect(r).toEqual({ claimed: true, value: 'x' });
+    });
+    describe('post-review fixes (2026-10-27, red/green)', () => {
+        /** A model whose connection hands out one fake claim collection. */
+        const fakeModel = (col: Record<string, jest.Mock>) => ({ db: { collection: jest.fn(() => col) } }) as any;
+
+        test('P1-3: a failed createIndex is not cached; the next call retries and succeeds', async () => {
+            const col = {
+                createIndex: jest.fn()
+                    .mockRejectedValueOnce(new Error('index build failed'))
+                    .mockResolvedValue('mobile_unique'),
+                findOneAndUpdate: jest.fn(async () => null),
+                updateOne: jest.fn(async () => null),
+            };
+            const model = fakeModel(col);
+            await expect(withPoolClaim(model, '919000000110', 'bufferClients', async () => 'first')).rejects.toThrow('index build failed');
+            expect(await withPoolClaim(model, '919000000110', 'bufferClients', async () => 'second')).toEqual({ claimed: true, value: 'second' });
+            expect(col.createIndex).toHaveBeenCalledTimes(2);
+            // Once created it stays cached: no third createIndex.
+            await ensurePoolClaimIndex(model);
+            expect(col.createIndex).toHaveBeenCalledTimes(2);
+        });
+
+        test('P2-b: a duplicate key from a same-pool race is reported as a concurrent same-pool claim, not the other pool', async () => {
+            const col = {
+                createIndex: jest.fn(async () => 'mobile_unique'),
+                findOneAndUpdate: jest.fn(async () => { throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 }); }),
+                findOne: jest.fn(async () => ({ mobile: '919000000111', pool: 'bufferClients', at: new Date() })),
+                updateOne: jest.fn(async () => null),
+            };
+            const ran = jest.fn();
+            const r = await withPoolClaim(fakeModel(col), '919000000111', 'bufferClients', async () => ran());
+            expect(r).toEqual({ claimed: false, heldBy: 'bufferClients', concurrent: true });
+            expect(ran).not.toHaveBeenCalled();
+            expect(describeClaimHolder(r as any)).toBe('a concurrent bufferClients enrolment');
+            expect(describeClaimHolder({ heldBy: 'promoteClients', concurrent: false })).toBe('promoteClients');
+        });
     });
 });

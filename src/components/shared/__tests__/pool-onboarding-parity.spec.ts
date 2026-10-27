@@ -77,6 +77,7 @@ export const CURRENT = {
         joinSweepErrorWipesQueues: false,   // D39
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
         warmupRunHealthCheckConnects: 20,   // owner 2026-10-27: per-run cap on health-check connects
+        warmupRunCapCountsSessionRotated: true, // post-review P1-1: as before the unification (old buffer loop held them)
     },
     promote: {
         operationalFloor: 230,
@@ -98,6 +99,7 @@ export const CURRENT = {
         joinSweepErrorWipesQueues: false,   // M11
         manualBulkEnrolCapsFromZero: false, // D10 (M12 commit)
         warmupRunHealthCheckConnects: 4,    // Q2 2026-10-27: promote share of the per-run cap (was 0)
+        warmupRunCapCountsSessionRotated: false, // post-review P1-1: as before Q2 (old promote loop excluded them)
     },
 };
 
@@ -771,6 +773,82 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             const second = await run();
             // Checked accounts are no longer due; the deferred ones go next run (nothing starves).
             expect(second).toEqual(mobiles.slice(cap, cap * 2));
+        });
+
+        describe('post-review fixes (2026-10-27, red/green)', () => {
+            const day = 24 * 60 * 60 * 1000;
+            const hour = 60 * 60 * 1000;
+            const stubRun = (svc: any) => {
+                jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'test', priority: 1 });
+                jest.spyOn(svc, pool === 'buffer' ? 'addNewUserstoBufferClientsDynamic' : 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({ createdCount: 0, attemptedCount: 0, createdEntries: [] });
+                jest.spyOn(svc, pool === 'buffer' ? 'sendBufferCheckSummaryNotification' : 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
+            };
+            const runWarmup = async (svc: any) => {
+                ledger.length = 0;
+                await svc[pool === 'buffer' ? '_checkBufferClientsInternal' : '_checkPromoteClientsInternal']();
+                return ledger.filter((e) => e.startsWith('getClient:')).map((e) => e.slice('getClient:'.length));
+            };
+            const rotated = (mobile: string, extra: Record<string, unknown>) => h.models[pool].create(poolDoc(pool, {
+                mobile, warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 300, enrolledAt: new Date(Date.now() - 40 * day),
+                sessionRotatedAt: new Date(Date.now() - 20 * day), ...extra,
+            }));
+
+            test('P1-1: the mutation cap backlog counts session_rotated only where the pool did before', async () => {
+                const svc = h.services[pool];
+                const now = Date.now();
+                for (let i = 0; i < 3; i++) {
+                    await h.models[pool].create(poolDoc(pool, { mobile: `91910000040${i}`, warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * day) }));
+                }
+                // Checked an hour ago: not due, so no connect; they still sit in the run's list.
+                for (let i = 0; i < 5; i++) await rotated(`91910000041${i}`, { lastChecked: new Date(now - hour) });
+                stubRun(svc);
+                jest.spyOn(svc, 'processClient').mockResolvedValue({ updateCount: 0 });
+                const cap = jest.spyOn(svc, 'getEffectiveUpdatesCap');
+                await runWarmup(svc);
+                expect(cap.mock.calls.map((c: any[]) => c[0])).toEqual([want.warmupRunCapCountsSessionRotated ? 8 : 3]);
+            });
+
+            test('P1-2: warmup-run checks skip a check that failed in the last 24 h and go by the later of lastChecked / last attempt', async () => {
+                const svc = h.services[pool];
+                const now = Date.now();
+                await rotated('919100000420', { lastChecked: null, lastHealthCheckAttemptAt: new Date(now - hour) });        // failed 1 h ago: skip
+                await rotated('919100000421', { lastChecked: new Date(now - 30 * day), lastHealthCheckAttemptAt: new Date(now - 2 * hour) }); // failed 2 h ago: skip
+                await rotated('919100000422', { lastChecked: new Date(now - 20 * day) });                                      // touched 20 d ago
+                await rotated('919100000423', { lastChecked: new Date(now - 30 * day), lastHealthCheckAttemptAt: new Date(now - 3 * day) });  // failed 3 d ago: last
+                await rotated('919100000424', { lastChecked: new Date(now - 12 * day) });                                      // touched 12 d ago
+                stubRun(svc);
+                jest.spyOn(svc, 'processClient').mockResolvedValue({ updateCount: 0 });
+                expect(await runWarmup(svc)).toEqual(['919100000422', '919100000424', '919100000423']);
+            });
+
+            test('P1-2: periodic candidates skip a check that failed in the last 24 h and put repeat failures behind the rest', async () => {
+                const svc = h.services[pool];
+                const now = Date.now();
+                await rotated('919100000430', { lastChecked: new Date(now - 10 * day), lastHealthCheckAttemptAt: new Date(now - hour) });     // failed 1 h ago: skip
+                await rotated('919100000431', { lastChecked: new Date(now - 20 * day), lastHealthCheckAttemptAt: new Date(now - 6 * day) });  // failed 6 d ago: last
+                await rotated('919100000432', { lastChecked: new Date(now - 8 * day), lastHealthCheckAttemptAt: new Date(now - 8 * day - 5000) }); // passed 8 d ago
+                await rotated('919100000433', { lastChecked: new Date(now - 30 * day) });                                                      // no attempt stamp: oldest
+                const picked = await svc.selectHealthCheckCandidates([], 10);
+                expect(picked.map((d: any) => d.mobile)).toEqual(['919100000433', '919100000432', '919100000431']);
+            });
+
+            test('P2-a: warmup-run checks skip accounts busy in the join/leave queue, like the periodic run', async () => {
+                const svc = h.services[pool];
+                await rotated('919100000440', { lastChecked: null });
+                await rotated('919100000441', { lastChecked: null });
+                await rotated('919100000442', { lastChecked: null });
+                stubRun(svc);
+                const processed = jest.spyOn(svc, 'processClient').mockResolvedValue({ updateCount: 0 });
+                svc.joinChannelMap.set('919100000440', []);
+                svc.leaveChannelMap.set('919100000441', []);
+                try {
+                    expect(await runWarmup(svc)).toEqual(['919100000442']);
+                    expect(processed.mock.calls.map((c: any[]) => c[0].mobile)).toEqual(['919100000442']);
+                } finally {
+                    svc.joinChannelMap.clear();
+                    svc.leaveChannelMap.clear();
+                }
+            });
         });
 
         test('join sweep: primary-mobile exclusion and per-account pacing (D37/D38)', async () => {

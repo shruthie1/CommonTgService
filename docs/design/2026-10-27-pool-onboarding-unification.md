@@ -145,3 +145,15 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | Q10 | no `'default'` reader; setAs writes a real date | D19 done | 127fde03 |
 | cap | per-run cap on health-check/probe connections, both pools, oldest-checked first | D47 done | 9d404340 |
 
+
+## Post-review fixes (2026-10-27, uncommitted)
+
+Each fix has a test that fails on e64c8fb9 and passes after the fix. Parity tests are in `src/components/shared/__tests__/pool-onboarding-parity.spec.ts` ("post-review fixes"); claim tests are in `src/components/shared/onboarding/__tests__/`.
+
+| ID | Fix | Test |
+|---|---|---|
+| P1-1 | Since Q2 the promote warmup run holds `session_rotated` accounts, and they raised promote's self-healing mutation cap (live 2026-10-27: 306 active assigned not-ready promote docs, 255 of them session_rotated; the cap would be 10 instead of 8). New `warmupRun.capCountsSessionRotated`: promote `false` (same as before Q2), buffer `true` (its pre-unification loop at 1cb9e116 always counted them, so it stays the same and is not slowed). | `P1-1: the mutation cap backlog counts session_rotated only where the pool did before` (promote red: 8 vs 3; buffer unchanged) |
+| P1-2 | A failed health check never updates `lastChecked`, so a repeatedly failing account stayed at the head of the queue. Both runs now skip an account whose check failed in the last 24 h (`HEALTH_CHECK_RETRY_AFTER_MS`, the same window as the never-checked tier). Order is now by the later of `lastChecked` and `lastHealthCheckAttemptAt`: in the warmup run directly, and in the periodic stale tier by attempt, then `lastChecked`. Cap counting is unchanged. | `P1-2: warmup-run checks skip ...`, `P1-2: periodic candidates skip ...` |
+| P1-3 | `poolEnrolmentClaims` index: a failed `createIndex` is evicted, so the next call retries (`ensurePoolClaimIndex`). It is created in `BaseClientService.onModuleInit`, which logs a failure but does not stop the boot. Auto-enrolment awaits it before the Telegram connect and skips the candidate if it is not ready. | `pool-claim.spec.ts` "P1-3: a failed createIndex is not cached", `enrolment-claim-index.spec.ts` |
+| P2-a | Warmup-run `session_rotated` checks skip accounts busy in the join/leave queue or client setup, as the periodic run does. | `P2-a: warmup-run checks skip accounts busy ...` |
+| P2-b | A duplicate key from a same-pool race is reported as "a concurrent <pool> enrolment", not as the other pool (`concurrent: true`, holder read back). The outcome is the same: refused, nothing written. | `pool-claim.spec.ts` "P2-b: ..." |

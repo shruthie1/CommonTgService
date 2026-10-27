@@ -14,7 +14,7 @@ import type { parseError } from '../../../utils/parseError';
 import type { RichNotificationInput } from '../../../utils/rich-message';
 import { ClientHelperUtils } from '../client-helper.utils';
 import { withEnrollmentLock } from '../enrollment-lock';
-import { withPoolClaim } from './pool-claim';
+import { describeClaimHolder, ensurePoolClaimIndex, withPoolClaim } from './pool-claim';
 import { WarmupPhase } from '../warmup-phases';
 import type { PoolProfile } from './pool-profile';
 
@@ -56,6 +56,15 @@ export async function enrolPoolClientFromUser(
     const enrolledIn = await port.isMobileEnrolledAnywhere(document.mobile);
     if (enrolledIn) {
         logger.debug(`Skipping ${document.mobile}: already enrolled in ${enrolledIn}`);
+        return false;
+    }
+
+    // The cross-process claim taken before the write needs its unique index; check it before any
+    // Telegram connect so a broken index costs no session work (post-review P1-3).
+    try {
+        await ensurePoolClaimIndex(port.model);
+    } catch (error: unknown) {
+        logger.error(`Skipping ${pool} enrollment for ${document.mobile}: pool claim index not ready: ${(error as Error)?.message ?? String(error)}`);
         return false;
     }
 
@@ -101,7 +110,7 @@ export async function enrolPoolClientFromUser(
         const enrolled = await withEnrollmentLock(canonical, async () => {
             const claim = await withPoolClaim(port.model, canonical, profile.collection, () => writeIfStillFree());
             if ('heldBy' in claim) {
-                logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: ${claim.heldBy} is enrolling it right now`);
+                logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: ${describeClaimHolder(claim)} is enrolling it right now`);
                 return false;
             }
             return claim.value;
