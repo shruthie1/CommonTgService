@@ -1,6 +1,6 @@
 # Pool onboarding unification (buffer + promote)
 
-**Date:** 2026-10-27. **Status:** in progress (tracker below is the source of truth).
+**Date:** 2026-10-27. **Status:** every row closed 2026-10-27: done, owner-gated (a value/policy decision over shared code), deferred to the master plan, or won't-fix (tracker below is the source of truth).
 **Input:** divergence analysis of 2026-10-27 (44 rows, M0-M13), every row re-verified against `master` @ `852f0d2a` before work started. Line numbers below are from that commit.
 **Related:** `2026-10-26-account-lifecycle-firmup-master-plan.md` (W-A..W-F, another workstream; not edited here). Rows that plan owns are marked `deferred to master-plan W-x` and their code is left alone.
 
@@ -20,7 +20,19 @@ shared/onboarding/
   candidate-source.ts users query + goodIds (one copy)
   enrolment.ts        probe (hasPassword, channelInfo) -> dedup -> lock -> write -> notice (one copy)
   pool-claim.ts       cross-process one-pool-per-mobile guard backed by Mongo (M13)
+  set-as.ts           operator enrolment setAs* (D8)
+shared/base-client.service.ts (one copy, values from poolProfile)
+  updateStatus / markAsActive / markAsInactive (M7), updateNameAndBio (M8),
+  runWarmupMaintenance (M9), runJoinSweep + refillJoinQueue + findPrioritizedJoinCandidates (M11b)
 ```
+
+Pool-specific code left in the services: the post-warmup enrolment planners (`buildBufferSupplyPlan` vs
+`buildPromoteEnrolmentPlan`, Q1) and their summary notices, the username strategy (D31), and thin
+wrappers that keep the existing public method names and routes.
+
+Per-pool pacing, messages and flags added in this pass: `setAs` (D8), `joinSweep` (D36-D40),
+`warmupRun` (M9), `consumerMinAgeDays` (D44). Each holds today's exact value; golden traces in
+`src/components/shared/__tests__/fixtures/` were captured on the pre-extraction code.
 
 `PoolProfile` holds only intentional differences:
 
@@ -46,11 +58,11 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 |---|---|---|---|---|---|---|---|---|
 | D1 | `users` candidate filter | buffer-client.service.ts:2111-2121 | promote-client.service.ts:1444-1454 | D/I (identical) | one shared query + batch loop (`shared/onboarding/candidate-source.ts`) | M6 | done | a12103bf |
 | D2 | goodIds exclusion set | :1663-1674 | :1105-1113 | D/I | one shared builder (`buildEnrolmentExclusions`) for the two run paths | M6 | done | a12103bf |
-| D3 | who decides buffer vs promote | first scheduler, lowest tgId | same | ?/? | no code exists; do not invent a rule | — | owner-gated (Q1) | |
+| D3 | who decides buffer vs promote | first scheduler, lowest tgId | same | ?/? | no classification code exists in either pool (a pool is chosen by which enrol path runs); inventing a rule is the owner's call | — | owner-gated (Q1, policy; no code to share) | |
 | D4 | pre-enrol probe (hasPassword, channelInfo) | :1966-1978 | :1303-1313 (no debug log on 2FA skip) | D/I | one enrolment function (`shared/onboarding/enrolment.ts`) | M5 | done | 67061500 |
 | D5 | cross-pool dedup is in-process only | :1942-1952, 2005-2024 | :1279-1289, 1339-1358 | D/I | Mongo-backed claim (`shared/onboarding/pool-claim.ts`): new collection `poolEnrolmentClaims`, one doc per mobile `{mobile, pool, at}`, unique index `mobile_unique` (additive). Taken inside the in-process lock by auto-enrol, both `setAs*` and both `create()`; the other pool is refused while its claim is younger than 60 s; release sets `at` to epoch (never deletes). Live data 2026-10-27: 0 dual-pool mobiles, so no existing doc is refused | M13 | done | 38b842bc |
 | D6 | `setAs*` cross-pool guard | refuses mains + promote (:1262-1273) | refuses mains only (:818-823); neither takes the lock | D/**A** | promote also refuses buffer; both take the lock and re-check inside it | M1 | done | 5b30cad5 |
-| D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | operator override or same as auto-enrol? | — | owner-gated (Q7) | |
+| D7 | `setAs*` eligibility (no twoFA/hasPassword/activity filter) | :1252-1257 | :811-816 | D/? | code shared (D8, `shared/onboarding/set-as.ts`): adding auto-enrol's 2FA/activity checks to the operator path is a policy decision, one place to change | — | owner-gated (Q7, policy; code shared) | D8 |
 | D8 | `setAs*` body / clientId | required (controller :161,168); 5-10 s pacing draw after channel info | optional, auto-assign (:825-841); no draw; `lastActive:'default'` | P/I | one shared body `shared/onboarding/set-as.ts`; per-pool values in `PoolProfile.setAs` (messages, `postChannelInfoSleep`, `docExtras`, `errorContext`, `permanentErrorReason`) + `setAsRequiresClientId`. Characterisation (messages, stored doc, pacing draws, permanent/plain errors, clientId omitted) green before and after. Pacing value owner-gated Q3, `lastActive` Q10 | M7b | done | D8 |
 | D9 | `setAs*` HTTP verb | POST | GET (controller :118) | D/A | additive `POST promoteclients/SetAsPromoteClient/:mobile` (same handler body, same API-key/IP auth: not an ignore or origin-only path); GET kept. Red/green controller test. Retiring GET is owner-gated (Q6) | D9 | done | D9 |
 | D10 | manual bulk enrol bypasses the cap | `addNewUserstoBufferClients` (:2059-2084) uses window need, no counted/cap map -> cap 20 counted from 0, no fleet budget | **re-verified:** promote manual (:1393-1418) also passes no counts -> cap 30 counted from 0 (the input said it matched scheduled; it does not) | D/A | manual path uses the same plan/caps/budget as the scheduled run, both pools | M12 | done | 2d209907 |
@@ -62,7 +74,7 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D16 | config block | :476-493 | :123-141 | P/I + ? | floor/minTotal/pacing read from the profile, values unchanged | M4 | done (pacing values owner-gated Q3) | 3b36a819 |
 | D17 | promote `totalSlotsNeeded` loop is a dead calculation | — | :1242-1256 | D/A | replaced by the priority-order budget allocation | M12 | done | 2d209907 |
 | D18 | fields on auto-enrol | :1989-2022 | + `lastActive` ISO (:1323-1356) | D/I | port `docExtras` (promote `lastActive`) | M5 | done | 67061500 |
-| D19 | promote `lastActive`: ISO (auto) vs `'default'` (setAs, :850) | — | :850 vs :1325 | D/A | value read by tg-platform promote selection? not checked; keep | — | owner-gated (Q10) | |
+| D19 | promote `lastActive`: ISO (auto) vs `'default'` (setAs, :850) | — | :850 vs :1325 | D/A | code shared: auto-enrol `lastActive` ISO via the enrolment port's `docExtras` (M5), setAs `'default'` via `PoolProfile.setAs.docExtras` (D8). Whether tg-platform reads it is the value question | — | owner-gated (Q10, value; code shared) | D8 |
 | D20 | `create()` default `message` | none (:816-826) | `'Account is functioning properly'` (:469-481) | D/A | harmless; keep | — | won't-fix | |
 | D21 | `create()` overwrites caller lifecycle (`warmupPhase`, `sessionRotatedAt`) | :816-825, reached from `returnOldClientToBufferPool` (client.service.ts:1545,1563) | same (:469-481) | P/A | **not changed here.** Fixing it would let a returning main without a buffer doc land directly in `session_rotated`, which is exactly the dirty re-entry W-E gates. Today's overwrite sends it back through warmup instead. | M3 | deferred to master-plan W-E | |
 | D22 | schema strictness (`clientId`/`session` optional, no status enum on promote) | buffer-client.schema.ts:30-79 | promote-client.schema.ts:27-51 | D/A | tightening a schema can reject existing docs; out of scope | — | won't-fix | |
@@ -75,9 +87,9 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D29 | step implementations | base :1042-1420 | same | S/I | — | — | done (shared); deferred to master-plan W-C/W-D | |
 | D30 | `updateNameAndBio` duplicated (~230 lines) | :497-731 | :164-398 | D/A (copy) | **re-verified:** byte-identical except surname field and other-pool service; one shared method in `BaseClientService` (surname list from `clientType`, `otherPoolModel()` hook, per-pool 'no persona pool' log text kept). Characterisation (Telegram ledger, pool surname, cross-pool dedup, error path, no-pool path) green before and after | M8 | done | 937ad159 |
 | D31 | `updateUsername` set vs clear | :733-781 | :400-434 | P/I | keep both strategies; a "skip clear when already blank" needs a username read we do not store | — | won't-fix | |
-| D32 | which phases the warmup run processes | skips READY (:1713) | skips READY + SESSION_ROTATED (:1151); health branch :1170-1175 dead | D/?/A | keep values; one loop with a profile list | M9 | todo, stopped 2026-10-27: `_checkBufferClientsInternal` (153 lines) vs `_checkPromoteClientsInternal` (125) differ in 193 diff lines (supply planner Q1, terminal phases Q2, pacing Q3, health branch); a shared loop first needs a whole-run Telegram/DB characterisation per pool. `terminalPhasesInWarmupRun` is in the profile (M4) ready for it. Values owner-gated Q2 | |
+| D32 | which phases the warmup run processes | skips READY (:1713) | skips READY + SESSION_ROTATED (:1151); health branch :1170-1175 dead | D/?/A | one loop `BaseClientService.runWarmupMaintenance`; phases processed = `profile.terminalPhasesInWarmupRun` (buffer `[session_rotated]`, promote `[]`), primary skip = `excludePrimaryMobiles`, enrolment planner = per-pool hook named by `warmupRun.supplyPlanner` (Q1). Golden whole-run trace (selection, order, health checks, enrolment args, summary) identical before/after. Unifying the phase list is a value decision (Q2) | M9 | done (values owner-gated Q2) | M9 |
 | D33 | primary-mobile skip uses `===` | :1696 | n/a | P/I | stored mobiles are canonical (schema setter); keep | — | won't-fix | |
-| D34 | promote SESSION_ROTATED never health-checked by the warmup run | warmup run + `updateInfo` | `updateInfo` only | D/A | adds Telegram connections to accounts that get none today | M10 | owner-gated (Q2) | |
+| D34 | promote SESSION_ROTATED never health-checked by the warmup run | warmup run + `updateInfo` | `updateInfo` only | D/A | code shared (M9): the health-check branch is in the one loop; promote reaches it only if `PROMOTE_PROFILE.terminalPhasesInWarmupRun` gains `session_rotated`. Turning it on adds Telegram connections to accounts that get none today | M10 | owner-gated (value; code shared) | M9 |
 | D35 | diagnostics endpoints | :1317, :1417 | none | D/A | observability only; not needed for unification | — | won't-fix | |
 | D36 | join candidate tiering | :232-266 | :604-638 | D/I | one `findPrioritizedJoinCandidates` in `BaseClientService` (fallback floor = `profile.operationalFloor`, 200/230 as before). Golden trace (candidate order incl. recovery tier) identical before/after | M11b | done | M11b |
 | D37 | join sweep primary exclusion / clientId scope | :1846-1854 | :914-924 | D/I | one sweep `runJoinSweep`; `profile.excludePrimaryMobiles` and `joinSweep.scopesByClientId` hold today's values. Golden trace pins buffer skipping the main, promote connecting it | M11b | done | M11b |
@@ -87,8 +99,8 @@ Status: `todo`, `done`, `owner-gated`, `won't-fix`, `deferred to master-plan W-x
 | D41 | schedules / minute offsets | scheduled-jobs.service.ts:99,107-109,140-144 | :160,165-167,189-191 | P/I | keep exactly | — | won't-fix | |
 | D42 | warmup failure backoff / deactivate cascade | base | same | S/I | — | — | done (shared) | |
 | D43 | `updateStatus` / `markAsInactive` copies | :969-1007, 1225-1242 | :549-602, 716-733 | D/A | **re-verified:** identical modulo names; one shared implementation in `BaseClientService` (label from `clientType`); characterisation test (fields, notices, idempotence, failure) green before and after | M7 | done | 279960d8 |
-| D44 | swap/runtime age gates (15d vs 7d) | client.service.ts:1798-1815 | tg-platform | P/? | — | — | owner-gated (Q8) | |
-| D45 | `setAsBufferClient` sleeps 5-10s after channelInfo; promote does not | :1281 | :812-851 | D/? | found by M0 ledger; pacing, kept exactly | — | owner-gated (Q3) | |
+| D44 | swap/runtime age gates (15d vs 7d) | client.service.ts:1798-1815 | tg-platform | P/? | values side by side in `PoolProfile.consumerMinAgeDays` (buffer 15, used by both `client.service.ts` swap checks; promote 7, enforced in tg-platform, outside this repo) | — | owner-gated (Q8, value; buffer code reads the profile) | M9 |
+| D45 | `setAsBufferClient` sleeps 5-10s after channelInfo; promote does not | :1281 | :812-851 | D/? | code shared (D8): `PoolProfile.setAs.postChannelInfoSleep` = buffer gaussian 7500/1250/5000-10000, promote null; characterisation pins the draw | — | owner-gated (value; code shared) | D8 |
 | D46 | archive collections (`*Archive`) written by no CMS code | — | — | ?/? | — | — | owner-gated (Q9) | |
 
 ## Owner questions (exact)

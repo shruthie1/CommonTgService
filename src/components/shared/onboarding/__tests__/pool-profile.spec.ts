@@ -24,6 +24,8 @@ describe('pool profiles (M4)', () => {
                 resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}', wrapError: null,
                 refillLeaveQueueStart: { kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 },
             },
+            warmupRun: { logGoodIdsCount: true, supplyPlanner: 'dynamic-supply' },
+            consumerMinAgeDays: 15,
         });
         expect(PROMOTE_PROFILE).toEqual({
             kind: 'promote', collection: 'promoteClients', label: 'Promote', operationalFloor: 230, legacyHealthyCap: 30,
@@ -48,6 +50,8 @@ describe('pool profiles (M4)', () => {
                 wrapError: { log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' },
                 refillLeaveQueueStart: { kind: 'uniform', base: 5000, spread: 3000 },
             },
+            warmupRun: { logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget' },
+            consumerMinAgeDays: 7,
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);
         expect(Object.isFrozen(PROMOTE_PROFILE.pacing)).toBe(true);

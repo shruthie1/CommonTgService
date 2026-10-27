@@ -35,6 +35,8 @@ import { currentNoticeBatch, eventsToTable, sendNoticeBatched } from '../../util
 import type { NoticeBatch } from '../../utils/notice-batch';
 import { ClientHelperUtils } from './client-helper.utils';
 import { BUFFER_PROFILE, PROMOTE_PROFILE, type PacingDraw, type PoolProfile } from './onboarding/pool-profile';
+import { buildEnrolmentExclusions } from './onboarding/candidate-source';
+import type { CheckEntry } from './check-summary-notification';
 import { performOrganicActivity, OrganicIntensity } from './organic-activity';
 import { PersonaPool, PersonaAssignment, generateCandidateCombinations, personaKey } from '../../utils/persona-assignment';
 import { nameMatchesAssignment, lastNameMatches } from '../../utils/homoglyph-normalizer';
@@ -221,6 +223,16 @@ export { WarmupPhase, WarmupAction, isAccountReady, isAccountWarmingUp, getWarmu
  *
  * Subclasses implement type-specific behavior via abstract methods.
  */
+/** What a pool's post-warmup enrolment planner receives from the shared warmup run. */
+export interface WarmupRunContext<TDoc> {
+    clients: Client[];
+    assigned: TDoc[];
+    goodIds: string[];
+    now: number;
+    totalUpdates: number;
+    updatedEntries: CheckEntry[];
+}
+
 export abstract class BaseClientService<TDoc extends BaseClientDocument> implements OnModuleDestroy {
     protected readonly logger: Logger;
     protected joinChannelMap: Map<string, (Channel | ActiveChannel)[]> = new Map();
@@ -874,6 +886,128 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             this.logger.error(`Failed to mark ${this.clientType} client ${mobile} as inactive: ${errorMessage}`);
             return null;
         }
+    }
+
+    // ---- Warmup maintenance run (pool-onboarding M9: one loop; per-pool values in PoolProfile) ----
+
+    /**
+     * Select, prioritise and process this pool's warmup accounts under the run caps, then hand
+     * over to the pool's enrolment planner (owner-gated Q1, `profile.warmupRun.supplyPlanner`).
+     * Which terminal phases are processed is `profile.terminalPhasesInWarmupRun` (Q2).
+     */
+    protected async runWarmupMaintenance(hooks: {
+        otherPoolMobiles(): Promise<string[]>;
+        enrolAfterWarmup(ctx: WarmupRunContext<TDoc>): Promise<void>;
+    }): Promise<void> {
+        const profile = this.poolProfile;
+        const pool = this.clientType;
+        const model = this.model as unknown as Model<any>;
+        const clients = await this.clientService.findAll();
+        const otherPoolMobiles = await hooks.otherPoolMobiles();
+        const clientMap = new Map(clients.map((client) => [client.clientId, client]));
+        const now = Date.now();
+
+        const clientMainMobiles = clients.map((c) => c.mobile);
+        const assigned: TDoc[] = await model
+            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
+            .exec();
+        // Exclude ALL of this pool's mobiles (not just active) from the candidate pool to prevent re-enrollment
+        const allPoolMobiles = (await model.find({}, { mobile: 1 }).lean().exec()).map((doc: { mobile: string }) => doc.mobile);
+
+        const goodIds = buildEnrolmentExclusions(clientMainMobiles, otherPoolMobiles, allPoolMobiles);
+
+        let totalUpdates = 0;
+        const updatedEntries: CheckEntry[] = [];
+        if (profile.warmupRun.logGoodIdsCount) {
+            this.logger.debug(`Checking ${pool} clients, good IDs count: ${goodIds.length}`);
+        }
+
+        // The warmupAction is computed ONCE here and carried through — the priority sort, the
+        // sensitive precheck, and the organic precheck all reuse it (recomputing risked a TOCTOU
+        // mismatch between the precheck action and what processClient actually did).
+        const toProcess: Array<{
+            doc: TDoc;
+            client: Client;
+            clientId: string;
+            priority: number;
+            warmupAction: ReturnType<typeof getWarmupPhaseAction>;
+        }> = [];
+
+        for (const doc of assigned) {
+            if (!doc.clientId) continue;
+            const client = clientMap.get(doc.clientId);
+            if (!client) continue;
+            if (profile.excludePrimaryMobiles && doc.mobile === client.mobile) {
+                this.logger.debug(`Skipping ${pool} maintenance for ${doc.mobile}: currently attached as primary client mobile`);
+                continue;
+            }
+            if (doc.inUse === true) continue;
+
+            if (this.isOnCooldown(doc.mobile, doc.lastUpdateAttempt, now)) continue;
+
+            const warmupPhase = doc.warmupPhase;
+            if (!warmupPhase) {
+                this.logger.warn(`Skipping ${pool} client ${doc.mobile}: incomplete lifecycle metadata`);
+                continue;
+            }
+            // READY -> SESSION_ROTATED is handled only by the paced ready-rotation scheduler; terminal
+            // phases enter this run only when the pool lists them (buffer: session_rotated, Q2).
+            if ((warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED)
+                && !profile.terminalPhasesInWarmupRun.includes(warmupPhase)) continue;
+            // Use the COMPUTED warmup phase for priority so enrolled accounts whose state machine
+            // already says "settling" get the same priority as DB-settling ones (no starvation).
+            const warmupAction = getWarmupPhaseAction(doc, now, { operationalFloor: this.operationalFloor });
+            const priority = calculateWarmupPriority(doc, warmupAction, now);
+
+            toProcess.push({ doc, client, clientId: doc.clientId, priority, warmupAction });
+        }
+
+        // Sort by priority (highest first)
+        toProcess.sort((a, b) => b.priority - a.priority);
+
+        // Self-healing cap: size this run's mutation budget to the live pending backlog so the
+        // pool drains toward the target SLA — grows when starved, shrinks when caught up.
+        const effectiveCap = this.getEffectiveUpdatesCap(toProcess.length);
+        let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
+        let organicUpdates = 0;   // separate budget so organic no-ops can't monopolize the run
+        this.logger.log(`${profile.label} warmup run: ${toProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
+
+        for (const { doc, client, warmupAction } of toProcess) {
+            if (totalUpdates >= effectiveCap) break;
+            const warmupPhase = doc.warmupPhase || WarmupPhase.ENROLLED;
+            if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
+                const lastChecked = doc.lastChecked ? new Date(doc.lastChecked).getTime() : 0;
+                const healthCheck = await this.performHealthCheck(doc.mobile, lastChecked, now);
+                if (!healthCheck.passed) continue;
+            }
+            const plannedAction = warmupAction.action; // computed once above; reused here
+
+            // Organic sub-cap: organic_only makes no phase progress but costs a ~20s TG session.
+            // Skipped accounts keep lastUpdateAttempt untouched, so they stay eligible next run.
+            if (plannedAction === 'organic_only' && organicUpdates >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+
+            // Anti-detection sub-cap: keep high-risk actions (2FA/remove_auths/username) sparse per
+            // run; a deferred account stays high-priority for a later run.
+            const plannedSensitive = this.isSensitiveWarmupAction(plannedAction);
+            if (plannedSensitive && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
+                continue;
+            }
+
+            // Count the PLANNED action against its sub-cap on commit — a failed sensitive action
+            // still consumed a risky attempt on this IP, so it must count.
+            if (plannedSensitive) sensitiveUpdates++;
+            if (plannedAction === 'organic_only') organicUpdates++;
+
+            const processResult = await this.processClient(doc, client, warmupAction);
+            if (processResult.updateCount > 0) {
+                totalUpdates += processResult.updateCount;
+                updatedEntries.push({ clientId: client.clientId, mobile: doc.mobile, change: processResult.updateSummary || 'updated', count: processResult.updateCount });
+            }
+        }
+
+        await hooks.enrolAfterWarmup({ clients, assigned, goodIds, now, totalUpdates, updatedEntries });
     }
 
     // ---- Join sweep + queue refill (pool-onboarding D36/D37/D40: one implementation; every

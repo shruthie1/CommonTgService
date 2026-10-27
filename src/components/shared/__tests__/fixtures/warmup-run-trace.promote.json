@@ -1,0 +1,165 @@
+{
+  "processed": [
+    [
+      "919100000082",
+      "c1",
+      "set_privacy"
+    ],
+    [
+      "919100000080",
+      "c1",
+      "set_privacy"
+    ],
+    [
+      "919100000086",
+      "c1",
+      "set_privacy"
+    ],
+    [
+      "919000000001",
+      "c1",
+      "set_privacy"
+    ],
+    [
+      "919100000081",
+      "c1",
+      "set_privacy"
+    ]
+  ],
+  "health": [],
+  "enrolCalls": [
+    {
+      "first": [],
+      "goodIds": [
+        "919000000001",
+        "919000000001",
+        "919100000080",
+        "919100000081",
+        "919100000082",
+        "919100000083",
+        "919100000084",
+        "919100000085",
+        "919100000086",
+        "919100000087",
+        "919100000088"
+      ],
+      "needs": [
+        [
+          "c1",
+          3,
+          30
+        ]
+      ],
+      "counted": [
+        [
+          "c1",
+          9
+        ],
+        [
+          "unknown-client",
+          1
+        ]
+      ],
+      "caps": null
+    }
+  ],
+  "summaries": [
+    [
+      5,
+      2,
+      3,
+      [
+        {
+          "clientId": "c1",
+          "mobile": "919100000082",
+          "change": "did set_privacy",
+          "count": 1
+        },
+        {
+          "clientId": "c1",
+          "mobile": "919100000080",
+          "change": "did set_privacy",
+          "count": 1
+        },
+        {
+          "clientId": "c1",
+          "mobile": "919100000086",
+          "change": "did set_privacy",
+          "count": 1
+        },
+        {
+          "clientId": "c1",
+          "mobile": "919000000001",
+          "change": "did set_privacy",
+          "count": 1
+        },
+        {
+          "clientId": "c1",
+          "mobile": "919100000081",
+          "change": "did set_privacy",
+          "count": 1
+        }
+      ],
+      [
+        {
+          "clientId": "c1",
+          "mobile": "new"
+        }
+      ]
+    ]
+  ],
+  "ledger": [],
+  "sleepMs": [],
+  "gaussian": [],
+  "docs": [
+    {
+      "mobile": "919000000001",
+      "status": "active",
+      "warmupPhase": "settling"
+    },
+    {
+      "mobile": "919100000080",
+      "status": "active",
+      "warmupPhase": "settling"
+    },
+    {
+      "mobile": "919100000081",
+      "status": "active",
+      "warmupPhase": "enrolled"
+    },
+    {
+      "mobile": "919100000082",
+      "status": "active",
+      "warmupPhase": "growing"
+    },
+    {
+      "mobile": "919100000083",
+      "status": "active",
+      "warmupPhase": "ready"
+    },
+    {
+      "mobile": "919100000084",
+      "status": "active",
+      "warmupPhase": "session_rotated"
+    },
+    {
+      "mobile": "919100000085",
+      "status": "active",
+      "warmupPhase": "settling"
+    },
+    {
+      "mobile": "919100000086",
+      "status": "active"
+    },
+    {
+      "mobile": "919100000087",
+      "status": "active",
+      "warmupPhase": "settling"
+    },
+    {
+      "mobile": "919100000088",
+      "status": "active",
+      "warmupPhase": "settling"
+    }
+  ]
+}

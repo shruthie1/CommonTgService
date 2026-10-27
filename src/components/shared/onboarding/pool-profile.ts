@@ -89,6 +89,24 @@ export interface PoolProfile {
     terminalPhasesInWarmupRun: WarmupPhaseType[];
     setAs: Readonly<SetAsProfile>;
     joinSweep: Readonly<JoinSweepProfile>;
+    warmupRun: Readonly<WarmupRunProfile>;
+    /**
+     * Minimum account age (days since createdAt) before the pool's consumer may use it (owner-gated
+     * Q8). Buffer: CMS swap eligibility (client.service.ts). Promote: enforced by tg-platform's
+     * promote selection, NOT by this repo; recorded here so both values sit side by side.
+     */
+    consumerMinAgeDays: number;
+}
+
+/** Warmup maintenance run per-pool values (the loop itself is shared: BaseClientService.runWarmupMaintenance). */
+export interface WarmupRunProfile {
+    /** Emit the 'Checking buffer clients, good IDs count' debug log. */
+    logGoodIdsCount: boolean;
+    /**
+     * Enrolment planner that runs after warmup (owner-gated Q1): buffer = dynamic supply
+     * (buffer-supply.ts), promote = legacy windows capped per client + engine budget (M12).
+     */
+    supplyPlanner: 'dynamic-supply' | 'legacy-windows-engine-budget';
 }
 
 export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -133,6 +151,8 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         wrapError: null,
         refillLeaveQueueStart: Object.freeze({ kind: 'gaussian', mean: 6500, sd: 1000, min: 5000, max: 8000 }),
     }),
+    warmupRun: Object.freeze({ logGoodIdsCount: true, supplyPlanner: 'dynamic-supply' }),
+    consumerMinAgeDays: 15,
 }) as Readonly<PoolProfile>;
 
 export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
@@ -177,6 +197,8 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
         refillLeaveQueueStart: Object.freeze({ kind: 'uniform', base: 5000, spread: 3000 }),
     }),
+    warmupRun: Object.freeze({ logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget' }),
+    consumerMinAgeDays: 7,
 }) as Readonly<PoolProfile>;
 
 /**

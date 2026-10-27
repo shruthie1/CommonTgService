@@ -42,6 +42,7 @@ import { BotsService, ChannelCategory } from '../bots';
 import {
     BaseClientUpdate,
     BaseClientService,
+    type WarmupRunContext,
     ClientStatusType,
     ClientConfig,
     performOrganicActivity,
@@ -518,103 +519,15 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     private async _checkPromoteClientsInternal() {
+        await this.runWarmupMaintenance({
+            otherPoolMobiles: async () => (await this.bufferClientService.findAll()).map((c) => c.mobile),
+            enrolAfterWarmup: (ctx) => this.enrolAfterWarmup(ctx),
+        });
+    }
 
-        const clients = await this.clientService.findAll();
-        const bufferClients = await this.bufferClientService.findAll();
-        const clientMap = new Map(clients.map((client) => [client.clientId, client]));
-        const now = Date.now();
-
-        const clientMainMobiles = clients.map((c) => c.mobile);
-        const bufferClientIds = bufferClients.map((c) => c.mobile);
-        const assignedPromoteClients = await this.promoteClientModel
-            .find({ clientId: { $exists: true, $ne: null }, status: 'active' })
-            .exec();
-        // Exclude ALL promote client mobiles (not just active) from candidate pool to prevent re-enrollment
-        const allPromoteClientMobiles = (await this.promoteClientModel.find({}, { mobile: 1 }).lean().exec()).map((doc) => doc.mobile);
-
-        const goodIds = buildEnrolmentExclusions(clientMainMobiles, bufferClientIds, allPromoteClientMobiles);
-
-        let totalUpdates = 0;
-        const updatedEntries: CheckEntry[] = [];
-        // warmupAction computed ONCE here and carried through (priority + sensitive/organic
-        // prechecks reuse it), instead of recomputing per account (was 3× + TOCTOU risk).
-        const promoteClientsToProcess: Array<{
-            promoteClient: PromoteClientDocument;
-            client: Client;
-            clientId: string;
-            priority: number;
-            warmupAction: ReturnType<typeof getWarmupPhaseAction>;
-        }> = [];
-
-        for (const promoteClient of assignedPromoteClients) {
-            if (!promoteClient.clientId) continue;
-            const client = clientMap.get(promoteClient.clientId);
-            if (!client) continue;
-            if (promoteClient.inUse === true) continue;
-
-            const lastUpdateAttempt = promoteClient.lastUpdateAttempt ? new Date(promoteClient.lastUpdateAttempt).getTime() : 0;
-            if (this.isOnCooldown(promoteClient.mobile, promoteClient.lastUpdateAttempt, now)) continue;
-
-            const warmupPhase = promoteClient.warmupPhase;
-            if (!warmupPhase) {
-                this.logger.warn(`Skipping promote client ${promoteClient.mobile}: incomplete lifecycle metadata`);
-                continue;
-            }
-            // Terminal phases are owned by selection/rotation paths. Normal
-            // maintenance must never re-enter them or perform extra Telegram
-            // health/session work on already-consumable accounts.
-            if (warmupPhase === WarmupPhase.READY || warmupPhase === WarmupPhase.SESSION_ROTATED) continue;
-            const warmupAction = getWarmupPhaseAction(promoteClient, now, { operationalFloor: this.operationalFloor });
-            const priority = calculateWarmupPriority(promoteClient, warmupAction, now);
-
-            promoteClientsToProcess.push({ promoteClient: promoteClient as PromoteClientDocument, client, clientId: promoteClient.clientId, priority, warmupAction });
-        }
-
-        promoteClientsToProcess.sort((a, b) => b.priority - a.priority);
-
-        // Self-healing cap: size this run's mutation budget to the live pending backlog (see
-        // getEffectiveUpdatesCap). Promote's backlog is larger, so this lifts the cap toward the
-        // ceiling automatically while it catches up, then relaxes as the pool drains.
-        const effectiveCap = this.getEffectiveUpdatesCap(promoteClientsToProcess.length);
-        let sensitiveUpdates = 0; // separate, tighter budget for high-risk actions (anti-detection)
-        let organicUpdates = 0;   // separate budget so organic no-ops can't monopolize the run
-        this.logger.log(`Promote warmup run: ${promoteClientsToProcess.length} eligible, effective cap=${effectiveCap} (ceiling ${this.MAX_UPDATES_PER_CYCLE}), sensitive sub-cap=${this.MAX_SENSITIVE_ACTIONS_PER_CYCLE}, organic sub-cap=${this.MAX_ORGANIC_ACTIONS_PER_CYCLE}`);
-
-        for (const { promoteClient, client, warmupAction } of promoteClientsToProcess) {
-            if (totalUpdates >= effectiveCap) break;
-            const warmupPhase = promoteClient.warmupPhase || WarmupPhase.ENROLLED;
-            if (warmupPhase === WarmupPhase.SESSION_ROTATED) {
-                const lastChecked = promoteClient.lastChecked ? new Date(promoteClient.lastChecked).getTime() : 0;
-                const healthCheck = await this.performHealthCheck(promoteClient.mobile, lastChecked, now);
-                if (!healthCheck.passed) continue;
-            }
-            const plannedAction = warmupAction.action; // computed once above; reused here
-
-            // Organic sub-cap: organic_only makes no phase progress but costs a ~20s TG session.
-            // Cap it so gated accounts can't monopolize the run and starve real mutations (see
-            // buffer equivalent). Skipped organic accounts keep lastUpdateAttempt untouched.
-            if (plannedAction === 'organic_only' && organicUpdates >= this.MAX_ORGANIC_ACTIONS_PER_CYCLE) {
-                continue;
-            }
-
-            // Anti-detection sub-cap: keep high-risk actions sparse per run (see buffer equivalent).
-            const plannedSensitive = this.isSensitiveWarmupAction(plannedAction);
-            if (plannedSensitive && sensitiveUpdates >= this.MAX_SENSITIVE_ACTIONS_PER_CYCLE) {
-                continue;
-            }
-
-            // Count the PLANNED action against its sub-cap on commit — a failed sensitive action
-            // still consumed a risky attempt on this IP, so it must count (see buffer equivalent).
-            if (plannedSensitive) sensitiveUpdates++;
-            if (plannedAction === 'organic_only') organicUpdates++;
-
-            const processResult = await this.processClient(promoteClient, client, warmupAction);
-            if (processResult.updateCount > 0) {
-                totalUpdates += processResult.updateCount;
-                updatedEntries.push({ clientId: client.clientId, mobile: promoteClient.mobile, change: processResult.updateSummary || 'updated', count: processResult.updateCount });
-            }
-        }
-
+    /** Post-warmup enrolment for this pool (planner = PoolProfile.warmupRun.supplyPlanner, owner-gated Q1). */
+    private async enrolAfterWarmup({ clients, assigned, goodIds, now, totalUpdates, updatedEntries }: WarmupRunContext<PromoteClientDocument>) {
+        const assignedPromoteClients = assigned;
         // Enrolment plan: legacy window need capped per client (30), then bounded by the promote
         // warmup engine's capacity like buffer's (pool-onboarding M12).
         const plan = await this.buildPromoteEnrolmentPlan(clients.map((c) => c.clientId), assignedPromoteClients, now);

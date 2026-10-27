@@ -755,6 +755,55 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             }
         });
 
+        test('warmup run: golden trace of selection, order, health checks, enrolment call and summary (D32/D34/M9, characterisation)', async () => {
+            const svc = h.services[pool];
+            const B = pool === 'buffer';
+            const day = 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            const mk = (mobile: string, extra: Record<string, unknown>) => h.models[pool].create(poolDoc(pool, { mobile, ...extra }));
+            await mk('919100000080', { warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * day) });
+            await mk('919100000081', { warmupPhase: WarmupPhase.ENROLLED, enrolledAt: new Date(now - 3 * day) });
+            await mk('919100000082', { warmupPhase: WarmupPhase.GROWING, channels: 120, enrolledAt: new Date(now - 10 * day) });
+            await mk('919100000083', { warmupPhase: WarmupPhase.READY, channels: 300, enrolledAt: new Date(now - 30 * day) });
+            await mk('919100000084', { warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 300, enrolledAt: new Date(now - 30 * day) });
+            await mk('919100000085', { warmupPhase: WarmupPhase.SETTLING, inUse: true, enrolledAt: new Date(now - 5 * day) });
+            await mk('919100000086', { warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * day) });
+            await h.models[pool].collection.updateOne({ mobile: '919100000086' }, { $unset: { warmupPhase: '' } });
+            await mk(MAIN_MOBILE, { warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * day) });
+            await mk('919100000087', { warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * day), lastUpdateAttempt: new Date(now - 60 * 1000) });
+            await mk('919100000088', { warmupPhase: WarmupPhase.SETTLING, enrolledAt: new Date(now - 5 * day), clientId: 'unknown-client' });
+
+            const processed: unknown[] = [];
+            jest.spyOn(svc, 'processClient').mockImplementation((async (doc: any, client: any, action: any) => {
+                processed.push([doc.mobile, client.clientId, action.action]);
+                return { updateCount: 1, updateSummary: `did ${action.action}` };
+            }) as any);
+            const health: string[] = [];
+            jest.spyOn(svc, 'performHealthCheck').mockImplementation((async (mobile: string) => { health.push(mobile); return { passed: true }; }) as any);
+            const enrolCalls: unknown[] = [];
+            jest.spyOn(svc, B ? 'addNewUserstoBufferClientsDynamic' : 'addNewUserstoPromoteClientsDynamic').mockImplementation((async (...args: any[]) => {
+                enrolCalls.push({
+                    first: args[0], goodIds: [...args[1]].sort(),
+                    needs: args[2].map((n: any) => [n.clientId, n.totalNeeded, n.priority]),
+                    counted: args[3] ? [...args[3].entries()].sort() : null,
+                    caps: args[4] ? [...args[4].entries()].sort() : null,
+                });
+                return { createdCount: 2, attemptedCount: 3, createdEntries: [{ clientId: CLIENT_ID, mobile: 'new' }] };
+            }) as any);
+            const summaries: unknown[] = [];
+            jest.spyOn(svc, B ? 'sendBufferCheckSummaryNotification' : 'sendPromoteCheckSummaryNotification').mockImplementation((async (...args: any[]) => {
+                summaries.push(args.slice(0, 5));
+            }) as any);
+
+            ledger.length = 0; sleepMs.length = 0; pacing.length = 0;
+            await svc[B ? '_checkBufferClientsInternal' : '_checkPromoteClientsInternal']();
+            const docs = await h.models[pool].find({}, { _id: 0, mobile: 1, warmupPhase: 1, status: 1 }).sort({ mobile: 1 }).lean();
+            const trace = { processed, health, enrolCalls, summaries, ledger: [...ledger], sleepMs: [...sleepMs], gaussian: [...pacing], docs };
+            const file = require('path').join(__dirname, 'fixtures', `warmup-run-trace.${pool}.json`);
+            if (process.env.CAPTURE_WARMUP_TRACE) require('fs').writeFileSync(file, JSON.stringify(trace, null, 2) + '\n');
+            expect(JSON.parse(JSON.stringify(trace))).toEqual(JSON.parse(require('fs').readFileSync(file, 'utf8')));
+        });
+
         test('join sweep: an unexpected error and the queued joins of other accounts (D39)', async () => {
             const svc = h.services[pool];
             svc.joinChannelMap.set('919100000012', [{ channelId: 'x' }]);

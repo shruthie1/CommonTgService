@@ -9,6 +9,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { BUFFER_PROFILE } from '../shared/onboarding/pool-profile';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
 import { Client, ClientDocument } from './schemas/client.schema';
@@ -1798,7 +1799,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return {
       clientId,
       mobile: mobileFilter,
-      createdAt: { $lte: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
+      createdAt: { $lte: new Date(Date.now() - BUFFER_PROFILE.consumerMinAgeDays * 24 * 60 * 60 * 1000) },
       // Match the warmup graduation threshold (>= MIN_CHANNELS_FOR_MATURING). Using $gt: 200
       // excluded accounts sitting at exactly the graduation count, making them count as ready
       // supply yet never swap-eligible.
@@ -2278,7 +2279,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       && buffer.status === 'active'
       && buffer.warmupPhase === WarmupPhase.SESSION_ROTATED
       && (buffer.channels ?? 0) >= MIN_CHANNELS_FOR_MATURING
-      && (!createdAt || new Date(createdAt).getTime() <= now - 15 * 24 * 60 * 60 * 1000)
+      && (!createdAt || new Date(createdAt).getTime() <= now - BUFFER_PROFILE.consumerMinAgeDays * 24 * 60 * 60 * 1000)
       && buffer.spamStatus !== 'harsh'
       && docUntil <= now
       && markerUntil <= now;
