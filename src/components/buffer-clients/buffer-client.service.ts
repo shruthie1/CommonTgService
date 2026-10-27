@@ -57,6 +57,7 @@ import {
 } from '../shared/base-client.service';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
+import { BUFFER_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import type { AvailabilityNeeds } from '../shared/base-client.service';
 import {
     allocateByNeed,
@@ -154,7 +155,7 @@ type WarmupSimulationSkip = { mobile: string; action: string; priority?: number;
 
 @Injectable()
 export class BufferClientService extends BaseClientService<BufferClientDocument> {
-    private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = 20;
+    private readonly MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT = BUFFER_PROFILE.legacyHealthyCap;
     private readyRotationInProgress = false;
 
     /** @deprecated Test compatibility alias: now reflects the warmup-check reentrancy flag
@@ -266,24 +267,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     }
 
     private isHealthyBufferClientForCap(doc: Partial<BufferClientDocument>, _now: number): boolean {
-        const phase = doc.warmupPhase;
-        if (!phase) return false;
-        if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
-            // A terminal document below the swap floor is not usable supply. Counting it
-            // against the pool cap prevents replacement/replenishment while setupClient()
-            // correctly rejects it.
-            return (doc.channels || 0) >= (this.config.operationalChannelThreshold ?? 200);
-        }
-
-        const failedAttempts = doc.failedUpdateAttempts || 0;
-        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-            return false;
-        }
-
-        // Age is NOT a health signal: a slow-warming account is still healthy supply and keeps
-        // progressing. Only permanent Telegram failures (via failedAttempts / deactivateClient)
-        // remove an account — never elapsed time.
-        return true;
+        return isHealthyForLegacyCap(doc, this.operationalFloor, this.MAX_FAILED_ATTEMPTS);
     }
 
     /** BUFFER_SUPPLY_* config (process.env = the Mongo configuration doc), fail-closed to legacy. */
@@ -476,19 +460,19 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
     get config(): ClientConfig {
         return {
             joinChannelInterval: 6 * 60 * 1000,      // 6 minutes
-            leaveChannelInterval: 120 * 1000,          // 120 seconds
+            leaveChannelInterval: BUFFER_PROFILE.pacing.leaveChannelIntervalMs, // 120 seconds (owner-gated Q3)
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,             // 120s (redesigned from 20s)
-            channelTarget: 350,                         // Must exceed buffer swap threshold (200+)
+            channelTarget: BUFFER_PROFILE.channelTarget, // Must exceed buffer swap threshold (200+)
             maxJoinsPerSession: 12,
-            maxNewClientsPerTrigger: 10,
-            minTotalClients: 10,
+            maxNewClientsPerTrigger: BUFFER_PROFILE.maxNewClientsPerTrigger,
+            minTotalClients: BUFFER_PROFILE.minTotalClients,
             maxMapSize: 100,
             cooldownHours: 2,
-            clientProcessingDelay: 10000,               // 10s between clients
+            clientProcessingDelay: BUFFER_PROFILE.pacing.clientProcessingDelayMs, // 10s between clients (owner-gated Q3)
             maxChannelJoinsPerDay: 25,
             joinsPerMobilePerRound: 4,
-            operationalChannelThreshold: 200,
+            operationalChannelThreshold: BUFFER_PROFILE.operationalFloor,
         };
     }
 

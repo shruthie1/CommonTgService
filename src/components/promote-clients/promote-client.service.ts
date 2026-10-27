@@ -53,13 +53,14 @@ import { Channel } from '../channels/schemas/channel.schema';
 import { ActiveChannel } from '../active-channels';
 import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
+import { PROMOTE_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 
 type ClientCount = { _id: string; count: number };
 type PromoteClientQuery = Record<string, unknown>;
 
 @Injectable()
 export class PromoteClientService extends BaseClientService<PromoteClientDocument> {
-    private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = 30;
+    private readonly MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT = PROMOTE_PROFILE.legacyHealthyCap;
     private readyRotationInProgress = false;
 
     /** @deprecated Test compatibility alias: now reflects the warmup-check reentrancy flag
@@ -123,40 +124,25 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     get config(): ClientConfig {
         return {
             joinChannelInterval: 6 * 60 * 1000,       // Increased from 4min to 6min
-            leaveChannelInterval: 60 * 1000,            // 1 minute
+            leaveChannelInterval: PROMOTE_PROFILE.pacing.leaveChannelIntervalMs, // 1 minute (owner-gated Q3)
             leaveChannelBatchSize: 10,
             channelProcessingDelay: 120000,              // 120s (redesigned from 10s)
-            channelTarget: 350,                          // Must exceed promote mobile selection threshold (230)
+            channelTarget: PROMOTE_PROFILE.channelTarget, // Must exceed promote mobile selection threshold (230)
             maxJoinsPerSession: 12,
-            maxNewClientsPerTrigger: 10,
-            minTotalClients: 12,
+            maxNewClientsPerTrigger: PROMOTE_PROFILE.maxNewClientsPerTrigger,
+            minTotalClients: PROMOTE_PROFILE.minTotalClients,
             maxMapSize: 100,
             cooldownHours: 2,
-            clientProcessingDelay: 8000,                 // 8s between clients
+            clientProcessingDelay: PROMOTE_PROFILE.pacing.clientProcessingDelayMs, // 8s between clients (owner-gated Q3)
             maxChannelJoinsPerDay: 25,
             joinsPerMobilePerRound: 4,
             // promote-clients selects runtime mobiles at >=230 channels.
-            operationalChannelThreshold: 230,
+            operationalChannelThreshold: PROMOTE_PROFILE.operationalFloor,
         };
     }
 
     private isHealthyPromoteClientForCap(doc: Partial<PromoteClientDocument>, _now: number): boolean {
-        const phase = doc.warmupPhase;
-        if (!phase) return false;
-        if (phase === WarmupPhase.READY || phase === WarmupPhase.SESSION_ROTATED) {
-            // Promotion runtime only selects accounts at this floor. Do not let a
-            // terminal-but-underfilled document suppress replenishment.
-            return (doc.channels || 0) >= (this.config.operationalChannelThreshold ?? 230);
-        }
-
-        const failedAttempts = doc.failedUpdateAttempts || 0;
-        if (failedAttempts >= this.MAX_FAILED_ATTEMPTS) {
-            return false;
-        }
-
-        // Age is NOT a health signal: a slow-warming account is still healthy supply and keeps
-        // progressing. Only permanent Telegram failures remove an account — never elapsed time.
-        return true;
+        return isHealthyForLegacyCap(doc, this.operationalFloor, this.MAX_FAILED_ATTEMPTS);
     }
 
     // ---- Promote-specific: updateNameAndBio (uses firstName + petName) ----
