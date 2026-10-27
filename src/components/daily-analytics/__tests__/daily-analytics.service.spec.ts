@@ -20,9 +20,9 @@ function build(pgRows: (sql: string, params: unknown[]) => any[] | undefined) {
 const pgRows = (sql: string) => {
   if (sql.includes('FROM payment_event')) {
     return [
-      { d: '2026-10-04', client_id: 'a', amt: '300' },
-      { d: '2026-10-05', client_id: 'a', amt: '100' },
-      { d: '2026-10-05', client_id: 'b', amt: '50' },
+      { d: '2026-10-04', client_id: 'a', owner: '300', gross: '300' },
+      { d: '2026-10-05', client_id: 'a', owner: '100', gross: '100' },
+      { d: '2026-10-05', client_id: 'b', owner: '50', gross: '50' },
     ];
   }
   if (sql.includes('GROUP BY day')) {
@@ -63,7 +63,7 @@ describe('DailyAnalyticsService (Postgres only)', () => {
         ['2026-10-04', 300, 'payment_event'],
         ['2026-10-05', 150, 'payment_event'],
       ]);
-      expect(rows[2]).toEqual({ date: '2026-10-05', newUsers: 6, active: 7, paid: 2, revenue: 150, revenueSource: 'payment_event' });
+      expect(rows[2]).toEqual({ date: '2026-10-05', newUsers: 6, active: 7, paid: 2, revenue: 150, grossRevenue: 150, flaggedRevenue: 0, revenueSource: 'payment_event' });
     });
 
     it('a window entirely before REVENUE_FROM_DAY never queries payment_event', async () => {

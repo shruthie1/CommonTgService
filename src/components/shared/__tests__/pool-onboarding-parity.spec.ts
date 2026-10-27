@@ -408,10 +408,11 @@ describe('pool onboarding parity (buffer vs promote)', () => {
                 ? await h.buffer.addNewUserstoBufferClientsDynamic([], ['919300000001'], needs, counted)
                 : await h.promote.addNewUserstoPromoteClientsDynamic([], ['919300000001'], needs, counted);
             expect(result.createdEntries).toEqual([{ clientId: CLIENT_ID, mobile: '919300000002' }]);
-            const [query, sort, limit] = h.usersService.executeQuery.mock.calls[0];
+            const [query, sort, limit, skip, projection] = h.usersService.executeQuery.mock.calls[0];
             expect(query).toEqual({ mobile: { $nin: ['919300000001'] }, expired: false, twoFA: false, lastActive: { $lt: expect.any(String) }, totalChats: { $gt: 150 } });
-            expect(sort).toEqual({ tgId: 1 });
-            expect(limit).toBe(8);
+            // Numeric tgId order is applied in JS (review 2026-10-28): no Mongo sort/limit, minimal projection.
+            expect([sort, limit, skip]).toEqual([undefined, undefined, undefined]);
+            expect(projection).toEqual({ _id: 0, mobile: 1, tgId: 1 });
         });
 
         test('setAs*: Telegram ledger and pacing (D6)', async () => {

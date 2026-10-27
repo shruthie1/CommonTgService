@@ -63,18 +63,58 @@ export function enrolmentIneligibilityReasons(
     return reasons;
 }
 
-/** The one `users` candidate query (lowest tgId first). */
-export function findEnrolmentCandidates(
-    usersService: { executeQuery(query: object, sort?: Record<string, 1 | -1>, limit?: number): Promise<CandidateUser[]> },
+/** Only these fields of a candidate are read; never pull full user docs (sessions, relationships). */
+export const ENROLMENT_CANDIDATE_PROJECTION = { _id: 0, mobile: 1, tgId: 1 } as const;
+
+/**
+ * Numeric order of two tgId strings (users.tgId is a String, so a Mongo sort is lexicographic:
+ * '10' < '9'). Digit-only ids compare by length then digits (exact for any size, no BigInt);
+ * a missing or non-numeric id sorts after every numeric one.
+ */
+export function compareTgIdNumeric(a?: string, b?: string): number {
+    const na = typeof a === 'string' && /^\d+$/.test(a) ? a.replace(/^0+(?=\d)/, '') : undefined;
+    const nb = typeof b === 'string' && /^\d+$/.test(b) ? b.replace(/^0+(?=\d)/, '') : undefined;
+    if (na !== undefined && nb !== undefined) {
+        if (na.length !== nb.length) return na.length - nb.length;
+        return na < nb ? -1 : na > nb ? 1 : 0;
+    }
+    if (na !== undefined) return -1;
+    if (nb !== undefined) return 1;
+    const sa = a ?? '';
+    const sb = b ?? '';
+    return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
+
+type CandidateUsersPort = {
+    executeQuery(
+        query: object,
+        sort?: Record<string, 1 | -1>,
+        limit?: number,
+        skip?: number,
+        projection?: Record<string, 0 | 1>,
+    ): Promise<CandidateUser[]>;
+};
+
+/**
+ * The one `users` candidate query: lowest NUMERIC tgId first (oldest accounts). Every eligible
+ * user is fetched with only { mobile, tgId } (no Mongo sort or limit, which would be
+ * lexicographic) and ordered here. Measured 2026-10-28: 576 eligible rows, ~26 KB, ~0.2 s,
+ * lastActive index (no collection scan).
+ */
+export async function findEnrolmentCandidates(
+    usersService: CandidateUsersPort,
     goodIds: string[],
     limit: number,
     inactiveSince: string,
 ): Promise<CandidateUser[]> {
-    return usersService.executeQuery(
+    const rows = await usersService.executeQuery(
         { mobile: { $nin: goodIds }, ...enrolmentEligibilityFilter(inactiveSince) },
-        { tgId: 1 },
-        limit,
+        undefined,
+        undefined,
+        undefined,
+        { ...ENROLMENT_CANDIDATE_PROJECTION },
     );
+    return [...rows].sort((x, y) => compareTgIdNumeric(x.tgId, y.tgId)).slice(0, Math.max(0, limit));
 }
 
 export interface EnrolmentBatchInput {

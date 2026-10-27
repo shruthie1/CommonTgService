@@ -11,6 +11,7 @@
  * joinchannelForBufferClients, diagnostics, checkBufferClients internals,
  * distribution stats, bulk session rotation, search/executeQuery error paths.
  */
+import { enrolmentEligibilityFilter } from '../shared/onboarding/candidate-source';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Connection, Model } from 'mongoose';
 import { BufferClient } from '../buffer-clients/schemas/buffer-client.schema';
@@ -86,6 +87,7 @@ describe('BufferClientService coverage', () => {
             search: jest.fn(async () => []),
             update: jest.fn(async () => 1),
             executeQuery: jest.fn(async () => []),
+            countDocuments: jest.fn(async () => 0),
             expireAccount: jest.fn(async () => undefined),
         };
         clientService = {
@@ -806,6 +808,22 @@ describe('BufferClientService coverage', () => {
     });
 
     describe('diagnoseEnrollmentDecision()', () => {
+        it('counts eligible users with the shared eligibility filter instead of pulling user docs (review 2026-10-28)', async () => {
+            usersService.countDocuments.mockResolvedValue(576);
+            jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({
+                totalNeeded: 3, readyActive: 0, warmingPipeline: 0, totalActive: 0,
+                calculationReason: 'deficit', priority: 5, replenishmentWindowNeeds: [], windowNeeds: [],
+            });
+            const report = await service.diagnoseEnrollmentDecision();
+            expect(report.eligibleUsersAvailable).toBe(576);
+            expect(usersService.executeQuery).not.toHaveBeenCalled();
+            const [query] = usersService.countDocuments.mock.calls[0];
+            expect(query).toEqual({
+                mobile: { $nin: expect.any(Array) },
+                ...enrolmentEligibilityFilter(query.lastActive.$lt),
+            });
+        });
+
         it('produces a per-client decision report', async () => {
             await service.create(makeBufferClientData({ mobile: '15551700001', status: 'active', clientId: 'test-client-1', warmupPhase: 'ready' }));
             jest.spyOn(service as any, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({

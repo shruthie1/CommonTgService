@@ -504,6 +504,13 @@ export class UsersService {
     return { $and: [...clauses, query] } as QueryFilter<UserDocument>;
   }
 
+  /** Count of users matching `query` under the same default list scoping as executeQuery. */
+  async countDocuments(query: QueryFilter<UserDocument>): Promise<number> {
+    if (!query) throw new BadRequestException('Query is invalid.');
+    const listQuery = await this.getDefaultUserListQuery(query);
+    return this.userModel.countDocuments(listQuery).exec();
+  }
+
   async findAllSorted(limit: number = 100, skip: number = 0, sort?: Record<string, 1 | -1>): Promise<User[]> {
     const filter = await this.getDefaultUserListQuery();
     const query = this.userModel.find(filter).lean();
@@ -1495,6 +1502,7 @@ export class UsersService {
     sort?: Record<string, 1 | -1>,
     limit?: number,
     skip?: number,
+    projection?: Record<string, 0 | 1>,
   ): Promise<User[]> {
     if (!query) {
       throw new BadRequestException('Query is invalid.');
@@ -1502,7 +1510,7 @@ export class UsersService {
 
     try {
       const listQuery = await this.getDefaultUserListQuery(query);
-      const queryExec = this.userModel.find(listQuery).lean();
+      const queryExec = this.userModel.find(listQuery, projection).lean();
 
       if (sort) queryExec.sort(sort);
       if (limit) queryExec.limit(limit);

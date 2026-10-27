@@ -80,7 +80,7 @@ describe('DailyAnalyticsService: daily_mobile', () => {
   describe('byMobile', () => {
     it('user: historical shape, revenue 0 + unavailable', async () => {
       const { svc } = build();
-      expect(await svc.byMobile('user', 2)).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, revenueSource: 'unavailable' }]);
+      expect(await svc.byMobile('user', 2)).toEqual([{ clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, grossRevenue: 0, flaggedRevenue: 0, revenueSource: 'unavailable' }]);
     });
 
     it('reaction with a namespace: namespace filter goes to daily_mobile', async () => {
@@ -126,7 +126,7 @@ describe('DailyAnalyticsService: daily_mobile', () => {
     it('user rows: null profile omitted, revenue 0 + unavailable; mobile filter passed through', async () => {
       const { svc, queries } = build();
       expect(await svc.rows('user', 1, 'a', undefined, 'm9')).toEqual([
-        { date: '2026-10-26', namespace: 'tg-aut', clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, revenueSource: 'unavailable' },
+        { date: '2026-10-26', namespace: 'tg-aut', clientId: 'a', mobile: 'm9', newUsers: 3, active: 4, paid: 1, revenue: 0, grossRevenue: 0, flaggedRevenue: 0, revenueSource: 'unavailable' },
       ]);
       expect(queries[0].params).toEqual([['2026-10-26'], 'a', 'm9']);
     });

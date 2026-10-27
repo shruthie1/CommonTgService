@@ -62,7 +62,7 @@ import { describeClaimHolder, withPoolClaim } from '../shared/onboarding/pool-cl
 import { BUFFER_PROFILE, ONBOARDING_PACING, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
-import { buildEnrolmentExclusions, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
+import { buildEnrolmentExclusions, enrolmentEligibilityFilter, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
 import type { AvailabilityNeeds } from '../shared/base-client.service';
 import {
     allocateByNeed,
@@ -904,17 +904,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         ].filter((id): id is string => typeof id === 'string' && id.length > 0);
 
         const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
-        const eligibleUserCount = await this.usersService.executeQuery(
-            {
-                mobile: { $nin: goodIds },
-                expired: false,
-                twoFA: false,
-                lastActive: { $lt: threeMonthsAgo },
-                totalChats: { $gt: 150 },
-            },
-            { _id: 1 },
-            totalSlotsNeeded + 5,
-        );
+        // A count only (no user docs): the same eligibility filter as the scheduled candidate query.
+        const eligibleUserCount = await this.usersService.countDocuments({
+            mobile: { $nin: goodIds },
+            ...enrolmentEligibilityFilter(threeMonthsAgo),
+        });
 
         return {
             maxNewClientsPerTrigger: this.config.maxNewClientsPerTrigger,
@@ -927,8 +921,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             totalClientsNeedingEnrollment: clientsNeedingBufferClients.length,
             totalSlotsRequested: clientsNeedingBufferClients.reduce((s, c) => s + c.need, 0),
             totalSlotsAllocated: totalSlotsNeeded,
-            eligibleUsersAvailable: eligibleUserCount.length,
-            wouldCreate: Math.min(totalSlotsNeeded, eligibleUserCount.length),
+            eligibleUsersAvailable: eligibleUserCount,
+            wouldCreate: Math.min(totalSlotsNeeded, eligibleUserCount),
             allocations,
             perClientDecisions: perClientDecisions.sort((a, b) => b.totalNeeded - a.totalNeeded),
         };

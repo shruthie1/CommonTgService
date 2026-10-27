@@ -4,7 +4,10 @@ import { AnalyticsPgError, AnalyticsPgReader } from './analytics-pg.reader';
 export type DailyMetric = 'promote' | 'reaction' | 'user';
 
 /**
- * `revenue` (number, same key as before) is sourced only from Postgres payment_event, which has
+ * `revenue` (number, same key as before) is the OWNER revenue: SUM(owner_amount) from the Postgres
+ * view payment_event_owner (credits minus every credit of a chat cheat-flagged on any persona, or
+ * with is_cheat). `grossRevenue` is SUM(amount) of the same rows (every credit, as `revenue` meant
+ * before 2026-10-28) and `flaggedRevenue` = grossRevenue - revenue. payment_event has
  * data from this IST day onward. Otherwise it is 0 and `revenueSource` says so: 'payment_event' |
  * 'payment_event_partial' (window starts before REVENUE_FROM_DAY) | 'unavailable' (0 means
  * "unknown", not "no revenue").
@@ -13,6 +16,12 @@ export const REVENUE_FROM_DAY = '2026-10-04';
 export type RevenueSource = 'payment_event' | 'payment_event_partial' | 'unavailable';
 /** Collects the first Postgres error of ONE public call (per call: no shared state between requests). */
 type PgCtx = { error?: AnalyticsPgError };
+/** One (day, client) revenue cell: owner = SUM(owner_amount), gross = SUM(amount). */
+type Rev = { owner: number; gross: number };
+const ZERO_REV: Rev = { owner: 0, gross: 0 };
+const addRev = (a: Rev, b: Rev): Rev => ({ owner: a.owner + b.owner, gross: a.gross + b.gross });
+/** The three additive revenue keys of a user-metric row. */
+const revFields = (r: Rev) => ({ revenue: r.owner, grossRevenue: r.gross, flaggedRevenue: r.gross - r.owner });
 
 /**
  * Response field -> daily_client / daily_mobile column (same names in both tables). Fixed map:
@@ -37,7 +46,7 @@ const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 /**
  * Read-only daily analytics for the dashboard (per-day trends, per-client and per-mobile
  * breakdowns, fleet totals), served ONLY from Postgres (owner decision 2026-10-26):
- * daily_client (+ payment_event for revenue) for totals and by-client, daily_mobile for by-mobile
+ * daily_client (+ payment_event_owner for revenue) for totals and by-client, daily_mobile for by-mobile
  * and rows. The Mongo *StatsDaily collections are never read. A Postgres failure is a 503
  * (ServiceUnavailableException), never a substitute answer. Never writes.
  */
@@ -99,16 +108,20 @@ export class DailyAnalyticsService {
       .join(', ');
   }
 
-  /** payment_event revenue per (IST day, client). Undefined if PG failed. */
-  private async pgRevenue(dates: string[], ctx: PgCtx): Promise<Map<string, Map<string, number>> | undefined> {
+  /**
+   * Owner and gross revenue per (IST day, client) from payment_event_owner. Undefined if PG failed.
+   * `NOT is_cheat` alone is not the owner rule: tg-aut always writes is_cheat=false, so cheat-flagged
+   * chats (cheat_flag) are only excluded through the view's owner_amount.
+   */
+  private async pgRevenue(dates: string[], ctx: PgCtx): Promise<Map<string, Map<string, Rev>> | undefined> {
     const from = dates.find((d) => d >= REVENUE_FROM_DAY);
-    const out = new Map<string, Map<string, number>>();
+    const out = new Map<string, Map<string, Rev>>();
     if (!from) return out;
-    const rows = await this.pg.query<{ d: string; client_id: string; amt: string }>(
+    const rows = await this.pg.query<{ d: string; client_id: string; owner: string; gross: string }>(
       `SELECT to_char((ts AT TIME ZONE 'Asia/Kolkata')::date, 'YYYY-MM-DD') AS d, client_id,
-              SUM(amount)::bigint AS amt
-         FROM payment_event
-        WHERE ts >= $1::timestamptz AND NOT is_cheat AND amount > 0
+              SUM(owner_amount)::bigint AS owner, SUM(amount)::bigint AS gross
+         FROM payment_event_owner
+        WHERE ts >= $1::timestamptz AND amount > 0
         GROUP BY 1, 2`,
       [`${from}T00:00:00+05:30`],
       this.onErr(ctx),
@@ -118,7 +131,7 @@ export class DailyAnalyticsService {
     for (const r of rows) {
       if (!set.has(r.d)) continue;
       if (!out.has(r.d)) out.set(r.d, new Map());
-      out.get(r.d)!.set(r.client_id, num(r.amt));
+      out.get(r.d)!.set(r.client_id, { owner: num(r.owner), gross: num(r.gross) });
     }
     return out;
   }
@@ -139,7 +152,7 @@ export class DailyAnalyticsService {
       this.onErr(ctx),
     );
     if (!pgRows) throw this.pgUnavailable('dailyTotals', ctx);
-    const revenue = metric === 'user' ? await this.pgRevenue(dates, ctx) : new Map<string, Map<string, number>>();
+    const revenue = metric === 'user' ? await this.pgRevenue(dates, ctx) : new Map<string, Map<string, Rev>>();
     if (!revenue) throw this.pgUnavailable('dailyTotals', ctx);
     const byDate = new Map(pgRows.map((r) => [String(r.d), r]));
     const fields = this.numericFields(metric);
@@ -149,7 +162,7 @@ export class DailyAnalyticsService {
       for (const f of fields) out[f] = num(row[f]);
       if (metric === 'user') {
         const perClient = revenue.get(date);
-        out.revenue = perClient ? [...perClient.values()].reduce((a, b) => a + b, 0) : 0;
+        Object.assign(out, revFields(perClient ? [...perClient.values()].reduce(addRev, ZERO_REV) : ZERO_REV));
         out.revenueSource = (date >= REVENUE_FROM_DAY ? 'payment_event' : 'unavailable') as RevenueSource;
       }
       return out;
@@ -176,10 +189,10 @@ export class DailyAnalyticsService {
     if (!pgRows) throw this.pgUnavailable('byClient', ctx);
     // payment_event carries no namespace; it is tg-aut revenue.
     const revenueApplies = metric === 'user' && (!namespace || namespace === 'tg-aut');
-    const revenue = revenueApplies ? await this.pgRevenue(dates, ctx) : new Map<string, Map<string, number>>();
+    const revenue = revenueApplies ? await this.pgRevenue(dates, ctx) : new Map<string, Map<string, Rev>>();
     if (!revenue) throw this.pgUnavailable('byClient', ctx);
-    const perClientRevenue = new Map<string, number>();
-    for (const m of revenue.values()) for (const [c, a] of m) perClientRevenue.set(c, (perClientRevenue.get(c) || 0) + a);
+    const perClientRevenue = new Map<string, Rev>();
+    for (const m of revenue.values()) for (const [c, a] of m) perClientRevenue.set(c, addRev(perClientRevenue.get(c) || ZERO_REV, a));
 
     const totals = new Map<string, Record<string, number>>();
     const add = (id: unknown, row: Record<string, unknown>) => {
@@ -197,7 +210,7 @@ export class DailyAnalyticsService {
       .map(([clientId, t]) => {
         const out: Record<string, unknown> = { clientId, ...t };
         if (metric === 'user') {
-          out.revenue = perClientRevenue.get(clientId) || 0;
+          Object.assign(out, revFields(perClientRevenue.get(clientId) || ZERO_REV));
           out.revenueSource = source;
         }
         return out;
@@ -231,7 +244,7 @@ export class DailyAnalyticsService {
         const out: Record<string, unknown> = { clientId: String(r.clientId), mobile: String(r.mobile) };
         for (const f of fields) out[f] = num(r[f]);
         if (metric === 'user') {
-          out.revenue = 0;
+          Object.assign(out, revFields(ZERO_REV));
           out.revenueSource = 'unavailable' as RevenueSource;
         }
         return out;
@@ -271,7 +284,7 @@ export class DailyAnalyticsService {
         if (r.profile) out.profile = r.profile;
         for (const f of fields) out[f] = num(r[f]);
         if (metric === 'user') {
-          out.revenue = 0;
+          Object.assign(out, revFields(ZERO_REV));
           out.revenueSource = 'unavailable' as RevenueSource;
         }
         return out;
