@@ -36,7 +36,7 @@ describe('pool profiles (M4)', () => {
                 wrapError: { log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' },
             },
             warmupRun: { logGoodIdsCount: false, healthCheckShare: 4 }, // Q2: a few per run
-            consumerMinAgeDays: 7,
+            consumerMinAgeDays: 15, // Q8 2026-10-27 (tg-platform fef4006)
         });
         expect(Object.isFrozen(BUFFER_PROFILE)).toBe(true);
         expect(Object.isFrozen(PROMOTE_PROFILE.joinSweep)).toBe(true);

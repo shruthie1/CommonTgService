@@ -109,9 +109,10 @@ export interface PoolProfile {
     joinSweep: Readonly<JoinSweepProfile>;
     warmupRun: Readonly<WarmupRunProfile>;
     /**
-     * Minimum account age (days since createdAt) before the pool's consumer may use it (owner-gated
-     * Q8). Buffer: CMS swap eligibility (client.service.ts). Promote: enforced by tg-platform's
-     * promote selection, NOT by this repo; recorded here so both values sit side by side.
+     * Minimum account age (days since createdAt) before the pool's consumer may use it. 15 for both
+     * pools (owner Q8, 2026-10-27; promote was 7). Buffer: CMS swap eligibility (client.service.ts).
+     * Promote: enforced by tg-platform's promote selection (PROMOTE_RUNTIME_MIN_AGE_DAYS in
+     * packages/tg-db promote.repository.ts), NOT by this repo; recorded here so both sit side by side.
      */
     consumerMinAgeDays: number;
 }
@@ -192,7 +193,7 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
     }),
     warmupRun: Object.freeze({ logGoodIdsCount: false, healthCheckShare: 4 }),
-    consumerMinAgeDays: 7,
+    consumerMinAgeDays: 15, // Q8 2026-10-27 (was 7)
 }) as Readonly<PoolProfile>;
 
 /**
