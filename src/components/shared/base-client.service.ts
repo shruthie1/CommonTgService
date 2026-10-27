@@ -892,7 +892,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     /**
      * Select, prioritise and process this pool's warmup accounts under the run caps, then hand
-     * over to the pool's enrolment planner (owner-gated Q1, `profile.warmupRun.supplyPlanner`).
+     * over to the pool's enrolment planner (both: dynamic supply planner, Q1).
      * Which terminal phases are processed is `profile.terminalPhasesInWarmupRun` (Q2).
      */
     protected async runWarmupMaintenance(hooks: {

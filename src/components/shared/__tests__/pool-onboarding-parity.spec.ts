@@ -275,13 +275,32 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             expect(needs.reduce((sum, n) => sum + n.totalNeeded, 0)).toBe(1);
         });
 
-        test('with budget to spare the scheduled promote run is unchanged (need 3 -> 3)', async () => {
+        test('Q1: window need 3 but 0 counted -> promote target 12, cut to the run budget 10', async () => {
             const svc: any = h.promote;
             jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 'test', priority: 1 });
             const dyn = jest.spyOn(svc, 'addNewUserstoPromoteClientsDynamic').mockResolvedValue({ createdCount: 0, attemptedCount: 0, createdEntries: [] });
             jest.spyOn(svc, 'sendPromoteCheckSummaryNotification').mockResolvedValue(undefined);
             await svc._checkPromoteClientsInternal();
-            expect((dyn.mock.calls[0][2] as any[]).map((n) => n.totalNeeded)).toEqual([3]);
+            expect((dyn.mock.calls[0][2] as any[]).map((n) => n.totalNeeded)).toEqual([10]);
+        });
+
+        test('Q1 (owner 2026-10-27): promote plans with the dynamic supply planner and its own target 12 / cap 30 / floor 230', async () => {
+            const svc: any = h.promote;
+            const mk = (clientId: string, n: number, extra: Record<string, unknown>) => Array.from({ length: n }, () => ({ clientId, status: 'active', ...extra }));
+            const assigned = [
+                ...mk('c1', 11, { warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 230 }), // spare at the floor
+                ...mk('c1', 3, { warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 229 }),  // below the floor: not counted
+                ...mk('c3', 20, { warmupPhase: WarmupPhase.SESSION_ROTATED, channels: 300 }),
+                ...mk('c3', 10, { warmupPhase: WarmupPhase.GROWING, channels: 50 }),          // in warmup: counted
+            ];
+            // Window need 0 everywhere: today's planner would enrol nothing.
+            jest.spyOn(svc, 'calculateAvailabilityBasedNeedsForCurrentState').mockResolvedValue({ totalNeeded: 0, windowNeeds: [], totalActive: 0, totalNeededForCount: 0, calculationReason: 'test', priority: 1 });
+            const plan = await svc.buildPromoteEnrolmentPlan(['c1', 'c2', 'c3'], assigned, Date.now());
+            expect([...plan.healthyPerClient.entries()].sort()).toEqual([['c1', 11], ['c3', 30]]);
+            // c1 needs 1, c2 needs 12, c3 is at cap 30. Budget 10 goes by need share: all to c2.
+            expect(plan.budget.budget).toBe(10);
+            expect(plan.needs.map((n: any) => [n.clientId, n.totalNeeded])).toEqual([['c2', 10]]);
+            expect(plan.needs.reduce((sum: number, n: any) => sum + n.totalNeeded, 0)).toBeLessThanOrEqual(plan.budget.budget);
         });
     });
 

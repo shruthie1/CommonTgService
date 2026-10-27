@@ -753,9 +753,10 @@ describe('Service flow reliability', () => {
             [],
             expect.any(Array),
             [
+                // 35 stalled docs do not count: counted 0 -> target 12 (Q1) > window need 4, cut to the run budget 10.
                 expect.objectContaining({
                     clientId: 'client-1',
-                    totalNeeded: 4,
+                    totalNeeded: 10,
                 }),
             ],
             expect.any(Map),

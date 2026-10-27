@@ -59,7 +59,15 @@ import { ONBOARDING_PACING, PROMOTE_PROFILE, isHealthyForLegacyCap } from '../sh
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
 import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
 import { buildEnrolmentExclusions, runEnrolmentBatch, type ClientEnrolmentNeed } from '../shared/onboarding/candidate-source';
-import { computeFleetEnrollmentBudget, engineWeeklyCeiling, type FleetBudget } from '../buffer-clients/buffer-supply';
+import {
+    allocateByNeed,
+    computeClientSupplyTarget,
+    computeFleetEnrollmentBudget,
+    defaultBufferSupplyConfig,
+    engineWeeklyCeiling,
+    type BufferSupplyConfig,
+    type FleetBudget,
+} from '../buffer-clients/buffer-supply';
 
 /** Same lead time as buffer's default (BUFFER_SUPPLY_LEAD_TIME_DAYS default 30). */
 const PROMOTE_ENROLMENT_LEAD_TIME_DAYS = 30;
@@ -525,11 +533,11 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         });
     }
 
-    /** Post-warmup enrolment for this pool (planner = PoolProfile.warmupRun.supplyPlanner, owner-gated Q1). */
+    /** Post-warmup enrolment for this pool (dynamic supply planner with promote's values, Q1). */
     private async enrolAfterWarmup({ clients, assigned, goodIds, now, totalUpdates, updatedEntries }: WarmupRunContext<PromoteClientDocument>) {
         const assignedPromoteClients = assigned;
-        // Enrolment plan: legacy window need capped per client (30), then bounded by the promote
-        // warmup engine's capacity like buffer's (pool-onboarding M12).
+        // Enrolment plan: buffer's dynamic supply planner with promote's values (Q1), bounded by the
+        // promote warmup engine's budget (M12).
         const plan = await this.buildPromoteEnrolmentPlan(clients.map((c) => c.clientId), assignedPromoteClients, now);
 
         let dynamicCreateResult: { createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] } = {
@@ -615,15 +623,35 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     /**
-     * Per-client promote need (legacy windows, capped at the healthy cap) shared out in priority
-     * order within the warmup-engine budget: the per-run maximum, the rolling-7-day engine ceiling
-     * and the pipeline the engine can carry (same formula as buffer, computeFleetEnrollmentBudget).
+     * Promote supply config for the shared dynamic planner (owner Q1, 2026-10-27): buffer's planner
+     * with promote's own values. Target floor = minTotalClients (12), cap = legacyHealthyCap (30) via
+     * headroom, lead time 30 d, same engine ceiling. Promote has no swap-out stamp (lastUsed), so
+     * consumption is 0 and the target sits at its floor; the window need still applies on top.
+     */
+    private promoteSupplyConfig(): BufferSupplyConfig {
+        return {
+            ...defaultBufferSupplyConfig(engineWeeklyCeiling(this.MAX_SENSITIVE_ACTIONS_PER_CYCLE, this.WARMUP_RUNS_PER_DAY)),
+            leadTimeDays: PROMOTE_ENROLMENT_LEAD_TIME_DAYS,
+            minTarget: PROMOTE_PROFILE.minTotalClients,
+            maxTarget: PROMOTE_PROFILE.legacyHealthyCap,
+            capHeadroom: PROMOTE_PROFILE.legacyHealthyCap - PROMOTE_PROFILE.minTotalClients,
+            hardCap: PROMOTE_PROFILE.legacyHealthyCap,
+        };
+    }
+
+    /**
+     * Per-client promote need with buffer's dynamic supply planner (owner Q1, 2026-10-27): counted =
+     * spare graduated accounts at the promote floor (230) + accounts in warmup (not stalled);
+     * need = min(cap - counted, max(target - counted, window need)); the run's warmup-engine budget
+     * (per-run max, rolling-7-day ceiling, pipeline) is shared out by need share (allocateByNeed),
+     * most-starved client first.
      */
     async buildPromoteEnrolmentPlan(
         clientIds: string[],
         assigned?: Array<Partial<PromoteClientDocument>>,
         now: number = Date.now(),
     ): Promise<{ needs: ClientEnrolmentNeed[]; healthyPerClient: Map<string, number>; budget: FleetBudget; enrolledLast7d: number; fleetWarming: number }> {
+        const config = this.promoteSupplyConfig();
         const docs = assigned ?? await this.promoteClientModel
             .find({ clientId: { $exists: true, $ne: null }, status: 'active' }, { clientId: 1, warmupPhase: 1, channels: 1, failedUpdateAttempts: 1 })
             .lean().exec() as Array<Partial<PromoteClientDocument>>;
@@ -638,52 +666,51 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
         const enrolledLast7d = await this.promoteClientModel.countDocuments({ enrolledAt: { $gte: new Date(now - 7 * this.ONE_DAY_MS) } });
         const budget = computeFleetEnrollmentBudget({
             maxNewPerRun: this.config.maxNewClientsPerTrigger,
-            weeklyCeiling: engineWeeklyCeiling(this.MAX_SENSITIVE_ACTIONS_PER_CYCLE, this.WARMUP_RUNS_PER_DAY),
+            weeklyCeiling: config.fleetWeeklyCeiling,
             enrolledLast7d,
             fleetWarming,
-            leadTimeDays: PROMOTE_ENROLMENT_LEAD_TIME_DAYS,
+            leadTimeDays: config.leadTimeDays,
         });
 
-        const capped: ClientEnrolmentNeed[] = [];
+        const entries: Array<ClientEnrolmentNeed & { need: number; target: number; cap: number; counted: number; allocated: number }> = [];
         for (const clientId of clientIds) {
-            const availabilityNeeds = await this.calculateAvailabilityBasedNeedsForCurrentState(clientId);
-            if (availabilityNeeds.totalNeeded <= 0) continue;
-            const healthyCount = healthyPerClient.get(clientId) || 0;
-            const remainingCapacity = Math.max(0, this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT - healthyCount);
-            if (remainingCapacity <= 0) {
+            const availability = await this.calculateAvailabilityBasedNeedsForCurrentState(clientId);
+            const counted = healthyPerClient.get(clientId) || 0;
+            const target = computeClientSupplyTarget({ consumed: 0, counted }, config);
+            const remaining = Math.max(0, target.cap - counted);
+            const wanted = Math.max(target.need, availability.totalNeeded);
+            const need = Math.min(remaining, wanted);
+            if (remaining <= 0 && wanted > 0) {
                 this.logger.debug(`Skipping dynamic promote enrollment for ${clientId}: healthy pool already at cap`, {
-                    healthyCount,
-                    cap: this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT,
-                    requested: availabilityNeeds.totalNeeded,
+                    healthyCount: counted,
+                    cap: target.cap,
+                    requested: wanted,
                 });
-                continue;
             }
-            const cappedNeeded = Math.min(availabilityNeeds.totalNeeded, remainingCapacity);
-            capped.push({
+            entries.push({
                 clientId,
-                ...availabilityNeeds,
-                totalNeeded: cappedNeeded,
-                calculationReason: cappedNeeded < availabilityNeeds.totalNeeded
-                    ? `${availabilityNeeds.calculationReason}; capped to remaining healthy capacity ${remainingCapacity}/${this.MAX_HEALTHY_PROMOTE_CLIENTS_PER_CLIENT}`
-                    : availabilityNeeds.calculationReason,
+                ...availability,
+                calculationReason: `supply ${counted}/${target.target} (cap ${target.cap}); window need ${availability.totalNeeded}`
+                    + (need < wanted ? `; capped to remaining healthy capacity ${remaining}/${target.cap}` : ''),
+                need, target: target.target, cap: target.cap, counted, allocated: 0,
             });
         }
-        capped.sort((a, b) => a.priority - b.priority);
-
-        // Priority order, first come first served, up to the budget (was: up to maxNewClientsPerTrigger).
-        const needs: ClientEnrolmentNeed[] = [];
-        let left = budget.budget;
-        for (const need of capped) {
-            if (left <= 0) break;
-            const allocated = Math.min(need.totalNeeded, left);
-            left -= allocated;
-            needs.push({ ...need, totalNeeded: allocated });
-        }
+        const allocation = allocateByNeed(entries.map((e) => ({ clientId: e.clientId, need: e.need, target: e.target })), budget.budget);
+        for (const entry of entries) entry.allocated = allocation.get(entry.clientId) || 0;
+        // Same enrolment order as buffer's dynamic plan: most-starved first.
+        const ordered = [...entries].sort((a, b) =>
+            (b.allocated / Math.max(1, b.target)) - (a.allocated / Math.max(1, a.target))
+            || b.need - a.need
+            || a.priority - b.priority
+            || a.clientId.localeCompare(b.clientId));
+        const needs: ClientEnrolmentNeed[] = ordered
+            .filter((e) => e.allocated > 0)
+            .map(({ need: _need, target: _target, cap: _cap, counted: _counted, allocated, ...rest }) => ({ ...rest, totalNeeded: allocated }));
         this.logger.info('Promote enrolment plan (fleet)', {
             ...budget,
             enrolledLast7d,
             fleetWarming,
-            totalNeed: capped.reduce((sum, n) => sum + n.totalNeeded, 0),
+            totalNeed: entries.reduce((sum, e) => sum + e.need, 0),
             totalAllocated: needs.reduce((sum, n) => sum + n.totalNeeded, 0),
         });
         return { needs, healthyPerClient, budget, enrolledLast7d, fleetWarming };

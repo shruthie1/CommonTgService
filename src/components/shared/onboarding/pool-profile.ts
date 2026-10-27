@@ -121,11 +121,6 @@ export interface WarmupRunProfile {
     /** Emit the 'Checking buffer clients, good IDs count' debug log. */
     logGoodIdsCount: boolean;
     /**
-     * Enrolment planner that runs after warmup (owner-gated Q1): buffer = dynamic supply
-     * (buffer-supply.ts), promote = legacy windows capped per client + engine budget (M12).
-     */
-    supplyPlanner: 'dynamic-supply' | 'legacy-windows-engine-budget';
-    /**
      * This pool's share of HEALTH_CHECK_CONNECTIONS_PER_RUN in its warmup run (session_rotated
      * checks). Promote: a few per run (owner Q2, 2026-10-27), never-checked/oldest first.
      */
@@ -162,7 +157,7 @@ export const BUFFER_PROFILE: Readonly<PoolProfile> = Object.freeze({
         resultTemplate: 'Buffer Join queued for: {join}, Leave queued for: {leave}',
         wrapError: null,
     }),
-    warmupRun: Object.freeze({ logGoodIdsCount: true, supplyPlanner: 'dynamic-supply', healthCheckShare: HEALTH_CHECK_CONNECTIONS_PER_RUN }),
+    warmupRun: Object.freeze({ logGoodIdsCount: true, healthCheckShare: HEALTH_CHECK_CONNECTIONS_PER_RUN }),
     consumerMinAgeDays: 15,
 }) as Readonly<PoolProfile>;
 
@@ -196,7 +191,7 @@ export const PROMOTE_PROFILE: Readonly<PoolProfile> = Object.freeze({
         resultTemplate: 'Initiated Joining channels for {join} | Queued for leave: {leave}',
         wrapError: Object.freeze({ log: 'Unexpected error during joinchannelForPromoteClients:', message: 'Failed to initiate channel joining process' }),
     }),
-    warmupRun: Object.freeze({ logGoodIdsCount: false, supplyPlanner: 'legacy-windows-engine-budget', healthCheckShare: 4 }),
+    warmupRun: Object.freeze({ logGoodIdsCount: false, healthCheckShare: 4 }),
     consumerMinAgeDays: 7,
 }) as Readonly<PoolProfile>;
 

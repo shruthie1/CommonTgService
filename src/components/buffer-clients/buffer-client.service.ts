@@ -1180,7 +1180,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         });
     }
 
-    /** Post-warmup enrolment for this pool (planner = PoolProfile.warmupRun.supplyPlanner, owner-gated Q1). */
+    /** Post-warmup enrolment for this pool (dynamic supply planner, Q1). */
     private async enrolAfterWarmup({ clients, goodIds, now, totalUpdates, updatedEntries }: WarmupRunContext<BufferClientDocument>) {
         // Supply-follows-demand enrolment (docs/design/2026-10-24-dynamic-buffer-supply.md). The plan
         // is computed after warmup so it sees this run's phase changes; it logs every client's
