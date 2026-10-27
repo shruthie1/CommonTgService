@@ -750,8 +750,10 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
     }
 
     async remove(mobile: string, message?: string): Promise<void> {
+        // Same as buffer remove(): a malformed mobile is a 400, and the notice names the stored mobile.
+        const canonicalMobile = this.canonicalMobile(mobile);
         try {
-            const deleteResult = await this.promoteClientModel.deleteOne({ mobile }).exec();
+            const deleteResult = await this.promoteClientModel.deleteOne({ mobile: canonicalMobile }).exec();
             if (deleteResult.deletedCount === 0) {
                 throw new NotFoundException(`PromoteClient with mobile ${mobile} not found`);
             }
@@ -760,7 +762,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
                 title: 'Deleting promote',
                 fields: [
                     { label: 'Service', value: process.env.serviceName || process.env.clientId || 'unknown' },
-                    { label: 'Mobile', value: mobile },
+                    { label: 'Mobile', value: canonicalMobile },
                     { label: 'Reason', value: message || 'manual removal', code: false },
                 ],
             });

@@ -81,7 +81,7 @@ export const CURRENT = {
         setAsSleepsAfterChannelInfo: false,
         setAsRequiresClientId: false,
         removeCanonicalisesMobile: true,
-        removeInvalidMobileIsBadRequest: false,
+        removeInvalidMobileIsBadRequest: true, // M2
         createKeepsCallerLifecycle: false,
         warmupRunHealthChecksSessionRotated: false,
         joinSweepExcludesPrimaryMobiles: false,
@@ -320,6 +320,10 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             if (want.removeCanonicalisesMobile) {
                 await attempt;
                 expect(await h.models[pool].countDocuments({ mobile: '919100000006' })).toBe(0);
+                const { sendBotNotice } = jest.requireMock('../../../utils/bot-notice');
+                const mobiles = (sendBotNotice as jest.Mock).mock.calls
+                    .flatMap((c: any[]) => c[1].fields).filter((f: any) => f.label === 'Mobile').map((f: any) => f.value);
+                expect(mobiles).toEqual(['919100000006']);
             } else {
                 await expect(attempt).rejects.toBeInstanceOf(NotFoundException);
                 expect(await h.models[pool].countDocuments({ mobile: '919100000006' })).toBe(1);
