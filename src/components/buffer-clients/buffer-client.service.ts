@@ -59,6 +59,7 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { withEnrollmentLock } from '../shared/enrollment-lock';
 import { BUFFER_PROFILE, isHealthyForLegacyCap } from '../shared/onboarding/pool-profile';
 import { enrolPoolClientFromUser, type EnrolmentPort } from '../shared/onboarding/enrolment';
+import { buildEnrolmentExclusions, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
 import type { AvailabilityNeeds } from '../shared/base-client.service';
 import {
     allocateByNeed,
@@ -1660,11 +1661,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         // Exclude ALL buffer client mobiles (not just active) from candidate pool to prevent re-enrollment
         const allBufferClientMobiles = (await this.bufferClientModel.find({}, { mobile: 1 }).lean().exec()).map((doc) => doc.mobile);
 
-        const goodIds = [
-            ...clientMainMobiles,
-            ...promoteClients.map((c) => c.mobile),
-            ...allBufferClientMobiles,
-        ].filter((id): id is string => typeof id === 'string' && id.length > 0);
+        const goodIds = buildEnrolmentExclusions(clientMainMobiles, promoteClients.map((c) => c.mobile), allBufferClientMobiles);
 
         let totalUpdates = 0;
         const updatedEntries: CheckEntry[] = [];
@@ -2013,82 +2010,18 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         bufferClientsPerClient?: Map<string, number>,
         capPerClient?: Map<string, number>,
     ): Promise<{ createdCount: number; attemptedCount: number; createdEntries: CheckEntry[] }> {
-        const threeMonthsAgo = ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS);
-
-        let totalNeeded = 0;
-        for (const clientNeed of clientsNeedingBufferClients) {
-            totalNeeded += clientNeed.totalNeeded;
-        }
-        totalNeeded = Math.min(totalNeeded, this.config.maxNewClientsPerTrigger);
-
-        if (totalNeeded === 0) return { createdCount: 0, attemptedCount: 0, createdEntries: [] };
-
-        const documents = await this.usersService.executeQuery(
-            {
-                mobile: { $nin: goodIds },
-                expired: false,
-                twoFA: false,
-                lastActive: { $lt: threeMonthsAgo },
-                totalChats: { $gt: 150 },
-            },
-            { tgId: 1 },
-            totalNeeded + 5,
-        );
-
-        const today = ClientHelperUtils.getTodayDateString();
-        const assignmentQueue: Array<{ clientId: string; priority: number }> = [];
-        const projectedHealthyCounts = new Map(bufferClientsPerClient || []);
-
-        for (const clientNeed of clientsNeedingBufferClients) {
-            const currentHealthyCount = projectedHealthyCounts.get(clientNeed.clientId) || 0;
-            const clientCap = capPerClient?.get(clientNeed.clientId) ?? this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT;
-            const remainingCapacity = Math.max(0, clientCap - currentHealthyCount);
-            const cappedNeed = Math.min(clientNeed.totalNeeded, remainingCapacity);
-            for (let i = 0; i < cappedNeed; i++) {
-                assignmentQueue.push({ clientId: clientNeed.clientId, priority: clientNeed.priority });
-            }
-            if (cappedNeed > 0) {
-                projectedHealthyCounts.set(clientNeed.clientId, currentHealthyCount + cappedNeed);
-            }
-        }
-
-        let attemptedCount = 0;
-        let createdCount = 0;
-        let assignmentIndex = 0;
-        const createdEntries: CheckEntry[] = [];
-        const enrolledThisRun = new Set<string>();
-
-        while (attemptedCount < totalNeeded && documents.length > 0 && assignmentIndex < assignmentQueue.length) {
-            const document = documents.shift();
-            if (!document || !document.mobile || !document.tgId) continue;
-
-            // Skip if already processed in this batch (dynamic in-flight tracking)
-            if (enrolledThisRun.has(document.mobile)) {
-                this.logger.debug(`Skipping ${document.mobile}: already attempted in this enrollment run`);
-                continue;
-            }
-            enrolledThisRun.add(document.mobile);
-
-            const assignment = assignmentQueue[assignmentIndex];
-            if (!assignment) break;
-
-            try {
-                const created = await this.createBufferClientFromUser(document, assignment.clientId, today);
-                if (created) {
-                    assignmentIndex++;
-                    createdCount++;
-                    createdEntries.push({ clientId: assignment.clientId, mobile: document.mobile });
-                }
-                attemptedCount++;
-            } catch (error: unknown) {
-                this.logger.error(`Error creating connection for ${document.mobile}`);
-                await sleep(ClientHelperUtils.gaussianRandom(12500, 1250, 10000, 15000));
-                attemptedCount++;
-            }
-        }
-
-        this.logger.log(`Dynamic batch completed: Created ${createdCount} new buffer clients (${attemptedCount} attempted)`);
-        return { createdCount, attemptedCount, createdEntries };
+        return runEnrolmentBatch({
+            label: 'buffer',
+            logger: this.logger,
+            usersService: this.usersService,
+            goodIds,
+            needs: clientsNeedingBufferClients,
+            countedPerClient: bufferClientsPerClient,
+            capFor: (clientId) => capPerClient?.get(clientId) ?? this.MAX_HEALTHY_BUFFER_CLIENTS_PER_CLIENT,
+            maxNewPerRun: this.config.maxNewClientsPerTrigger,
+            inactiveSince: ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS),
+            enrolOne: (document, clientId, availableDate) => this.createBufferClientFromUser(document, clientId, availableDate),
+        });
     }
 
     // ---- Buffer-specific: Distribution stats ----

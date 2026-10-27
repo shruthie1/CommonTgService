@@ -323,6 +323,20 @@ describe('pool onboarding parity (buffer vs promote)', () => {
             ]);
         });
 
+        test('enrolment batch: per-client cap projection and candidate order (D1/D13, characterisation)', async () => {
+            for (const m of ['919300000003', '919300000001', '919300000002']) addUser(m);
+            const needs = [{ clientId: CLIENT_ID, totalNeeded: 3, windowNeeds: [], totalActive: 0, totalNeededForCount: 3, calculationReason: 't', priority: 1 }];
+            const counted = new Map([[CLIENT_ID, want.legacyHealthyCap - 1]]);
+            const result = pool === 'buffer'
+                ? await h.buffer.addNewUserstoBufferClientsDynamic([], ['919300000001'], needs, counted)
+                : await h.promote.addNewUserstoPromoteClientsDynamic([], ['919300000001'], needs, counted);
+            expect(result.createdEntries).toEqual([{ clientId: CLIENT_ID, mobile: '919300000002' }]);
+            const [query, sort, limit] = h.usersService.executeQuery.mock.calls[0];
+            expect(query).toEqual({ mobile: { $nin: ['919300000001'] }, expired: false, twoFA: false, lastActive: { $lt: expect.any(String) }, totalChats: { $gt: 150 } });
+            expect(sort).toEqual({ tgId: 1 });
+            expect(limit).toBe(8);
+        });
+
         test('setAs*: Telegram ledger and pacing (D6)', async () => {
             addUser('919100000004');
             await setAs(pool, '919100000004');
