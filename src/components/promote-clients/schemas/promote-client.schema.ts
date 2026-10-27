@@ -150,12 +150,9 @@ export class PromoteClient {
   @Prop({ required: false, type: Date, default: null })
   sessionRotatedAt: Date;
 
-  // ---- Written by tg-platform promote-clients (declared so CMS reads/writes keep them) ----
-  // No defaults: a doc that never had them stays without them.
-  @ApiPropertyOptional({ description: 'SpamBot snapshot written by promote-clients setDaysLeft: -1 healthy, 0 released today, >0 limited for N days (as of the write, not a live countdown).' })
-  @Prop({ required: false, type: Number })
-  daysLeft?: number;
-
+  // ---- Written by tg-platform promote-clients (declared so CMS reads/writes keep it) ----
+  // No default: a doc that never had it stays without it. (daysLeft is not stored on promoteClients:
+  // tg-platform keeps the SpamBot verdict in Redis tg::acct::{mobile}; owner 2026-10-28.)
   @ApiPropertyOptional({ description: 'Timestamp of the last inactive-mobile scrape by promote-clients.' })
   @Prop({ required: false, type: Date })
   lastScraped?: Date;
