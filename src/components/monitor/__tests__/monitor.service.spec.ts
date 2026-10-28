@@ -258,6 +258,75 @@ describe('MonitorService.client', () => {
   });
 });
 
+describe('MonitorService.fleetDetail', () => {
+  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(NOW));
+  afterEach(() => jest.restoreAllMocks());
+
+  const ist = (s: string) => new Date(Date.parse(`${s}+05:30`));
+  const pay = [
+    { ts: ist('2026-10-28T15:10:00'), chat_id: 'c1', amount: 150, owner_amount: 150, cheat_flagged: false },
+    { ts: ist('2026-10-28T15:40:00'), chat_id: 'c9', amount: 200, owner_amount: 200, cheat_flagged: false },
+    { ts: ist('2026-10-27T09:00:00'), chat_id: 'c1', amount: 50, owner_amount: 50, cheat_flagged: false },
+  ];
+  function pg(_n: string, sql: string): any[] {
+    if (sql.includes('SELECT ts, chat_id')) return pay;
+    if (sql.includes('LIMIT 20') && sql.includes('conversion_event')) return [{ channel_id: '1234567890', dms: '6' }];
+    if (sql.includes('FROM daily_channel')) return [{ channel_id: '1234567890', sent: '30', rolled_to: '2026-10-25' }];
+    if (sql.includes('FROM daily_client') && !sql.includes('prev_sent')) return [{ d: '2026-10-28', sent: '50', delivered: '40', banned: '5', new_users: '20' }];
+    if (sql.includes('FROM conversion_event') && sql.includes('::text AS d,')) return [{ d: '2026-10-27', dms: '8' }];
+    if (sql.includes('extract(hour')) return [{ d: '2026-10-28', h: 15, sent: '13' }];
+    if (sql.includes('FROM daily_mobile')) return [{ mobile: '919876541234', client_id: 'beta1', new_users: '9', dms: '0', sent: '5', delivered: '5', banned: '0', first_day: '2026-10-22', last_day: '2026-10-28' }];
+    return defaultPg(_n, sql);
+  }
+  function mongo(coll: string, op: string, arg: any): any[] {
+    if (coll === 'bufferClients') return [{ _id: 'alpha1', total: 10, eligible: 2, harsh: 3 }, { _id: 'beta1', total: 4, eligible: 1, harsh: 0 }];
+    if (coll === 'promoteClients') return [{ _id: 'alpha1', active: 12 }, { _id: 'beta1', active: 3 }];
+    return defaultMongo(coll, op, arg);
+  }
+
+  it('same shape as client detail, aggregated over every client, no client filter anywhere', async () => {
+    const { svc, pgCalls, mongoCalls } = build(pg, mongo);
+    const r = await svc.buildFleetDetail(7, NOW);
+    expect(r).toMatchObject({ clientId: 'all', name: 'All clients', days: 7, range: { from: '2026-10-22', to: '2026-10-28' } });
+    for (const sql of pgCalls.filter((s) => !s.includes('GROUPING') && !s.includes('prev_sent') && !s.includes('AS d, coalesce(sum(owner_amount)'))) {
+      expect(sql).not.toMatch(/client_id\s*=/);
+    }
+    for (const c of mongoCalls.filter((m) => m.coll === 'userData' || m.coll === 'bufferClients' || m.coll === 'promoteClients')) {
+      expect(JSON.stringify(c.arg)).not.toContain('"clientId":"');
+    }
+    // conversion per day pools every client's cohort (alpha 40/2, beta 10/1, unattributed 5/0)
+    expect(r.daily[6]).toMatchObject({ date: '2026-10-28', revenue: 350, payers: 2, newUsers: 20, conversion: 0.0545, sends: 50, dms: 0 });
+    expect(r.daily[5]).toMatchObject({ date: '2026-10-27', revenue: 50, dms: 8 });
+    expect(r.hourly.today[15]).toEqual({ hour: 15, revenue: 350, payers: 2, newUsers: 3, sends: 13 });
+    expect(r.distributions.repeat).toEqual({ oneTime: 1, repeat: 1, repeatRevenueShare: 0.5 });
+    expect(r.mobiles).toEqual([
+      { mobile: '••••1234', clientId: 'beta1', newUsers: 9, sends: 5, sendSuccess: 5, banned: 0, dms: 0, firstDay: '2026-10-22', lastDay: '2026-10-28' },
+    ]);
+    expect(r.channels[0]).toEqual({ title: 'Chan One', sends: 30, dms: 6, dmPerSend: 0.2 });
+    expect(r.pool).toEqual({ buffersEligible: 3, buffersTotal: 14, harsh: 3, promoteActive: 15 });
+    // summary = the fleet row of /monitor/fleet?period=7d
+    expect(r.summary).toMatchObject({ clientId: 'all', name: 'All clients', revenue: 600, grossRevenue: 1800, payers: 5, sends: 700, dms: 9 });
+    expect(r.summary.previous).toMatchObject({ revenue: 300, payers: 2, newUsers: 280 });
+    expect(r.summary.pool).toEqual({ buffersEligible: 3, buffersTotal: 14, promoteActive: 15 });
+    expect(r.summary.spark).toHaveLength(7);
+    expect(r.notes.join('\n')).not.toContain('not in the clients collection');
+    expect(r.notes.join('\n')).toContain('top 20 fleet-wide');
+    expect(r.notes.join('\n')).toContain('daily_channel is rolled up only to 2026-10-25; sends for 2026-10-26..2026-10-27 are missing');
+    expect(JSON.stringify(r)).not.toContain('919876541234');
+    expect(JSON.stringify(r)).not.toContain('"c1"');
+  });
+
+  it('caches 60 s per days with single-flight, separately from client keys', async () => {
+    const { svc, pg: pgMock } = build(pg, mongo);
+    await Promise.all([svc.fleetDetail(30), svc.fleetDetail(30)]);
+    const n = pgMock.query.mock.calls.length;
+    await svc.fleetDetail(30);
+    expect(pgMock.query.mock.calls.length).toBe(n);
+    await svc.client('all', 30);
+    expect(pgMock.query.mock.calls.length).toBeGreaterThan(n);
+  });
+});
+
 describe('MonitorService.live', () => {
   let now = NOW;
   beforeEach(() => jest.spyOn(Date, 'now').mockImplementation(() => now));

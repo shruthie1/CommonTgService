@@ -126,10 +126,10 @@ export function promotePoolPipeline(clientId?: string): object[] {
 
 export const TTFP_BUCKETS = ['<10m', '10-30m', '30m-2h', '2-24h', '1-3d', '3d+'] as const;
 
-/** Minutes from userData creation to firstPaidAt, for first payments in [start, end). */
-export function timeToFirstPayPipeline(clientId: string, start: number, end: number): object[] {
+/** Minutes from userData creation to firstPaidAt, for first payments in [start, end); clientId omitted = fleet. */
+export function timeToFirstPayPipeline(clientId: string | undefined, start: number, end: number): object[] {
   return [
-    { $match: { clientId, firstPaidAt: { $gte: start, $lt: end } } },
+    { $match: { ...(clientId ? { clientId } : {}), firstPaidAt: { $gte: start, $lt: end } } },
     { $project: { _id: 0, mins: { $divide: [{ $subtract: ['$firstPaidAt', { $toLong: { $toDate: '$_id' } }] }, 60000] } } },
     {
       $bucket: {

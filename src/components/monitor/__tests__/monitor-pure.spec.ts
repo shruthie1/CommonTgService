@@ -1,8 +1,13 @@
 import { TtlCache } from '../monitor-cache';
-import { mapTtfp, userCohortPipeline } from '../monitor-mongo';
+import { mapTtfp, timeToFirstPayPipeline, userCohortPipeline } from '../monitor-mongo';
 import {
   clientChannelSendsSql,
+  clientDailyClientSql,
+  clientDmsDailySql,
+  clientMobilesSql,
+  clientPaymentsSql,
   clientSendsHourlySql,
+  clientTopDmChannelsSql,
   fleetDailyClientSql,
   fleetDmsSql,
   fleetRevenueSql,
@@ -11,7 +16,7 @@ import {
 import { clientDaysRange, istDate, istDayStart, istHour, resolvePeriod } from '../monitor-time';
 import { historyNotes, maskMobile, maskPayload, pooledConversion, ratio, withTimeout } from '../monitor-util';
 import { classifyHeartbeat } from '../monitor.service';
-import { parseDays, parsePeriod, parseSvc } from '../monitor.controller';
+import { MonitorController, parseDays, parsePeriod, parseSvc } from '../monitor.controller';
 
 // 2026-10-28 15:42:10 IST
 const NOW = Date.parse('2026-10-28T10:12:10.000Z');
@@ -105,6 +110,63 @@ describe('monitor SQL builders', () => {
   it('dms come from conversion_event kind=dm', () => {
     const q = fleetDmsSql(w.cur, w.prev);
     expect(q.sql).toContain("FROM conversion_event\nWHERE kind = 'dm'");
+  });
+});
+
+describe('monitor SQL builders: fleet scope (clientId null)', () => {
+  const start = Date.parse('2026-09-28T18:30:00.000Z');
+  const iso = '2026-09-28T18:30:00.000Z';
+
+  it('one client keeps client_id = $1 first; the fleet drops the filter and renumbers params', () => {
+    const one = clientPaymentsSql('alpha1', start);
+    expect(one.sql).toContain('client_id = $1 AND ts >= $2::timestamptz');
+    expect(one.params).toEqual(['alpha1', iso]);
+    const all = clientPaymentsSql(null, start);
+    expect(all.name).toBe('fleet.payments');
+    expect(all.sql).not.toContain('client_id');
+    expect(all.sql).toContain('ts >= $1::timestamptz');
+    expect(all.params).toEqual([iso]);
+
+    for (const q of [clientDailyClientSql(null, '2026-09-29'), clientDmsDailySql(null, start), clientSendsHourlySql(null, start), clientTopDmChannelsSql(null, start)]) {
+      expect(q.name.startsWith('fleet.')).toBe(true);
+      expect(q.sql).not.toMatch(/client_id\s*=/);
+      expect(q.sql).not.toContain('$2');
+      expect(q.params).toHaveLength(1);
+    }
+  });
+
+  it('fleet channel sends: closed days from daily_channel, today from promotion_send by channel id; no client filter, no COUNT(DISTINCT)', () => {
+    const today0 = Date.parse('2026-10-27T18:30:00.000Z');
+    const q = clientChannelSendsSql(null, start, ['1', '2'], { from: '2026-09-29', today: '2026-10-28', todayStart: today0 });
+    expect(q.name).toBe('fleet.channels_sends');
+    expect(q.sql).toContain('FROM daily_channel\n  WHERE channel_id = ANY($1::text[]) AND day >= $2::date AND day < $3::date');
+    expect(q.sql).toContain("FROM promotion_send\n  WHERE channel_id = ANY($1::text[]) AND ts >= $4::timestamptz");
+    expect(q.sql).toContain('max(day) FROM daily_channel');
+    expect(q.sql).not.toMatch(/client_id/);
+    expect(q.sql.toLowerCase()).not.toContain('count(distinct');
+    expect(q.params).toEqual([['1', '2'], '2026-09-29', '2026-10-28', '2026-10-27T18:30:00.000Z']);
+    expect(() => clientChannelSendsSql(null, start, ['1'])).toThrow();
+    // one client: unchanged promotion_send index path
+    const one = clientChannelSendsSql('a', start, ['1']);
+    expect(one.sql).toContain('channel_id = ANY($3::text[]) AND client_id = $1 AND ts >= $2::timestamptz');
+    expect(one.params).toEqual(['a', iso, ['1']]);
+  });
+
+  it('fleet mobiles = top 20 by new users with the latest owning client; one client keeps every mobile by sends', () => {
+    const all = clientMobilesSql(null, '2026-09-29');
+    expect(all.sql).toContain('ORDER BY new_users DESC, sent DESC');
+    expect(all.sql).toContain('LIMIT 20');
+    expect(all.sql).toContain('AS client_id');
+    expect(all.params).toEqual(['2026-09-29']);
+    const one = clientMobilesSql('alpha1', '2026-09-29');
+    expect(one.sql).toContain('ORDER BY sent DESC');
+    expect(one.sql).not.toContain('LIMIT');
+    expect(one.params).toEqual(['alpha1', '2026-09-29']);
+  });
+
+  it('time-to-first-pay pipeline: client filter optional', () => {
+    expect((timeToFirstPayPipeline(undefined, 1, 2)[0] as any).$match).toEqual({ firstPaidAt: { $gte: 1, $lt: 2 } });
+    expect((timeToFirstPayPipeline('a', 1, 2)[0] as any).$match).toEqual({ clientId: 'a', firstPaidAt: { $gte: 1, $lt: 2 } });
   });
 });
 
@@ -251,5 +313,22 @@ describe('monitor controller parsing', () => {
     expect(parseSvc(undefined)).toBe('all');
     expect(parseSvc('promote')).toBe('promote');
     expect(() => parseSvc('cms')).toThrow();
+  });
+});
+
+describe('monitor controller routes', () => {
+  it('fleet/detail is its own route, declared before client/:clientId', () => {
+    const proto = MonitorController.prototype as any;
+    const names = Object.getOwnPropertyNames(proto).filter((n) => n !== 'constructor');
+    const paths = names.map((n) => Reflect.getMetadata('path', proto[n]));
+    expect(paths).toContain('fleet/detail');
+    expect(paths.indexOf('fleet/detail')).toBeLessThan(paths.indexOf('client/:clientId'));
+  });
+
+  it('fleet/detail validates days and calls the service', async () => {
+    const svc = { fleetDetail: jest.fn(async (d: number) => ({ days: d })) };
+    const c = new MonitorController(svc as any);
+    await expect((c as any).fleetDetail('30')).resolves.toEqual({ days: 30 });
+    expect(() => (c as any).fleetDetail('14')).toThrow();
   });
 });

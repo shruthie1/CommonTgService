@@ -114,102 +114,159 @@ GROUP BY GROUPING SETS ((client_id), ())`,
 }
 
 /**
- * One client's credits since `start` (raw rows; ~10/day/client). Daily, hourly, amount, hour-of-day
- * and repeat distributions are computed from these in memory. chat_id never leaves the service.
+ * Detail scope: one client id, or null for the whole fleet (/monitor/fleet/detail). The client filter
+ * is always the first parameter ($1) so one-client SQL is unchanged; the fleet drops it and the
+ * remaining parameters renumber from $1.
  */
-export function clientPaymentsSql(clientId: string, start: number): SqlQuery {
+export type Scope = string | null;
+
+function scoped(clientId: Scope, base: string) {
+  const params: unknown[] = [];
+  const add = (v: unknown) => {
+    params.push(v);
+    return `$${params.length}`;
+  };
+  const where = clientId === null ? '' : `client_id = ${add(clientId)} AND `;
+  return { params, add, where, name: `${clientId === null ? 'fleet' : 'client'}.${base}` };
+}
+
+/**
+ * Credits since `start` (raw rows; ~10/day/client, ~250/day fleet). Daily, hourly, amount,
+ * hour-of-day and repeat distributions are computed from these in memory. chat_id never leaves the service.
+ */
+export function clientPaymentsSql(clientId: Scope, start: number): SqlQuery {
+  const q = scoped(clientId, 'payments');
   return {
-    name: 'client.payments',
+    name: q.name,
     sql: `SELECT ts, chat_id, amount, owner_amount, cheat_flagged
 FROM payment_event_owner
-WHERE client_id = $1 AND ts >= $2::timestamptz AND amount > 0`,
-    params: [clientId, iso(start)],
+WHERE ${q.where}ts >= ${q.add(iso(start))}::timestamptz AND amount > 0`,
+    params: q.params,
   };
 }
 
-export function clientDailyClientSql(clientId: string, from: string): SqlQuery {
+export function clientDailyClientSql(clientId: Scope, from: string): SqlQuery {
+  const q = scoped(clientId, 'daily_client');
   return {
-    name: 'client.daily_client',
+    name: q.name,
     sql: `SELECT day::text AS d,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users
 FROM daily_client
-WHERE client_id = $1 AND day >= $2::date
+WHERE ${q.where}day >= ${q.add(from)}::date
 GROUP BY day`,
-    params: [clientId, from],
+    params: q.params,
   };
 }
 
-export function clientDmsDailySql(clientId: string, start: number): SqlQuery {
+export function clientDmsDailySql(clientId: Scope, start: number): SqlQuery {
+  const q = scoped(clientId, 'dms_daily');
   return {
-    name: 'client.dms_daily',
+    name: q.name,
     sql: `SELECT ${IST}::date::text AS d, count(DISTINCT conversion_id) AS dms
 FROM conversion_event
-WHERE kind = 'dm' AND client_id = $1 AND ts >= $2::timestamptz
+WHERE kind = 'dm' AND ${q.where}ts >= ${q.add(iso(start))}::timestamptz
 GROUP BY 1`,
-    params: [clientId, iso(start)],
+    params: q.params,
   };
 }
 
-/** Hourly sends today + yesterday for one client (raw promotion_send, 2 days). */
-export function clientSendsHourlySql(clientId: string, start: number): SqlQuery {
+/** Hourly sends today + yesterday (raw promotion_send, 2 days; count(*) only). */
+export function clientSendsHourlySql(clientId: Scope, start: number): SqlQuery {
+  const q = scoped(clientId, 'promotion_send_hourly');
   return {
-    name: 'client.promotion_send_hourly',
+    name: q.name,
     sql: `SELECT ${IST}::date::text AS d, extract(hour FROM ${IST})::int AS h,
   count(*) FILTER (WHERE outcome <> 'deleted') AS sent
 FROM promotion_send
-WHERE client_id = $1 AND ts >= $2::timestamptz
+WHERE ${q.where}ts >= ${q.add(iso(start))}::timestamptz
 GROUP BY 1, 2`,
-    params: [clientId, iso(start)],
+    params: q.params,
   };
 }
 
 /**
  * Per-mobile totals. newUsers = tg-aut first contacts on that account; dms = first DMs to that
- * account when it is a promote account (namespace promote-clients new_users).
+ * account when it is a promote account (namespace promote-clients new_users). One client: every
+ * mobile by sends. Fleet: top 20 by new users, with the client that owned the mobile on its last day.
  */
-export function clientMobilesSql(clientId: string, from: string): SqlQuery {
+export function clientMobilesSql(clientId: Scope, from: string): SqlQuery {
+  const q = scoped(clientId, 'daily_mobile');
+  const fleet = clientId === null;
   return {
-    name: 'client.daily_mobile',
-    sql: `SELECT mobile,
+    name: q.name,
+    sql: `SELECT mobile,${fleet ? `\n  (array_agg(client_id ORDER BY day DESC))[1] AS client_id,` : ''}
   coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'promote-clients'), 0) AS dms,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
   min(day)::text AS first_day, max(day)::text AS last_day
 FROM daily_mobile
-WHERE client_id = $1 AND day >= $2::date
+WHERE ${q.where}day >= ${q.add(from)}::date
 GROUP BY mobile
-ORDER BY sent DESC`,
-    params: [clientId, from],
+${fleet ? 'ORDER BY new_users DESC, sent DESC, mobile\nLIMIT 20' : 'ORDER BY sent DESC'}`,
+    params: q.params,
   };
 }
 
 /**
- * Top 20 channels for one client, ranked by attributed DMs (conversion_event; per-client from
- * 2026-10-26). Sends are then read only for those channels through promotion_send's
- * (channel_id, ts) index: the one-pass FULL JOIN over every partition took 6.3 s cold / >10 s
- * timeout for 30 d on prod (2026-10-28), this pair 0.3 s + 0.8 s cold.
+ * Top 20 channels ranked by attributed DMs (conversion_event; per-client from 2026-10-26, fleet
+ * includes rows without a client). Sends are then read only for those channels through
+ * promotion_send's (channel_id, ts) index: the one-pass FULL JOIN over every partition took 6.3 s
+ * cold / >10 s timeout for 30 d on prod (2026-10-28), this pair 0.3 s + 0.8 s cold.
  */
-export function clientTopDmChannelsSql(clientId: string, start: number): SqlQuery {
+export function clientTopDmChannelsSql(clientId: Scope, start: number): SqlQuery {
+  const q = scoped(clientId, 'channels_top_dms');
   return {
-    name: 'client.channels_top_dms',
+    name: q.name,
     sql: `SELECT channel_id, count(DISTINCT conversion_id) AS dms
 FROM conversion_event
-WHERE kind = 'dm' AND client_id = $1 AND ts >= $2::timestamptz AND channel_id IS NOT NULL
+WHERE kind = 'dm' AND ${q.where}ts >= ${q.add(iso(start))}::timestamptz AND channel_id IS NOT NULL
 GROUP BY 1
 ORDER BY 2 DESC, 1
 LIMIT 20`,
-    params: [clientId, iso(start)],
+    params: q.params,
   };
 }
 
-export function clientChannelSendsSql(clientId: string, start: number, channelIds: string[]): SqlQuery {
+/**
+ * Sends for the top channels. One client: promotion_send through its (channel_id, ts) index (no
+ * client column elsewhere). Fleet: closed IST days from daily_channel (PK (day, channel_id),
+ * recomputed nightly for the last 7 days) + today from promotion_send's channel index; on prod
+ * 2026-10-28 30 d this took 373 ms cold vs 2.5-6.0 s cold for 30 raw partitions, same totals
+ * (17,047). rolled_to = last day daily_channel holds, so a late rollup is reported, not hidden.
+ */
+export function clientChannelSendsSql(
+  clientId: Scope,
+  start: number,
+  channelIds: string[],
+  fleetDays?: { from: string; today: string; todayStart: number },
+): SqlQuery {
+  const q = scoped(clientId, 'channels_sends');
+  if (clientId === null) {
+    if (!fleetDays) throw new Error('fleet channel sends need the IST day range');
+    const ids = q.add(channelIds);
+    return {
+      name: q.name,
+      sql: `SELECT channel_id, sum(sent)::bigint AS sent, (SELECT max(day) FROM daily_channel)::text AS rolled_to
+FROM (
+  SELECT channel_id, sent FROM daily_channel
+  WHERE channel_id = ANY(${ids}::text[]) AND day >= ${q.add(fleetDays.from)}::date AND day < ${q.add(fleetDays.today)}::date
+  UNION ALL
+  SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') FROM promotion_send
+  WHERE channel_id = ANY(${ids}::text[]) AND ts >= ${q.add(iso(fleetDays.todayStart))}::timestamptz
+  GROUP BY 1
+) x
+GROUP BY 1`,
+      params: q.params,
+    };
+  }
+  const ts = q.add(iso(start));
   return {
-    name: 'client.channels_sends',
+    name: q.name,
     sql: `SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') AS sent
 FROM promotion_send
-WHERE channel_id = ANY($3::text[]) AND client_id = $1 AND ts >= $2::timestamptz
+WHERE channel_id = ANY(${q.add(channelIds)}::text[]) AND ${q.where}ts >= ${ts}::timestamptz
 GROUP BY 1`,
-    params: [clientId, iso(start), channelIds],
+    params: q.params,
   };
 }

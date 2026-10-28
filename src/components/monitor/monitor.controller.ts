@@ -41,6 +41,13 @@ export class MonitorController {
     return this.service.live(parseSvc(svc));
   }
 
+  /** Client-detail shape aggregated over every client. Declared before client/:clientId. */
+  @Get('fleet/detail')
+  @ApiQuery({ name: 'days', required: false, enum: ['7', '30'] })
+  fleetDetail(@Query('days') days?: string) {
+    return this.service.fleetDetail(parseDays(days));
+  }
+
   @Get('client/:clientId')
   @ApiParam({ name: 'clientId' })
   @ApiQuery({ name: 'days', required: false, enum: ['7', '30'] })

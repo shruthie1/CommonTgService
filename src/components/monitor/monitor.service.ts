@@ -26,6 +26,7 @@ import {
   fleetRevenueSql,
   fleetSendsIntradaySql,
   fleetSparkSql,
+  Scope,
   SqlQuery,
 } from './monitor-sql';
 import {
@@ -88,6 +89,48 @@ export interface FleetClientRow {
   pool: { buffersEligible: number; buffersTotal: number; promoteActive: number } | null;
   spark: number[] | null;
   previous: { revenue: number | null; payers: number | null; newUsers: number | null; conversion: number | null };
+}
+
+/** clientId of the fleet-wide detail (/monitor/fleet/detail). Not a valid client cache key (has '*'). */
+export const FLEET_DETAIL_ID = 'all';
+const FLEET_DETAIL_KEY = '*fleet*';
+
+/** The fleet row of a /monitor/fleet response in the shape of a per-client summary row. */
+export function fleetSummaryRow(f: FleetResponse): FleetClientRow & { grossRevenue: number | null; flaggedRevenue: number | null } {
+  const pools = f.clients.map((c) => c.pool);
+  const sparks = f.clients.map((c) => c.spark);
+  const pool = pools.length && pools.every((p) => p)
+    ? pools.reduce(
+        (a, p) => ({
+          buffersEligible: a.buffersEligible + p!.buffersEligible,
+          buffersTotal: a.buffersTotal + p!.buffersTotal,
+          promoteActive: a.promoteActive + p!.promoteActive,
+        }),
+        { buffersEligible: 0, buffersTotal: 0, promoteActive: 0 },
+      )
+    : null;
+  const spark = sparks.length && sparks.every((x) => x)
+    ? sparks[0]!.map((_, i) => sparks.reduce((s, x) => s + (x![i] ?? 0), 0))
+    : null;
+  const m = f.fleet;
+  return {
+    clientId: FLEET_DETAIL_ID,
+    name: 'All clients',
+    revenue: m.revenue,
+    grossRevenue: m.grossRevenue,
+    flaggedRevenue: m.flaggedRevenue,
+    payers: m.payers,
+    newUsers: m.newUsers,
+    conversion: m.conversion,
+    avgTicket: m.avgTicket,
+    sends: m.sends,
+    sendSuccess: m.sendSuccess,
+    banned: m.banned,
+    dms: m.dms,
+    pool,
+    spark,
+    previous: { revenue: f.previous.revenue, payers: f.previous.payers, newUsers: f.previous.newUsers, conversion: f.previous.conversion },
+  };
 }
 
 export interface FleetResponse {
@@ -454,36 +497,61 @@ export class MonitorService {
     return (await this.clientCache.get(`${clientId}:${days}`, () => this.buildClient(clientId, days, Date.now()))).value;
   }
 
+  /** Same shape as client detail, aggregated over every client (clientId 'all'). */
+  async fleetDetail(days: 7 | 30): Promise<any> {
+    return (await this.clientCache.get(`${FLEET_DETAIL_KEY}:${days}`, () => this.buildFleetDetail(days, Date.now()))).value;
+  }
+
   async buildClient(clientId: string, days: 7 | 30, now: number): Promise<any> {
+    return this.buildDetail(clientId, days, now);
+  }
+
+  async buildFleetDetail(days: 7 | 30, now: number): Promise<any> {
+    return this.buildDetail(null, days, now);
+  }
+
+  /** Client detail for one client, or for the whole fleet when `scope` is null. */
+  private async buildDetail(scope: Scope, days: 7 | 30, now: number): Promise<any> {
     const ctx: Ctx = { notes: [], timings: {} };
+    const fleetScope = scope === null;
+    const clientId = scope ?? FLEET_DETAIL_ID;
+    const mongoClient = scope ?? undefined;
     const r = clientDaysRange(days, now);
     const today = r.to;
     const yday = addDays(today, -1);
     const yday0 = istDayStart(yday);
     const payStart = Math.min(r.start, yday0);
+    const tag = fleetScope ? 'fleet' : 'client';
 
     const [meta, fleet, payRows, dcRows, dmsRows, psHourly, mobileRows, channelRows, cohortDaily, cohortHourly, ttfpRows, pool] =
       await Promise.all([
         this.section('clients', ctx, () => this.clientMeta(ctx)),
         this.section('summary', ctx, () => this.fleet(days === 7 ? '7d' : '30d')),
-        this.section('payments', ctx, () => this.pgRows<PayRow>(clientPaymentsSql(clientId, payStart), ctx)),
-        this.section('daily_client', ctx, () => this.pgRows(clientDailyClientSql(clientId, r.from), ctx)),
-        this.section('dms', ctx, () => this.pgRows(clientDmsDailySql(clientId, r.start), ctx)),
-        this.section('hourly_sends', ctx, () => this.pgRows(clientSendsHourlySql(clientId, yday0), ctx)),
-        this.section('mobiles', ctx, () => this.pgRows(clientMobilesSql(clientId, r.from), ctx)),
-        this.section('channels', ctx, () => this.topChannels(clientId, r.start, ctx)),
+        this.section('payments', ctx, () => this.pgRows<PayRow>(clientPaymentsSql(scope, payStart), ctx)),
+        this.section('daily_client', ctx, () => this.pgRows(clientDailyClientSql(scope, r.from), ctx)),
+        this.section('dms', ctx, () => this.pgRows(clientDmsDailySql(scope, r.start), ctx)),
+        this.section('hourly_sends', ctx, () => this.pgRows(clientSendsHourlySql(scope, yday0), ctx)),
+        this.section('mobiles', ctx, () => this.pgRows(clientMobilesSql(scope, r.from), ctx)),
+        this.section('channels', ctx, () => this.topChannels(scope, r.start, { from: r.from, today, todayStart: istDayStart(today) }, ctx)),
         this.section('conversion', ctx, async () =>
-          flattenCohort(await this.mongoAgg('userData', userCohortPipeline({ start: r.start, end: now, clientId }), 'mongo.userData_cohorts_client', ctx)),
+          flattenCohort(
+            await this.mongoAgg('userData', userCohortPipeline({ start: r.start, end: now, clientId: mongoClient }), `mongo.userData_cohorts_${tag}`, ctx),
+          ),
         ),
         this.section('hourly_new_users', ctx, async () =>
           flattenCohort(
-            await this.mongoAgg('userData', userCohortPipeline({ start: yday0, end: now, clientId, byHour: true }), 'mongo.userData_hourly_client', ctx),
+            await this.mongoAgg(
+              'userData',
+              userCohortPipeline({ start: yday0, end: now, clientId: mongoClient, byHour: true }),
+              `mongo.userData_hourly_${tag}`,
+              ctx,
+            ),
           ),
         ),
         this.section('time_to_first_pay', ctx, () =>
-          this.mongoAgg('userData', timeToFirstPayPipeline(clientId, r.start, now), 'mongo.userData_ttfp_client', ctx),
+          this.mongoAgg('userData', timeToFirstPayPipeline(mongoClient, r.start, now), `mongo.userData_ttfp_${tag}`, ctx),
         ),
-        this.section('pool', ctx, () => this.poolByClient(now, today, clientId, ctx)),
+        this.section('pool', ctx, () => this.poolByClient(now, today, mongoClient, ctx)),
       ]);
 
     const credits = (payRows ?? []).map(credit);
@@ -492,7 +560,14 @@ export class MonitorService {
     // ---- daily
     const dcBy = new Map((dcRows ?? []).map((x) => [x.d, x]));
     const dmsBy = new Map((dmsRows ?? []).map((x) => [x.d, num(x.dms)]));
-    const cohortBy = new Map((cohortDaily ?? []).map((x) => [x.d, x]));
+    // fleet cohorts have one row per (client, day): pool numerators and denominators per day.
+    const cohortBy = new Map<string, { n: number; same: number }>();
+    for (const x of cohortDaily ?? []) {
+      const e = cohortBy.get(x.d) ?? { n: 0, same: 0 };
+      e.n += x.n;
+      e.same += x.same;
+      cohortBy.set(x.d, e);
+    }
     const daily = datesBetween(r.from, r.to).map((date) => {
       const dayCredits = inRange.filter((c) => istDate(c.ms) === date);
       const revenue = payRows ? dayCredits.reduce((s, c) => s + c.revenue, 0) : null;
@@ -575,6 +650,7 @@ export class MonitorService {
     const mobiles = mobileRows
       ? mobileRows.map((m) => ({
           mobile: maskMobile(m.mobile),
+          ...(fleetScope ? { clientId: m.client_id ?? null } : {}),
           newUsers: num(m.new_users),
           sends: num(m.sent),
           sendSuccess: num(m.delivered),
@@ -597,19 +673,35 @@ export class MonitorService {
         };
       });
     }
-    const p = pool?.get(clientId);
-    const metaRow = meta?.find((m) => m.clientId === clientId);
-    const summary = fleet?.clients.find((c) => c.clientId === clientId) ?? null;
+    const poolAll = { eligible: 0, total: 0, harsh: 0, promoteActive: 0 };
+    for (const v of pool?.values() ?? []) {
+      poolAll.eligible += v.eligible;
+      poolAll.total += v.total;
+      poolAll.harsh += v.harsh;
+      poolAll.promoteActive += v.promoteActive;
+    }
+    const p = fleetScope ? poolAll : pool?.get(clientId);
+    const metaRow = fleetScope ? undefined : meta?.find((m) => m.clientId === clientId);
+    const summary = fleetScope
+      ? fleet
+        ? fleetSummaryRow(fleet)
+        : null
+      : (fleet?.clients.find((c) => c.clientId === clientId) ?? null);
 
     const notes = [...historyNotes([r, ...(fleet ? [fleet.previousRange] : [])], { mobiles: true }), ...ctx.notes];
-    if (meta && !metaRow) notes.push(`clientId ${clientId} is not in the clients collection.`);
-    notes.push(`daily covers ${r.from}..${r.to} IST; the last row (today) is partial. summary = ${days} complete IST days ending yesterday (same row as /monitor/fleet?period=${days}d).`);
-    notes.push('channels = top 20 by attributed DMs (conversion_event); channels with sends but no DMs are not listed.');
+    if (!fleetScope && meta && !metaRow) notes.push(`clientId ${clientId} is not in the clients collection.`);
+    notes.push(`daily covers ${r.from}..${r.to} IST; the last row (today) is partial. summary = ${days} complete IST days ending yesterday (same row as /monitor/fleet?period=${days}d${fleetScope ? ', fleet totals' : ''}).`);
+    if (fleetScope) {
+      notes.push('channels = top 20 fleet-wide by attributed DMs (conversion_event, incl. DMs without a client before 2026-10-26); channels with sends but no DMs are not listed.');
+      notes.push('mobiles = top 20 accounts fleet-wide by tg-aut new users; clientId = the client that owned the mobile on its last day in range.');
+    } else {
+      notes.push('channels = top 20 by attributed DMs (conversion_event); channels with sends but no DMs are not listed.');
+    }
     notes.push('mobiles[].dms = first DMs to that account as a promote account (daily_mobile promote-clients new_users), not attributed conversion_event DMs.');
 
     return {
       clientId,
-      name: metaRow?.name ?? null,
+      name: fleetScope ? 'All clients' : (metaRow?.name ?? null),
       generatedAt: new Date(now).toISOString(),
       days,
       range: { from: r.from, to: r.to },
@@ -625,12 +717,22 @@ export class MonitorService {
     };
   }
 
-  /** Top channels by attributed DMs, then their sends via the promotion_send channel index. */
-  private async topChannels(clientId: string, start: number, ctx: Ctx): Promise<Array<{ channel_id: string; sent: number; dms: number }>> {
+  /** Top channels by attributed DMs, then their sends (client: promotion_send index; fleet: daily_channel + today raw). */
+  private async topChannels(
+    clientId: Scope,
+    start: number,
+    days: { from: string; today: string; todayStart: number },
+    ctx: Ctx,
+  ): Promise<Array<{ channel_id: string; sent: number; dms: number }>> {
     const top = await this.pgRows(clientTopDmChannelsSql(clientId, start), ctx);
     if (!top.length) return [];
     const ids = top.map((t) => String(t.channel_id));
-    const sends = await this.pgRows(clientChannelSendsSql(clientId, start, ids), ctx);
+    const sends = await this.pgRows(clientChannelSendsSql(clientId, start, ids, clientId === null ? days : undefined), ctx);
+    const rolledTo = sends.find((x) => x.rolled_to)?.rolled_to;
+    const yday = addDays(days.today, -1);
+    if (clientId === null && rolledTo && rolledTo < yday) {
+      ctx.notes.push(`channels[].sends: daily_channel is rolled up only to ${rolledTo}; sends for ${addDays(rolledTo, 1)}..${yday} are missing.`);
+    }
     const sentBy = new Map(sends.map((x) => [String(x.channel_id), num(x.sent)]));
     return top.map((t) => ({ channel_id: String(t.channel_id), dms: num(t.dms), sent: sentBy.get(String(t.channel_id)) ?? 0 }));
   }
