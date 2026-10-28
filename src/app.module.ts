@@ -31,6 +31,7 @@ import { ExceptionsFilter } from './interceptors';
 import { EventManagerModule } from './components/event-manager/event-manager.module';
 import { CollectionInsightsModule } from './components/collection-insights/collection-insights.module';
 import { DailyAnalyticsModule } from './components/daily-analytics/daily-analytics.module';
+import { MonitorModule } from './components/monitor/monitor.module';
 import { FileModule } from './components/files/file.module';
 import { AppService } from './app.service';
 import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
@@ -59,6 +60,7 @@ import { AccountMaintenanceService } from './control-plane/maintenance/account-m
     PromoteMsgModule,
     PromoteStatModule,
     DailyAnalyticsModule,
+    MonitorModule,
     StatModule,
     Stat2Module,
     TgSignupModule,
