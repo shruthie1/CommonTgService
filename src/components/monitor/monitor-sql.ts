@@ -1,15 +1,24 @@
 /**
  * Read-only SQL for the monitor endpoints (Postgres analytics store). Every query is a parameterised
  * SELECT; instants are passed as ISO strings ($n::timestamptz), IST dates as 'YYYY-MM-DD' ($n::date).
+ * Each statement starts with a `/* monitor.<name> *\/` comment (visible in pg_stat_activity).
+ *
+ * Shape (2026-10-28 lightweight rework): the work of every response is split into
+ *  - HISTORY: closed IST days (before today). Fleet-wide where possible, so one cached result serves
+ *    every page (fleet 7d/30d, fleet detail, every client page filter it in memory). Cached until the
+ *    IST day rolls over, refreshed in the background every 10 min (late sink rows, 00:35 IST rollup).
+ *  - TODAY: [IST today 00:00, now). Small, cached 60 s, refreshed in the background.
  *
  * Definitions (scratchpad metrics.md, 2026-10-28):
- *  - revenue = payment_event_owner.owner_amount with amount < 1000 (owner rule 8: a receipt of
- *    ₹1,000 or more is never credited; the view does not apply it). gross = every credit.
- *  - payers = distinct chats with a clean (not cheat-flagged) credit under ₹1,000.
+ *  - revenue = payment_event_owner.owner_amount with amount < 1000 (owner rule 8). Computed in memory
+ *    from the raw credit rows (~250/day fleet-wide), so payers stay distinct over any window.
  *  - daily_client.revenue is always 0 and active_users is an event count: never read.
- *  - sends over whole days come from daily_client (sent = delivered + failed, failed ⊇ banned).
- *    promotion_send (raw, 30 d retention, no client index) only for ≤ 2-day hourly and per-client
- *    channels; never COUNT(DISTINCT) on it.
+ *  - sends over whole days come from daily_client; promotion_send (raw, 30 d, no client index) only
+ *    for today, yesterday's hours and per-client channel sends; never COUNT(DISTINCT) on it.
+ *  - DMs: conversion_event kind='dm' rows are one per conversion (prod 2026-10-28: 37,937 rows = Σ
+ *    per-channel distinct, 34,227 = fleet distinct = Σ per-day distinct = Σ per-client distinct over
+ *    30 d), so per-day counts add up to any window exactly. daily_channel.dms equals per-channel
+ *    distinct per day (7 closed days, 4,535 cells, 0 differences).
  */
 import { Window } from './monitor-time';
 
@@ -21,252 +30,212 @@ export interface SqlQuery {
 
 const IST = `(ts AT TIME ZONE 'Asia/Kolkata')`;
 const iso = (ms: number) => new Date(ms).toISOString();
-const CLEAN_CREDIT = `amount < 1000 AND cheat_flagged IS NOT TRUE`;
 
-/** Fleet revenue/payers per client plus a fleet total row (GROUPING SETS keeps fleet payers distinct). */
-export function fleetRevenueSql(cur: Window, prev: Window): SqlQuery {
-  const c = `ts >= $1::timestamptz AND ts < $2::timestamptz`;
-  const p = `ts >= $3::timestamptz AND ts < $4::timestamptz`;
-  return {
-    name: 'fleet.revenue',
-    sql: `SELECT client_id, GROUPING(client_id) AS is_total,
-  coalesce(sum(owner_amount) FILTER (WHERE ${c} AND amount < 1000), 0) AS revenue,
-  coalesce(sum(amount) FILTER (WHERE ${c}), 0) AS gross,
-  count(DISTINCT chat_id) FILTER (WHERE ${c} AND ${CLEAN_CREDIT}) AS payers,
-  coalesce(sum(owner_amount) FILTER (WHERE ${p} AND amount < 1000), 0) AS prev_revenue,
-  coalesce(sum(amount) FILTER (WHERE ${p}), 0) AS prev_gross,
-  count(DISTINCT chat_id) FILTER (WHERE ${p} AND ${CLEAN_CREDIT}) AS prev_payers
-FROM payment_event_owner
-WHERE amount > 0 AND ((${c}) OR (${p}))
-GROUP BY GROUPING SETS ((client_id), ())`,
-    params: [iso(cur.start), iso(cur.end), iso(prev.start), iso(prev.end)],
-  };
-}
-
-/** Daily owner revenue per client from `fromDate` (IST) on, for the 7-day sparkline. */
-export function fleetSparkSql(fromDayStart: number): SqlQuery {
-  return {
-    name: 'fleet.spark',
-    sql: `SELECT client_id, ${IST}::date::text AS d, coalesce(sum(owner_amount), 0) AS revenue
-FROM payment_event_owner
-WHERE amount > 0 AND amount < 1000 AND ts >= $1::timestamptz
-GROUP BY 1, 2`,
-    params: [iso(fromDayStart)],
-  };
-}
-
-/** Whole-day sends + tg-aut new users per client for the current and previous date ranges. */
-export function fleetDailyClientSql(from: string, to: string, prevFrom: string, prevTo: string): SqlQuery {
-  const c = `day BETWEEN $1::date AND $2::date`;
-  const p = `day BETWEEN $3::date AND $4::date`;
-  return {
-    name: 'fleet.daily_client',
-    sql: `SELECT client_id,
-  coalesce(sum(sent) FILTER (WHERE ${c}), 0) AS sent,
-  coalesce(sum(delivered) FILTER (WHERE ${c}), 0) AS delivered,
-  coalesce(sum(banned) FILTER (WHERE ${c}), 0) AS banned,
-  coalesce(sum(new_users) FILTER (WHERE ${c} AND namespace = 'tg-aut'), 0) AS new_users,
-  coalesce(sum(sent) FILTER (WHERE ${p}), 0) AS prev_sent,
-  coalesce(sum(delivered) FILTER (WHERE ${p}), 0) AS prev_delivered,
-  coalesce(sum(banned) FILTER (WHERE ${p}), 0) AS prev_banned,
-  coalesce(sum(new_users) FILTER (WHERE ${p} AND namespace = 'tg-aut'), 0) AS prev_new_users
-FROM daily_client
-WHERE day BETWEEN $3::date AND $2::date
-GROUP BY client_id`,
-    params: [from, to, prevFrom, prevTo],
-  };
-}
-
-/** Today vs yesterday-up-to-the-same-time sends from raw promotion_send (≤ 2 days scanned). */
-export function fleetSendsIntradaySql(cur: Window, prev: Window): SqlQuery {
-  const c = `ts >= $1::timestamptz`;
-  const p = `ts < $2::timestamptz`;
-  return {
-    name: 'fleet.promotion_send_intraday',
-    sql: `SELECT client_id,
-  count(*) FILTER (WHERE ${c} AND outcome <> 'deleted') AS sent,
-  count(*) FILTER (WHERE ${c} AND outcome = 'delivered') AS delivered,
-  count(*) FILTER (WHERE ${c} AND outcome = 'banned') AS banned,
-  count(*) FILTER (WHERE ${p} AND outcome <> 'deleted') AS prev_sent,
-  count(*) FILTER (WHERE ${p} AND outcome = 'delivered') AS prev_delivered,
-  count(*) FILTER (WHERE ${p} AND outcome = 'banned') AS prev_banned
-FROM promotion_send
-WHERE ts >= $3::timestamptz AND ts < $4::timestamptz AND (${c} OR ${p})
-GROUP BY client_id`,
-    params: [iso(cur.start), iso(prev.end), iso(prev.start), iso(cur.end)],
-  };
-}
-
-/** Attributed promo DMs (conversion_event kind='dm') per client + fleet total. */
-export function fleetDmsSql(cur: Window, prev: Window): SqlQuery {
-  const c = `ts >= $1::timestamptz AND ts < $2::timestamptz`;
-  const p = `ts >= $3::timestamptz AND ts < $4::timestamptz`;
-  return {
-    name: 'fleet.dms',
-    sql: `SELECT client_id, GROUPING(client_id) AS is_total,
-  count(DISTINCT conversion_id) FILTER (WHERE ${c}) AS dms,
-  count(DISTINCT conversion_id) FILTER (WHERE ${p}) AS prev_dms
-FROM conversion_event
-WHERE kind = 'dm' AND ((${c}) OR (${p}))
-GROUP BY GROUPING SETS ((client_id), ())`,
-    params: [iso(cur.start), iso(cur.end), iso(prev.start), iso(prev.end)],
-  };
+function q(name: string, sql: string, params: unknown[]): SqlQuery {
+  return { name, sql: `/* monitor.${name} */ ${sql}`, params };
 }
 
 /**
- * Detail scope: one client id, or null for the whole fleet (/monitor/fleet/detail). The client filter
- * is always the first parameter ($1) so one-client SQL is unchanged; the fleet drops it and the
- * remaining parameters renumber from $1.
+ * Raw credit rows in [start, end) (end omitted = up to now), every client. Revenue, payers, spark and
+ * the client-page distributions are computed from these in memory. chat_id never leaves the service.
  */
-export type Scope = string | null;
-
-function scoped(clientId: Scope, base: string) {
-  const params: unknown[] = [];
-  const add = (v: unknown) => {
-    params.push(v);
-    return `$${params.length}`;
-  };
-  const where = clientId === null ? '' : `client_id = ${add(clientId)} AND `;
-  return { params, add, where, name: `${clientId === null ? 'fleet' : 'client'}.${base}` };
-}
-
-/**
- * Credits since `start` (raw rows; ~10/day/client, ~250/day fleet). Daily, hourly, amount,
- * hour-of-day and repeat distributions are computed from these in memory. chat_id never leaves the service.
- */
-export function clientPaymentsSql(clientId: Scope, start: number): SqlQuery {
-  const q = scoped(clientId, 'payments');
-  return {
-    name: q.name,
-    sql: `SELECT ts, chat_id, amount, owner_amount, cheat_flagged
+export function paymentRowsSql(name: 'pay_hist' | 'pay_today', start: number, end?: number): SqlQuery {
+  const params: unknown[] = [iso(start)];
+  let range = 'ts >= $1::timestamptz';
+  if (end !== undefined) {
+    params.push(iso(end));
+    range += ' AND ts < $2::timestamptz';
+  }
+  return q(
+    name,
+    `SELECT client_id, ts, chat_id, amount, owner_amount, cheat_flagged
 FROM payment_event_owner
-WHERE ${q.where}ts >= ${q.add(iso(start))}::timestamptz AND amount > 0`,
-    params: q.params,
-  };
+WHERE ${range} AND amount > 0`,
+    params,
+  );
 }
 
-export function clientDailyClientSql(clientId: Scope, from: string): SqlQuery {
-  const q = scoped(clientId, 'daily_client');
-  return {
-    name: q.name,
-    sql: `SELECT day::text AS d,
+/** daily_client per (IST day, client) for from..to inclusive: sends + tg-aut new users. */
+export function dailyClientSql(name: 'dc_hist' | 'dc_today', from: string, to: string): SqlQuery {
+  return q(
+    name,
+    `SELECT day::text AS d, client_id,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users
 FROM daily_client
-WHERE ${q.where}day >= ${q.add(from)}::date
-GROUP BY day`,
-    params: q.params,
-  };
+WHERE day BETWEEN $1::date AND $2::date
+GROUP BY day, client_id`,
+    [from, to],
+  );
 }
 
-export function clientDmsDailySql(clientId: Scope, start: number): SqlQuery {
-  const q = scoped(clientId, 'dms_daily');
-  return {
-    name: q.name,
-    sql: `SELECT ${IST}::date::text AS d, count(DISTINCT conversion_id) AS dms
+/** Attributed DMs per (IST day, client) in [start, end); client_id NULL rows (before 2026-10-26) included. */
+export function dmsByDaySql(start: number, end: number): SqlQuery {
+  return q(
+    'dms_hist',
+    `SELECT ${IST}::date::text AS d, client_id, count(DISTINCT conversion_id) AS dms
 FROM conversion_event
-WHERE kind = 'dm' AND ${q.where}ts >= ${q.add(iso(start))}::timestamptz
-GROUP BY 1`,
-    params: q.params,
-  };
-}
-
-/** Hourly sends today + yesterday (raw promotion_send, 2 days; count(*) only). */
-export function clientSendsHourlySql(clientId: Scope, start: number): SqlQuery {
-  const q = scoped(clientId, 'promotion_send_hourly');
-  return {
-    name: q.name,
-    sql: `SELECT ${IST}::date::text AS d, extract(hour FROM ${IST})::int AS h,
-  count(*) FILTER (WHERE outcome <> 'deleted') AS sent
-FROM promotion_send
-WHERE ${q.where}ts >= ${q.add(iso(start))}::timestamptz
+WHERE kind = 'dm' AND ts >= $1::timestamptz AND ts < $2::timestamptz
 GROUP BY 1, 2`,
-    params: q.params,
-  };
+    [iso(start), iso(end)],
+  );
 }
 
 /**
- * Per-mobile totals. newUsers = tg-aut first contacts on that account; dms = first DMs to that
- * account when it is a promote account (namespace promote-clients new_users). One client: every
- * mobile by sends. Fleet: top 20 by new users, with the client that owned the mobile on its last day.
+ * Raw attributed-DM rows in [start, end) (end omitted = up to now): yesterday (to cut the
+ * yesterday-same-time window in memory) and today (fleet dms, today's daily row, today's channel DMs).
+ * ~1.5k rows/day. conversion_id never leaves the service.
  */
-export function clientMobilesSql(clientId: Scope, from: string): SqlQuery {
-  const q = scoped(clientId, 'daily_mobile');
-  const fleet = clientId === null;
-  return {
-    name: q.name,
-    sql: `SELECT mobile,${fleet ? `\n  (array_agg(client_id ORDER BY day DESC))[1] AS client_id,` : ''}
+export function dmRowsSql(name: 'dm_rows_yday' | 'dm_rows_today', start: number, end?: number): SqlQuery {
+  const params: unknown[] = [iso(start)];
+  let range = 'ts >= $1::timestamptz';
+  if (end !== undefined) {
+    params.push(iso(end));
+    range += ' AND ts < $2::timestamptz';
+  }
+  return q(
+    name,
+    `SELECT client_id, channel_id, conversion_id, ts
+FROM conversion_event
+WHERE kind = 'dm' AND ${range}`,
+    params,
+  );
+}
+
+/**
+ * promotion_send live: today per (client, IST hour) plus yesterday up to `cut` (= now - 24 h) per
+ * (client, IST hour). One statement scans the two newest partitions; count(*) only.
+ */
+export function sendsLiveSql(today: Window, cut: number): SqlQuery {
+  return q(
+    'sends_live',
+    `SELECT client_id, ts >= $1::timestamptz AS today, extract(hour FROM ${IST})::int AS h,
+  count(*) FILTER (WHERE outcome <> 'deleted') AS sent,
+  count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
+  count(*) FILTER (WHERE outcome = 'banned') AS banned
+FROM promotion_send
+WHERE ts >= $2::timestamptz AND ts < $3::timestamptz AND (ts >= $1::timestamptz OR ts < $4::timestamptz)
+GROUP BY 1, 2, 3`,
+    [iso(today.start), iso(today.start - 86_400_000), iso(today.end), iso(cut)],
+  );
+}
+
+/** Yesterday's sends per (client, IST hour) for hourly.yesterday (one closed partition, count(*) only). */
+export function sendsHourlySql(day: Window): SqlQuery {
+  return q(
+    'sends_yday_hourly',
+    `SELECT client_id, extract(hour FROM ${IST})::int AS h, count(*) FILTER (WHERE outcome <> 'deleted') AS sent
+FROM promotion_send
+WHERE ts >= $1::timestamptz AND ts < $2::timestamptz
+GROUP BY 1, 2`,
+    [iso(day.start), iso(day.end)],
+  );
+}
+
+/** daily_mobile per (mobile, client) over from..to inclusive. Mobiles are masked before leaving the service. */
+export function mobilesSql(name: 'mobiles_hist' | 'mobiles_today', from: string, to: string): SqlQuery {
+  return q(
+    name,
+    `SELECT mobile, client_id,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'promote-clients'), 0) AS dms,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
   min(day)::text AS first_day, max(day)::text AS last_day
 FROM daily_mobile
-WHERE ${q.where}day >= ${q.add(from)}::date
-GROUP BY mobile
-${fleet ? 'ORDER BY new_users DESC, sent DESC, mobile\nLIMIT 20' : 'ORDER BY sent DESC'}`,
-    params: q.params,
-  };
+WHERE day BETWEEN $1::date AND $2::date
+GROUP BY mobile, client_id`,
+    [from, to],
+  );
 }
 
 /**
- * Top 20 channels ranked by attributed DMs (conversion_event; per-client from 2026-10-26, fleet
- * includes rows without a client). Sends are then read only for those channels through
- * promotion_send's (channel_id, ts) index: the one-pass FULL JOIN over every partition took 6.3 s
- * cold / >10 s timeout for 30 d on prod (2026-10-28), this pair 0.3 s + 0.8 s cold.
+ * The closed IST days `from` .. day before `today`, split at daily_channel's last rolled day: days up
+ * to it come from the rollup, later closed days (only between 00:00 and the 00:35 IST rollup, or if
+ * the rollup is late) from the raw table. The raw branch sits behind a one-time filter on the
+ * rollup's max(day), so it is never executed when the rollup is current.
  */
-export function clientTopDmChannelsSql(clientId: Scope, start: number): SqlQuery {
-  const q = scoped(clientId, 'channels_top_dms');
-  return {
-    name: q.name,
-    sql: `SELECT channel_id, count(DISTINCT conversion_id) AS dms
-FROM conversion_event
-WHERE kind = 'dm' AND ${q.where}ts >= ${q.add(iso(start))}::timestamptz AND channel_id IS NOT NULL
-GROUP BY 1
-ORDER BY 2 DESC, 1
-LIMIT 20`,
-    params: q.params,
-  };
-}
+const ROLLED = `rolled AS (SELECT coalesce(max(day), DATE '1970-01-01') AS d FROM daily_channel WHERE day < $2::date)`;
+const RAW_FROM = `greatest($3::timestamptz, (((SELECT d FROM rolled) + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'))`;
+const RAW_GATE = `(SELECT d FROM rolled) < $2::date - 1`;
 
 /**
- * Sends for the top channels. One client: promotion_send through its (channel_id, ts) index (no
- * client column elsewhere). Fleet: closed IST days from daily_channel (PK (day, channel_id),
- * recomputed nightly for the last 7 days) + today from promotion_send's channel index; on prod
- * 2026-10-28 30 d this took 373 ms cold vs 2.5-6.0 s cold for 30 raw partitions, same totals
- * (17,047). rolled_to = last day daily_channel holds, so a late rollup is reported, not hidden.
+ * Attributed DMs per channel over closed days. Fleet: daily_channel (+ raw for unrolled days). One
+ * client: conversion_event (daily_channel has no client column).
  */
-export function clientChannelSendsSql(
-  clientId: Scope,
-  start: number,
-  channelIds: string[],
-  fleetDays?: { from: string; today: string; todayStart: number },
-): SqlQuery {
-  const q = scoped(clientId, 'channels_sends');
+export function channelDmsHistSql(clientId: string | null, from: string, today: string, start: number, today0: number): SqlQuery {
   if (clientId === null) {
-    if (!fleetDays) throw new Error('fleet channel sends need the IST day range');
-    const ids = q.add(channelIds);
-    return {
-      name: q.name,
-      sql: `SELECT channel_id, sum(sent)::bigint AS sent, (SELECT max(day) FROM daily_channel)::text AS rolled_to
+    return q(
+      'channels_dms_hist',
+      `WITH ${ROLLED}
+SELECT channel_id, sum(dms) AS dms, (SELECT d FROM rolled)::text AS rolled_to
 FROM (
-  SELECT channel_id, sent FROM daily_channel
-  WHERE channel_id = ANY(${ids}::text[]) AND day >= ${q.add(fleetDays.from)}::date AND day < ${q.add(fleetDays.today)}::date
+  SELECT channel_id, dms FROM daily_channel
+  WHERE day >= $1::date AND day <= (SELECT d FROM rolled) AND dms > 0
   UNION ALL
-  SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') FROM promotion_send
-  WHERE channel_id = ANY(${ids}::text[]) AND ts >= ${q.add(iso(fleetDays.todayStart))}::timestamptz
+  SELECT channel_id, count(DISTINCT conversion_id) FROM conversion_event
+  WHERE ${RAW_GATE} AND kind = 'dm' AND ts >= ${RAW_FROM} AND ts < $4::timestamptz AND channel_id IS NOT NULL
   GROUP BY 1
 ) x
 GROUP BY 1`,
-      params: q.params,
-    };
+      [from, today, iso(start), iso(today0)],
+    );
   }
-  const ts = q.add(iso(start));
-  return {
-    name: q.name,
-    sql: `SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') AS sent
-FROM promotion_send
-WHERE channel_id = ANY(${q.add(channelIds)}::text[]) AND ${q.where}ts >= ${ts}::timestamptz
+  return q(
+    'client_channels_dms_hist',
+    `SELECT channel_id, count(DISTINCT conversion_id) AS dms
+FROM conversion_event
+WHERE kind = 'dm' AND client_id = $1 AND ts >= $2::timestamptz AND ts < $3::timestamptz AND channel_id IS NOT NULL
 GROUP BY 1`,
-    params: q.params,
-  };
+    [clientId, iso(start), iso(today0)],
+  );
+}
+
+/**
+ * Sends over closed days for a set of channels. Fleet: daily_channel (+ promotion_send by channel
+ * index for unrolled days). One client: promotion_send through its (channel_id, ts) index.
+ */
+export function channelSendsHistSql(clientId: string | null, ids: string[], from: string, today: string, start: number, today0: number): SqlQuery {
+  if (clientId === null) {
+    return q(
+      'channels_sends_hist',
+      `WITH ${ROLLED}
+SELECT channel_id, sum(sent)::bigint AS sent, (SELECT d FROM rolled)::text AS rolled_to
+FROM (
+  SELECT channel_id, sent FROM daily_channel
+  WHERE channel_id = ANY($5::text[]) AND day >= $1::date AND day <= (SELECT d FROM rolled)
+  UNION ALL
+  SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') FROM promotion_send
+  WHERE ${RAW_GATE} AND channel_id = ANY($5::text[]) AND ts >= ${RAW_FROM} AND ts < $4::timestamptz
+  GROUP BY 1
+) x
+GROUP BY 1`,
+      [from, today, iso(start), iso(today0), ids],
+    );
+  }
+  return q(
+    'client_channels_sends_hist',
+    `SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') AS sent
+FROM promotion_send
+WHERE channel_id = ANY($2::text[]) AND client_id = $1 AND ts >= $3::timestamptz AND ts < $4::timestamptz
+GROUP BY 1`,
+    [clientId, ids, iso(start), iso(today0)],
+  );
+}
+
+/** Today's sends for a set of channels (promotion_send channel index, today's partition only). */
+export function channelSendsTodaySql(clientId: string | null, ids: string[], today0: number): SqlQuery {
+  const params: unknown[] = [ids, iso(today0)];
+  let client = '';
+  if (clientId !== null) {
+    params.push(clientId);
+    client = ' AND client_id = $3';
+  }
+  return q(
+    clientId === null ? 'channels_sends_today' : 'client_channels_sends_today',
+    `SELECT channel_id, count(*) FILTER (WHERE outcome <> 'deleted') AS sent
+FROM promotion_send
+WHERE channel_id = ANY($1::text[]) AND ts >= $2::timestamptz${client}
+GROUP BY 1`,
+    params,
+  );
 }

@@ -7,7 +7,8 @@ import { MONITOR_REDIS, MonitorRedis, MonitorService } from './monitor.service';
 /**
  * Read-only monitoring API (GET /monitor/fleet, /monitor/client/:clientId, /monitor/live).
  * Postgres via its own AnalyticsPgReader (pool max 2, 10 s timeouts); Mongo via the default
- * connection (aggregate/find only); Redis via the shared RedisClient (SMEMBERS + MGET only).
+ * connection (aggregate/find only); Redis via the shared RedisClient (SMEMBERS + MGET for live; GET/SET
+ * only on its own monitor::snapshot::<page> keys).
  */
 @Module({
   controllers: [MonitorController],
@@ -19,6 +20,9 @@ import { MONITOR_REDIS, MonitorRedis, MonitorService } from './monitor.service';
       useFactory: (): MonitorRedis => ({
         smembers: (key) => RedisClient.getClient().smembers(key),
         mget: (keys) => RedisClient.getClient().mget(keys),
+        // only the monitor's own monitor::snapshot::<page> keys (last page snapshots, TTL 36 h)
+        get: (key) => RedisClient.getClient().get(key),
+        set: (key, value, mode, ttlSec) => RedisClient.getClient().set(key, value, mode, ttlSec),
       }),
     },
   ],

@@ -52,7 +52,11 @@ export class AnalyticsPgReader implements OnModuleDestroy {
         connectionTimeoutMillis: QUERY_TIMEOUT_MS,
         query_timeout: QUERY_TIMEOUT_MS,
         statement_timeout: QUERY_TIMEOUT_MS,
-        idleTimeoutMillis: 30_000,
+        // Opening a TLS connection to Supabase from VM2 costs ~2.1 s; dashboards refresh every
+        // 60-120 s, so a 30 s idle timeout reconnected on almost every refresh. max:2 bounds the
+        // held connections.
+        idleTimeoutMillis: 10 * 60_000,
+        keepAlive: true,
       });
       pool.on('error', (err: Error) => this.logOnce('pool error', err));
       const old = this.pool;

@@ -1,17 +1,16 @@
 import { TtlCache } from '../monitor-cache';
 import { mapTtfp, timeToFirstPayPipeline, userCohortPipeline } from '../monitor-mongo';
 import {
-  clientChannelSendsSql,
-  clientDailyClientSql,
-  clientDmsDailySql,
-  clientMobilesSql,
-  clientPaymentsSql,
-  clientSendsHourlySql,
-  clientTopDmChannelsSql,
-  fleetDailyClientSql,
-  fleetDmsSql,
-  fleetRevenueSql,
-  fleetSendsIntradaySql,
+  channelDmsHistSql,
+  channelSendsHistSql,
+  channelSendsTodaySql,
+  dailyClientSql,
+  dmRowsSql,
+  dmsByDaySql,
+  mobilesSql,
+  paymentRowsSql,
+  sendsHourlySql,
+  sendsLiveSql,
 } from '../monitor-sql';
 import { clientDaysRange, istDate, istDayStart, istHour, resolvePeriod } from '../monitor-time';
 import { historyNotes, maskMobile, maskPayload, pooledConversion, ratio, withTimeout } from '../monitor-util';
@@ -66,104 +65,111 @@ describe('monitor IST period math', () => {
 });
 
 describe('monitor SQL builders', () => {
-  const w = resolvePeriod('today', NOW);
+  const today0 = Date.parse('2026-10-27T18:30:00.000Z');
+  const start = Date.parse('2026-09-28T18:30:00.000Z');
 
-  it('revenue: owner_amount under ₹1,000, clean payers, fleet total via GROUPING SETS, params in order', () => {
-    const q = fleetRevenueSql(w.cur, w.prev);
-    expect(q.sql).toContain('FROM payment_event_owner');
-    expect(q.sql).toContain('sum(owner_amount) FILTER (WHERE ts >= $1::timestamptz AND ts < $2::timestamptz AND amount < 1000)');
-    expect(q.sql).toContain('cheat_flagged IS NOT TRUE');
-    expect(q.sql).toContain('GROUPING SETS ((client_id), ())');
-    expect(q.params).toEqual([
-      '2026-10-27T18:30:00.000Z',
-      '2026-10-28T10:12:10.000Z',
-      '2026-10-26T18:30:00.000Z',
-      '2026-10-27T10:12:10.000Z',
-    ]);
+  it('every statement is a named SELECT', () => {
+    const qs = [
+      paymentRowsSql('pay_hist', start, today0),
+      paymentRowsSql('pay_today', today0),
+      dailyClientSql('dc_hist', '2026-08-29', '2026-10-27'),
+      dmsByDaySql(start, today0),
+      dmRowsSql('dm_rows_today', today0),
+      sendsLiveSql({ start: today0, end: NOW }, NOW - 86_400_000),
+      sendsHourlySql({ start: today0 - 86_400_000, end: today0 }),
+      mobilesSql('mobiles_hist', '2026-10-22', '2026-10-27'),
+      channelDmsHistSql(null, '2026-10-21', '2026-10-28', start, today0),
+      channelDmsHistSql('a', '2026-10-21', '2026-10-28', start, today0),
+      channelSendsHistSql(null, ['1'], '2026-10-21', '2026-10-28', start, today0),
+      channelSendsHistSql('a', ['1'], '2026-10-21', '2026-10-28', start, today0),
+      channelSendsTodaySql(null, ['1'], today0),
+      channelSendsTodaySql('a', ['1'], today0),
+    ];
+    for (const q of qs) {
+      expect(q.sql.startsWith(`/* monitor.${q.name} */ `)).toBe(true);
+      expect(q.sql).toMatch(/^\/\* monitor\.[a-z_]+ \*\/ (SELECT|WITH)/);
+      expect(q.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\b/i);
+    }
   });
 
-  it('daily_client: never revenue or active_users; tg-aut new users only', () => {
-    const q = fleetDailyClientSql('2026-10-21', '2026-10-27', '2026-10-14', '2026-10-20');
+  it('payments: raw credit rows with client_id, bounded history / open-ended today', () => {
+    const h = paymentRowsSql('pay_hist', start, today0);
+    expect(h.sql).toContain('FROM payment_event_owner');
+    expect(h.sql).toContain('client_id, ts, chat_id, amount, owner_amount, cheat_flagged');
+    expect(h.sql).toContain('ts >= $1::timestamptz AND ts < $2::timestamptz AND amount > 0');
+    expect(h.params).toEqual(['2026-09-28T18:30:00.000Z', '2026-10-27T18:30:00.000Z']);
+    const t = paymentRowsSql('pay_today', today0);
+    expect(t.sql).toContain('WHERE ts >= $1::timestamptz AND amount > 0');
+    expect(t.params).toEqual(['2026-10-27T18:30:00.000Z']);
+  });
+
+  it('daily_client: never revenue or active_users; tg-aut new users only; per (day, client)', () => {
+    const q = dailyClientSql('dc_hist', '2026-08-29', '2026-10-27');
     expect(q.sql).not.toMatch(/\brevenue\b/);
     expect(q.sql).not.toContain('active_users');
     expect(q.sql).toContain("namespace = 'tg-aut'");
-    expect(q.params).toEqual(['2026-10-21', '2026-10-27', '2026-10-14', '2026-10-20']);
+    expect(q.sql).toContain('GROUP BY day, client_id');
+    expect(q.params).toEqual(['2026-08-29', '2026-10-27']);
   });
 
   it('promotion_send queries never use COUNT(DISTINCT) and are time-bounded', () => {
-    for (const q of [fleetSendsIntradaySql(w.cur, w.prev), clientSendsHourlySql('a', w.prev.start), clientChannelSendsSql('a', w.prev.start, ['1'])]) {
-      const ps = q.sql.split('FROM promotion_send')[1].split('GROUP BY')[0];
-      expect(ps).toMatch(/ts >= \$\d::timestamptz/);
-      const at = q.sql.indexOf('FROM promotion_send');
-      const selectList = q.sql.slice(q.sql.lastIndexOf('SELECT', at), at);
-      expect(selectList).not.toMatch(/DISTINCT/i);
+    const qs = [
+      sendsLiveSql({ start: today0, end: NOW }, NOW - 86_400_000),
+      sendsHourlySql({ start: today0 - 86_400_000, end: today0 }),
+      channelSendsHistSql('a', ['1'], '2026-10-21', '2026-10-28', start, today0),
+      channelSendsTodaySql('a', ['1'], today0),
+      channelSendsTodaySql(null, ['1'], today0),
+    ];
+    for (const q of qs) {
+      expect(q.sql).toContain('FROM promotion_send');
+      expect(q.sql).toMatch(/ts >= \$\d::timestamptz/);
+      expect(q.sql.toLowerCase()).not.toContain('count(distinct');
     }
-    const intraday = fleetSendsIntradaySql(w.cur, w.prev);
-    expect(intraday.params).toEqual([
+    const live = sendsLiveSql({ start: today0, end: NOW }, NOW - 86_400_000);
+    expect(live.params).toEqual([
       '2026-10-27T18:30:00.000Z',
-      '2026-10-27T10:12:10.000Z',
       '2026-10-26T18:30:00.000Z',
       '2026-10-28T10:12:10.000Z',
+      '2026-10-27T10:12:10.000Z',
     ]);
   });
 
   it('dms come from conversion_event kind=dm', () => {
-    const q = fleetDmsSql(w.cur, w.prev);
-    expect(q.sql).toContain("FROM conversion_event\nWHERE kind = 'dm'");
+    expect(dmsByDaySql(start, today0).sql).toContain("FROM conversion_event\nWHERE kind = 'dm'");
+    expect(dmRowsSql('dm_rows_yday', today0 - 86_400_000, today0).sql).toContain("WHERE kind = 'dm' AND ts >= $1::timestamptz AND ts < $2::timestamptz");
+  });
+
+  it('fleet channels: closed days from daily_channel, raw only behind a one-time gate for unrolled days', () => {
+    const d = channelDmsHistSql(null, '2026-09-29', '2026-10-28', start, today0);
+    expect(d.name).toBe('channels_dms_hist');
+    expect(d.sql).toContain('FROM daily_channel\n  WHERE day >= $1::date AND day <= (SELECT d FROM rolled) AND dms > 0');
+    expect(d.sql).toContain('WHERE (SELECT d FROM rolled) < $2::date - 1 AND kind = \'dm\'');
+    expect(d.sql).not.toMatch(/client_id/);
+    expect(d.params).toEqual(['2026-09-29', '2026-10-28', '2026-09-28T18:30:00.000Z', '2026-10-27T18:30:00.000Z']);
+    const s = channelSendsHistSql(null, ['1', '2'], '2026-09-29', '2026-10-28', start, today0);
+    expect(s.sql).toContain('FROM daily_channel\n  WHERE channel_id = ANY($5::text[]) AND day >= $1::date');
+    expect(s.sql).toContain('WHERE (SELECT d FROM rolled) < $2::date - 1 AND channel_id = ANY($5::text[])');
+    expect(s.sql).not.toMatch(/client_id/);
+    expect(s.params[4]).toEqual(['1', '2']);
+    // one client: conversion_event / promotion_send with client_id = $1 (daily_channel has no client)
+    const cd = channelDmsHistSql('a', '2026-09-29', '2026-10-28', start, today0);
+    expect(cd.sql).toContain("kind = 'dm' AND client_id = $1 AND ts >= $2::timestamptz AND ts < $3::timestamptz");
+    expect(cd.sql).not.toContain('daily_channel');
+    const cs = channelSendsHistSql('a', ['1'], '2026-09-29', '2026-10-28', start, today0);
+    expect(cs.sql).toContain('channel_id = ANY($2::text[]) AND client_id = $1 AND ts >= $3::timestamptz AND ts < $4::timestamptz');
+    expect(channelSendsTodaySql('a', ['1'], today0).sql).toContain('AND client_id = $3');
+    expect(channelSendsTodaySql(null, ['1'], today0).sql).not.toContain('client_id');
+  });
+
+  it('mobiles: per (mobile, client) so history and today merge exactly', () => {
+    const m = mobilesSql('mobiles_today', '2026-10-28', '2026-10-28');
+    expect(m.sql).toContain('GROUP BY mobile, client_id');
+    expect(m.sql).toContain("FILTER (WHERE namespace = 'promote-clients')");
+    expect(m.params).toEqual(['2026-10-28', '2026-10-28']);
   });
 });
 
-describe('monitor SQL builders: fleet scope (clientId null)', () => {
-  const start = Date.parse('2026-09-28T18:30:00.000Z');
-  const iso = '2026-09-28T18:30:00.000Z';
-
-  it('one client keeps client_id = $1 first; the fleet drops the filter and renumbers params', () => {
-    const one = clientPaymentsSql('alpha1', start);
-    expect(one.sql).toContain('client_id = $1 AND ts >= $2::timestamptz');
-    expect(one.params).toEqual(['alpha1', iso]);
-    const all = clientPaymentsSql(null, start);
-    expect(all.name).toBe('fleet.payments');
-    expect(all.sql).not.toContain('client_id');
-    expect(all.sql).toContain('ts >= $1::timestamptz');
-    expect(all.params).toEqual([iso]);
-
-    for (const q of [clientDailyClientSql(null, '2026-09-29'), clientDmsDailySql(null, start), clientSendsHourlySql(null, start), clientTopDmChannelsSql(null, start)]) {
-      expect(q.name.startsWith('fleet.')).toBe(true);
-      expect(q.sql).not.toMatch(/client_id\s*=/);
-      expect(q.sql).not.toContain('$2');
-      expect(q.params).toHaveLength(1);
-    }
-  });
-
-  it('fleet channel sends: closed days from daily_channel, today from promotion_send by channel id; no client filter, no COUNT(DISTINCT)', () => {
-    const today0 = Date.parse('2026-10-27T18:30:00.000Z');
-    const q = clientChannelSendsSql(null, start, ['1', '2'], { from: '2026-09-29', today: '2026-10-28', todayStart: today0 });
-    expect(q.name).toBe('fleet.channels_sends');
-    expect(q.sql).toContain('FROM daily_channel\n  WHERE channel_id = ANY($1::text[]) AND day >= $2::date AND day < $3::date');
-    expect(q.sql).toContain("FROM promotion_send\n  WHERE channel_id = ANY($1::text[]) AND ts >= $4::timestamptz");
-    expect(q.sql).toContain('max(day) FROM daily_channel');
-    expect(q.sql).not.toMatch(/client_id/);
-    expect(q.sql.toLowerCase()).not.toContain('count(distinct');
-    expect(q.params).toEqual([['1', '2'], '2026-09-29', '2026-10-28', '2026-10-27T18:30:00.000Z']);
-    expect(() => clientChannelSendsSql(null, start, ['1'])).toThrow();
-    // one client: unchanged promotion_send index path
-    const one = clientChannelSendsSql('a', start, ['1']);
-    expect(one.sql).toContain('channel_id = ANY($3::text[]) AND client_id = $1 AND ts >= $2::timestamptz');
-    expect(one.params).toEqual(['a', iso, ['1']]);
-  });
-
-  it('fleet mobiles = top 20 by new users with the latest owning client; one client keeps every mobile by sends', () => {
-    const all = clientMobilesSql(null, '2026-09-29');
-    expect(all.sql).toContain('ORDER BY new_users DESC, sent DESC');
-    expect(all.sql).toContain('LIMIT 20');
-    expect(all.sql).toContain('AS client_id');
-    expect(all.params).toEqual(['2026-09-29']);
-    const one = clientMobilesSql('alpha1', '2026-09-29');
-    expect(one.sql).toContain('ORDER BY sent DESC');
-    expect(one.sql).not.toContain('LIMIT');
-    expect(one.params).toEqual(['alpha1', '2026-09-29']);
-  });
-
+describe('monitor pipelines', () => {
   it('time-to-first-pay pipeline: client filter optional', () => {
     expect((timeToFirstPayPipeline(undefined, 1, 2)[0] as any).$match).toEqual({ firstPaidAt: { $gte: 1, $lt: 2 } });
     expect((timeToFirstPayPipeline('a', 1, 2)[0] as any).$match).toEqual({ clientId: 'a', firstPaidAt: { $gte: 1, $lt: 2 } });

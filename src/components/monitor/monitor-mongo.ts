@@ -142,6 +142,49 @@ export function timeToFirstPayPipeline(clientId: string | undefined, start: numb
   ];
 }
 
+/**
+ * First payments in [start, end) as small rows {c: clientId, fp: firstPaidAt, mins: minutes since the
+ * doc was created}, every client (pages filter and bucket in memory, see ttfpBuckets).
+ * `chats` given: only those chatIds, so the query walks the chatId_Profile index instead of scanning
+ * the collection (userData has no firstPaidAt index). Used for today with the chats that have a
+ * credit row today (prod 2026-10-28: equal buckets for today and 7 d, fleet and sowmya2; 30 d missed
+ * 3 of 1,984 first payments that have no credit row, so closed days keep the full scan, once a day).
+ */
+export function firstPayRowsPipeline(start: number, end: number, chats?: string[]): object[] {
+  return [
+    { $match: { ...(chats ? { chatId: { $in: chats } } : {}), firstPaidAt: { $gte: start, $lt: end } } },
+    { $project: { _id: 0, c: '$clientId', fp: '$firstPaidAt', mins: { $divide: [{ $subtract: ['$firstPaidAt', { $toLong: { $toDate: '$_id' } }] }, 60000] } } },
+  ];
+}
+
+export interface FirstPayRow {
+  c?: string | null;
+  fp: number;
+  mins: number;
+}
+
+const TTFP_BOUNDARIES = [-1e15, 0, 10, 30, 120, 1440, 4320, 1e15];
+
+/** Same output as timeToFirstPayPipeline's $bucket, from first-pay rows: one scope, fp in [start, end). */
+export function ttfpBuckets(rows: FirstPayRow[], scope: string | null, start: number, end: number): Array<{ _id: number | string; n: number }> {
+  const m = new Map<number | string, number>();
+  for (const r of rows) {
+    if (scope !== null && r.c !== scope) continue;
+    const fp = Number(r.fp);
+    if (!(fp >= start && fp < end)) continue;
+    const mins = Number(r.mins);
+    let id: number | string = 'other';
+    for (let i = 0; i < TTFP_BOUNDARIES.length - 1; i++) {
+      if (mins >= TTFP_BOUNDARIES[i] && mins < TTFP_BOUNDARIES[i + 1]) {
+        id = TTFP_BOUNDARIES[i];
+        break;
+      }
+    }
+    m.set(id, (m.get(id) ?? 0) + 1);
+  }
+  return [...m].map(([_id, n]) => ({ _id, n }));
+}
+
 const TTFP_BY_LOWER: Record<string, string> = {
   '0': '<10m',
   '10': '10-30m',

@@ -76,4 +76,18 @@ describe('AnalyticsPgReader', () => {
     on.mock.calls[0][1](new Error('idle client error')); // must not throw
     jest.dontMock('pg');
   });
+
+  it('keeps idle connections longer than a 60 s dashboard refresh (a new TLS connection costs ~2 s)', async () => {
+    jest.resetModules();
+    const Pool = jest.fn(() => ({ on: jest.fn(), query: jest.fn().mockResolvedValue({ rows: [] }), end: jest.fn().mockResolvedValue(undefined) }));
+    jest.doMock('pg', () => ({ Pool }));
+    const { AnalyticsPgReader: Fresh } = require('../analytics-pg.reader');
+    process.env.ANALYTICS_DB_URL = 'postgres://u:p@h/db';
+    await new Fresh().query('select 1');
+    const opts = (Pool.mock.calls[0] as any[])[0];
+    expect(opts.idleTimeoutMillis).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(opts.keepAlive).toBe(true);
+    expect(opts.max).toBe(2);
+    jest.dontMock('pg');
+  });
 });
