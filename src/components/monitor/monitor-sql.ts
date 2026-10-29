@@ -56,6 +56,14 @@ WHERE ${range} AND amount > 0`,
 }
 
 /**
+ * Reaction outcome counters on daily_client / daily_mobile (tg-reactions recordReaction, from 2026-09-18
+ * on daily_client and 2026-10-10 on daily_mobile). Added to the existing daily_client and promotions
+ * statements so /monitor/reactions needs no statement of its own.
+ */
+export const REACTION_COLUMNS = ['reactions_success', 'reactions_restricted', 'reactions_failed', 'reactions_floods'] as const;
+const REACTION_SUMS = REACTION_COLUMNS.map((c) => `, coalesce(sum(${c}), 0) AS ${c}`).join('');
+
+/**
  * daily_client per (IST day, client, namespace) for from..to inclusive: sends + tg-aut new users.
  * Grouped by namespace (2026-10-29) so the family split is exact; summing the namespaces gives the
  * former per-(day, client) row. `ns_new_users` = new_users of that namespace (promote-clients: first DMs
@@ -68,7 +76,7 @@ export function dailyClientSql(name: 'dc_hist' | 'dc_today', from: string, to: s
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
   coalesce(sum(failed), 0) AS failed,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users,
-  coalesce(sum(new_users), 0) AS ns_new_users
+  coalesce(sum(new_users), 0) AS ns_new_users${REACTION_SUMS}
 FROM daily_client
 WHERE day BETWEEN $1::date AND $2::date
 GROUP BY day, client_id, namespace`,
@@ -347,7 +355,7 @@ export function promoMobilesHistSql(prevFrom: string, curFrom: string, to: strin
     'promo_mobiles_hist',
     `SELECT day >= $2::date AS cur, namespace, client_id, mobile, max(profile) AS profile,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
-  coalesce(sum(failed), 0) AS failed, coalesce(sum(new_users), 0) AS new_users, max(day)::text AS last_day${routedSums(routed)}
+  coalesce(sum(failed), 0) AS failed, coalesce(sum(new_users), 0) AS new_users, max(day)::text AS last_day${REACTION_SUMS}${routedSums(routed)}
 FROM daily_mobile
 WHERE day BETWEEN $1::date AND $3::date
 GROUP BY 1, 2, 3, 4`,
@@ -359,7 +367,7 @@ GROUP BY 1, 2, 3, 4`,
 export function promoMobilesTodaySql(today: string, routed: readonly string[] = []): SqlQuery {
   return q(
     'promo_mobiles_today',
-    `SELECT namespace, client_id, mobile, max(profile) AS profile, coalesce(sum(new_users), 0) AS new_users${routedSums(routed)}
+    `SELECT namespace, client_id, mobile, max(profile) AS profile, coalesce(sum(new_users), 0) AS new_users${REACTION_SUMS}${routedSums(routed)}
 FROM daily_mobile
 WHERE day = $1::date
 GROUP BY 1, 2, 3`,

@@ -2,6 +2,7 @@ import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/comm
 import { ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { istDate, MONITOR_PERIODS, MonitorPeriod } from './monitor-time';
 import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
+import { REACT_WINDOWS, ReactWindow } from './monitor-reactions';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
 import { LIVE_SVCS, LiveSvc, MonitorService } from './monitor.service';
 
@@ -17,6 +18,12 @@ export function parseWindow(window?: string): PromoWindow {
   if (window === undefined || window === '') return 'today';
   if ((PROMO_WINDOWS as string[]).includes(window)) return window as PromoWindow;
   throw new BadRequestException(`window must be one of ${PROMO_WINDOWS.join('|')}`);
+}
+
+export function parseReactWindow(window?: string): ReactWindow {
+  if (window === undefined || window === '') return 'today';
+  if ((REACT_WINDOWS as string[]).includes(window)) return window as ReactWindow;
+  throw new BadRequestException(`window must be one of ${REACT_WINDOWS.join('|')} (reactions are daily counters; no 24h)`);
 }
 
 export function parseDays(days?: string): 7 | 30 {
@@ -94,6 +101,18 @@ export class MonitorController {
   @ApiQuery({ name: 'client', required: false })
   promotions(@Query('window') window?: string, @Query('client') client?: string) {
     return this.service.promotions(parseWindow(window), parseOptionalClientId(client));
+  }
+
+  /**
+   * Reaction outcomes per family, client and masked mobile (daily_mobile + Redis reactions::* + Mongo
+   * activeChannels). 400 on a bad window (24h included) or client, 503 when Postgres fails. Declared
+   * before client/:clientId.
+   */
+  @Get('reactions')
+  @ApiQuery({ name: 'window', required: false, enum: REACT_WINDOWS })
+  @ApiQuery({ name: 'client', required: false })
+  reactions(@Query('window') window?: string, @Query('client') client?: string) {
+    return this.service.reactions(parseReactWindow(window), parseOptionalClientId(client));
   }
 
   /** New users -> payers by origin (direct / routed / unattributed). Declared before client/:clientId. */

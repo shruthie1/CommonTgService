@@ -52,6 +52,19 @@ import {
   SpamState,
 } from './monitor-promotions';
 import {
+  buildReactions,
+  reactDaily,
+  ReactLive,
+  reactRedisBatch,
+  reactRowsFromHist,
+  reactRowsFromToday,
+  ReactWindow,
+  readReactBatch,
+  readRestrictedChannels,
+  restrictedChannelsPipeline,
+  yesterdayTotals,
+} from './monitor-reactions';
+import {
   bufferPoolPipeline,
   CohortRow,
   flattenCohort,
@@ -109,10 +122,11 @@ export interface MonitorRedis {
   get?(key: string): Promise<string | null>;
   set?(key: string, value: string, mode: 'EX', ttlSec: number): Promise<unknown>;
   /** Read-only batch (one round trip): results in order, null for a failed command. Optional. */
-  readPipeline?(cmds: Array<[RedisReadCmd, string]>): Promise<unknown[]>;
+  readPipeline?(cmds: Array<[RedisReadCmd, string, ...Array<string | number>]>): Promise<unknown[]>;
 }
 
-export type RedisReadCmd = 'hgetall' | 'hlen' | 'zcard';
+/** Read-only commands only (ZCOUNT for the reactions::hourly / floods windows). */
+export type RedisReadCmd = 'hgetall' | 'hlen' | 'zcard' | 'zcount';
 
 export const PG_TIMEOUT_MS = 10_500;
 export const MONGO_TIMEOUT_MS = 10_000;
@@ -130,6 +144,8 @@ export const HISTORY_DAYS = 60;
 /** Channels whose closed-day sends are fetched (stable all day: ranked by history DMs). */
 export const CHANNEL_CANDIDATES = 40;
 export const LIVE_TTL_MS = 5_000;
+/** activeChannels.reactRestricted counts: served for up to 1 h, then refreshed in the background. */
+export const RESTRICTED_FRESH_MS = 60 * 60_000;
 /** Whole responses: served fresh for 60 s, then served at once while one background rebuild runs (same IST day). */
 export const SNAPSHOT_FRESH_MS = TODAY_FRESH_MS;
 /** Redis key prefix of the persisted snapshots (one key per page: fleet:today, detail:all:7, client:<id>:30, ...). */
@@ -501,6 +517,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   private prewarming: Promise<void> | null = null;
   /** The module's Postgres pool has 2 connections: viewers use both, background refreshes one. */
   private readonly pgGate = new ConcurrencyGate(2, 1);
+  /** activeChannels reaction-restricted counts (unindexed scan, ~0.6 s): refreshed at most hourly. */
+  private readonly restrictedCache = new SwrCache<Loaded<any>>({ freshMs: RESTRICTED_FRESH_MS, maxKeys: 2 });
 
   constructor(
     private readonly pg: AnalyticsPgReader,
@@ -591,6 +609,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     if (kind === 'fleet') return this.buildFleet(a as MonitorPeriod, now, background);
     if (kind === 'detail') return this.buildDetail(null, Number(b) as 7 | 30, now, background);
     if (kind === 'promotions') return this.buildPromotions(a as PromoWindow, b === '*' ? null : b, now, background);
+    if (kind === 'reactions') return this.buildReactions(a as ReactWindow, b === '*' ? null : b, now, background);
     if (kind === 'funnel') return this.buildFunnel(a as MonitorPeriod, b === '*' ? null : b, now, background);
     return this.buildDetail(a, Number(b) as 7 | 30, now, background);
   }
@@ -1594,7 +1613,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Redis spam + route state for every mobile on the page (unmasked here, masked in the body)
-    const inScope = (c: string | null) => client === null || c === client;
+    // a client-scoped page also reads the other clients' mobiles: its fleet block uses the same rules
+    const inScope = (_c: string | null) => true;
     const mobiles = new Set<string>();
     const promote = new Set<string>();
     for (const r of rows) {
@@ -1610,7 +1630,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const acct = await this.section('redis_state', ctx, () => this.redisAccountState([...mobiles].sort(), promote, ctx));
 
     const entries = (live?.entries ?? []).map((e) => ({ svc: e.svc, clientId: e.clientId, payload: e.payload as Record<string, any> | null, state: classifyHeartbeat(e.payload, now).state }));
-    const body = buildPromotions({
+    const inputs = {
       w,
       rows,
       extra: extraRows ? extrasFromToday(extraRows, routedCols) : null,
@@ -1622,6 +1642,116 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       names: new Map((meta ?? []).map((m) => [m.clientId, m.name])),
       routedCols,
       client,
+    };
+    const body = buildPromotions(inputs);
+    if (client !== null && meta && !meta.some((m) => m.clientId === client)) ctx.notes.push(`clientId ${client} is not in the clients collection.`);
+    // client-scoped: the unscoped totals of the same parts (in memory), for "client · fleet" comparisons
+    let fleet: { both: unknown; families: Record<Family, { totals: unknown }> } | undefined;
+    if (client !== null) {
+      const f = buildPromotions({ ...inputs, client: null });
+      fleet = { both: f.both, families: { 'tg-aut': { totals: f.families['tg-aut'].totals }, promote: { totals: f.families.promote.totals } } };
+    }
+    return {
+      generatedAt: new Date(now).toISOString(),
+      ...body,
+      ...(fleet ? { fleet } : {}),
+      notes: [...body.notes, ...ctx.notes],
+      timingsMs: ctx.timings,
+      cache: ctx.cache(Date.now()),
+    };
+  }
+
+  // ---------------------------------------------------------------- reactions (reactions-tab design §4)
+
+  /**
+   * Reaction outcomes per family, client and masked mobile. 503 when the daily_mobile part fails (a
+   * stale snapshot is still served while it refreshes); Redis / Mongo failures null their block + a note.
+   */
+  async reactions(window: ReactWindow, client: string | null): Promise<any> {
+    try {
+      return await this.snap(`reactions:${window}:${client ?? '*'}`);
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor reactions ${window} failed: ${msg}`);
+      throw new ServiceUnavailableException(`reactions unavailable: ${msg}`);
+    }
+  }
+
+  /** activeChannels flagged reaction-restricted: total + newly flagged per IST day over 30 days. */
+  private restrictedChannels(ctx: Ctx): Promise<{ total: number; byDay: Array<{ day: string; n: number }> }> {
+    return this.part<{ total: number; byDay: Array<{ day: string; n: number }> }>(
+      ctx,
+      'history',
+      'react_restricted_channels',
+      async (now, t) => {
+        const since = new Date(istDayStart(addDays(istDate(now), -29)));
+        return readRestrictedChannels(await this.mongoAgg('activeChannels', restrictedChannelsPipeline(since), 'mongo.activeChannels_react_restricted', t));
+      },
+      this.restrictedCache,
+    ).then((l) => l.value);
+  }
+
+  /** One read-only Redis pipeline: ZCOUNT hourly/floods, HGETALL state, HLEN restricted per mobile. */
+  private async redisReactionState(mobiles: string[], now: number, ctx: Ctx): Promise<Map<string, ReactLive>> {
+    if (typeof this.redis?.readPipeline !== 'function') throw new Error('Redis pipeline not configured');
+    if (!mobiles.length) return new Map();
+    const t = Date.now();
+    try {
+      const results = await withTimeout(this.redis.readPipeline(reactRedisBatch(mobiles, now)), LIVE_REDIS_DEADLINE_MS, 'redis reaction state');
+      return readReactBatch(mobiles, results, now);
+    } finally {
+      ctx.timings['redis.reaction_state'] = Date.now() - t;
+    }
+  }
+
+  async buildReactions(window: ReactWindow, client: string | null, now: number, background = false): Promise<any> {
+    const ctx = new Ctx(background);
+    const w = promoWindows(window, now);
+    const intraday = w.intraday;
+    const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
+    const routedCols = routed?.mobile ?? [];
+
+    const mobileP: Promise<any[]> = intraday ? this.promoMobilesToday(ctx, routedCols) : this.promoHist(ctx, window as '7d' | '30d', routedCols);
+    const [mobileRows, dcH, meta, assigned, live, restricted] = await Promise.all([
+      mobileP.catch((err) => {
+        const msg = String((err as Error)?.message ?? err).slice(0, 200);
+        throw new ServiceUnavailableException(`reaction counts unavailable: ${msg}`);
+      }),
+      this.section('daily_client', ctx, () => this.dcHist(ctx)),
+      this.section('clients', ctx, () => this.clientMeta(ctx)),
+      this.section('assigned', ctx, () => this.promoteAssigned(ctx)),
+      this.section('heartbeats', ctx, async () => (await this.liveCache.get('all', () => this.loadLive())).value),
+      this.section('restricted_channels', ctx, () => this.restrictedChannels(ctx)),
+    ]);
+    const rows = intraday ? reactRowsFromToday(mobileRows, w.today) : reactRowsFromHist(mobileRows);
+
+    // mobiles listed even with no reactions: active promote mobiles + live tg-aut mobiles
+    const entries = (live?.entries ?? []).map((e) => ({ svc: e.svc, clientId: e.clientId, payload: e.payload as Record<string, any> | null, state: classifyHeartbeat(e.payload, now).state }));
+    const known: Array<{ family: Family; clientId: string | null; mobile: string }> = (assigned ?? []).map((a) => ({ family: 'promote' as Family, clientId: a.clientId, mobile: a.mobile }));
+    for (const e of entries) {
+      const m = e.payload?.mobile;
+      if (e.svc === 'tg-aut' && m && /^\d{6,}$/.test(String(m)) && (e.state === 'live' || e.state === 'stopping')) known.push({ family: 'tg-aut', clientId: e.clientId, mobile: String(m) });
+    }
+
+    // Redis live state for every mobile on the page (fleet-wide: the fleet block uses it too)
+    const mobiles = new Set<string>();
+    for (const r of rows) if (r.cur && r.mobile && r.family) mobiles.add(r.mobile);
+    for (const k of known) mobiles.add(k.mobile);
+    const reactLive = await this.section('redis_reactions', ctx, () => this.redisReactionState([...mobiles].sort(), now, ctx));
+
+    const body = buildReactions({
+      w,
+      rows,
+      yesterday: intraday && dcH ? yesterdayTotals(dcH, addDays(w.today, -1), client) : null,
+      daily: !intraday && dcH ? reactDaily(dcH, w.range.from, w.range.to, client) : null,
+      live: reactLive,
+      heartbeats: live ? heartbeatJoins(entries) : null,
+      known,
+      names: new Map((meta ?? []).map((m) => [m.clientId, m.name])),
+      restrictedChannels: restricted,
+      client,
+      now,
     });
     if (client !== null && meta && !meta.some((m) => m.clientId === client)) ctx.notes.push(`clientId ${client} is not in the clients collection.`);
     return {
@@ -1767,6 +1897,15 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         }))
       : null;
 
+    // client-scoped: fleet totals + origins from the same parts, for "client · fleet" comparisons
+    const fleetBlock =
+      client !== null && fleet
+        ? {
+            totals: { newUsers: fleet.fleet.newUsers, payers: fleet.fleet.payers, revenue: fleet.fleet.revenue, conversion: fleet.fleet.conversion },
+            byOrigin: origins(curCredits, dmsCur, fleet.fleet.newUsers, null),
+          }
+        : undefined;
+
     const notes = [...historyNotes([w.range, w.prevRange]), ...ctx.notes];
     notes.push('byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.');
     notes.push('byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).');
@@ -1790,6 +1929,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       daily,
       ttfp: detail?.distributions?.timeToFirstPay ?? null,
       repeat: detail?.distributions?.repeat ?? null,
+      ...(fleetBlock ? { fleet: fleetBlock } : {}),
       notes,
       timingsMs: ctx.timings,
       cache: ctx.cache(Date.now()),
