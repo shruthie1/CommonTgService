@@ -148,6 +148,12 @@ export const LIVE_TTL_MS = 5_000;
 export const RESTRICTED_FRESH_MS = 60 * 60_000;
 /** Whole responses: served fresh for 60 s, then served at once while one background rebuild runs (same IST day). */
 export const SNAPSHOT_FRESH_MS = TODAY_FRESH_MS;
+/**
+ * A whole-response snapshot this old is no longer served at once: the viewer waits for the rebuild
+ * (prod 2026-10-29: rebuilds 1.9-6.2 s; snapshots served 2.4 h old after idle, revenue ₹565 short).
+ * Polling viewers (60 s / 120 s) still get the instant stale-while-revalidate path.
+ */
+export const SNAPSHOT_MAX_SERVE_STALE_MS = 120_000;
 /** Redis key prefix of the persisted snapshots (one key per page: fleet:today, detail:all:7, client:<id>:30, ...). */
 export const SNAPSHOT_KEY_PREFIX = 'monitor::snapshot::';
 /** Redis TTL of a snapshot: 36 h, so a boot can tell the monitor was used since yesterday. */
@@ -531,6 +537,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         : null;
     this.snapshots = new SnapshotCache<any>({
       freshMs: SNAPSHOT_FRESH_MS,
+      maxServeStaleMs: SNAPSHOT_MAX_SERVE_STALE_MS,
       day: (t) => istDate(t),
       store,
       keyPrefix: SNAPSHOT_KEY_PREFIX,

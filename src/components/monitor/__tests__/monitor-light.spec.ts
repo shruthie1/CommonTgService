@@ -6,6 +6,7 @@ import { ConcurrencyGate, SnapshotCache, SnapshotStore, SwrCache } from '../moni
 import { DmRow, MobileRow, dmsByChannel, mergeMobiles, rankChannels, revenueBy, sumDmsDays, toCredit } from '../monitor-merge';
 import { ttfpBuckets } from '../monitor-mongo';
 import { addDays, istDate, istDayStart } from '../monitor-time';
+import { SNAPSHOT_MAX_SERVE_STALE_MS } from '../monitor.service';
 
 const flush = () => new Promise((r) => setImmediate(r));
 
@@ -116,8 +117,8 @@ describe('SnapshotCache', () => {
     new SnapshotCache<any>({ freshMs: 60_000, day, store, now: () => now, complete: (v) => !v.degraded, ...extra });
   beforeEach(() => (now = Date.parse('2026-10-28T10:00:00.000Z')));
 
-  it('fresh = served without a build; stale = served at once while ONE background rebuild runs', async () => {
-    const c = mk();
+  it('fresh = served without a build; stale (< maxServeStaleMs) = served at once while ONE background rebuild runs', async () => {
+    const c = mk(undefined, { maxServeStaleMs: 120_000 });
     let n = 0;
     let release!: () => void;
     const build = jest.fn(async (bg: boolean) => {
@@ -128,7 +129,7 @@ describe('SnapshotCache', () => {
     expect(await c.get('fleet:today', build)).toMatchObject({ value: { n: 1 }, state: 'miss', source: 'build' });
     now += 59_000;
     expect(await c.get('fleet:today', build)).toMatchObject({ value: { n: 1 }, state: 'hit', source: 'memory' });
-    now += 16 * 60_000; // long idle: still served at once
+    now += 30_000; // 89 s old: under the 120 s cap, still served at once
     const [a, b] = await Promise.all([c.get('fleet:today', build), c.get('fleet:today', build)]);
     expect([a.state, b.state, a.value.n, b.value.n]).toEqual(['stale', 'stale', 1, 1]);
     expect(build).toHaveBeenCalledTimes(2);
@@ -136,6 +137,34 @@ describe('SnapshotCache', () => {
     release();
     await flush();
     expect(await c.get('fleet:today', build)).toMatchObject({ value: { n: 2 }, state: 'hit' });
+  });
+
+  it('a snapshot at or over maxServeStaleMs is not served at once: callers wait for (and share) the rebuild', async () => {
+    // prod 2026-10-29 10:29:31Z: /monitor/fleet served a snapshot built 08:49:12Z (6,019 s old), revenue ₹5,445 vs ₹6,010
+    const c = mk(undefined, { maxServeStaleMs: SNAPSHOT_MAX_SERVE_STALE_MS });
+    let n = 0;
+    const build = jest.fn(async (_bg: boolean) => ({ n: ++n }));
+    await c.get('fleet:today', build);
+    now += 100 * 60_000; // long idle
+    const [a, b] = await Promise.all([c.get('fleet:today', build), c.get('fleet:today', build)]);
+    expect([a.state, a.source, a.value.n, b.state, b.value.n]).toEqual(['miss', 'build', 2, 'miss', 2]);
+    expect(build).toHaveBeenCalledTimes(2);
+    expect((build.mock.calls[1] as unknown[])[0]).toBe(false); // a viewer is waiting: foreground priority
+    expect(await c.get('fleet:today', build)).toMatchObject({ value: { n: 2 }, state: 'hit' });
+  });
+
+  it('over the cap, a rebuild that throws falls back to the old snapshot (stale) instead of failing the request', async () => {
+    const errors: string[] = [];
+    const c = mk(undefined, { maxServeStaleMs: 120_000, onError: (what: string) => errors.push(what) });
+    await c.get('p', async () => ({ v: 'old' }));
+    now += 10 * 60_000;
+    const r = await c.get('p', async () => { throw new Error('pg down'); });
+    expect(r).toMatchObject({ value: { v: 'old' }, state: 'stale' });
+    expect(errors).toEqual(['rebuild p']);
+  });
+
+  it('the monitor caps served snapshots at 120 s', () => {
+    expect(SNAPSHOT_MAX_SERVE_STALE_MS).toBe(120_000);
   });
 
   it('never serves a snapshot on another IST day, and never joins a build started before midnight', async () => {

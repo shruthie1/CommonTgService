@@ -346,7 +346,7 @@ describe('MonitorService caching: closed-day history vs today', () => {
       return new Promise((res) => (release = () => res([...PAY_TODAY, { ...PAY_TODAY[5], chat_id: 'c9', amount: 50, owner_amount: 50 }])));
     }, defaultMongo);
     await svc.fleet('today');
-    now = NOW + 120_000;
+    now = NOW + 90_000; // under SNAPSHOT_MAX_SERVE_STALE_MS (120 s): the snapshot is still served at once
     const [a, b, c] = await Promise.all([svc.fleet('today'), svc.fleet('today'), svc.fleet('today')]);
     for (const r of [a, b, c]) {
       expect(r.fleet.revenue).toBe(600); // old value, served without waiting
@@ -439,7 +439,8 @@ describe('MonitorService snapshots: instant pages on warm calls, long idles and 
     expect(d).toHaveBeenCalledTimes(2);
   });
 
-  it('after a long idle (past the 15 min today limit) the last page is served at once; the background rebuild waits for fresh parts', async () => {
+  it('after a long idle (snapshot past SNAPSHOT_MAX_SERVE_STALE_MS) viewers wait for ONE rebuild with fresh parts, not the old page', async () => {
+    // prod 2026-10-29 10:29:31Z: a 6,019 s old snapshot was served at once, revenue ₹5,445 vs ₹6,010 in payment_event
     let todayLoads = 0;
     let release: (() => void) | undefined;
     const { svc, pgNames } = build((n) => {
@@ -450,20 +451,19 @@ describe('MonitorService snapshots: instant pages on warm calls, long idles and 
     }, defaultMongo);
     await svc.fleet('today');
     now = NOW + 16 * 60_000;
-    const r = await within50ms(svc.fleet('today'));
-    expect(r).not.toBe('blocked');
-    expect((r as any).fleet.revenue).toBe(600);
-    expect((r as any).cache).toMatchObject({ today: 'stale', snapshot: 'stale', snapshotAgeSec: 960 });
+    const first = svc.fleet('today');
+    expect(await within50ms(first)).toBe('blocked'); // the 960 s old page is not served
+    const second = svc.fleet('today'); // a second viewer joins the same rebuild
     await flush();
-    expect(await svc.fleet('today')).toMatchObject({ fleet: { revenue: 600 } }); // a second viewer: same snapshot, no second rebuild
-    await flush();
-    expect(count(pgNames, 'pay_today')).toBe(2); // one background rebuild
+    expect(count(pgNames, 'pay_today')).toBe(2); // one rebuild
     release!();
-    await flush();
-    await flush();
-    const fresh = await svc.fleet('today');
-    expect(fresh.fleet.revenue).toBe(650);
-    expect(fresh.cache).toMatchObject({ today: 'hit', snapshot: 'hit' });
+    const [a, b] = await Promise.all([first, second]);
+    for (const r of [a, b]) {
+      expect(r.fleet.revenue).toBe(650);
+      expect(r.cache).toMatchObject({ snapshot: 'miss', snapshotSource: 'build' });
+    }
+    expect(count(pgNames, 'pay_today')).toBe(2);
+    expect((await svc.fleet('today')).cache).toMatchObject({ snapshot: 'hit' });
   });
 
   it('restart: a new process serves the last snapshot from Redis without waiting on Postgres or Mongo', async () => {

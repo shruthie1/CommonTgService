@@ -240,6 +240,11 @@ export interface SnapshotStore {
 export interface SnapshotOptions<T> {
   /** Age below which a snapshot is served without a rebuild. */
   freshMs: number;
+  /**
+   * Age from which a snapshot is no longer served at once: the caller waits for the rebuild (joining
+   * one in flight) and gets the old snapshot only if that rebuild throws. Default: no limit.
+   */
+  maxServeStaleMs?: number;
   /** Calendar day of an instant (IST date): a snapshot is served only on the day it was built. */
   day: (now: number) => string;
   store?: SnapshotStore | null;
@@ -285,7 +290,8 @@ interface Built<T> {
  * Whole-response snapshots (stale-while-revalidate, single-flight per name), optionally persisted to
  * a store so a restarted process serves the last snapshot instead of making its first viewer wait.
  *  - fresh (age < freshMs)            → served.
- *  - older, same calendar day          → served at once; ONE background rebuild starts.
+ *  - older (< maxServeStaleMs), same day → served at once; ONE background rebuild starts.
+ *  - maxServeStaleMs or older           → the caller waits for the rebuild (old snapshot only if it throws).
  *  - none in memory                    → the store is read once per (day, name), within a deadline.
  *  - none at all / another day         → the caller waits for the build (shared with one in flight).
  * A degraded build (complete() false) is returned to its caller but never replaces a snapshot.
@@ -318,6 +324,15 @@ export class SnapshotCache<T> {
     if (!e) e = await this.fromStore(name, day);
     if (e) {
       if (now - e.at < this.opts.freshMs) return { value: e.value, at: e.at, state: 'hit', source: e.source };
+      if (now - e.at >= (this.opts.maxServeStaleMs ?? Number.POSITIVE_INFINITY)) {
+        try {
+          const b = await (this.inflight.get(`${day}|${name}`) ?? this.start(name, build, false));
+          return { value: b.value, at: b.at, state: 'miss', source: 'build' };
+        } catch (err) {
+          this.opts.onError?.(`rebuild ${name}`, err);
+          return { value: e.value, at: e.at, state: 'stale', source: e.source };
+        }
+      }
       this.refresh(name, build).catch((err) => this.opts.onError?.(`rebuild ${name}`, err));
       return { value: e.value, at: e.at, state: 'stale', source: e.source };
     }
