@@ -202,7 +202,8 @@ function resolveProxyFromEnv(): ProxyInterface | null {
       timeout: envInt("PROXY_TIMEOUT", 10),
     };
   } catch {
-    logger.error("Failed to parse proxy URL from env", { proxyUrl });
+    // The value can carry proxy credentials (user:pass@host): log its length only.
+    logger.error("Failed to parse proxy URL from env", { length: String(proxyUrl ?? "").length });
     return null;
   }
 }

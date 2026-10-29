@@ -276,5 +276,62 @@ describe('spam-aware setupClient swap', () => {
         expect(dto).not.toHaveProperty('spamStatus');
       }
     });
+
+    test('PENDING 24-5: the returned buffer doc (with its live session) is never logged; only identifiers are', async () => {
+      const liveSession = '1' + 'BQANOTEuMTA4LjU2LjE0MAG7'.repeat(15);
+      const svc = releaseService({ channels: 300 });
+      bufferClientService.createOrUpdate.mockResolvedValue({ mobile: '911', clientId: 'c1', session: liveSession, status: 'active' });
+      const logSpy = jest.spyOn(svc.logger, 'log');
+      await svc.returnOldClientToBufferPool(oldClient, oldUser, '911', 5);
+      const logged = JSON.stringify(logSpy.mock.calls);
+      expect(logSpy.mock.calls.some((args: unknown[]) => String(args[0]).includes('returned to buffer pool'))).toBe(true);
+      expect(logged).not.toContain(liveSession);
+      expect(logged).not.toContain('"session"');
+      expect(logged).toContain('911');
+    });
+  });
+
+  describe('retireReplacedMobile idempotency (PENDING 24-6)', () => {
+    function retireService(users: any[], bufferDoc: any) {
+      bufferClientService.findOne.mockResolvedValue(bufferDoc);
+      const svc = makeService() as any;
+      svc.usersService.findByMobileAnyStatus = jest.fn().mockResolvedValue(users);
+      jest.spyOn(svc, 'notify').mockResolvedValue(undefined);
+      return svc;
+    }
+
+    test('expired user docs + inactive buffer: not expired or announced again', async () => {
+      const svc = retireService([{ mobile: '911', expired: true }], { mobile: '911', status: 'inactive' });
+      await svc.retireReplacedMobile('911', 'USER_DEACTIVATED_BAN');
+      expect(svc.usersService.expireAccount).not.toHaveBeenCalled();
+      expect(svc.notify).not.toHaveBeenCalled();
+    });
+
+    test('no user docs (orphaned pool record) whose buffer row is already inactive: retired once, not on every caller retry', async () => {
+      const svc = retireService([], { mobile: '911', status: 'inactive' });
+      await svc.retireReplacedMobile('911', 'USER_DEACTIVATED_BAN');
+      await svc.retireReplacedMobile('911', 'USER_DEACTIVATED_BAN');
+      expect(svc.usersService.expireAccount).not.toHaveBeenCalled();
+      expect(svc.notify).not.toHaveBeenCalled();
+    });
+
+    test('no user docs and an active buffer row: retired (buffer still selectable)', async () => {
+      const svc = retireService([], { mobile: '911', status: 'active' });
+      await svc.retireReplacedMobile('911', 'USER_DEACTIVATED_BAN');
+      expect(svc.usersService.expireAccount).toHaveBeenCalledTimes(1);
+      expect(svc.notify).toHaveBeenCalledTimes(1);
+    });
+
+    test('no user docs and no buffer row: retired (cannot prove a previous retire)', async () => {
+      const svc = retireService([], null);
+      await svc.retireReplacedMobile('911', 'USER_DEACTIVATED_BAN');
+      expect(svc.usersService.expireAccount).toHaveBeenCalledTimes(1);
+    });
+
+    test('a live (non-expired) user doc: retired', async () => {
+      const svc = retireService([{ mobile: '911', expired: false }], { mobile: '911', status: 'inactive' });
+      await svc.retireReplacedMobile('911', 'USER_DEACTIVATED_BAN');
+      expect(svc.usersService.expireAccount).toHaveBeenCalledTimes(1);
+    });
   });
 });

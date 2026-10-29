@@ -1,5 +1,6 @@
 import { Logger as NestLogger } from '@nestjs/common';
 import chalk from "chalk";
+import { isSecretKey, redactSecretText, REDACTED } from "./redact-secrets";
 import path from "path";
 // import fs from "fs";
 // import path from "path";
@@ -57,6 +58,7 @@ export class Logger extends NestLogger {
 
     error(message: any, data: any = "", trace?: any) {
         const line = this.formatMessage("ERROR", message, this.getErrorColors(), data);
+        if (trace) trace = redactSecretText(typeof trace === "string" ? trace : String(trace));
         process.stderr.write(line + (trace ? "\n" + chalk.red.bold(trace) : "") + "\n");
         this.writeToFile(this.stripAnsi(line + (trace ? "\n" + trace : "")));
     }
@@ -140,7 +142,8 @@ export class Logger extends NestLogger {
 
         const levelFormatted = safeColors.level(`[${safeLevel}]`);
 
-        return `${levelFormatted} ${serviceCtx} ${formattedMessage}${extraCtx}`;
+        // Credentials embedded in free text (e.g. a Mongo E11000 on users.session_1) never reach the log.
+        return redactSecretText(`${levelFormatted} ${serviceCtx} ${formattedMessage}${extraCtx}`);
     }
 
     private formatMultiColorMessage(message: any, levelColor: any): string {
@@ -182,7 +185,10 @@ export class Logger extends NestLogger {
 
         const entries = Object.entries(obj).map(([key, value]) => {
             const coloredKey = chalk.cyan(`"${key}"`) + chalk.white(": ");
-            const formattedValue = this.formatObjectMessage(value, indent + 2, seen);
+            // Session / 2FA password / API key / token fields of any logged doc are never printed.
+            const formattedValue = isSecretKey(key) && typeof value === "string" && value !== ""
+                ? chalk.gray(`"${REDACTED}"`)
+                : this.formatObjectMessage(value, indent + 2, seen);
             return " ".repeat(indent) + coloredKey + formattedValue;
         });
 

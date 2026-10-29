@@ -1,4 +1,5 @@
 import { sendBotNotice } from "./bot-notice";
+import { redactSecretText } from "./redact-secrets";
 import axios, { AxiosError, AxiosResponse } from "axios";
 
 /**
@@ -311,20 +312,22 @@ export function parseError(
     // Process the raw message to get a clean version
     let extractedMessage;
     try {
-      extractedMessage = typeof rawMessage === 'string' ? rawMessage : extractMessage(rawMessage);
+      extractedMessage = redactSecretText(typeof rawMessage === 'string' ? rawMessage : extractMessage(rawMessage));
     } catch (e) {
       /* istanbul ignore next -- extractMessage is fully self-catching and never throws; this catch is defense-in-depth */
       extractedMessage = safeStringify(rawMessage) || 'Error extracting message';
     }
 
     // Prepare the full message for logging
-    const fullMessage = `${prefixStr} :: ${extractedMessage}`;
+    // Scrubbed before it is logged, sent to the bot or returned (and possibly stored): an error can embed a doc's session.
+    const fullMessage = redactSecretText(`${prefixStr} :: ${extractedMessage}`);
+    const errMessage = redactSecretText(err.errorMessage);
     if (shouldLogDiagnostics()) console.error("parsedErr: ", fullMessage);
 
     // Prepare response object
     const response: ErrorResponse = {
       status,
-      message: err.errorMessage ? err.errorMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),
+      message: errMessage ? errMessage : String(fullMessage).slice(0, fullConfig.maxMessageLength),
       error,
       raw: err
     };
@@ -335,7 +338,7 @@ export function parseError(
         const ignoreError = shouldIgnoreError(fullMessage, status, fullConfig.ignorePatterns);
 
         if (!ignoreError) {
-          const notificationMessage = (err.errorMessage ? err.errorMessage : extractedMessage)?.slice(0, 500);
+          const notificationMessage = (errMessage ? errMessage : extractedMessage)?.slice(0, 500);
           // Rich message (falls back to the classic GET on 400/404). Not awaited to avoid delaying the response.
           sendBotNotice('notif', {
             severity: 'error',

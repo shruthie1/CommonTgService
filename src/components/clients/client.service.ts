@@ -1476,8 +1476,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   private async isAlreadyRetired(mobile: string): Promise<boolean> {
     try {
       const users = (await this.usersService.findByMobileAnyStatus(mobile)) ?? [];
-      if (!users.length || !users.every((u) => u.expired === true)) return false;
+      if (users.some((u) => u.expired !== true)) return false;
       const buffer = await this.bufferClientService.findOne(mobile, false);
+      // No users doc (orphaned pool record): only an inactive buffer row proves a previous retire;
+      // without this, every caller retry for such a mobile re-ran expireAccount and re-announced it.
+      if (!users.length) return buffer?.status === 'inactive';
       return !buffer || buffer.status === 'inactive';
     } catch {
       return false; // unknown: retire (expireAccount is idempotent; at worst one extra notice)
@@ -1565,7 +1568,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         existingMobile,
         bufferClientDto,
       );
-      this.logger.log('Client returned to buffer pool:', updatedBufferClient);
+      // Identifiers only: the buffer doc carries the live Telegram session (PENDING 24-5).
+      this.logger.log('Client returned to buffer pool', {
+        mobile: existingMobile,
+        clientId: updatedBufferClient?.clientId ?? existingClient.clientId,
+        status: updatedBufferClient?.status,
+        availableDate,
+      });
       await this.notify({ title: 'Returned to pool', fields: [{ label: 'Mobile', value: existingMobile }, { label: 'Available date', value: availableDate, code: false }] });
     } catch (error) {
       const errorDetails = parseError(error, `Error returning old client to buffer pool: ${existingMobile}`, true);
