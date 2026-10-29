@@ -1,6 +1,7 @@
 import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { istDate, MONITOR_PERIODS, MonitorPeriod } from './monitor-time';
+import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
 import { LIVE_SVCS, LiveSvc, MonitorService } from './monitor.service';
 
@@ -10,6 +11,12 @@ export function parsePeriod(period?: string): MonitorPeriod {
   if (period === undefined || period === '') return 'today';
   if ((MONITOR_PERIODS as string[]).includes(period)) return period as MonitorPeriod;
   throw new BadRequestException(`period must be one of ${MONITOR_PERIODS.join('|')}`);
+}
+
+export function parseWindow(window?: string): PromoWindow {
+  if (window === undefined || window === '') return 'today';
+  if ((PROMO_WINDOWS as string[]).includes(window)) return window as PromoWindow;
+  throw new BadRequestException(`window must be one of ${PROMO_WINDOWS.join('|')}`);
 }
 
 export function parseDays(days?: string): 7 | 30 {
@@ -76,6 +83,25 @@ export class MonitorController {
   @ApiQuery({ name: 'clientId', required: false })
   paidChats(@Query('date') date?: string, @Query('clientId') clientId?: string) {
     return this.service.paidChats(parsePaidDate(date, Date.now()), parseOptionalClientId(clientId));
+  }
+
+  /**
+   * Promotion health per family (tg-aut / promote), client and masked mobile. 400 on a bad window or
+   * client, 503 when Postgres sends fail. Declared before client/:clientId.
+   */
+  @Get('promotions')
+  @ApiQuery({ name: 'window', required: false, enum: PROMO_WINDOWS })
+  @ApiQuery({ name: 'client', required: false })
+  promotions(@Query('window') window?: string, @Query('client') client?: string) {
+    return this.service.promotions(parseWindow(window), parseOptionalClientId(client));
+  }
+
+  /** New users -> payers by origin (direct / routed / unattributed). Declared before client/:clientId. */
+  @Get('funnel')
+  @ApiQuery({ name: 'period', required: false, enum: MONITOR_PERIODS })
+  @ApiQuery({ name: 'client', required: false })
+  funnel(@Query('period') period?: string, @Query('client') client?: string) {
+    return this.service.funnel(parsePeriod(period), parseOptionalClientId(client));
   }
 
   @Get('client/:clientId')

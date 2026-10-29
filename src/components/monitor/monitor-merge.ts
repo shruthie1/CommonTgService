@@ -4,6 +4,7 @@
  * them on fixtures.
  */
 import { istDate } from './monitor-time';
+import { Family, familyOf } from './monitor-family';
 import { num } from './monitor-util';
 
 // ---------------------------------------------------------------- payments
@@ -92,6 +93,11 @@ export function revenueByClientDay(credits: Credit[]): Map<string, Map<string, n
 export interface DailyClientRow {
   d: string;
   client_id: string | null;
+  /** daily_client namespace ('tg-aut' | 'promote-clients'); absent on rows built in memory. */
+  namespace?: string | null;
+  failed?: number | string;
+  /** new_users of this namespace (promote-clients: first DMs to a promote account). */
+  ns_new_users?: number | string;
   sent: number | string;
   delivered: number | string;
   banned: number | string;
@@ -146,7 +152,16 @@ export function dailyClientByDate(rows: DailyClientRow[], scope: string | null):
 export interface DmsDayRow {
   d: string;
   client_id: string | null;
+  /** conversion_event.service of a per-service row ('t' | 'p' | null); absent/null on merged rows. */
+  service?: string | null;
+  /** GROUPING(service): 1 (or absent) = the merged per-(day, client) row, 0 = a per-service row. */
+  g?: number | string | null;
   dms: number | string;
+}
+
+/** true for the merged per-(day, client) DM rows every merged number is computed from. */
+export function isMergedDmsRow(r: DmsDayRow): boolean {
+  return r.g === undefined || r.g === null || num(r.g) !== 0;
 }
 
 /**
@@ -158,7 +173,7 @@ export function sumDmsDays(rows: DmsDayRow[], from: string, to: string): { byCli
   const byClient = new Map<string, number>();
   let total = 0;
   for (const r of rows) {
-    if (r.d < from || r.d > to) continue;
+    if (r.d < from || r.d > to || !isMergedDmsRow(r)) continue;
     total += num(r.dms);
     if (r.client_id) byClient.set(r.client_id, (byClient.get(r.client_id) ?? 0) + num(r.dms));
   }
@@ -169,7 +184,7 @@ export function sumDmsDays(rows: DmsDayRow[], from: string, to: string): { byCli
 export function dmsByDate(rows: DmsDayRow[], scope: string | null): Map<string, number> {
   const out = new Map<string, number>();
   for (const r of rows) {
-    if (scope !== null && r.client_id !== scope) continue;
+    if ((scope !== null && r.client_id !== scope) || !isMergedDmsRow(r)) continue;
     out.set(r.d, (out.get(r.d) ?? 0) + num(r.dms));
   }
   return out;
@@ -180,6 +195,8 @@ export interface DmRow {
   channel_id: string | null;
   conversion_id: string;
   ts: Date | string;
+  /** conversion_event.service ('t' | 'p'; NULL before 2026-10-25). */
+  service?: string | null;
 }
 
 /** Distinct conversions per client and fleet-wide among raw DM rows with ts < before. */
@@ -231,6 +248,8 @@ export function rankChannels(hist: Map<string, number>, today: Map<string, numbe
 export interface MobileRow {
   mobile: string;
   client_id: string | null;
+  /** daily_mobile namespace ('tg-aut' | 'promote-clients'). */
+  namespace?: string | null;
   new_users: number | string;
   dms: number | string;
   sent: number | string;
@@ -250,6 +269,8 @@ export interface MobileOut {
   banned: number;
   first_day: string;
   last_day: string;
+  /** Family the mobile sent the most promotions under (ties: tg-aut); null when no row named one. */
+  family: Family | null;
 }
 
 /**
@@ -259,8 +280,15 @@ export interface MobileOut {
  */
 export function mergeMobiles(rows: MobileRow[], scope: string | null, limit = 20): MobileOut[] {
   const by = new Map<string, MobileOut & { lastByClient: string }>();
+  const famSends = new Map<string, Map<Family, number>>();
   for (const r of rows) {
     if (scope !== null && r.client_id !== scope) continue;
+    const fam = familyOf(r.namespace);
+    if (fam) {
+      const f = famSends.get(r.mobile) ?? new Map<Family, number>();
+      f.set(fam, (f.get(fam) ?? 0) + num(r.sent));
+      famSends.set(r.mobile, f);
+    }
     const e = by.get(r.mobile);
     if (!e) {
       by.set(r.mobile, {
@@ -273,6 +301,7 @@ export function mergeMobiles(rows: MobileRow[], scope: string | null, limit = 20
         banned: num(r.banned),
         first_day: r.first_day,
         last_day: r.last_day,
+        family: null,
         lastByClient: r.last_day,
       });
       continue;
@@ -289,7 +318,11 @@ export function mergeMobiles(rows: MobileRow[], scope: string | null, limit = 20
       e.client_id = r.client_id;
     }
   }
-  const out = [...by.values()].map(({ lastByClient: _l, ...m }) => m);
+  const out = [...by.values()].map(({ lastByClient: _l, ...m }) => {
+    const f = famSends.get(m.mobile);
+    if (f) m.family = (f.get('promote') ?? -1) > (f.get('tg-aut') ?? -1) ? 'promote' : 'tg-aut';
+    return m;
+  });
   if (scope !== null) return out.sort((a, b) => b.sent - a.sent || (a.mobile < b.mobile ? -1 : 1));
   return out
     .sort((a, b) => b.new_users - a.new_users || b.sent - a.sent || (a.mobile < b.mobile ? -1 : a.mobile > b.mobile ? 1 : 0))

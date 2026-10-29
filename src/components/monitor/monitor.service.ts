@@ -24,6 +24,34 @@ import {
   toCredit,
 } from './monitor-merge';
 import {
+  ByFamily,
+  byFamily,
+  byFamilyOfDate,
+  dmsFamilyByDate,
+  dmsFamilyDays,
+  dmsFamilyRows,
+  FamSend,
+  FamSplit,
+  Family,
+  sendsByFamily,
+  sendsByFamilyDate,
+} from './monitor-family';
+import {
+  buildPromotions,
+  funnelOrigins,
+  extrasFromToday,
+  heartbeatJoins,
+  histBounds,
+  PromoWindow,
+  promoWindows,
+  readBatch,
+  redisBatch,
+  rowsFromHist,
+  rowsFromSends,
+  RouteState,
+  SpamState,
+} from './monitor-promotions';
+import {
   bufferPoolPipeline,
   CohortRow,
   flattenCohort,
@@ -44,7 +72,13 @@ import {
   dmsByDaySql,
   mobilesSql,
   paidChatsSql,
+  paidOriginSql,
   paymentRowsSql,
+  promoMobilesHistSql,
+  promoMobilesTodaySql,
+  promoSendsSql,
+  routedColumnsSql,
+  routedDailySql,
   sendsHourlySql,
   sendsLiveSql,
   SqlQuery,
@@ -61,7 +95,7 @@ import {
   MonitorPeriod,
   resolvePeriod,
 } from './monitor-time';
-import { historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
+import { FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
 
 export const MONITOR_REDIS = 'MONITOR_REDIS';
 
@@ -74,7 +108,11 @@ export interface MonitorRedis {
   mget(keys: string[]): Promise<Array<string | null>>;
   get?(key: string): Promise<string | null>;
   set?(key: string, value: string, mode: 'EX', ttlSec: number): Promise<unknown>;
+  /** Read-only batch (one round trip): results in order, null for a failed command. Optional. */
+  readPipeline?(cmds: Array<[RedisReadCmd, string]>): Promise<unknown[]>;
 }
+
+export type RedisReadCmd = 'hgetall' | 'hlen' | 'zcard';
 
 export const PG_TIMEOUT_MS = 10_500;
 export const MONGO_TIMEOUT_MS = 10_000;
@@ -167,6 +205,8 @@ export interface Metrics {
   sendSuccess: number | null;
   banned: number | null;
   dms: number | null;
+  /** Additive (2026-10-29): the sends/DMs split by family; merged fields above are the sums (plus rows with no family). */
+  byFamily?: ByFamily;
 }
 
 export interface FleetClientRow {
@@ -184,6 +224,8 @@ export interface FleetClientRow {
   pool: { buffersEligible: number; buffersTotal: number; promoteActive: number } | null;
   spark: number[] | null;
   previous: { revenue: number | null; payers: number | null; newUsers: number | null; conversion: number | null };
+  /** Additive (2026-10-29): sends/DMs per family for this client. */
+  byFamily?: ByFamily;
 }
 
 /**
@@ -240,6 +282,7 @@ export function fleetSummaryRow(f: FleetResponse): FleetClientRow & { grossReven
     sendSuccess: m.sendSuccess,
     banned: m.banned,
     dms: m.dms,
+    ...(m.byFamily ? { byFamily: m.byFamily } : {}),
     pool,
     spark,
     previous: { revenue: f.previous.revenue, payers: f.previous.payers, newUsers: f.previous.newUsers, conversion: f.previous.conversion },
@@ -270,6 +313,8 @@ interface LiveEntry {
   clientId: string;
   payload: Record<string, unknown> | null;
   parseError?: boolean;
+  /** Member of heartbeat::index (the process registered itself); false = expected from the clients collection only. */
+  indexed: boolean;
 }
 
 interface LiveSnapshot {
@@ -283,6 +328,8 @@ export interface LiveItem {
   state: 'live' | 'stopping' | 'stale' | 'no-heartbeat';
   ageSec: number | null;
   clockSkew?: boolean;
+  /** Additive (2026-10-29): the process is in heartbeat::index (false = listed from the clients collection only). */
+  indexed?: boolean;
   [k: string]: unknown;
 }
 
@@ -543,6 +590,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const [kind, a, b] = page.split(':');
     if (kind === 'fleet') return this.buildFleet(a as MonitorPeriod, now, background);
     if (kind === 'detail') return this.buildDetail(null, Number(b) as 7 | 30, now, background);
+    if (kind === 'promotions') return this.buildPromotions(a as PromoWindow, b === '*' ? null : b, now, background);
+    if (kind === 'funnel') return this.buildFunnel(a as MonitorPeriod, b === '*' ? null : b, now, background);
     return this.buildDetail(a, Number(b) as 7 | 30, now, background);
   }
 
@@ -668,6 +717,21 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     return this.part<DailyClientRow[]>(ctx, 'today', 'dc_today', (now, t, bg) => {
       const today = istDate(now);
       return this.pgRows(dailyClientSql('dc_today', today, today), t, bg);
+    }).then((l) => l.value);
+  }
+
+  /**
+   * Which route counters (ROUTED_COLUMNS, tg-platform 2026-10-29) exist on daily_client / daily_mobile:
+   * one information_schema read, cached like history (re-read every 10 min, so the columns are picked
+   * up within 10 min of the tg-platform deploy that adds them).
+   */
+  private routedColumns(ctx: Ctx): Promise<{ client: string[]; mobile: string[] }> {
+    return this.part<{ client: string[]; mobile: string[] }>(ctx, 'history', 'routed_columns', async (_now, t, bg) => {
+      const rows = await this.pgRows<{ t: string; c: string }>(routedColumnsSql(), t, bg);
+      return {
+        client: rows.filter((r) => r.t === 'daily_client').map((r) => r.c).sort(),
+        mobile: rows.filter((r) => r.t === 'daily_mobile').map((r) => r.c).sort(),
+      };
     }).then((l) => l.value);
   }
 
@@ -828,10 +892,17 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     type Sends = ReturnType<typeof sumDailyClient>;
     let sends: Sends | null = null;
     let sendsPrev: Sends | null = null;
+    let famSends: FamSplit<FamSend> | null = null;
+    let famSendsPrev: FamSplit<FamSend> | null = null;
     if (dcH) {
       sends = sumDailyClient(dcH, w.range.from, w.range.to);
       sendsPrev = sumDailyClient(dcH, w.prevRange.from, w.prevRange.to);
+      famSends = sendsByFamily(dcH, 'namespace', (r) => r.d >= w.range.from && r.d <= w.range.to);
+      famSendsPrev = sendsByFamily(dcH, 'namespace', (r) => r.d >= w.prevRange.from && r.d <= w.prevRange.to);
     } else if (live) {
+      const isToday = (r: any) => r.today === true || r.today === 't';
+      famSends = sendsByFamily(live.rows, 'service', isToday);
+      famSendsPrev = sendsByFamily(live.rows, 'service', (r) => !isToday(r));
       const cur = new Map<string, any>();
       const prev = new Map<string, any>();
       for (const r of live.rows) {
@@ -852,12 +923,22 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     type Dms = { byClient: Map<string, number>; total: number };
     let dms: Dms | null = null;
     let dmsPrev: Dms | null = null;
+    let famDms: FamSplit<number> | null = null;
+    let famDmsPrev: FamSplit<number> | null = null;
     if (dmsH) {
       dms = sumDmsDays(dmsH, w.range.from, w.range.to);
       dmsPrev = sumDmsDays(dmsH, w.prevRange.from, w.prevRange.to);
+      famDms = dmsFamilyDays(dmsH, w.range.from, w.range.to);
+      famDmsPrev = dmsFamilyDays(dmsH, w.prevRange.from, w.prevRange.to);
     } else {
-      if (dmT) dms = distinctDms(dmT.rows);
-      if (dmY) dmsPrev = distinctDms(dmY, (dmT?.asOf ?? now) - DAY_MS);
+      if (dmT) {
+        dms = distinctDms(dmT.rows);
+        famDms = dmsFamilyRows(dmT.rows);
+      }
+      if (dmY) {
+        dmsPrev = distinctDms(dmY, (dmT?.asOf ?? now) - DAY_MS);
+        famDmsPrev = dmsFamilyRows(dmY, (dmT?.asOf ?? now) - DAY_MS);
+      }
     }
 
     // ---- conversion cohorts (current / previous)
@@ -928,11 +1009,12 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
           newUsers: nuPrev(id),
           conversion: conv(prevCohorts, id),
         },
+        byFamily: byFamily(famSends, famDms, id),
       };
     });
     clients.sort((a, b) => (b.revenue ?? -1) - (a.revenue ?? -1) || a.clientId.localeCompare(b.clientId));
 
-    const totals = (r: Rev | null, s: Sends | null, d: Dms | null, cohorts: CohortRow[] | null, nu: number | null): Metrics => {
+    const totals = (r: Rev | null, s: Sends | null, d: Dms | null, cohorts: CohortRow[] | null, nu: number | null, fam: ByFamily): Metrics => {
       const revenue = r ? r.total.revenue : null;
       const gross = r ? r.total.gross : null;
       const payers = r ? r.total.payers : null;
@@ -948,6 +1030,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         sendSuccess: s ? s.total.delivered : null,
         banned: s ? s.total.banned : null,
         dms: d ? d.total : null,
+        byFamily: fam,
       };
     };
 
@@ -958,6 +1041,9 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         `previous = yesterday 00:00 to ${new Date(cutAt + 19_800_000).toISOString().slice(11, 16)} IST; today's sends come from promotion_send and new users/conversion from Mongo userData.`,
       );
     }
+    notes.push(
+      `byFamily splits sends/DMs into tg-aut and promote; rows without a family (promotion_send/conversion_event before 2026-10-25) count only in the merged numbers.`,
+    );
     if (prevSwept) {
       notes.push(
         'previous.conversion is null: the previous window is older than ~30 days and userData docs are swept after 30 days idle. Current-window days older than ~30 days may also undercount.',
@@ -968,8 +1054,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       period,
       range: w.range,
       previousRange: w.prevRange,
-      fleet: totals(rev, sends, dms, cohortCur, nuCur()),
-      previous: totals(revPrev, sendsPrev, dmsPrev, prevCohorts, nuPrev()),
+      fleet: totals(rev, sends, dms, cohortCur, nuCur(), byFamily(famSends, famDms)),
+      previous: totals(revPrev, sendsPrev, dmsPrev, prevCohorts, nuPrev(), byFamily(famSendsPrev, famDmsPrev)),
       clients,
       notes,
       timingsMs: ctx.timings,
@@ -1041,6 +1127,9 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const dcBy = new Map([...(dcH ? dailyClientByDate(dcH, scope) : []), ...(dcT ? dailyClientByDate(dcT, scope) : [])]);
     const dmsBy = dmsH ? dmsByDate(dmsH, scope) : new Map<string, number>();
     const dmsToday = dmT ? distinctDms(dmT.rows.filter((x) => inScope(x.client_id))).total : null;
+    const famDcBy = new Map([...(dcH ? sendsByFamilyDate(dcH, scope) : []), ...(dcT ? sendsByFamilyDate(dcT, scope) : [])]);
+    const famDmsBy = dmsH ? dmsFamilyByDate(dmsH, scope) : null;
+    const famDmsToday = dmT ? dmsFamilyRows(dmT.rows, Number.POSITIVE_INFINITY, (x) => inScope(x.client_id)).total : null;
     const cohortBy = new Map<string, { n: number; same: number }>();
     for (const x of [...(cohH ?? []), ...(cohT ?? [])]) {
       if (!inScope(x.c)) continue;
@@ -1067,6 +1156,11 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         sendSuccess: dcOk ? (dc?.delivered ?? 0) : null,
         banned: dcOk ? (dc?.banned ?? 0) : null,
         dms: isToday ? dmsToday : dmsH ? (dmsBy.get(date) ?? 0) : null,
+        byFamily: byFamilyOfDate(
+          dcOk ? famDcBy : null,
+          isToday ? (famDmsToday ? new Map([[date, famDmsToday]]) : null) : famDmsBy,
+          date,
+        ),
       };
     });
 
@@ -1153,6 +1247,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
           dms: m.dms,
           firstDay: m.first_day,
           lastDay: m.last_day,
+          family: m.family,
         }))
       : null;
     let channels: Array<{ title: string; sends: number; dms: number; dmPerSend: number | null }> | null = null;
@@ -1382,6 +1477,325 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+
+  // ---------------------------------------------------------------- promotions (design-v2 P1)
+
+  /**
+   * Promotion health per family / client / mobile. Snapshot per (window, client); every Postgres part
+   * is shared fleet-wide (client filter in memory). Postgres failure of the sends part = 503, never an
+   * empty page (a stale snapshot is still served while it refreshes).
+   */
+  async promotions(window: PromoWindow, client: string | null): Promise<any> {
+    try {
+      return await this.snap(`promotions:${window}:${client ?? '*'}`);
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor promotions ${window} failed: ${msg}`);
+      throw new ServiceUnavailableException(`promotions unavailable: ${msg}`);
+    }
+  }
+
+  /** promotion_send per (current?, service, client, mobile, error type) for today / 24h. */
+  private promoSends(ctx: Ctx, window: 'today' | '24h'): Promise<any[]> {
+    return this.part<any[]>(ctx, 'today', `promo_sends:${window}`, (now, t, bg) => {
+      const w = promoWindows(window, now);
+      return this.pgRows(promoSendsSql(w.cur, w.prev), t, bg);
+    }).then((l) => l.value);
+  }
+
+  /** daily_mobile per (current?, namespace, client, mobile) over the 7d / 30d windows. */
+  private promoHist(ctx: Ctx, window: '7d' | '30d', routed: string[]): Promise<any[]> {
+    return this.part<any[]>(ctx, 'history', `promo_mobiles_hist:${window}:${routed.join(',')}`, (now, t, bg) => {
+      const b = histBounds(promoWindows(window, now));
+      return this.pgRows(promoMobilesHistSql(b.prevFrom, b.curFrom, b.to, routed), t, bg);
+    }).then((l) => l.value);
+  }
+
+  private promoMobilesToday(ctx: Ctx, routed: string[]): Promise<any[]> {
+    return this.part<any[]>(ctx, 'today', `promo_mobiles_today:${routed.join(',')}`, (now, t, bg) =>
+      this.pgRows(promoMobilesTodaySql(istDate(now), routed), t, bg),
+    ).then((l) => l.value);
+  }
+
+  /** Active promote mobiles per client (promoteClients, ~750 docs), refreshed like the pool counts. */
+  private promoteAssigned(ctx: Ctx): Promise<Array<{ mobile: string; clientId: string | null }>> {
+    return this.part<Array<{ mobile: string; clientId: string | null }>>(
+      ctx,
+      'history',
+      'promote_assigned',
+      async (_now, t) => {
+        const rows = await this.mongoFind<any>('promoteClients', { status: 'active' }, { _id: 0, mobile: 1, clientId: 1 }, 'mongo.promoteClients_assigned', t);
+        return rows.filter((r) => r.mobile).map((r) => ({ mobile: String(r.mobile), clientId: r.clientId ? String(r.clientId) : null }));
+      },
+      this.poolCache,
+    ).then((l) => l.value);
+  }
+
+  /** One read-only Redis pipeline: spam state of every mobile + route keys of promote mobiles. */
+  private async redisAccountState(
+    mobiles: string[],
+    promote: Set<string>,
+    ctx: Ctx,
+  ): Promise<{ spam: Map<string, SpamState | null>; route: Map<string, RouteState> } | null> {
+    if (typeof this.redis?.readPipeline !== 'function') {
+      ctx.notes.push('spam/route state not read: Redis pipeline not configured.');
+      return null;
+    }
+    if (!mobiles.length) return { spam: new Map(), route: new Map() };
+    const cmds = redisBatch(mobiles, promote);
+    const t = Date.now();
+    try {
+      const results = await withTimeout(this.redis.readPipeline(cmds), LIVE_REDIS_DEADLINE_MS, 'redis account state');
+      return readBatch(mobiles, promote, results);
+    } finally {
+      ctx.timings['redis.account_state'] = Date.now() - t;
+    }
+  }
+
+  async buildPromotions(window: PromoWindow, client: string | null, now: number, background = false): Promise<any> {
+    const ctx = new Ctx(background);
+    const w = promoWindows(window, now);
+    const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
+    const routedCols = routed?.mobile ?? [];
+    const intraday = w.intraday;
+
+    const sendsP: Promise<any[]> = intraday ? this.promoSends(ctx, window as 'today' | '24h') : this.promoHist(ctx, window as '7d' | '30d', routedCols);
+    const [sendRows, extraRows, meta, dmsH, dmY, dmT, assigned, live] = await Promise.all([
+      sendsP.catch((err) => {
+        const msg = String((err as Error)?.message ?? err).slice(0, 200);
+        throw new ServiceUnavailableException(`promotion sends unavailable: ${msg}`);
+      }),
+      intraday ? this.section('mobiles_today', ctx, () => this.promoMobilesToday(ctx, routedCols)) : null,
+      this.section('clients', ctx, () => this.clientMeta(ctx)),
+      intraday ? null : this.section('dms', ctx, () => this.dmsHist(ctx)),
+      intraday ? this.section('dms', ctx, () => this.dmRowsYday(ctx)) : null,
+      intraday ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
+      this.section('assigned', ctx, () => this.promoteAssigned(ctx)),
+      this.section('heartbeats', ctx, async () => (await this.liveCache.get('all', () => this.loadLive())).value),
+    ]);
+
+    const rows = intraday ? rowsFromSends(sendRows) : rowsFromHist(sendRows, routedCols);
+
+    // DMs per family (conversion_event.service)
+    let dmsCur: FamSplit<number> | null = null;
+    let dmsPrev: FamSplit<number> | null = null;
+    if (!intraday) {
+      if (dmsH) {
+        dmsCur = dmsFamilyDays(dmsH, w.range.from, w.range.to);
+        dmsPrev = dmsFamilyDays(dmsH, w.previousRange.from, w.previousRange.to);
+      }
+    } else if (window === 'today') {
+      if (dmT) dmsCur = dmsFamilyRows(dmT.rows);
+      if (dmY) dmsPrev = dmsFamilyRows(dmY, (dmT?.asOf ?? now) - DAY_MS);
+    } else if (dmT && dmY) {
+      const from = dmT.asOf - DAY_MS;
+      dmsCur = dmsFamilyRows([...dmY.filter((r) => new Date(r.ts).getTime() >= from), ...dmT.rows]);
+    }
+
+    // Redis spam + route state for every mobile on the page (unmasked here, masked in the body)
+    const inScope = (c: string | null) => client === null || c === client;
+    const mobiles = new Set<string>();
+    const promote = new Set<string>();
+    for (const r of rows) {
+      if (!r.cur || !r.mobile || !r.family || !inScope(r.clientId)) continue;
+      mobiles.add(r.mobile);
+      if (r.family === 'promote') promote.add(r.mobile);
+    }
+    for (const a of assigned ?? []) {
+      if (!inScope(a.clientId)) continue;
+      mobiles.add(a.mobile);
+      promote.add(a.mobile);
+    }
+    const acct = await this.section('redis_state', ctx, () => this.redisAccountState([...mobiles].sort(), promote, ctx));
+
+    const entries = (live?.entries ?? []).map((e) => ({ svc: e.svc, clientId: e.clientId, payload: e.payload as Record<string, any> | null, state: classifyHeartbeat(e.payload, now).state }));
+    const body = buildPromotions({
+      w,
+      rows,
+      extra: extraRows ? extrasFromToday(extraRows, routedCols) : null,
+      dms: { cur: dmsCur, prev: dmsPrev },
+      spam: acct?.spam ?? null,
+      route: acct?.route ?? null,
+      heartbeats: live ? heartbeatJoins(entries) : null,
+      assigned: assigned ?? null,
+      names: new Map((meta ?? []).map((m) => [m.clientId, m.name])),
+      routedCols,
+      client,
+    });
+    if (client !== null && meta && !meta.some((m) => m.clientId === client)) ctx.notes.push(`clientId ${client} is not in the clients collection.`);
+    return {
+      generatedAt: new Date(now).toISOString(),
+      ...body,
+      notes: [...body.notes, ...ctx.notes],
+      timingsMs: ctx.timings,
+      cache: ctx.cache(Date.now()),
+    };
+  }
+
+  // ---------------------------------------------------------------- funnel (design-v2 P3)
+
+  async funnel(period: MonitorPeriod, client: string | null): Promise<any> {
+    return this.snap(`funnel:${period}:${client ?? '*'}`);
+  }
+
+  /**
+   * First attributed DM service of every chat that paid in the history window ('t' direct, 'p' routed),
+   * keyed chat|client. History-cached (re-read every 10 min); chat ids stay inside the service.
+   */
+  private paidOrigin(ctx: Ctx): Promise<Map<string, string | null>> {
+    return this.part<Array<[string, string | null]>>(ctx, 'history', 'paid_origin', async (now, t, bg) => {
+      const from = this.historyStart(istDate(now));
+      const dmFrom = Math.max(from, istDayStart(FAMILY_DMS_FROM));
+      const rows = await this.pgRows<{ chat_id: string; client_id: string; service: string | null }>(paidOriginSql(dmFrom, from), t, bg);
+      return rows.map((r) => [`${r.chat_id}|${r.client_id}`, r.service ?? null] as [string, string | null]);
+    }).then((l) => new Map(l.value));
+  }
+
+  /** Route counters per (day, client) when the columns exist: closed days (history) or today. */
+  private routedDaily(ctx: Ctx, kind: 'hist' | 'today', cols: string[]): Promise<any[]> {
+    if (kind === 'hist') {
+      return this.part<any[]>(ctx, 'history', `routed_hist:${cols.join(',')}`, (now, t, bg) => {
+        const today = istDate(now);
+        return this.pgRows(routedDailySql('routed_hist', addDays(today, -HISTORY_DAYS), addDays(today, -1), cols), t, bg);
+      }).then((l) => l.value);
+    }
+    return this.part<any[]>(ctx, 'today', `routed_today:${cols.join(',')}`, (now, t, bg) => {
+      const today = istDate(now);
+      return this.pgRows(routedDailySql('routed_today', today, today, cols), t, bg);
+    }).then((l) => l.value);
+  }
+
+  async buildFunnel(period: MonitorPeriod, client: string | null, now: number, background = false): Promise<any> {
+    const ctx = new Ctx(background);
+    const w = resolvePeriod(period, now);
+    const intraday = !w.wholeDays;
+    const days: 7 | 30 = period === '30d' ? 30 : 7;
+    const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
+    const routedCols = routed?.client ?? [];
+    const [fleet, payH, payT, origin, dmsH, dmY, dmT, dcH, dcT, routedRows, detail] = await Promise.all([
+      this.section('summary', ctx, () => this.snap<FleetResponse>(`fleet:${period}`)),
+      this.section('revenue', ctx, () => this.payHist(ctx)),
+      intraday ? this.section('revenue_today', ctx, () => this.payToday(ctx)) : null,
+      this.section('paid_origin', ctx, () => this.paidOrigin(ctx)),
+      w.wholeDays ? this.section('dms', ctx, () => this.dmsHist(ctx)) : null,
+      intraday ? this.section('dms', ctx, () => this.dmRowsYday(ctx)) : null,
+      intraday ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
+      w.wholeDays ? this.section('daily_client', ctx, () => this.dcHist(ctx)) : null,
+      intraday ? this.section('daily_client_today', ctx, () => this.dcToday(ctx)) : null,
+      routedCols.length ? this.section('routed', ctx, () => this.routedDaily(ctx, intraday ? 'today' : 'hist', routedCols)) : null,
+      w.wholeDays ? this.section('detail', ctx, () => this.snap<any>(client ? `client:${client}:${days}` : `detail:all:${days}`)) : null,
+    ]);
+    if (fleet) ctx.merge(fleet.cache, Date.now());
+    if (detail) ctx.merge(detail.cache, Date.now());
+    const inScope = (c: string | null) => client === null || c === client;
+
+    // DMs per family: direct = tg-aut ('t'), routed = promote ('p')
+    let dmsCur: FamSplit<number> | null = null;
+    let dmsPrev: FamSplit<number> | null = null;
+    if (dmsH) {
+      dmsCur = dmsFamilyDays(dmsH, w.range.from, w.range.to);
+      dmsPrev = dmsFamilyDays(dmsH, w.prevRange.from, w.prevRange.to);
+    } else {
+      if (dmT) dmsCur = dmsFamilyRows(dmT.rows);
+      if (dmY) dmsPrev = dmsFamilyRows(dmY, (dmT?.asOf ?? now) - DAY_MS);
+    }
+
+    // credits of the window (current / previous)
+    const curCredits = intraday ? (payT ? payT.rows.filter((c) => c.ms >= w.cur.start && c.ms < payT.asOf) : null) : payH ? payH.filter((c) => c.ms >= w.cur.start && c.ms < w.cur.end) : null;
+    const prevEnd = intraday ? (payT?.asOf ?? now) - DAY_MS : w.prev.end;
+    const prevCredits = payH ? payH.filter((c) => c.ms >= w.prev.start && c.ms < prevEnd) : null;
+
+    const fleetRow = (f: FleetResponse | null) =>
+      !f ? null : client === null ? { cur: f.fleet, prev: f.previous } : (() => {
+        const r = f.clients.find((c) => c.clientId === client);
+        return r ? { cur: r, prev: r.previous } : { cur: null, prev: null };
+      })();
+    const fr = fleetRow(fleet);
+
+    const origins = (credits: Credit[] | null, split: FamSplit<number> | null, newUsers: number | null, id: string | null) =>
+      funnelOrigins(credits, split, newUsers, origin, id);
+
+    const totals = fr?.cur
+      ? { newUsers: fr.cur.newUsers, payers: fr.cur.payers, revenue: fr.cur.revenue, conversion: fr.cur.conversion }
+      : { newUsers: null, payers: null, revenue: null, conversion: null };
+    const previous = fr?.prev
+      ? { newUsers: fr.prev.newUsers, payers: fr.prev.payers, revenue: fr.prev.revenue, conversion: fr.prev.conversion }
+      : null;
+
+    // incoming promote DMs (daily_client promote-clients new_users) + route counters
+    const dcRows = (dcH ?? dcT ?? []).filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
+    const incoming = dcH || dcT ? dcRows.filter((r) => r.namespace === 'promote-clients').reduce((s, r) => s + num(r.ns_new_users), 0) : null;
+    let routedOut: Record<string, number | null> | null = null;
+    if (routedRows) {
+      const sel = routedRows.filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
+      const sumOf = (c: string) => (routedCols.includes(c) ? sel.reduce((s, r) => s + num(r[c]), 0) : null);
+      const sent = sumOf('routes_sent');
+      const reached = sumOf('routed_reached');
+      routedOut = {
+        routesSent: sent,
+        routedReached: reached,
+        routeCallsOk: sumOf('route_calls_ok'),
+        routeCallsFailed: sumOf('route_calls_failed'),
+        reachRate: sent === null || reached === null ? null : ratio(reached, sent),
+      };
+    }
+
+    const ids = fleet ? fleet.clients.map((c) => c.clientId).filter((id) => inScope(id)) : [];
+    const clients = (fleet?.clients ?? [])
+      .filter((c) => ids.includes(c.clientId))
+      .map((c) => ({
+        clientId: c.clientId,
+        name: c.name,
+        newUsers: c.newUsers,
+        payers: c.payers,
+        revenue: c.revenue,
+        conversion: c.conversion,
+        previous: c.previous,
+        byOrigin: origins(curCredits, dmsCur, c.newUsers, c.clientId),
+      }));
+
+    const daily = detail
+      ? (detail.daily as any[]).map((d) => ({
+          date: d.date,
+          newUsers: d.newUsers,
+          payers: d.payers,
+          revenue: d.revenue,
+          conversion: d.conversion,
+          dms: d.dms,
+          dmsByFamily: d.byFamily ? { 'tg-aut': d.byFamily['tg-aut'].dms, promote: d.byFamily.promote.dms } : null,
+        }))
+      : null;
+
+    const notes = [...historyNotes([w.range, w.prevRange]), ...ctx.notes];
+    notes.push('byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.');
+    notes.push('byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).');
+    if (!routedCols.includes('routes_sent')) notes.push('routed: history starts when counters ship (daily_client route columns not present yet).');
+    if (intraday) notes.push('timeToFirstPay / repeat are 7d/30d only (null for today); payer origins refresh every 10 min.');
+    if (client !== null && fleet && !fleet.clients.some((c) => c.clientId === client)) notes.push(`clientId ${client} has no row in /monitor/fleet for ${period}.`);
+
+    return {
+      generatedAt: new Date(now).toISOString(),
+      period,
+      clientId: client,
+      range: w.range,
+      previousRange: w.prevRange,
+      totals,
+      previous,
+      byOrigin: origins(curCredits, dmsCur, totals.newUsers, client),
+      previousByOrigin: origins(prevCredits, dmsPrev, previous?.newUsers ?? null, client),
+      incomingPromoteDms: incoming,
+      routed: routedOut,
+      clients,
+      daily,
+      ttfp: detail?.distributions?.timeToFirstPay ?? null,
+      repeat: detail?.distributions?.repeat ?? null,
+      notes,
+      timingsMs: ctx.timings,
+      cache: ctx.cache(Date.now()),
+    };
+  }
+
   // ---------------------------------------------------------------- live
 
   async live(svc: LiveSvc | 'all'): Promise<{
@@ -1410,7 +1824,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       .map((e) => {
         const c = classifyHeartbeat(e.payload, now);
         const masked = (e.payload ? maskPayload(e.payload) : {}) as Record<string, unknown>;
-        const item: LiveItem = { ...masked, svc: e.svc, clientId: e.clientId, state: c.state, ageSec: c.ageSec };
+        const item: LiveItem = { ...masked, svc: e.svc, clientId: e.clientId, state: c.state, ageSec: c.ageSec, indexed: e.indexed };
         if (c.clockSkew) item.clockSkew = true;
         if (e.parseError) item.parseError = true;
         return item;
@@ -1431,6 +1845,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const meta = await this.section('clients', ctx, () => this.clientMeta(ctx));
     const redisPart = async () => {
       const members = await this.redis.smembers(HEARTBEAT_INDEX_KEY);
+      const indexed = new Set(members ?? []);
       const keys = new Map<string, { svc: LiveSvc; clientId: string }>();
       const add = (svc: string, clientId: string) => {
         if (!(LIVE_SVCS as readonly string[]).includes(svc) || !clientId) return;
@@ -1446,18 +1861,21 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       }
       const keyList = [...keys.keys()];
       const values = keyList.length ? await this.redis.mget(keyList) : [];
-      return keyList.map((k, i) => ({ ...keys.get(k)!, raw: values[i] ?? null }));
+      return keyList.map((k, i) => {
+        const e = keys.get(k)!;
+        return { ...e, indexed: indexed.has(`${e.svc}::${e.clientId}`), raw: values[i] ?? null };
+      });
     };
     const rows = await withTimeout(redisPart(), LIVE_REDIS_DEADLINE_MS, 'redis heartbeat read');
     const entries: LiveEntry[] = rows.map((r) => {
-      if (r.raw === null) return { svc: r.svc, clientId: r.clientId, payload: null };
+      if (r.raw === null) return { svc: r.svc, clientId: r.clientId, payload: null, indexed: r.indexed };
       try {
         const parsed = JSON.parse(r.raw);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { svc: r.svc, clientId: r.clientId, payload: parsed };
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { svc: r.svc, clientId: r.clientId, payload: parsed, indexed: r.indexed };
       } catch {
         /* fall through */
       }
-      return { svc: r.svc, clientId: r.clientId, payload: { at: null }, parseError: true };
+      return { svc: r.svc, clientId: r.clientId, payload: { at: null }, parseError: true, indexed: r.indexed };
     });
     entries.sort((a, b) => a.svc.localeCompare(b.svc) || a.clientId.localeCompare(b.clientId));
     return { entries, notes: ctx.notes };

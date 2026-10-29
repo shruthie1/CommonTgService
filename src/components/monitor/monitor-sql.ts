@@ -55,28 +55,78 @@ WHERE ${range} AND amount > 0`,
   );
 }
 
-/** daily_client per (IST day, client) for from..to inclusive: sends + tg-aut new users. */
+/**
+ * daily_client per (IST day, client, namespace) for from..to inclusive: sends + tg-aut new users.
+ * Grouped by namespace (2026-10-29) so the family split is exact; summing the namespaces gives the
+ * former per-(day, client) row. `ns_new_users` = new_users of that namespace (promote-clients: first DMs
+ * to a promote account).
+ */
 export function dailyClientSql(name: 'dc_hist' | 'dc_today', from: string, to: string): SqlQuery {
   return q(
     name,
-    `SELECT day::text AS d, client_id,
+    `SELECT day::text AS d, client_id, namespace,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
-  coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users
+  coalesce(sum(failed), 0) AS failed,
+  coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users,
+  coalesce(sum(new_users), 0) AS ns_new_users
 FROM daily_client
 WHERE day BETWEEN $1::date AND $2::date
+GROUP BY day, client_id, namespace`,
+    [from, to],
+  );
+}
+
+/**
+ * Route counters written by promote-clients into daily_client / daily_mobile (tg-platform P4, 2026-10-29).
+ * Read only when present (feature-detected through information_schema), so the CMS works before and
+ * after the columns ship.
+ */
+export const ROUTED_COLUMNS = ['routes_sent', 'routed_reached', 'route_calls_ok', 'route_calls_failed'] as const;
+
+function routedSums(cols: readonly string[]): string {
+  const ok = cols.filter((c) => (ROUTED_COLUMNS as readonly string[]).includes(c));
+  return ok.map((c) => `, coalesce(sum(${c}), 0) AS ${c}`).join('');
+}
+
+/**
+ * Route counters per (IST day, client) over from..to inclusive, promote-clients rows only (primary-key
+ * range on day). Run only for the columns routedColumnsSql found; never with an empty list.
+ */
+export function routedDailySql(name: 'routed_hist' | 'routed_today', from: string, to: string, cols: readonly string[]): SqlQuery {
+  return q(
+    name,
+    `SELECT day::text AS d, client_id${routedSums(cols)}
+FROM daily_client
+WHERE day BETWEEN $1::date AND $2::date AND namespace = 'promote-clients'
 GROUP BY day, client_id`,
     [from, to],
   );
 }
 
-/** Attributed DMs per (IST day, client) in [start, end); client_id NULL rows (before 2026-10-26) included. */
+/** Which ROUTED_COLUMNS exist on daily_client and on daily_mobile (catalog read, no table scan). */
+export function routedColumnsSql(): SqlQuery {
+  return q(
+    'routed_columns',
+    `SELECT table_name::text AS t, column_name::text AS c
+FROM information_schema.columns
+WHERE table_schema = current_schema() AND table_name IN ('daily_client', 'daily_mobile') AND column_name = ANY($1::text[])`,
+    [[...ROUTED_COLUMNS]],
+  );
+}
+
+/**
+ * Attributed DMs per (IST day, client) in [start, end); client_id NULL rows (before 2026-10-26) included.
+ * GROUPING SETS (2026-10-29): rows with g = 1 are the former per-(day, client) distinct counts (used for
+ * every merged number, unchanged); rows with g = 0 split them by service ('t' tg-aut, 'p' promote-clients
+ * routed DMs, NULL before 2026-10-25) for the family view.
+ */
 export function dmsByDaySql(start: number, end: number): SqlQuery {
   return q(
     'dms_hist',
-    `SELECT ${IST}::date::text AS d, client_id, count(DISTINCT conversion_id) AS dms
+    `SELECT ${IST}::date::text AS d, client_id, service, GROUPING(service) AS g, count(DISTINCT conversion_id) AS dms
 FROM conversion_event
 WHERE kind = 'dm' AND ts >= $1::timestamptz AND ts < $2::timestamptz
-GROUP BY 1, 2`,
+GROUP BY GROUPING SETS ((1, 2), (1, 2, 3))`,
     [iso(start), iso(end)],
   );
 }
@@ -95,7 +145,7 @@ export function dmRowsSql(name: 'dm_rows_yday' | 'dm_rows_today', start: number,
   }
   return q(
     name,
-    `SELECT client_id, channel_id, conversion_id, ts
+    `SELECT client_id, channel_id, conversion_id, ts, service
 FROM conversion_event
 WHERE kind = 'dm' AND ${range}`,
     params,
@@ -109,13 +159,14 @@ WHERE kind = 'dm' AND ${range}`,
 export function sendsLiveSql(today: Window, cut: number): SqlQuery {
   return q(
     'sends_live',
-    `SELECT client_id, ts >= $1::timestamptz AS today, extract(hour FROM ${IST})::int AS h,
+    `SELECT client_id, ts >= $1::timestamptz AS today, extract(hour FROM ${IST})::int AS h, service,
   count(*) FILTER (WHERE outcome <> 'deleted') AS sent,
   count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
-  count(*) FILTER (WHERE outcome = 'banned') AS banned
+  count(*) FILTER (WHERE outcome = 'banned') AS banned,
+  count(*) FILTER (WHERE outcome = 'failed') AS failed
 FROM promotion_send
 WHERE ts >= $2::timestamptz AND ts < $3::timestamptz AND (ts >= $1::timestamptz OR ts < $4::timestamptz)
-GROUP BY 1, 2, 3`,
+GROUP BY 1, 2, 3, 4`,
     [iso(today.start), iso(today.start - 86_400_000), iso(today.end), iso(cut)],
   );
 }
@@ -132,18 +183,21 @@ GROUP BY 1, 2`,
   );
 }
 
-/** daily_mobile per (mobile, client) over from..to inclusive. Mobiles are masked before leaving the service. */
+/**
+ * daily_mobile per (mobile, client, namespace) over from..to inclusive (namespace added 2026-10-29 for
+ * mobiles[].family; the merge sums namespaces). Mobiles are masked before leaving the service.
+ */
 export function mobilesSql(name: 'mobiles_hist' | 'mobiles_today', from: string, to: string): SqlQuery {
   return q(
     name,
-    `SELECT mobile, client_id,
+    `SELECT mobile, client_id, namespace,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'tg-aut'), 0) AS new_users,
   coalesce(sum(new_users) FILTER (WHERE namespace = 'promote-clients'), 0) AS dms,
   coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
   min(day)::text AS first_day, max(day)::text AS last_day
 FROM daily_mobile
 WHERE day BETWEEN $1::date AND $2::date
-GROUP BY mobile, client_id`,
+GROUP BY mobile, client_id, namespace`,
     [from, to],
   );
 }
@@ -257,5 +311,76 @@ WHERE ts >= $1::timestamptz AND ts < $2::timestamptz AND amount > 0
 GROUP BY client_id, chat_id
 ORDER BY max(ts) DESC`,
     [iso(dayStart), iso(dayEnd)],
+  );
+}
+
+// ---------------------------------------------------------------- promotions + funnel (2026-10-29)
+
+/**
+ * Promotion sends of one intraday window per (current?, service, client, mobile, error_type), current =
+ * [curStart, end), previous = [prevStart, prevEnd) (prevEnd <= curStart). One scan of the partitions the
+ * range covers (2 for today, 3 for 24h); count(*) only. error_type is NULL on non-failed rows, so the
+ * failed rows carry the per-mobile error mix. max(ts) = last send.
+ */
+export function promoSendsSql(cur: Window, prev: Window): SqlQuery {
+  return q(
+    'promo_sends',
+    `SELECT ts >= $1::timestamptz AS cur, service, client_id, mobile, error_type,
+  count(*) FILTER (WHERE outcome <> 'deleted') AS sent,
+  count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
+  count(*) FILTER (WHERE outcome = 'banned') AS banned,
+  count(*) FILTER (WHERE outcome = 'failed') AS failed,
+  max(ts) FILTER (WHERE outcome <> 'deleted') AS last_ts
+FROM promotion_send
+WHERE ts >= $2::timestamptz AND ts < $3::timestamptz AND (ts >= $1::timestamptz OR ts < $4::timestamptz)
+GROUP BY 1, 2, 3, 4, 5`,
+    [iso(cur.start), iso(prev.start), iso(cur.end), iso(prev.end)],
+  );
+}
+
+/**
+ * daily_mobile over two closed-day ranges in one statement (primary-key range on day): per (current?,
+ * namespace, client, mobile). `cur` = day >= curFrom. Profile = the latest non-null one.
+ */
+export function promoMobilesHistSql(prevFrom: string, curFrom: string, to: string, routed: readonly string[] = []): SqlQuery {
+  return q(
+    'promo_mobiles_hist',
+    `SELECT day >= $2::date AS cur, namespace, client_id, mobile, max(profile) AS profile,
+  coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
+  coalesce(sum(failed), 0) AS failed, coalesce(sum(new_users), 0) AS new_users, max(day)::text AS last_day${routedSums(routed)}
+FROM daily_mobile
+WHERE day BETWEEN $1::date AND $3::date
+GROUP BY 1, 2, 3, 4`,
+    [prevFrom, curFrom, to],
+  );
+}
+
+/** Today's daily_mobile rows (profile, promote first DMs and route counters per mobile). */
+export function promoMobilesTodaySql(today: string, routed: readonly string[] = []): SqlQuery {
+  return q(
+    'promo_mobiles_today',
+    `SELECT namespace, client_id, mobile, max(profile) AS profile, coalesce(sum(new_users), 0) AS new_users${routedSums(routed)}
+FROM daily_mobile
+WHERE day = $1::date
+GROUP BY 1, 2, 3`,
+    [today],
+  );
+}
+
+/**
+ * Origin of the chats that paid since `payFrom`: the first attributed DM conversion of the same
+ * (chat, client) since `dmFrom` and its service ('t' direct tg-aut promotion, 'p' routed by a promote
+ * account). payment_event's ts index bounds the payers; conversion_event has no chat index, so its
+ * scan is the dm rows since dmFrom (same rows dms_hist reads). Chat ids never leave the service.
+ */
+export function paidOriginSql(dmFrom: number, payFrom: number): SqlQuery {
+  return q(
+    'paid_origin',
+    `SELECT DISTINCT ON (c.chat_id, c.client_id) c.chat_id, c.client_id, c.service
+FROM conversion_event c
+WHERE c.kind = 'dm' AND c.ts >= $1::timestamptz AND c.client_id IS NOT NULL
+  AND (c.chat_id, c.client_id) IN (SELECT chat_id, client_id FROM payment_event WHERE ts >= $2::timestamptz AND amount > 0)
+ORDER BY c.chat_id, c.client_id, c.ts`,
+    [iso(dmFrom), iso(payFrom)],
   );
 }

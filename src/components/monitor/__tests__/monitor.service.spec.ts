@@ -165,7 +165,9 @@ describe('MonitorService.fleet', () => {
     const { svc } = build(defaultPg, defaultMongo);
     const r = await svc.buildFleet('today', NOW);
     expect(r.range).toEqual({ from: '2026-10-28', to: '2026-10-28' });
-    expect(r.fleet).toEqual({
+    // merged fields unchanged by the additive byFamily (2026-10-29)
+    const { byFamily: _fam, ...fleetMerged } = r.fleet;
+    expect(fleetMerged).toEqual({
       revenue: 600,
       grossRevenue: 1800,
       flaggedRevenue: 1200,
@@ -632,7 +634,7 @@ describe('MonitorService.client', () => {
       { bucket: '30m-2h', count: 1 },
     ]);
     expect(r.mobiles).toEqual([
-      { mobile: '••••1234', newUsers: 6, sends: 24, sendSuccess: 19, banned: 3, dms: 2, firstDay: '2026-10-22', lastDay: '2026-10-28' },
+      { mobile: '••••1234', newUsers: 6, sends: 24, sendSuccess: 19, banned: 3, dms: 2, firstDay: '2026-10-22', lastDay: '2026-10-28', family: null },
     ]);
     // 555: 1 closed-day DM + 1 today = 2, ties with 1234567890 → id order
     expect(r.channels).toEqual([
@@ -727,7 +729,7 @@ describe('MonitorService.fleetDetail', () => {
     expect(r.distributions.repeat).toEqual({ oneTime: 1, repeat: 1, repeatRevenueShare: 0.5 });
     // one mobile moved alpha1 → beta1 today: summed, owner = client on its last day
     expect(r.mobiles).toEqual([
-      { mobile: '••••1234', clientId: 'beta1', newUsers: 9, sends: 5, sendSuccess: 5, banned: 0, dms: 0, firstDay: '2026-10-22', lastDay: '2026-10-28' },
+      { mobile: '••••1234', clientId: 'beta1', newUsers: 9, sends: 5, sendSuccess: 5, banned: 0, dms: 0, firstDay: '2026-10-22', lastDay: '2026-10-28', family: null },
     ]);
     // 6 closed-day DMs (daily_channel) + 0 today on 1234567890; 777 has 9 DMs today only
     expect(r.channels[0]).toEqual({ title: 'channel …0777'.replace('0777', '777'), sends: 0, dms: 9, dmPerSend: null });

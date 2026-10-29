@@ -52,6 +52,8 @@ export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promis
 export const DMS_ATTRIBUTION_FROM = '2026-10-26';
 /** payment_event starts 2026-10-03 20:32Z = 2026-10-04 02:02 IST. */
 export const REVENUE_HISTORY_FROM = '2026-10-04';
+/** conversion_event / promotion_send carry `service` (family) from this IST date. */
+export const FAMILY_DMS_FROM = '2026-10-25';
 export const DAILY_MOBILE_FROM = '2026-10-10';
 
 /** Data-history notes for every range the response covers. */
