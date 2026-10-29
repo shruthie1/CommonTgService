@@ -306,6 +306,19 @@ describe('heartbeat classification (CMS clock)', () => {
     expect(classifyHeartbeat({ at: 'x' }, now).state).toBe('stale');
     expect(classifyHeartbeat({ at: now + 6_000 }, now)).toEqual({ state: 'live', ageSec: 0, clockSkew: true });
   });
+  it('reads ts from the real tg-platform heartbeat envelope (v1)', () => {
+    expect(classifyHeartbeat({ v: 1, svc: 'tg-aut', ts: now - 17_000, seq: 4, status: 'ready' }, now)).toEqual({
+      state: 'live',
+      ageSec: 17,
+      clockSkew: false,
+    });
+    expect(classifyHeartbeat({ v: 1, ts: now - 71_000, status: 'ready' }, now)).toEqual({ state: 'stale', ageSec: 71, clockSkew: false });
+    expect(classifyHeartbeat({ v: 1, ts: now - 100_000, status: 'stopping' }, now)).toEqual({
+      state: 'stopping',
+      ageSec: 100,
+      clockSkew: false,
+    });
+  });
 });
 
 describe('monitor controller parsing', () => {

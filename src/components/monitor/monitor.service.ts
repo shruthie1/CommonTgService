@@ -382,7 +382,8 @@ export function classifyHeartbeat(
   now: number,
 ): { state: LiveItem['state']; ageSec: number | null; clockSkew: boolean } {
   if (!payload) return { state: 'no-heartbeat', ageSec: null, clockSkew: false };
-  const at = Number(payload.at);
+  // tg-platform heartbeat envelope v1 stamps `ts` (Date.now()); `at` kept for older writers.
+  const at = Number(payload.ts ?? payload.at);
   if (!Number.isFinite(at) || at <= 0) return { state: 'stale', ageSec: null, clockSkew: false };
   const clockSkew = at > now + 5_000;
   const ageSec = Math.max(0, Math.round((now - at) / 1000));
