@@ -239,3 +239,23 @@ GROUP BY 1`,
     params,
   );
 }
+
+/**
+ * Paid chats of one IST day (GET /monitor/paid-chats): ONE row per (client_id, chat_id) credited in
+ * [istDayStart(date), istDayStart(date + 1)). payment_event has a row only per credit, so a re-sent
+ * screenshot that was not credited never adds a row or amount. A chat belongs to one persona per
+ * client, so min(persona_id) only carries it. Fleet-wide (~250 rows/day); clientId filters in memory.
+ */
+export function paidChatsSql(dayStart: number, dayEnd: number): SqlQuery {
+  return q(
+    'paid_chats',
+    `SELECT client_id, chat_id, min(persona_id) AS persona_id,
+  count(*)::int AS credits, sum(amount)::bigint AS amount, sum(owner_amount)::bigint AS owner_amount,
+  bool_or(cheat_flagged) AS cheat_flagged, min(ts) AS first_at, max(ts) AS last_at
+FROM payment_event_owner
+WHERE ts >= $1::timestamptz AND ts < $2::timestamptz AND amount > 0
+GROUP BY client_id, chat_id
+ORDER BY max(ts) DESC`,
+    [iso(dayStart), iso(dayEnd)],
+  );
+}

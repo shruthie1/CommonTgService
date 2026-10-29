@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytics-pg.reader';
@@ -43,6 +43,7 @@ import {
   dmRowsSql,
   dmsByDaySql,
   mobilesSql,
+  paidChatsSql,
   paymentRowsSql,
   sendsHourlySql,
   sendsLiveSql,
@@ -60,7 +61,7 @@ import {
   MonitorPeriod,
   resolvePeriod,
 } from './monitor-time';
-import { historyNotes, maskMobile, maskPayload, num, ratio, withTimeout } from './monitor-util';
+import { historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
 
 export const MONITOR_REDIS = 'MONITOR_REDIS';
 
@@ -109,6 +110,50 @@ export const CLIENT_TTL_MS = TODAY_FRESH_MS;
 export const HEARTBEAT_INDEX_KEY = 'heartbeat::index';
 export const LIVE_SVCS = ['tg-aut', 'promote'] as const;
 export type LiveSvc = (typeof LIVE_SVCS)[number];
+
+/** Paid chats: closed days are fixed once written (late sink rows aside), so up to 30 days are kept. */
+export const PAID_HIST_KEYS = 30;
+/** Max chat ids sent to the one userData username lookup per request. */
+export const PAID_ENRICH_MAX = 1000;
+
+/** One chat credited on the requested IST day (one row per clientId + chatId). */
+export interface PaidChat {
+  clientId: string;
+  chatId: string;
+  profile: string;
+  username: string | null;
+  credits: number;
+  amount: number;
+  ownerAmount: number;
+  cheatFlagged: boolean;
+  firstCreditAt: string;
+  lastCreditAt: string;
+}
+
+export interface PaidChatsResponse {
+  date: string;
+  tz: 'Asia/Kolkata';
+  clientId: string | null;
+  asOf: number;
+  source: 'payment_event';
+  chats: PaidChat[];
+  totals: { chats: number; credits: number; amount: number; ownerAmount: number };
+  notes: string[];
+}
+
+interface PaidChatPgRow {
+  client_id: string;
+  chat_id: string;
+  persona_id: string | null;
+  credits: unknown;
+  amount: unknown;
+  owner_amount: unknown;
+  cheat_flagged: boolean | null;
+  first_at: Date | string;
+  last_at: Date | string;
+}
+
+const isoOf = (v: Date | string) => new Date(v as any).toISOString();
 
 export interface Metrics {
   revenue: number | null;
@@ -314,6 +359,23 @@ export function withSnapshotCache<T extends { cache: CacheInfo }>(r: SnapshotRes
   };
 }
 
+/** Postgres paid-chats row -> API row (username filled in later). */
+export function toPaidChat(r: PaidChatPgRow): PaidChat {
+  const clientId = String(r.client_id);
+  return {
+    clientId,
+    chatId: String(r.chat_id),
+    profile: r.persona_id ? String(r.persona_id) : clientId.replace(/\d+$/, ''),
+    username: null,
+    credits: num(r.credits),
+    amount: num(r.amount),
+    ownerAmount: num(r.owner_amount),
+    cheatFlagged: r.cheat_flagged === true,
+    firstCreditAt: isoOf(r.first_at),
+    lastCreditAt: isoOf(r.last_at),
+  };
+}
+
 /** Live state from a heartbeat payload, measured on the CMS clock (live-state.md §6). */
 export function classifyHeartbeat(
   payload: Record<string, unknown> | null,
@@ -370,6 +432,19 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     onBackgroundError: (key, err) => this.logger.warn(`monitor clients refresh ${key} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
   });
   private readonly liveCache = new TtlCache<LiveSnapshot>(LIVE_TTL_MS, 2);
+  /** Paid chats per closed IST day (fleet-wide rows; clientId filters in memory). */
+  private readonly paidHistCache = new SwrCache<Loaded<PaidChat[]>>({
+    freshMs: HISTORY_FRESH_MS,
+    maxKeys: PAID_HIST_KEYS,
+    onBackgroundError: (key, err) => this.logger.warn(`monitor paid-chats refresh ${key} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
+  });
+  /** Paid chats of today: fresh 60 s, then stale-while-revalidate (never older than 15 min). */
+  private readonly paidTodayCache = new SwrCache<Loaded<PaidChat[]>>({
+    freshMs: TODAY_FRESH_MS,
+    maxStaleMs: TODAY_MAX_STALE_MS,
+    maxKeys: 2,
+    onBackgroundError: (key, err) => this.logger.warn(`monitor paid-chats refresh ${key} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
+  });
   /** Whole responses per page, persisted to Redis (monitor::snapshot::<page>) when the client supports GET/SET. */
   private readonly snapshots: SnapshotCache<any>;
   /** Boot prewarm delay; negative disables the prewarm (and the midnight rebuild). */
@@ -1235,6 +1310,75 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       return [...out];
     });
     return new Map(loaded.value);
+  }
+
+  // ---------------------------------------------------------------- paid chats
+
+  /**
+   * Chats credited on IST day `date` (already validated by the controller): one row per
+   * (clientId, chatId) from Postgres payment_event_owner, newest last credit first. Postgres
+   * failure = 503, never an empty list. Usernames come from ONE userData find per request
+   * (chatId_Profile index prefix); a Mongo failure only drops usernames (note added).
+   */
+  async paidChats(date: string, clientId: string | null): Promise<PaidChatsResponse> {
+    const now = Date.now();
+    const today = istDate(now);
+    const isToday = date === today;
+    const cache = isToday ? this.paidTodayCache : this.paidHistCache;
+    let loaded: Loaded<PaidChat[]>;
+    try {
+      const r = await cache.get(
+        date,
+        async (background) => {
+          const asOf = Date.now();
+          const timings: Record<string, number> = {};
+          const rows = await this.pgRows<PaidChatPgRow>(paidChatsSql(istDayStart(date), istDayStart(addDays(date, 1))), timings, background);
+          return { value: rows.map(toPaidChat), asOf, timings };
+        },
+        isToday ? istDayStart(addDays(today, 1)) : Number.POSITIVE_INFINITY,
+      );
+      loaded = r.value;
+    } catch (err) {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor paid-chats ${date} failed: ${msg}`);
+      throw new ServiceUnavailableException(`paid chats unavailable: ${msg}`);
+    }
+    const chats = loaded.value.filter((c) => clientId === null || c.clientId === clientId).map((c) => ({ ...c }));
+    const notes: string[] = [];
+    if (date === REVENUE_HISTORY_FROM) notes.push('payment_event starts 2026-10-04 02:02 IST; earlier credits of that day are not recorded.');
+    await this.addUsernames(chats, notes);
+    const totals = { chats: chats.length, credits: 0, amount: 0, ownerAmount: 0 };
+    for (const c of chats) {
+      totals.credits += c.credits;
+      totals.amount += c.amount;
+      totals.ownerAmount += c.ownerAmount;
+    }
+    return { date, tz: 'Asia/Kolkata', clientId, asOf: loaded.asOf, source: 'payment_event', chats, totals, notes };
+  }
+
+  private async addUsernames(chats: PaidChat[], notes: string[]): Promise<void> {
+    if (!chats.length) return;
+    const ids = [...new Set(chats.map((c) => c.chatId))].slice(0, PAID_ENRICH_MAX);
+    let docs: Array<{ chatId?: string; profile?: string; clientId?: string; username?: string }>;
+    try {
+      docs = await this.mongoFind('userData', { chatId: { $in: ids } }, { _id: 0, chatId: 1, profile: 1, clientId: 1, username: 1 }, 'mongo.userData_paid_usernames', {});
+    } catch (err) {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor paid-chats usernames failed: ${msg}`);
+      notes.push(`usernames unavailable: ${msg}`);
+      return;
+    }
+    const byClient = new Map<string, string>();
+    const byProfile = new Map<string, string>();
+    for (const d of docs) {
+      const u = typeof d.username === 'string' ? d.username.trim() : '';
+      if (!u || !d.chatId) continue;
+      if (d.clientId) byClient.set(`${d.clientId}|${d.chatId}`, u);
+      if (d.profile) byProfile.set(`${d.profile}|${d.chatId}`, u);
+    }
+    for (const c of chats) {
+      c.username = byClient.get(`${c.clientId}|${c.chatId}`) ?? byProfile.get(`${c.profile}|${c.chatId}`) ?? null;
+    }
   }
 
   // ---------------------------------------------------------------- live
