@@ -1,7 +1,7 @@
 // create-stat.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CreateStatDto {
+export class CreateStat2Dto {
   @ApiProperty({ description: 'Chat ID' })
   chatId: string;
 

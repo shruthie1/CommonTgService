@@ -9,8 +9,8 @@ export { UpdateStatDto as Stat1UpdateDto } from '../../components/stats/update-s
 export { Stat2Module } from '../../components/stats2/stat2.module';
 export { Stat2Service } from '../../components/stats2/stat2.service';
 export { StatSchema as Stat2Schema, Stat2, Stat2Document } from '../../components/stats2/stat2.schema';
-export { CreateStatDto as Stat2CreateDto } from '../../components/stats2/create-stat2.dto';
-export { UpdateStatDto as Stat2UpdateDto } from '../../components/stats2/update-stat2.dto';
+export { CreateStat2Dto as Stat2CreateDto } from '../../components/stats2/create-stat2.dto';
+export { UpdateStat2Dto as Stat2UpdateDto } from '../../components/stats2/update-stat2.dto';
 
 // Promotion stats
 export { PromoteStatModule } from '../../components/promote-stats/promote-stat.module';

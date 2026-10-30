@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Stat2Service } from './stat2.service';
-import { CreateStatDto } from './create-stat2.dto';
-import { UpdateStatDto } from './update-stat2.dto';
+import { CreateStat2Dto } from './create-stat2.dto';
+import { UpdateStat2Dto } from './update-stat2.dto';
 
 @ApiTags('stats2')
 @Controller('stats2')
@@ -10,7 +10,7 @@ export class Stat2Controller {
   constructor(private readonly statService: Stat2Service) {}
 
   @Post()
-  async create(@Body() createStatDto: CreateStatDto) {
+  async create(@Body() createStatDto: CreateStat2Dto) {
     return this.statService.create(createStatDto);
   }
 
@@ -23,7 +23,7 @@ export class Stat2Controller {
   async update(
     @Param('chatId') chatId: string,
     @Param('profile') profile: string,
-    @Body() updateStatDto: UpdateStatDto,
+    @Body() updateStatDto: UpdateStat2Dto,
   ) {
     return this.statService.update(chatId, profile, updateStatDto);
   }
