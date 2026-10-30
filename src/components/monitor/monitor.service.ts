@@ -48,6 +48,9 @@ import {
   redisBatch,
   rowsFromHist,
   rowsFromSends,
+  reachAlertOf,
+  reachRateOf,
+  REACH_ALERT,
   RouteState,
   SpamState,
 } from './monitor-promotions';
@@ -1863,18 +1866,23 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     // incoming promote DMs (daily_client promote-clients new_users) + route counters
     const dcRows = (dcH ?? dcT ?? []).filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
     const incoming = dcH || dcT ? dcRows.filter((r) => r.namespace === 'promote-clients').reduce((s, r) => s + num(r.ns_new_users), 0) : null;
-    let routedOut: Record<string, number | null> | null = null;
+    let routedOut: Record<string, number | boolean | null> | null = null;
     if (routedRows) {
       const sel = routedRows.filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
       const sumOf = (c: string) => (routedCols.includes(c) ? sel.reduce((s, r) => s + num(r[c]), 0) : null);
       const sent = sumOf('routes_sent');
       const reached = sumOf('routed_reached');
+      const users = sumOf('routed_users');
       routedOut = {
         routesSent: sent,
         routedReached: reached,
         routeCallsOk: sumOf('route_calls_ok'),
         routeCallsFailed: sumOf('route_calls_failed'),
-        reachRate: sent === null || reached === null ? null : ratio(reached, sent),
+        routedUsers: users,
+        // 2026-10-30: reach per routed USER (was per route MESSAGE, kept as reachPerRouteMessage).
+        reachRate: reachRateOf(reached, users),
+        reachPerRouteMessage: sent === null || reached === null ? null : ratio(reached, sent),
+        reachAlert: reachAlertOf(reached, users),
       };
     }
 
@@ -1917,6 +1925,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     notes.push('byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.');
     notes.push('byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).');
     if (!routedCols.includes('routes_sent')) notes.push('routed: history starts when counters ship (daily_client route columns not present yet).');
+    if (routedCols.includes('routes_sent') && !routedCols.includes('routed_users')) notes.push('routed.routedUsers/reachRate/reachAlert: null until daily_client has the routed_users column (analytics upgrade 2026-10-30).');
+    if (routedCols.includes('routed_users')) notes.push(`routed.reachRate = routedReached / routedUsers (users first routed per IST day per promote mobile); reachPerRouteMessage = routedReached / routesSent; reachAlert = routedUsers >= ${REACH_ALERT.MIN_USERS} and reachRate < ${REACH_ALERT.MAX_RATE}.`);
     if (intraday) notes.push('timeToFirstPay / repeat are 7d/30d only (null for today); payer origins refresh every 10 min.');
     if (client !== null && fleet && !fleet.clients.some((c) => c.clientId === client)) notes.push(`clientId ${client} has no row in /monitor/fleet for ${period}.`);
 

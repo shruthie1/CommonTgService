@@ -85,11 +85,13 @@ GROUP BY day, client_id, namespace`,
 }
 
 /**
- * Route counters written by promote-clients into daily_client / daily_mobile (tg-platform P4, 2026-10-29).
+ * Route counters written by promote-clients into daily_client / daily_mobile (tg-platform P4, 2026-10-29;
+ * routed_users = distinct users first routed that IST day per mobile, tg-platform 2026-10-30).
+ * Each column is detected on its own, so routed_users may be absent while the 10-29 four are present.
  * Read only when present (feature-detected through information_schema), so the CMS works before and
  * after the columns ship.
  */
-export const ROUTED_COLUMNS = ['routes_sent', 'routed_reached', 'route_calls_ok', 'route_calls_failed'] as const;
+export const ROUTED_COLUMNS = ['routes_sent', 'routed_reached', 'route_calls_ok', 'route_calls_failed', 'routed_users'] as const;
 
 function routedSums(cols: readonly string[]): string {
   const ok = cols.filter((c) => (ROUTED_COLUMNS as readonly string[]).includes(c));

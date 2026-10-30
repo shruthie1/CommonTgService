@@ -23,6 +23,27 @@ export const PROMO_LIMITS = {
   IDLE_ASSIGNED_SENDS: 0,
 } as const;
 
+/**
+ * Route reach alert (owner 2026-10-30): a client whose promote accounts routed at least MIN_USERS users
+ * in the window, of whom fewer than MAX_RATE reached the main account.
+ */
+export const REACH_ALERT = {
+  MIN_USERS: 50,
+  MAX_RATE: 0.5,
+} as const;
+
+/** routedReached / routedUsers; null when either is unknown or routedUsers is 0. */
+export function reachRateOf(reached: number | null | undefined, users: number | null | undefined): number | null {
+  return typeof reached === 'number' && typeof users === 'number' && users > 0 ? ratio(reached, users) : null;
+}
+
+/** true when routedUsers >= REACH_ALERT.MIN_USERS and the reach rate < REACH_ALERT.MAX_RATE; null when routedUsers is unknown. */
+export function reachAlertOf(reached: number | null | undefined, users: number | null | undefined): boolean | null {
+  if (typeof users !== 'number') return null;
+  const rate = reachRateOf(reached, users);
+  return users >= REACH_ALERT.MIN_USERS && rate !== null && rate < REACH_ALERT.MAX_RATE;
+}
+
 /** Redis spam states that mark a mobile limited whatever its send counts. */
 const LIMITED_SPAM = new Set(['limited', 'harsh']);
 
@@ -244,6 +265,10 @@ export interface Promo {
   /** promote only: route counters (null until tg-platform writes the columns) */
   routesSent?: number | null;
   routedReached?: number | null;
+  /** promote only: distinct users first routed per IST day per mobile, summed (null until the routed_users column exists) */
+  routedUsers?: number | null;
+  /** promote only: routedReached / routedUsers (null when routedUsers is 0 or unknown) */
+  reachRate?: number | null;
 }
 
 export interface MobilePromo {
@@ -273,6 +298,8 @@ export type ClientPromo = Promo & {
   mobilesAssigned: number | null;
   lastSendAt: string | null;
   engine?: EngineState | null;
+  /** promote only: routedUsers >= REACH_ALERT.MIN_USERS and reachRate < REACH_ALERT.MAX_RATE (null until routed_users exists) */
+  reachAlert?: boolean | null;
 };
 
 export interface FamilyPromo {
@@ -451,14 +478,19 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
       })
       .sort((x, y) => y.sent - x.sent || String(x.clientId).localeCompare(String(y.clientId)) || String(x.mobile).localeCompare(String(y.mobile)));
 
-    const promoteExtras = (aggs: Agg[]): Partial<Promo> =>
-      f === 'promote'
-        ? {
-            incomingDms: w.intraday && !i.extra ? null : aggs.reduce((s, a) => s + a.newDms, 0),
-            routesSent: hasRouted('routes_sent') ? aggs.reduce((s, a) => s + (a.routed.routes_sent ?? 0), 0) : null,
-            routedReached: hasRouted('routed_reached') ? aggs.reduce((s, a) => s + (a.routed.routed_reached ?? 0), 0) : null,
-          }
-        : {};
+    const routedSum = (aggs: Agg[], c: string) => (hasRouted(c) ? aggs.reduce((s, a) => s + (a.routed[c] ?? 0), 0) : null);
+    const promoteExtras = (aggs: Agg[]): Partial<Promo> => {
+      if (f !== 'promote') return {};
+      const routedReached = routedSum(aggs, 'routed_reached');
+      const routedUsers = routedSum(aggs, 'routed_users');
+      return {
+        incomingDms: w.intraday && !i.extra ? null : aggs.reduce((s, a) => s + a.newDms, 0),
+        routesSent: routedSum(aggs, 'routes_sent'),
+        routedReached,
+        routedUsers,
+        reachRate: reachRateOf(routedReached, routedUsers),
+      };
+    };
 
     const totals: Promo = { ...promo(fc, scopedDms(i.dms.cur, f, client), w.window, limitedCur), ...promoteExtras(fc) };
     const previous: Promo | null = { ...promo(fp, scopedDms(i.dms.prev, f, client), w.window, limitedPrev), ...(f === 'promote' && !w.intraday ? promoteExtras(fp) : {}) };
@@ -475,6 +507,7 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
         name: i.names.get(id) ?? null,
         ...promo(mine, dmsOf(i.dms.cur, f, id), w.window, limitedCur),
         ...promoteExtras(mine),
+        ...(f === 'promote' ? { reachAlert: reachAlertOf(routedSum(mine, 'routed_reached'), routedSum(mine, 'routed_users')) } : {}),
         mobilesAssigned: f === 'promote' && i.assigned ? assigned.filter((a) => a.clientId === id).length : null,
         lastSendAt: last !== null ? new Date(last).toISOString() : null,
       };
@@ -513,6 +546,8 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
     notes.push('Per-family DMs (conversion_event.service) start 2026-10-25; earlier DMs count only in unattributed.');
   }
   if (!i.routedCols.includes('routes_sent')) notes.push('routesSent/routedReached: history starts when counters ship (daily_mobile route columns not present yet).');
+  if (i.routedCols.includes('routes_sent') && !i.routedCols.includes('routed_users')) notes.push('routedUsers/reachRate/reachAlert: null until daily_mobile has the routed_users column (analytics upgrade 2026-10-30).');
+  else if (i.routedCols.includes('routed_users')) notes.push(`routedUsers = users first routed per IST day per promote mobile, summed over days and mobiles; reachRate = routedReached / routedUsers; reachAlert = routedUsers >= ${REACH_ALERT.MIN_USERS} and reachRate < ${REACH_ALERT.MAX_RATE}.`);
   notes.push(
     `looksLimited = sent >= ${PROMO_LIMITS.LIMITED_MIN_SENDS_TODAY} today (>= ${PROMO_LIMITS.LIMITED_MIN_SENDS_WINDOW} for 24h/7d/30d) with < ${PROMO_LIMITS.LIMITED_MAX_DELIVERED * 100}% delivered, or Redis spam state limited/harsh; previous.mobilesLimited uses the rate rule only.`,
   );

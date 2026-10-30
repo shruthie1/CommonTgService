@@ -446,7 +446,7 @@ describe('P1 GET /monitor/promotions (service)', () => {
 // ---------------------------------------------------------------- P3
 
 describe('route columns absent on live Postgres (EXPLAIN 2026-10-29: 42703 "column routes_sent does not exist")', () => {
-  const ROUTE_RE = /\b(routes_sent|routed_reached|route_calls_ok|route_calls_failed)\b/;
+  const ROUTE_RE = /\b(routes_sent|routed_reached|route_calls_ok|route_calls_failed|routed_users)\b/;
   /** Live schema today: the catalog read finds no route column; any query naming one fails. */
   const liveSchema = (base: (n: string) => any[] | undefined) => (n: string, sql: string) => {
     if (n === 'routed_columns') return [];
@@ -524,13 +524,91 @@ describe('P3 GET /monitor/funnel (service)', () => {
     };
     const { svc } = build(pg, mongo, pipelineRedis());
     const r = await svc.funnel('today', 'alpha1');
-    expect(r.routed).toEqual({ routesSent: 10, routedReached: 4, routeCallsOk: 3, routeCallsFailed: 1, reachRate: 0.4 });
+    // routed_users column absent: the per-user fields are null; the old per-message ratio moved to reachPerRouteMessage (2026-10-30)
+    expect(r.routed).toEqual({
+      routesSent: 10, routedReached: 4, routeCallsOk: 3, routeCallsFailed: 1,
+      routedUsers: null, reachRate: null, reachPerRouteMessage: 0.4, reachAlert: null,
+    });
+    expect(r.notes.join(' ')).toContain('null until daily_client has the routed_users column');
     expect(r.incomingPromoteDms).toBe(6);
     expect(r.byOrigin.direct.newUsers).toBe(2);
     expect(r.byOrigin.routed.newUsers).toBe(1);
     expect(r.ttfp).toBeNull();
     expect(r.daily).toBeNull();
     expect(r.clients.map((c: any) => c.clientId)).toEqual(['alpha1']);
+  });
+});
+
+// ---------------------------------------------------------------- routed_users (2026-10-30)
+
+describe('routedUsers / reachRate / reachAlert (tg-platform routed_users, 2026-10-30)', () => {
+  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(NOW));
+  afterEach(() => jest.restoreAllMocks());
+
+  const ALL = ['routes_sent', 'routed_reached', 'route_calls_ok', 'route_calls_failed', 'routed_users'];
+  const hist = (rows: Array<{ client: string; mobile: string; users: number; reached: number }>) =>
+    rows.map((x) => ({
+      cur: true, namespace: 'promote-clients', client_id: x.client, mobile: x.mobile, profile: 'p', sent: '900', delivered: '700',
+      banned: '0', failed: '0', new_users: '30', last_day: '2026-10-27', routes_sent: String(x.users * 3), routed_reached: String(x.reached),
+      routed_users: String(x.users),
+    }));
+  const promoPg = (rows: any[], cols = ALL) => (n: string) =>
+    n === 'routed_columns' ? cols.map((c) => ({ t: 'daily_mobile', c })) : n === 'promo_mobiles_hist' ? rows : pgHist(n);
+
+  it('promotions 7d: routedUsers + reachRate on totals and clients; reachAlert only at >= 50 users and < 50% reach', async () => {
+    const rows = hist([
+      { client: 'alpha1', mobile: '919876540001', users: 40, reached: 10 },
+      { client: 'alpha1', mobile: '919876540002', users: 20, reached: 9 }, // alpha1: 60 users, 19 reached = 0.3167 -> alert
+      { client: 'beta1', mobile: '919876540003', users: 49, reached: 1 }, // beta1: < 50 users -> no alert
+      { client: 'gamma1', mobile: '919876540004', users: 80, reached: 40 }, // gamma1: exactly 0.5 -> no alert
+    ]);
+    const { svc, calls } = build(promoPg(rows), mongo, pipelineRedis());
+    const r = await svc.promotions('7d', null);
+    expect(calls.find((c) => c.name === 'promo_mobiles_hist')!.sql).toContain('coalesce(sum(routed_users), 0) AS routed_users');
+    const t = r.families.promote.totals;
+    expect(t).toMatchObject({ routedUsers: 189, routedReached: 60, routesSent: 567 });
+    expect(t.reachRate).toBeCloseTo(60 / 189, 4);
+    const by = (id: string) => r.families.promote.clients.find((c: any) => c.clientId === id);
+    expect(by('alpha1')).toMatchObject({ routedUsers: 60, routedReached: 19, reachRate: 0.3167, reachAlert: true });
+    expect(by('beta1')).toMatchObject({ routedUsers: 49, reachAlert: false });
+    expect(by('gamma1')).toMatchObject({ routedUsers: 80, reachRate: 0.5, reachAlert: false });
+    expect(r.families['tg-aut'].clients.every((c: any) => !('reachAlert' in c))).toBe(true);
+    expect(r.notes.join(' ')).toContain('reachRate = routedReached / routedUsers');
+  });
+
+  it('promotions: routedUsers 0 -> reachRate null, no alert', async () => {
+    const rows = hist([{ client: 'alpha1', mobile: '919876540001', users: 0, reached: 3 }]);
+    const { svc } = build(promoPg(rows), mongo, pipelineRedis());
+    const r = await svc.promotions('7d', null);
+    const c = r.families.promote.clients.find((x: any) => x.clientId === 'alpha1');
+    expect(c).toMatchObject({ routedUsers: 0, reachRate: null, reachAlert: false });
+  });
+
+  it('promotions: route columns present but routed_users absent -> never named in SQL; fields null; a note', async () => {
+    const rows = hist([{ client: 'alpha1', mobile: '919876540001', users: 60, reached: 3 }]).map(({ routed_users: _u, ...x }) => x);
+    const { svc, calls } = build(promoPg(rows, ALL.slice(0, 4)), mongo, pipelineRedis());
+    const r = await svc.promotions('7d', null);
+    expect(calls.some((c) => c.name !== 'routed_columns' && /routed_users/.test(c.sql))).toBe(false);
+    expect(r.families.promote.totals).toMatchObject({ routesSent: 180, routedUsers: null, reachRate: null });
+    expect(r.families.promote.clients.find((x: any) => x.clientId === 'alpha1').reachAlert).toBeNull();
+    expect(r.notes.join(' ')).toContain('null until daily_mobile has the routed_users column');
+  });
+
+  it('funnel today: routedUsers summed, reachRate per user, reachPerRouteMessage, reachAlert', async () => {
+    const pg = (n: string) => {
+      if (n === 'routed_columns') return ALL.map((c) => ({ t: 'daily_client', c }));
+      if (n === 'routed_today') return [
+        { d: '2026-10-28', client_id: 'alpha1', routes_sent: '300', routed_reached: '20', route_calls_ok: '3', route_calls_failed: '1', routed_users: '80' },
+      ];
+      return pgToday(n);
+    };
+    const { svc, calls } = build(pg, mongo, pipelineRedis());
+    const r = await svc.funnel('today', 'alpha1');
+    expect(calls.find((c) => c.name === 'routed_today')!.sql).toContain('AS routed_users');
+    expect(r.routed).toEqual({
+      routesSent: 300, routedReached: 20, routeCallsOk: 3, routeCallsFailed: 1,
+      routedUsers: 80, reachRate: 0.25, reachPerRouteMessage: 0.0667, reachAlert: true,
+    });
   });
 });
 
