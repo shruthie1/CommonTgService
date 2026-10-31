@@ -365,6 +365,25 @@ GROUP BY 1, 2, 3, 4`,
   );
 }
 
+/**
+ * daily_mobile per (IST day, namespace, client, mobile) over from..to inclusive (primary-key range on
+ * day): the shared closed-day read behind /monitor/promotions and /monitor/reactions from/to ranges,
+ * folded per range in memory (foldMobileDays). Measured 2026-10-31 on prod: 62 closed days = 2,162 rows,
+ * 301,510 bytes (pg_column_size), ~100 rows per day.
+ */
+export function promoMobileDaysSql(from: string, to: string, routed: readonly string[] = []): SqlQuery {
+  return q(
+    'promo_mobile_days',
+    `SELECT day::text AS d, namespace, client_id, mobile, max(profile) AS profile,
+  coalesce(sum(sent), 0) AS sent, coalesce(sum(delivered), 0) AS delivered, coalesce(sum(banned), 0) AS banned,
+  coalesce(sum(failed), 0) AS failed, coalesce(sum(new_users), 0) AS new_users${REACTION_SUMS}${routedSums(routed)}
+FROM daily_mobile
+WHERE day BETWEEN $1::date AND $2::date
+GROUP BY 1, 2, 3, 4`,
+    [from, to],
+  );
+}
+
 /** Today's daily_mobile rows (profile, promote first DMs and route counters per mobile). */
 export function promoMobilesTodaySql(today: string, routed: readonly string[] = []): SqlQuery {
   return q(

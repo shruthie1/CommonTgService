@@ -258,6 +258,11 @@ export interface SnapshotOptions<T> {
   maxKeys?: number;
   /** false = a degraded build (a section failed): returned to its caller, never cached or persisted. */
   complete?: (value: T) => boolean;
+  /** false = this snapshot is kept in memory only (never read from or written to the store). Default: all persisted. */
+  persist?: (name: string) => boolean;
+  /** Per-snapshot freshMs / maxServeStaleMs (undefined = the defaults above). */
+  freshMsOf?: (name: string) => number | undefined;
+  maxServeStaleMsOf?: (name: string) => number | undefined;
   now?: () => number;
   onError?: (what: string, err: unknown) => void;
 }
@@ -323,8 +328,10 @@ export class SnapshotCache<T> {
     }
     if (!e) e = await this.fromStore(name, day);
     if (e) {
-      if (now - e.at < this.opts.freshMs) return { value: e.value, at: e.at, state: 'hit', source: e.source };
-      if (now - e.at >= (this.opts.maxServeStaleMs ?? Number.POSITIVE_INFINITY)) {
+      const freshMs = this.opts.freshMsOf?.(name) ?? this.opts.freshMs;
+      const maxServeStaleMs = this.opts.maxServeStaleMsOf?.(name) ?? this.opts.maxServeStaleMs ?? Number.POSITIVE_INFINITY;
+      if (now - e.at < freshMs) return { value: e.value, at: e.at, state: 'hit', source: e.source };
+      if (now - e.at >= maxServeStaleMs) {
         try {
           const b = await (this.inflight.get(`${day}|${name}`) ?? this.start(name, build, false));
           return { value: b.value, at: b.at, state: 'miss', source: 'build' };
@@ -402,7 +409,7 @@ export class SnapshotCache<T> {
 
   /** One store read per (day, name); concurrent first callers share it. */
   private fromStore(name: string, day: string): Promise<SnapEntry<T> | undefined> {
-    if (!this.opts.store) return Promise.resolve(undefined);
+    if (!this.opts.store || this.opts.persist?.(name) === false) return Promise.resolve(undefined);
     const k = `${day}|${name}`;
     const pending = this.storeReads.get(k);
     if (pending) return pending;
@@ -428,7 +435,7 @@ export class SnapshotCache<T> {
 
   private persist(name: string, value: T, at: number, day: string): void {
     const store = this.opts.store;
-    if (!store) return;
+    if (!store || this.opts.persist?.(name) === false) return;
     let raw: string;
     try {
       raw = JSON.stringify({ v: 1, day, at, value });

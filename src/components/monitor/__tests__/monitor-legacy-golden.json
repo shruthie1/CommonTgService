@@ -1,0 +1,4845 @@
+{
+ "fleet?period=today": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "period": "today",
+  "range": {
+   "from": "2026-10-31",
+   "to": "2026-10-31"
+  },
+  "previousRange": {
+   "from": "2026-10-30",
+   "to": "2026-10-30"
+  },
+  "fleet": {
+   "revenue": 900,
+   "grossRevenue": 900,
+   "flaggedRevenue": 0,
+   "payers": 3,
+   "newUsers": 5,
+   "conversion": 0.4,
+   "avgTicket": 300,
+   "sends": 16,
+   "sendSuccess": 14,
+   "banned": 1,
+   "dms": 3,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 10,
+     "sendSuccess": 9,
+     "banned": 1,
+     "failed": 0,
+     "dms": 2
+    },
+    "promote": {
+     "sends": 6,
+     "sendSuccess": 5,
+     "banned": 0,
+     "failed": 1,
+     "dms": 1
+    }
+   }
+  },
+  "previous": {
+   "revenue": 500,
+   "grossRevenue": 500,
+   "flaggedRevenue": 0,
+   "payers": 3,
+   "newUsers": 5,
+   "conversion": 0.2,
+   "avgTicket": 166.7,
+   "sends": 7,
+   "sendSuccess": 7,
+   "banned": 0,
+   "dms": 1,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 7,
+     "sendSuccess": 7,
+     "banned": 0,
+     "failed": 0,
+     "dms": 1
+    },
+    "promote": {
+     "sends": 0,
+     "sendSuccess": 0,
+     "banned": 0,
+     "failed": 0,
+     "dms": 0
+    }
+   }
+  },
+  "clients": [
+   {
+    "clientId": "alpha1",
+    "name": "Alpha",
+    "revenue": 700,
+    "payers": 2,
+    "newUsers": 4,
+    "conversion": 0.25,
+    "avgTicket": 350,
+    "sends": 10,
+    "sendSuccess": 9,
+    "banned": 1,
+    "dms": 2,
+    "pool": {
+     "buffersEligible": 3,
+     "buffersTotal": 5,
+     "promoteActive": 2
+    },
+    "spark": [
+     400,
+     400,
+     400,
+     400,
+     400,
+     400,
+     700
+    ],
+    "previous": {
+     "revenue": 150,
+     "payers": 2,
+     "newUsers": 4,
+     "conversion": 0.25
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 10,
+      "sendSuccess": 9,
+      "banned": 1,
+      "failed": 0,
+      "dms": 1
+     },
+     "promote": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "clientId": "beta1",
+    "name": "Beta",
+    "revenue": 200,
+    "payers": 1,
+    "newUsers": 1,
+    "conversion": 1,
+    "avgTicket": 200,
+    "sends": 6,
+    "sendSuccess": 5,
+    "banned": 0,
+    "dms": 1,
+    "pool": {
+     "buffersEligible": 0,
+     "buffersTotal": 0,
+     "promoteActive": 0
+    },
+    "spark": [
+     350,
+     350,
+     350,
+     350,
+     350,
+     350,
+     200
+    ],
+    "previous": {
+     "revenue": 350,
+     "payers": 1,
+     "newUsers": 1,
+     "conversion": 0
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 1
+     },
+     "promote": {
+      "sends": 6,
+      "sendSuccess": 5,
+      "banned": 0,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "clientId": "gamma1",
+    "name": "Gamma",
+    "revenue": 0,
+    "payers": 0,
+    "newUsers": 0,
+    "conversion": null,
+    "avgTicket": null,
+    "sends": 0,
+    "sendSuccess": 0,
+    "banned": 0,
+    "dms": 0,
+    "pool": {
+     "buffersEligible": 0,
+     "buffersTotal": 0,
+     "promoteActive": 0
+    },
+    "spark": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "previous": {
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "conversion": null
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     }
+    }
+   }
+  ],
+  "notes": [
+   "previous = yesterday 00:00 to 15:30 IST; today's sends come from promotion_send and new users/conversion from Mongo userData.",
+   "byFamily splits sends/DMs into tg-aut and promote; rows without a family (promotion_send/conversion_event before 2026-10-25) count only in the merged numbers."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "fleet?period=7d": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "period": "7d",
+  "range": {
+   "from": "2026-10-24",
+   "to": "2026-10-30"
+  },
+  "previousRange": {
+   "from": "2026-10-17",
+   "to": "2026-10-23"
+  },
+  "fleet": {
+   "revenue": 5250,
+   "grossRevenue": 5250,
+   "flaggedRevenue": 0,
+   "payers": 22,
+   "newUsers": 350,
+   "conversion": 0.1667,
+   "avgTicket": 238.6,
+   "sends": 1260,
+   "sendSuccess": 1134,
+   "banned": 70,
+   "dms": 35,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 910,
+     "sendSuccess": 819,
+     "banned": 49,
+     "failed": 14,
+     "dms": 21
+    },
+    "promote": {
+     "sends": 350,
+     "sendSuccess": 315,
+     "banned": 21,
+     "failed": 7,
+     "dms": 7
+    }
+   }
+  },
+  "previous": {
+   "revenue": 5850,
+   "grossRevenue": 7050,
+   "flaggedRevenue": 1200,
+   "payers": 22,
+   "newUsers": 350,
+   "conversion": 0.1667,
+   "avgTicket": 265.9,
+   "sends": 1260,
+   "sendSuccess": 1134,
+   "banned": 70,
+   "dms": 20,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 910,
+     "sendSuccess": 819,
+     "banned": 49,
+     "failed": 14,
+     "dms": 12
+    },
+    "promote": {
+     "sends": 350,
+     "sendSuccess": 315,
+     "banned": 21,
+     "failed": 7,
+     "dms": 4
+    }
+   }
+  },
+  "clients": [
+   {
+    "clientId": "alpha1",
+    "name": "Alpha",
+    "revenue": 2800,
+    "payers": 15,
+    "newUsers": 280,
+    "conversion": 0.25,
+    "avgTicket": 186.7,
+    "sends": 1050,
+    "sendSuccess": 945,
+    "banned": 56,
+    "dms": 21,
+    "pool": {
+     "buffersEligible": 3,
+     "buffersTotal": 5,
+     "promoteActive": 2
+    },
+    "spark": [
+     400,
+     400,
+     400,
+     400,
+     400,
+     400,
+     700
+    ],
+    "previous": {
+     "revenue": 2800,
+     "payers": 15,
+     "newUsers": 280,
+     "conversion": 0.25
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 700,
+      "sendSuccess": 630,
+      "banned": 35,
+      "failed": 7,
+      "dms": 14
+     },
+     "promote": {
+      "sends": 350,
+      "sendSuccess": 315,
+      "banned": 21,
+      "failed": 7,
+      "dms": 7
+     }
+    }
+   },
+   {
+    "clientId": "beta1",
+    "name": "Beta",
+    "revenue": 2450,
+    "payers": 7,
+    "newUsers": 70,
+    "conversion": 0,
+    "avgTicket": 350,
+    "sends": 210,
+    "sendSuccess": 189,
+    "banned": 14,
+    "dms": 7,
+    "pool": {
+     "buffersEligible": 0,
+     "buffersTotal": 0,
+     "promoteActive": 0
+    },
+    "spark": [
+     350,
+     350,
+     350,
+     350,
+     350,
+     350,
+     200
+    ],
+    "previous": {
+     "revenue": 3050,
+     "payers": 7,
+     "newUsers": 70,
+     "conversion": 0
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 210,
+      "sendSuccess": 189,
+      "banned": 14,
+      "failed": 7,
+      "dms": 7
+     },
+     "promote": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "clientId": "gamma1",
+    "name": "Gamma",
+    "revenue": 0,
+    "payers": 0,
+    "newUsers": 0,
+    "conversion": null,
+    "avgTicket": null,
+    "sends": 0,
+    "sendSuccess": 0,
+    "banned": 0,
+    "dms": 0,
+    "pool": {
+     "buffersEligible": 0,
+     "buffersTotal": 0,
+     "promoteActive": 0
+    },
+    "spark": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "previous": {
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "conversion": null
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     }
+    }
+   }
+  ],
+  "notes": [
+   "Per-client attribution of DMs and sends begins 2026-10-26; DMs before it are only in fleet totals (unattributed).",
+   "byFamily splits sends/DMs into tg-aut and promote; rows without a family (promotion_send/conversion_event before 2026-10-25) count only in the merged numbers."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "fleet?period=30d": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "period": "30d",
+  "range": {
+   "from": "2026-10-01",
+   "to": "2026-10-30"
+  },
+  "previousRange": {
+   "from": "2026-09-01",
+   "to": "2026-09-30"
+  },
+  "fleet": {
+   "revenue": 23100,
+   "grossRevenue": 24300,
+   "flaggedRevenue": 1200,
+   "payers": 91,
+   "newUsers": 1500,
+   "conversion": 0.1667,
+   "avgTicket": 253.8,
+   "sends": 5400,
+   "sendSuccess": 4860,
+   "banned": 300,
+   "dms": 55,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 3900,
+     "sendSuccess": 3510,
+     "banned": 210,
+     "failed": 60,
+     "dms": 33
+    },
+    "promote": {
+     "sends": 1500,
+     "sendSuccess": 1350,
+     "banned": 90,
+     "failed": 30,
+     "dms": 11
+    }
+   }
+  },
+  "previous": {
+   "revenue": 4500,
+   "grossRevenue": 4500,
+   "flaggedRevenue": 0,
+   "payers": 19,
+   "newUsers": 300,
+   "conversion": null,
+   "avgTicket": 236.8,
+   "sends": 1080,
+   "sendSuccess": 972,
+   "banned": 60,
+   "dms": 0,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 780,
+     "sendSuccess": 702,
+     "banned": 42,
+     "failed": 12,
+     "dms": 0
+    },
+    "promote": {
+     "sends": 300,
+     "sendSuccess": 270,
+     "banned": 18,
+     "failed": 6,
+     "dms": 0
+    }
+   }
+  },
+  "clients": [
+   {
+    "clientId": "alpha1",
+    "name": "Alpha",
+    "revenue": 12000,
+    "payers": 61,
+    "newUsers": 1200,
+    "conversion": 0.25,
+    "avgTicket": 196.7,
+    "sends": 4500,
+    "sendSuccess": 4050,
+    "banned": 240,
+    "dms": 33,
+    "pool": {
+     "buffersEligible": 3,
+     "buffersTotal": 5,
+     "promoteActive": 2
+    },
+    "spark": [
+     400,
+     400,
+     400,
+     400,
+     400,
+     400,
+     700
+    ],
+    "previous": {
+     "revenue": 2400,
+     "payers": 13,
+     "newUsers": 240,
+     "conversion": null
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 3000,
+      "sendSuccess": 2700,
+      "banned": 150,
+      "failed": 30,
+      "dms": 22
+     },
+     "promote": {
+      "sends": 1500,
+      "sendSuccess": 1350,
+      "banned": 90,
+      "failed": 30,
+      "dms": 11
+     }
+    }
+   },
+   {
+    "clientId": "beta1",
+    "name": "Beta",
+    "revenue": 11100,
+    "payers": 30,
+    "newUsers": 300,
+    "conversion": 0,
+    "avgTicket": 370,
+    "sends": 900,
+    "sendSuccess": 810,
+    "banned": 60,
+    "dms": 11,
+    "pool": {
+     "buffersEligible": 0,
+     "buffersTotal": 0,
+     "promoteActive": 0
+    },
+    "spark": [
+     350,
+     350,
+     350,
+     350,
+     350,
+     350,
+     200
+    ],
+    "previous": {
+     "revenue": 2100,
+     "payers": 6,
+     "newUsers": 60,
+     "conversion": null
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 900,
+      "sendSuccess": 810,
+      "banned": 60,
+      "failed": 30,
+      "dms": 11
+     },
+     "promote": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "clientId": "gamma1",
+    "name": "Gamma",
+    "revenue": 0,
+    "payers": 0,
+    "newUsers": 0,
+    "conversion": null,
+    "avgTicket": null,
+    "sends": 0,
+    "sendSuccess": 0,
+    "banned": 0,
+    "dms": 0,
+    "pool": {
+     "buffersEligible": 0,
+     "buffersTotal": 0,
+     "promoteActive": 0
+    },
+    "spark": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "previous": {
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "conversion": null
+    },
+    "byFamily": {
+     "tg-aut": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 0,
+      "sendSuccess": 0,
+      "banned": 0,
+      "failed": 0,
+      "dms": 0
+     }
+    }
+   }
+  ],
+  "notes": [
+   "Per-client attribution of DMs and sends begins 2026-10-26; DMs before it are only in fleet totals (unattributed).",
+   "Revenue history begins 2026-10-03 20:32Z (2026-10-04 IST); earlier days show 0 revenue, not no revenue.",
+   "byFamily splits sends/DMs into tg-aut and promote; rows without a family (promotion_send/conversion_event before 2026-10-25) count only in the merged numbers.",
+   "previous.conversion is null: the previous window is older than ~30 days and userData docs are swept after 30 days idle. Current-window days older than ~30 days may also undercount."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "fleet/detail?days=7": {
+  "clientId": "all",
+  "name": "All clients",
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "days": 7,
+  "range": {
+   "from": "2026-10-25",
+   "to": "2026-10-31"
+  },
+  "summary": {
+   "clientId": "all",
+   "name": "All clients",
+   "revenue": 5250,
+   "grossRevenue": 5250,
+   "flaggedRevenue": 0,
+   "payers": 22,
+   "newUsers": 350,
+   "conversion": 0.1667,
+   "avgTicket": 238.6,
+   "sends": 1260,
+   "sendSuccess": 1134,
+   "banned": 70,
+   "dms": 35,
+   "byFamily": {
+    "tg-aut": {
+     "sends": 910,
+     "sendSuccess": 819,
+     "banned": 49,
+     "failed": 14,
+     "dms": 21
+    },
+    "promote": {
+     "sends": 350,
+     "sendSuccess": 315,
+     "banned": 21,
+     "failed": 7,
+     "dms": 7
+    }
+   },
+   "pool": {
+    "buffersEligible": 3,
+    "buffersTotal": 5,
+    "promoteActive": 2
+   },
+   "spark": [
+    750,
+    750,
+    750,
+    750,
+    750,
+    750,
+    900
+   ],
+   "previous": {
+    "revenue": 5850,
+    "payers": 22,
+    "newUsers": 350,
+    "conversion": 0.1667
+   }
+  },
+  "daily": [
+   {
+    "date": "2026-10-25",
+    "revenue": 750,
+    "grossRevenue": 750,
+    "payers": 4,
+    "newUsers": 50,
+    "conversion": 0.1667,
+    "sends": 180,
+    "sendSuccess": 162,
+    "banned": 10,
+    "dms": 5,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 130,
+      "sendSuccess": 117,
+      "banned": 7,
+      "failed": 2,
+      "dms": 3
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-26",
+    "revenue": 750,
+    "grossRevenue": 750,
+    "payers": 4,
+    "newUsers": 50,
+    "conversion": 0.1667,
+    "sends": 180,
+    "sendSuccess": 162,
+    "banned": 10,
+    "dms": 5,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 130,
+      "sendSuccess": 117,
+      "banned": 7,
+      "failed": 2,
+      "dms": 3
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-27",
+    "revenue": 750,
+    "grossRevenue": 750,
+    "payers": 4,
+    "newUsers": 50,
+    "conversion": 0.1667,
+    "sends": 180,
+    "sendSuccess": 162,
+    "banned": 10,
+    "dms": 5,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 130,
+      "sendSuccess": 117,
+      "banned": 7,
+      "failed": 2,
+      "dms": 3
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "revenue": 750,
+    "grossRevenue": 750,
+    "payers": 4,
+    "newUsers": 50,
+    "conversion": 0.1667,
+    "sends": 180,
+    "sendSuccess": 162,
+    "banned": 10,
+    "dms": 5,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 130,
+      "sendSuccess": 117,
+      "banned": 7,
+      "failed": 2,
+      "dms": 3
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-29",
+    "revenue": 750,
+    "grossRevenue": 750,
+    "payers": 4,
+    "newUsers": 50,
+    "conversion": 0.1667,
+    "sends": 180,
+    "sendSuccess": 162,
+    "banned": 10,
+    "dms": 5,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 130,
+      "sendSuccess": 117,
+      "banned": 7,
+      "failed": 2,
+      "dms": 3
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-30",
+    "revenue": 750,
+    "grossRevenue": 750,
+    "payers": 4,
+    "newUsers": 50,
+    "conversion": 0.1667,
+    "sends": 180,
+    "sendSuccess": 162,
+    "banned": 10,
+    "dms": 5,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 130,
+      "sendSuccess": 117,
+      "banned": 7,
+      "failed": 2,
+      "dms": 3
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-31",
+    "revenue": 900,
+    "grossRevenue": 900,
+    "payers": 3,
+    "newUsers": 10,
+    "conversion": 0.4,
+    "sends": 36,
+    "sendSuccess": 32,
+    "banned": 2,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 26,
+      "sendSuccess": 23,
+      "banned": 1,
+      "failed": 2,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 10,
+      "sendSuccess": 9,
+      "banned": 1,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   }
+  ],
+  "hourly": {
+   "today": [
+    {
+     "hour": 0,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 1,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 2,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 3,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 4,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 5,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 6,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 7,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 8,
+     "revenue": 100,
+     "payers": 1,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 9,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 10
+    },
+    {
+     "hour": 10,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 2,
+     "sends": 0
+    },
+    {
+     "hour": 11,
+     "revenue": 200,
+     "payers": 1,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 12,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 13,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 14,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 6
+    },
+    {
+     "hour": 15,
+     "revenue": 600,
+     "payers": 1,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 16,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 17,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 18,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 19,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 20,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 21,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 22,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 23,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    }
+   ],
+   "yesterday": [
+    {
+     "hour": 0,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 1,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 2,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 3,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 4,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 5,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 6,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 7,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 8,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 9,
+     "revenue": 350,
+     "payers": 1,
+     "newUsers": 1,
+     "sends": 12
+    },
+    {
+     "hour": 10,
+     "revenue": 100,
+     "payers": 1,
+     "newUsers": 2,
+     "sends": 0
+    },
+    {
+     "hour": 11,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 12,
+     "revenue": 50,
+     "payers": 1,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 13,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 14,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 4
+    },
+    {
+     "hour": 15,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 16,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 17,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 18,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 19,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 20,
+     "revenue": 250,
+     "payers": 1,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 21,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 22,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 23,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    }
+   ]
+  },
+  "distributions": {
+   "amount": [
+    {
+     "bucket": "<100",
+     "count": 6,
+     "revenue": 300
+    },
+    {
+     "bucket": "100-199",
+     "count": 7,
+     "revenue": 700
+    },
+    {
+     "bucket": "200-299",
+     "count": 7,
+     "revenue": 1700
+    },
+    {
+     "bucket": "300-499",
+     "count": 6,
+     "revenue": 2100
+    },
+    {
+     "bucket": "500-999",
+     "count": 1,
+     "revenue": 600
+    }
+   ],
+   "hourOfDay": [
+    {
+     "hour": 0,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 1,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 2,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 3,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 4,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 5,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 6,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 7,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 8,
+     "revenue": 100,
+     "payers": 1
+    },
+    {
+     "hour": 9,
+     "revenue": 2100,
+     "payers": 6
+    },
+    {
+     "hour": 10,
+     "revenue": 600,
+     "payers": 6
+    },
+    {
+     "hour": 11,
+     "revenue": 200,
+     "payers": 1
+    },
+    {
+     "hour": 12,
+     "revenue": 300,
+     "payers": 1
+    },
+    {
+     "hour": 13,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 14,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 15,
+     "revenue": 600,
+     "payers": 1
+    },
+    {
+     "hour": 16,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 17,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 18,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 19,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 20,
+     "revenue": 1500,
+     "payers": 6
+    },
+    {
+     "hour": 21,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 22,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 23,
+     "revenue": 0,
+     "payers": 0
+    }
+   ],
+   "timeToFirstPay": [
+    {
+     "bucket": "<10m",
+     "count": 0
+    },
+    {
+     "bucket": "10-30m",
+     "count": 0
+    },
+    {
+     "bucket": "30m-2h",
+     "count": 0
+    },
+    {
+     "bucket": "2-24h",
+     "count": 0
+    },
+    {
+     "bucket": "1-3d",
+     "count": 0
+    },
+    {
+     "bucket": "3d+",
+     "count": 0
+    }
+   ],
+   "repeat": {
+    "oneTime": 21,
+    "repeat": 1,
+    "repeatRevenueShare": 0.0556
+   }
+  },
+  "mobiles": [
+   {
+    "mobile": "••••0000",
+    "clientId": "alpha1",
+    "newUsers": 42,
+    "sends": 240,
+    "sendSuccess": 120,
+    "banned": 6,
+    "dms": 0,
+    "firstDay": "2026-10-25",
+    "lastDay": "2026-10-30",
+    "family": "tg-aut"
+   },
+   {
+    "mobile": "••••0000",
+    "clientId": "beta1",
+    "newUsers": 12,
+    "sends": 120,
+    "sendSuccess": 60,
+    "banned": 6,
+    "dms": 0,
+    "firstDay": "2026-10-25",
+    "lastDay": "2026-10-30",
+    "family": "tg-aut"
+   },
+   {
+    "mobile": "••••0001",
+    "clientId": "alpha1",
+    "newUsers": 0,
+    "sends": 600,
+    "sendSuccess": 300,
+    "banned": 6,
+    "dms": 18,
+    "firstDay": "2026-10-25",
+    "lastDay": "2026-10-30",
+    "family": "promote"
+   }
+  ],
+  "channels": [
+   {
+    "title": "channel …777",
+    "sends": 0,
+    "dms": 3,
+    "dmPerSend": null
+   }
+  ],
+  "pool": {
+   "buffersEligible": 3,
+   "buffersTotal": 5,
+   "harsh": 0,
+   "promoteActive": 2
+  },
+  "notes": [
+   "Per-client attribution of DMs and sends begins 2026-10-26; DMs before it are only in fleet totals (unattributed).",
+   "daily covers 2026-10-25..2026-10-31 IST; the last row (today) is partial. summary = 7 complete IST days ending yesterday (same row as /monitor/fleet?period=7d, fleet totals).",
+   "channels = top 20 fleet-wide by attributed DMs (conversion_event, incl. DMs without a client before 2026-10-26); channels with sends but no DMs are not listed.",
+   "mobiles = top 20 accounts fleet-wide by tg-aut new users; clientId = the client that owned the mobile on its last day in range.",
+   "mobiles[].dms = first DMs to that account as a promote account (daily_mobile promote-clients new_users), not attributed conversion_event DMs."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "client/alpha1?days=30": {
+  "clientId": "alpha1",
+  "name": "Alpha",
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "days": 30,
+  "range": {
+   "from": "2026-10-02",
+   "to": "2026-10-31"
+  },
+  "summary": {
+   "clientId": "alpha1",
+   "name": "Alpha",
+   "revenue": 12000,
+   "payers": 61,
+   "newUsers": 1200,
+   "conversion": 0.25,
+   "avgTicket": 196.7,
+   "sends": 4500,
+   "sendSuccess": 4050,
+   "banned": 240,
+   "dms": 33,
+   "pool": {
+    "buffersEligible": 3,
+    "buffersTotal": 5,
+    "promoteActive": 2
+   },
+   "spark": [
+    400,
+    400,
+    400,
+    400,
+    400,
+    400,
+    700
+   ],
+   "previous": {
+    "revenue": 2400,
+    "payers": 13,
+    "newUsers": 240,
+    "conversion": null
+   },
+   "byFamily": {
+    "tg-aut": {
+     "sends": 3000,
+     "sendSuccess": 2700,
+     "banned": 150,
+     "failed": 30,
+     "dms": 22
+    },
+    "promote": {
+     "sends": 1500,
+     "sendSuccess": 1350,
+     "banned": 90,
+     "failed": 30,
+     "dms": 11
+    }
+   }
+  },
+  "daily": [
+   {
+    "date": "2026-10-02",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-03",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-04",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-05",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-06",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-07",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-08",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-09",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-10",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-11",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-12",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-13",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-14",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-15",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-16",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-17",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-18",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-19",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 0,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 0
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 0
+     }
+    }
+   },
+   {
+    "date": "2026-10-20",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-21",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-22",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-23",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-24",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-25",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-26",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-27",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-29",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-30",
+    "revenue": 400,
+    "grossRevenue": 400,
+    "payers": 3,
+    "newUsers": 40,
+    "conversion": 0.25,
+    "sends": 150,
+    "sendSuccess": 135,
+    "banned": 8,
+    "dms": 3,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 100,
+      "sendSuccess": 90,
+      "banned": 5,
+      "failed": 1,
+      "dms": 2
+     },
+     "promote": {
+      "sends": 50,
+      "sendSuccess": 45,
+      "banned": 3,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   },
+   {
+    "date": "2026-10-31",
+    "revenue": 700,
+    "grossRevenue": 700,
+    "payers": 2,
+    "newUsers": 8,
+    "conversion": 0.25,
+    "sends": 30,
+    "sendSuccess": 27,
+    "banned": 2,
+    "dms": 2,
+    "byFamily": {
+     "tg-aut": {
+      "sends": 20,
+      "sendSuccess": 18,
+      "banned": 1,
+      "failed": 1,
+      "dms": 1
+     },
+     "promote": {
+      "sends": 10,
+      "sendSuccess": 9,
+      "banned": 1,
+      "failed": 1,
+      "dms": 1
+     }
+    }
+   }
+  ],
+  "hourly": {
+   "today": [
+    {
+     "hour": 0,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 1,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 2,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 3,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 4,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 5,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 6,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 7,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 8,
+     "revenue": 100,
+     "payers": 1,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 9,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 10
+    },
+    {
+     "hour": 10,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 11,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 12,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 13,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 14,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 15,
+     "revenue": 600,
+     "payers": 1,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 16,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 17,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 18,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 19,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 20,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 21,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 22,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 23,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    }
+   ],
+   "yesterday": [
+    {
+     "hour": 0,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 1,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 2,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 3,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 4,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 5,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 6,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 7,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 8,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 9,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 12
+    },
+    {
+     "hour": 10,
+     "revenue": 100,
+     "payers": 1,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 11,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 12,
+     "revenue": 50,
+     "payers": 1,
+     "newUsers": 1,
+     "sends": 0
+    },
+    {
+     "hour": 13,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 14,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 15,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 16,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 17,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 18,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 19,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 20,
+     "revenue": 250,
+     "payers": 1,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 21,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 22,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    },
+    {
+     "hour": 23,
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "sends": 0
+    }
+   ]
+  },
+  "distributions": {
+   "amount": [
+    {
+     "bucket": "<100",
+     "count": 29,
+     "revenue": 1450
+    },
+    {
+     "bucket": "100-199",
+     "count": 30,
+     "revenue": 3000
+    },
+    {
+     "bucket": "200-299",
+     "count": 29,
+     "revenue": 7250
+    },
+    {
+     "bucket": "300-499",
+     "count": 0,
+     "revenue": 0
+    },
+    {
+     "bucket": "500-999",
+     "count": 1,
+     "revenue": 600
+    }
+   ],
+   "hourOfDay": [
+    {
+     "hour": 0,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 1,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 2,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 3,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 4,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 5,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 6,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 7,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 8,
+     "revenue": 100,
+     "payers": 1
+    },
+    {
+     "hour": 9,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 10,
+     "revenue": 2900,
+     "payers": 29
+    },
+    {
+     "hour": 11,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 12,
+     "revenue": 1450,
+     "payers": 1
+    },
+    {
+     "hour": 13,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 14,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 15,
+     "revenue": 600,
+     "payers": 1
+    },
+    {
+     "hour": 16,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 17,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 18,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 19,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 20,
+     "revenue": 7250,
+     "payers": 29
+    },
+    {
+     "hour": 21,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 22,
+     "revenue": 0,
+     "payers": 0
+    },
+    {
+     "hour": 23,
+     "revenue": 0,
+     "payers": 0
+    }
+   ],
+   "timeToFirstPay": [
+    {
+     "bucket": "<10m",
+     "count": 0
+    },
+    {
+     "bucket": "10-30m",
+     "count": 0
+    },
+    {
+     "bucket": "30m-2h",
+     "count": 0
+    },
+    {
+     "bucket": "2-24h",
+     "count": 0
+    },
+    {
+     "bucket": "1-3d",
+     "count": 0
+    },
+    {
+     "bucket": "3d+",
+     "count": 0
+    }
+   ],
+   "repeat": {
+    "oneTime": 60,
+    "repeat": 1,
+    "repeatRevenueShare": 0.1179
+   }
+  },
+  "mobiles": [
+   {
+    "mobile": "••••0001",
+    "newUsers": 0,
+    "sends": 2100,
+    "sendSuccess": 1050,
+    "banned": 21,
+    "dms": 63,
+    "firstDay": "2026-10-10",
+    "lastDay": "2026-10-30",
+    "family": "promote"
+   },
+   {
+    "mobile": "••••0000",
+    "newUsers": 147,
+    "sends": 840,
+    "sendSuccess": 420,
+    "banned": 21,
+    "dms": 0,
+    "firstDay": "2026-10-10",
+    "lastDay": "2026-10-30",
+    "family": "tg-aut"
+   }
+  ],
+  "channels": [
+   {
+    "title": "channel …777",
+    "sends": 0,
+    "dms": 2,
+    "dmPerSend": null
+   }
+  ],
+  "pool": {
+   "buffersEligible": 3,
+   "buffersTotal": 5,
+   "harsh": 0,
+   "promoteActive": 2
+  },
+  "notes": [
+   "Per-client attribution of DMs and sends begins 2026-10-26; DMs before it are only in fleet totals (unattributed).",
+   "Revenue history begins 2026-10-03 20:32Z (2026-10-04 IST); earlier days show 0 revenue, not no revenue.",
+   "Per-mobile rows (daily_mobile) begin 2026-10-10.",
+   "daily covers 2026-10-02..2026-10-31 IST; the last row (today) is partial. summary = 30 complete IST days ending yesterday (same row as /monitor/fleet?period=30d).",
+   "channels = top 20 by attributed DMs (conversion_event); channels with sends but no DMs are not listed.",
+   "mobiles[].dms = first DMs to that account as a promote account (daily_mobile promote-clients new_users), not attributed conversion_event DMs."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "funnel?period=7d": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "period": "7d",
+  "clientId": null,
+  "range": {
+   "from": "2026-10-24",
+   "to": "2026-10-30"
+  },
+  "previousRange": {
+   "from": "2026-10-17",
+   "to": "2026-10-23"
+  },
+  "totals": {
+   "newUsers": 350,
+   "payers": 22,
+   "revenue": 5250,
+   "conversion": 0.1667
+  },
+  "previous": {
+   "newUsers": 350,
+   "payers": 22,
+   "revenue": 5850,
+   "conversion": 0.1667
+  },
+  "byOrigin": {
+   "direct": {
+    "newUsers": 21,
+    "payers": 1,
+    "revenue": 350
+   },
+   "routed": {
+    "newUsers": 7,
+    "payers": 0,
+    "revenue": 0
+   },
+   "unattributed": {
+    "newUsers": 322,
+    "payers": 21,
+    "revenue": 4900
+   }
+  },
+  "previousByOrigin": {
+   "direct": {
+    "newUsers": 12,
+    "payers": 1,
+    "revenue": 350
+   },
+   "routed": {
+    "newUsers": 4,
+    "payers": 0,
+    "revenue": 0
+   },
+   "unattributed": {
+    "newUsers": 334,
+    "payers": 21,
+    "revenue": 5500
+   }
+  },
+  "incomingPromoteDms": 42,
+  "routed": null,
+  "clients": [
+   {
+    "clientId": "alpha1",
+    "name": "Alpha",
+    "newUsers": 280,
+    "payers": 15,
+    "revenue": 2800,
+    "conversion": 0.25,
+    "previous": {
+     "revenue": 2800,
+     "payers": 15,
+     "newUsers": 280,
+     "conversion": 0.25
+    },
+    "byOrigin": {
+     "direct": {
+      "newUsers": 14,
+      "payers": 1,
+      "revenue": 350
+     },
+     "routed": {
+      "newUsers": 7,
+      "payers": 0,
+      "revenue": 0
+     },
+     "unattributed": {
+      "newUsers": 259,
+      "payers": 14,
+      "revenue": 2450
+     }
+    }
+   },
+   {
+    "clientId": "beta1",
+    "name": "Beta",
+    "newUsers": 70,
+    "payers": 7,
+    "revenue": 2450,
+    "conversion": 0,
+    "previous": {
+     "revenue": 3050,
+     "payers": 7,
+     "newUsers": 70,
+     "conversion": 0
+    },
+    "byOrigin": {
+     "direct": {
+      "newUsers": 7,
+      "payers": 0,
+      "revenue": 0
+     },
+     "routed": {
+      "newUsers": 0,
+      "payers": 0,
+      "revenue": 0
+     },
+     "unattributed": {
+      "newUsers": 63,
+      "payers": 7,
+      "revenue": 2450
+     }
+    }
+   },
+   {
+    "clientId": "gamma1",
+    "name": "Gamma",
+    "newUsers": 0,
+    "payers": 0,
+    "revenue": 0,
+    "conversion": null,
+    "previous": {
+     "revenue": 0,
+     "payers": 0,
+     "newUsers": 0,
+     "conversion": null
+    },
+    "byOrigin": {
+     "direct": {
+      "newUsers": 0,
+      "payers": 0,
+      "revenue": 0
+     },
+     "routed": {
+      "newUsers": 0,
+      "payers": 0,
+      "revenue": 0
+     },
+     "unattributed": {
+      "newUsers": 0,
+      "payers": 0,
+      "revenue": 0
+     }
+    }
+   }
+  ],
+  "daily": [
+   {
+    "date": "2026-10-25",
+    "newUsers": 50,
+    "payers": 4,
+    "revenue": 750,
+    "conversion": 0.1667,
+    "dms": 5,
+    "dmsByFamily": {
+     "tg-aut": 3,
+     "promote": 1
+    }
+   },
+   {
+    "date": "2026-10-26",
+    "newUsers": 50,
+    "payers": 4,
+    "revenue": 750,
+    "conversion": 0.1667,
+    "dms": 5,
+    "dmsByFamily": {
+     "tg-aut": 3,
+     "promote": 1
+    }
+   },
+   {
+    "date": "2026-10-27",
+    "newUsers": 50,
+    "payers": 4,
+    "revenue": 750,
+    "conversion": 0.1667,
+    "dms": 5,
+    "dmsByFamily": {
+     "tg-aut": 3,
+     "promote": 1
+    }
+   },
+   {
+    "date": "2026-10-28",
+    "newUsers": 50,
+    "payers": 4,
+    "revenue": 750,
+    "conversion": 0.1667,
+    "dms": 5,
+    "dmsByFamily": {
+     "tg-aut": 3,
+     "promote": 1
+    }
+   },
+   {
+    "date": "2026-10-29",
+    "newUsers": 50,
+    "payers": 4,
+    "revenue": 750,
+    "conversion": 0.1667,
+    "dms": 5,
+    "dmsByFamily": {
+     "tg-aut": 3,
+     "promote": 1
+    }
+   },
+   {
+    "date": "2026-10-30",
+    "newUsers": 50,
+    "payers": 4,
+    "revenue": 750,
+    "conversion": 0.1667,
+    "dms": 5,
+    "dmsByFamily": {
+     "tg-aut": 3,
+     "promote": 1
+    }
+   },
+   {
+    "date": "2026-10-31",
+    "newUsers": 10,
+    "payers": 3,
+    "revenue": 900,
+    "conversion": 0.4,
+    "dms": 3,
+    "dmsByFamily": {
+     "tg-aut": 2,
+     "promote": 1
+    }
+   }
+  ],
+  "ttfp": [
+   {
+    "bucket": "<10m",
+    "count": 0
+   },
+   {
+    "bucket": "10-30m",
+    "count": 0
+   },
+   {
+    "bucket": "30m-2h",
+    "count": 0
+   },
+   {
+    "bucket": "2-24h",
+    "count": 0
+   },
+   {
+    "bucket": "1-3d",
+    "count": 0
+   },
+   {
+    "bucket": "3d+",
+    "count": 0
+   }
+  ],
+  "repeat": {
+   "oneTime": 21,
+   "repeat": 1,
+   "repeatRevenueShare": 0.0556
+  },
+  "notes": [
+   "Per-client attribution of DMs and sends begins 2026-10-26; DMs before it are only in fleet totals (unattributed).",
+   "byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.",
+   "byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).",
+   "routed: history starts when counters ship (daily_client route columns not present yet)."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "funnel?period=today&client=alpha1": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "period": "today",
+  "clientId": "alpha1",
+  "range": {
+   "from": "2026-10-31",
+   "to": "2026-10-31"
+  },
+  "previousRange": {
+   "from": "2026-10-30",
+   "to": "2026-10-30"
+  },
+  "totals": {
+   "newUsers": 4,
+   "payers": 2,
+   "revenue": 700,
+   "conversion": 0.25
+  },
+  "previous": {
+   "newUsers": 4,
+   "payers": 2,
+   "revenue": 150,
+   "conversion": 0.25
+  },
+  "byOrigin": {
+   "direct": {
+    "newUsers": 1,
+    "payers": 0,
+    "revenue": 0
+   },
+   "routed": {
+    "newUsers": 1,
+    "payers": 0,
+    "revenue": 0
+   },
+   "unattributed": {
+    "newUsers": 2,
+    "payers": 2,
+    "revenue": 700
+   }
+  },
+  "previousByOrigin": {
+   "direct": {
+    "newUsers": 1,
+    "payers": 1,
+    "revenue": 50
+   },
+   "routed": {
+    "newUsers": 0,
+    "payers": 0,
+    "revenue": 0
+   },
+   "unattributed": {
+    "newUsers": 3,
+    "payers": 1,
+    "revenue": 100
+   }
+  },
+  "incomingPromoteDms": 6,
+  "routed": null,
+  "clients": [
+   {
+    "clientId": "alpha1",
+    "name": "Alpha",
+    "newUsers": 4,
+    "payers": 2,
+    "revenue": 700,
+    "conversion": 0.25,
+    "previous": {
+     "revenue": 150,
+     "payers": 2,
+     "newUsers": 4,
+     "conversion": 0.25
+    },
+    "byOrigin": {
+     "direct": {
+      "newUsers": 1,
+      "payers": 0,
+      "revenue": 0
+     },
+     "routed": {
+      "newUsers": 1,
+      "payers": 0,
+      "revenue": 0
+     },
+     "unattributed": {
+      "newUsers": 2,
+      "payers": 2,
+      "revenue": 700
+     }
+    }
+   }
+  ],
+  "daily": null,
+  "ttfp": null,
+  "repeat": null,
+  "fleet": {
+   "totals": {
+    "newUsers": 5,
+    "payers": 3,
+    "revenue": 900,
+    "conversion": 0.4
+   },
+   "byOrigin": {
+    "direct": {
+     "newUsers": 2,
+     "payers": 0,
+     "revenue": 0
+    },
+    "routed": {
+     "newUsers": 1,
+     "payers": 1,
+     "revenue": 200
+    },
+    "unattributed": {
+     "newUsers": 2,
+     "payers": 2,
+     "revenue": 700
+    }
+   }
+  },
+  "notes": [
+   "byOrigin: direct = first attributed DM from a tg-aut promotion (service t), routed = from a promote account (service p); payers/revenue by origin are attributed only (chats with an attributed DM since 2026-10-25), the rest is unattributed.",
+   "byOrigin newUsers: direct/routed = attributed DMs of that origin; unattributed = newUsers minus both (floored at 0).",
+   "routed: history starts when counters ship (daily_client route columns not present yet).",
+   "timeToFirstPay / repeat are 7d/30d only (null for today); payer origins refresh every 10 min."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "promotions?window=today": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "window": "today",
+  "clientId": null,
+  "range": {
+   "from": "2026-10-31",
+   "to": "2026-10-31"
+  },
+  "previousRange": {
+   "from": "2026-10-30",
+   "to": "2026-10-30"
+  },
+  "families": {
+   "tg-aut": {
+    "totals": {
+     "sent": 9,
+     "delivered": 9,
+     "banned": 0,
+     "failed": 0,
+     "deliveryRate": 1,
+     "banRate": 0,
+     "dms": 2,
+     "dmsPer100Delivered": 22.22,
+     "mobilesSending": 1,
+     "mobilesLimited": 0
+    },
+    "previous": {
+     "sent": 0,
+     "delivered": 0,
+     "banned": 0,
+     "failed": 0,
+     "deliveryRate": null,
+     "banRate": null,
+     "dms": 1,
+     "dmsPer100Delivered": null,
+     "mobilesSending": 0,
+     "mobilesLimited": 0
+    },
+    "clients": [
+     {
+      "clientId": "beta1",
+      "name": "Beta",
+      "sent": 9,
+      "delivered": 9,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": 1,
+      "banRate": 0,
+      "dms": 1,
+      "dmsPer100Delivered": 11.11,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "mobilesAssigned": null,
+      "lastSendAt": "2026-10-31T06:30:00.000Z",
+      "engine": null
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0000",
+      "clientId": "beta1",
+      "profile": "beta",
+      "sent": 9,
+      "delivered": 9,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": 1,
+      "banRate": 0,
+      "newDms": 1,
+      "topError": null,
+      "lastSendAt": "2026-10-31T06:30:00.000Z",
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": false,
+      "heartbeat": null,
+      "route24h": null
+     }
+    ]
+   },
+   "promote": {
+    "totals": {
+     "sent": 35,
+     "delivered": 20,
+     "banned": 0,
+     "failed": 5,
+     "deliveryRate": 0.5714,
+     "banRate": 0,
+     "dms": 1,
+     "dmsPer100Delivered": 5,
+     "mobilesSending": 1,
+     "mobilesLimited": 0,
+     "incomingDms": 4,
+     "routesSent": null,
+     "routedReached": null,
+     "routedUsers": null,
+     "reachRate": null
+    },
+    "previous": {
+     "sent": 80,
+     "delivered": 60,
+     "banned": 0,
+     "failed": 0,
+     "deliveryRate": 0.75,
+     "banRate": 0,
+     "dms": 0,
+     "dmsPer100Delivered": 0,
+     "mobilesSending": 1,
+     "mobilesLimited": 0
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "sent": 35,
+      "delivered": 20,
+      "banned": 0,
+      "failed": 5,
+      "deliveryRate": 0.5714,
+      "banRate": 0,
+      "dms": 1,
+      "dmsPer100Delivered": 5,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "incomingDms": 4,
+      "routesSent": null,
+      "routedReached": null,
+      "routedUsers": null,
+      "reachRate": null,
+      "reachAlert": null,
+      "mobilesAssigned": 2,
+      "lastSendAt": "2026-10-31T09:40:00.000Z"
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0001",
+      "clientId": "alpha1",
+      "profile": "alpha2",
+      "sent": 35,
+      "delivered": 20,
+      "banned": 0,
+      "failed": 5,
+      "deliveryRate": 0.5714,
+      "banRate": 0,
+      "newDms": 4,
+      "topError": {
+       "type": "FLOOD",
+       "count": 5
+      },
+      "lastSendAt": "2026-10-31T09:40:00.000Z",
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": false,
+      "heartbeat": {
+       "connected": true,
+       "health": "ok"
+      },
+      "route24h": {
+       "pending": 0,
+       "backlog": 0,
+       "mainReplies": 0
+      }
+     },
+     {
+      "mobile": "••••0002",
+      "clientId": "alpha1",
+      "profile": null,
+      "sent": 0,
+      "delivered": 0,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": null,
+      "banRate": null,
+      "newDms": 0,
+      "topError": null,
+      "lastSendAt": null,
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": true,
+      "heartbeat": null,
+      "route24h": {
+       "pending": 0,
+       "backlog": 0,
+       "mainReplies": 0
+      }
+     }
+    ]
+   }
+  },
+  "both": {
+   "sent": 44,
+   "delivered": 29,
+   "banned": 0,
+   "failed": 5,
+   "deliveryRate": 0.6591,
+   "banRate": 0,
+   "dms": 3,
+   "dmsPer100Delivered": 10.34,
+   "mobilesSending": 2,
+   "mobilesLimited": 0
+  },
+  "unattributed": null,
+  "notes": [
+   "today/24h sends come from promotion_send (per send); 7d/30d from daily_mobile (closed IST days).",
+   "routesSent/routedReached: history starts when counters ship (daily_mobile route columns not present yet).",
+   "looksLimited = sent >= 50 today (>= 200 for 24h/7d/30d) with < 5% delivered, or Redis spam state limited/harsh; previous.mobilesLimited uses the rate rule only.",
+   "idle = an active promoteClients mobile with no sends in the window."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "promotions?window=7d&client=alpha1": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "window": "7d",
+  "clientId": "alpha1",
+  "range": {
+   "from": "2026-10-24",
+   "to": "2026-10-30"
+  },
+  "previousRange": {
+   "from": "2026-10-17",
+   "to": "2026-10-23"
+  },
+  "families": {
+   "tg-aut": {
+    "totals": {
+     "sent": 280,
+     "delivered": 140,
+     "banned": 7,
+     "failed": 14,
+     "deliveryRate": 0.5,
+     "banRate": 0.025,
+     "dms": 14,
+     "dmsPer100Delivered": 10,
+     "mobilesSending": 1,
+     "mobilesLimited": 0
+    },
+    "previous": {
+     "sent": 280,
+     "delivered": 140,
+     "banned": 7,
+     "failed": 14,
+     "deliveryRate": 0.5,
+     "banRate": 0.025,
+     "dms": 8,
+     "dmsPer100Delivered": 5.71,
+     "mobilesSending": 1,
+     "mobilesLimited": 0
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "sent": 280,
+      "delivered": 140,
+      "banned": 7,
+      "failed": 14,
+      "deliveryRate": 0.5,
+      "banRate": 0.025,
+      "dms": 14,
+      "dmsPer100Delivered": 10,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "mobilesAssigned": null,
+      "lastSendAt": null,
+      "engine": null
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0000",
+      "clientId": "alpha1",
+      "profile": null,
+      "sent": 280,
+      "delivered": 140,
+      "banned": 7,
+      "failed": 14,
+      "deliveryRate": 0.5,
+      "banRate": 0.025,
+      "newDms": 49,
+      "topError": null,
+      "lastSendAt": null,
+      "lastDay": "2026-10-30",
+      "spam": null,
+      "looksLimited": false,
+      "idle": false,
+      "heartbeat": {
+       "connected": true,
+       "health": "live"
+      },
+      "route24h": null
+     }
+    ]
+   },
+   "promote": {
+    "totals": {
+     "sent": 700,
+     "delivered": 350,
+     "banned": 7,
+     "failed": 14,
+     "deliveryRate": 0.5,
+     "banRate": 0.01,
+     "dms": 7,
+     "dmsPer100Delivered": 2,
+     "mobilesSending": 1,
+     "mobilesLimited": 0,
+     "incomingDms": 21,
+     "routesSent": null,
+     "routedReached": null,
+     "routedUsers": null,
+     "reachRate": null
+    },
+    "previous": {
+     "sent": 700,
+     "delivered": 350,
+     "banned": 7,
+     "failed": 14,
+     "deliveryRate": 0.5,
+     "banRate": 0.01,
+     "dms": 4,
+     "dmsPer100Delivered": 1.14,
+     "mobilesSending": 1,
+     "mobilesLimited": 0,
+     "incomingDms": 21,
+     "routesSent": null,
+     "routedReached": null,
+     "routedUsers": null,
+     "reachRate": null
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "sent": 700,
+      "delivered": 350,
+      "banned": 7,
+      "failed": 14,
+      "deliveryRate": 0.5,
+      "banRate": 0.01,
+      "dms": 7,
+      "dmsPer100Delivered": 2,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "incomingDms": 21,
+      "routesSent": null,
+      "routedReached": null,
+      "routedUsers": null,
+      "reachRate": null,
+      "reachAlert": null,
+      "mobilesAssigned": 2,
+      "lastSendAt": null
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0001",
+      "clientId": "alpha1",
+      "profile": "alpha2",
+      "sent": 700,
+      "delivered": 350,
+      "banned": 7,
+      "failed": 14,
+      "deliveryRate": 0.5,
+      "banRate": 0.01,
+      "newDms": 21,
+      "topError": null,
+      "lastSendAt": null,
+      "lastDay": "2026-10-30",
+      "spam": null,
+      "looksLimited": false,
+      "idle": false,
+      "heartbeat": {
+       "connected": true,
+       "health": "ok"
+      },
+      "route24h": {
+       "pending": 0,
+       "backlog": 0,
+       "mainReplies": 0
+      }
+     },
+     {
+      "mobile": "••••0002",
+      "clientId": "alpha1",
+      "profile": null,
+      "sent": 0,
+      "delivered": 0,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": null,
+      "banRate": null,
+      "newDms": 0,
+      "topError": null,
+      "lastSendAt": null,
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": true,
+      "heartbeat": null,
+      "route24h": {
+       "pending": 0,
+       "backlog": 0,
+       "mainReplies": 0
+      }
+     }
+    ]
+   }
+  },
+  "both": {
+   "sent": 980,
+   "delivered": 490,
+   "banned": 14,
+   "failed": 28,
+   "deliveryRate": 0.5,
+   "banRate": 0.0143,
+   "dms": 21,
+   "dmsPer100Delivered": 4.29,
+   "mobilesSending": 2,
+   "mobilesLimited": 0
+  },
+  "unattributed": null,
+  "notes": [
+   "7d/30d: topError is null (daily_mobile keeps no error types); lastDay = last IST day with a daily_mobile row.",
+   "Per-family DMs (conversion_event.service) start 2026-10-25; earlier DMs count only in unattributed.",
+   "routesSent/routedReached: history starts when counters ship (daily_mobile route columns not present yet).",
+   "looksLimited = sent >= 50 today (>= 200 for 24h/7d/30d) with < 5% delivered, or Redis spam state limited/harsh; previous.mobilesLimited uses the rate rule only.",
+   "idle = an active promoteClients mobile with no sends in the window."
+  ],
+  "fleet": {
+   "both": {
+    "sent": 1120,
+    "delivered": 560,
+    "banned": 21,
+    "failed": 42,
+    "deliveryRate": 0.5,
+    "banRate": 0.0188,
+    "dms": 28,
+    "dmsPer100Delivered": 5,
+    "mobilesSending": 3,
+    "mobilesLimited": 0
+   },
+   "families": {
+    "tg-aut": {
+     "totals": {
+      "sent": 420,
+      "delivered": 210,
+      "banned": 14,
+      "failed": 28,
+      "deliveryRate": 0.5,
+      "banRate": 0.0333,
+      "dms": 21,
+      "dmsPer100Delivered": 10,
+      "mobilesSending": 2,
+      "mobilesLimited": 0
+     }
+    },
+    "promote": {
+     "totals": {
+      "sent": 700,
+      "delivered": 350,
+      "banned": 7,
+      "failed": 14,
+      "deliveryRate": 0.5,
+      "banRate": 0.01,
+      "dms": 7,
+      "dmsPer100Delivered": 2,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "incomingDms": 21,
+      "routesSent": null,
+      "routedReached": null,
+      "routedUsers": null,
+      "reachRate": null
+     }
+    }
+   }
+  },
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "promotions?window=24h": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "window": "24h",
+  "clientId": null,
+  "range": {
+   "from": "2026-10-30",
+   "to": "2026-10-31"
+  },
+  "previousRange": {
+   "from": "2026-10-29",
+   "to": "2026-10-30"
+  },
+  "families": {
+   "tg-aut": {
+    "totals": {
+     "sent": 9,
+     "delivered": 9,
+     "banned": 0,
+     "failed": 0,
+     "deliveryRate": 1,
+     "banRate": 0,
+     "dms": 2,
+     "dmsPer100Delivered": 22.22,
+     "mobilesSending": 1,
+     "mobilesLimited": 0
+    },
+    "previous": {
+     "sent": 0,
+     "delivered": 0,
+     "banned": 0,
+     "failed": 0,
+     "deliveryRate": null,
+     "banRate": null,
+     "dms": null,
+     "dmsPer100Delivered": null,
+     "mobilesSending": 0,
+     "mobilesLimited": 0
+    },
+    "clients": [
+     {
+      "clientId": "beta1",
+      "name": "Beta",
+      "sent": 9,
+      "delivered": 9,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": 1,
+      "banRate": 0,
+      "dms": 1,
+      "dmsPer100Delivered": 11.11,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "mobilesAssigned": null,
+      "lastSendAt": "2026-10-31T06:30:00.000Z",
+      "engine": null
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0000",
+      "clientId": "beta1",
+      "profile": "beta",
+      "sent": 9,
+      "delivered": 9,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": 1,
+      "banRate": 0,
+      "newDms": 1,
+      "topError": null,
+      "lastSendAt": "2026-10-31T06:30:00.000Z",
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": false,
+      "heartbeat": null,
+      "route24h": null
+     }
+    ]
+   },
+   "promote": {
+    "totals": {
+     "sent": 35,
+     "delivered": 20,
+     "banned": 0,
+     "failed": 5,
+     "deliveryRate": 0.5714,
+     "banRate": 0,
+     "dms": 2,
+     "dmsPer100Delivered": 10,
+     "mobilesSending": 1,
+     "mobilesLimited": 0,
+     "incomingDms": 4,
+     "routesSent": null,
+     "routedReached": null,
+     "routedUsers": null,
+     "reachRate": null
+    },
+    "previous": {
+     "sent": 80,
+     "delivered": 60,
+     "banned": 0,
+     "failed": 0,
+     "deliveryRate": 0.75,
+     "banRate": 0,
+     "dms": null,
+     "dmsPer100Delivered": null,
+     "mobilesSending": 1,
+     "mobilesLimited": 0
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "sent": 35,
+      "delivered": 20,
+      "banned": 0,
+      "failed": 5,
+      "deliveryRate": 0.5714,
+      "banRate": 0,
+      "dms": 2,
+      "dmsPer100Delivered": 10,
+      "mobilesSending": 1,
+      "mobilesLimited": 0,
+      "incomingDms": 4,
+      "routesSent": null,
+      "routedReached": null,
+      "routedUsers": null,
+      "reachRate": null,
+      "reachAlert": null,
+      "mobilesAssigned": 2,
+      "lastSendAt": "2026-10-31T09:40:00.000Z"
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0001",
+      "clientId": "alpha1",
+      "profile": "alpha2",
+      "sent": 35,
+      "delivered": 20,
+      "banned": 0,
+      "failed": 5,
+      "deliveryRate": 0.5714,
+      "banRate": 0,
+      "newDms": 4,
+      "topError": {
+       "type": "FLOOD",
+       "count": 5
+      },
+      "lastSendAt": "2026-10-31T09:40:00.000Z",
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": false,
+      "heartbeat": {
+       "connected": true,
+       "health": "ok"
+      },
+      "route24h": {
+       "pending": 0,
+       "backlog": 0,
+       "mainReplies": 0
+      }
+     },
+     {
+      "mobile": "••••0002",
+      "clientId": "alpha1",
+      "profile": null,
+      "sent": 0,
+      "delivered": 0,
+      "banned": 0,
+      "failed": 0,
+      "deliveryRate": null,
+      "banRate": null,
+      "newDms": 0,
+      "topError": null,
+      "lastSendAt": null,
+      "lastDay": null,
+      "spam": null,
+      "looksLimited": false,
+      "idle": true,
+      "heartbeat": null,
+      "route24h": {
+       "pending": 0,
+       "backlog": 0,
+       "mainReplies": 0
+      }
+     }
+    ]
+   }
+  },
+  "both": {
+   "sent": 44,
+   "delivered": 29,
+   "banned": 0,
+   "failed": 5,
+   "deliveryRate": 0.6591,
+   "banRate": 0,
+   "dms": 4,
+   "dmsPer100Delivered": 13.79,
+   "mobilesSending": 2,
+   "mobilesLimited": 0
+  },
+  "unattributed": null,
+  "notes": [
+   "24h: previous.dms is null (DMs are kept per IST day); mobiles[].newDms / incomingDms = today since IST midnight.",
+   "today/24h sends come from promotion_send (per send); 7d/30d from daily_mobile (closed IST days).",
+   "routesSent/routedReached: history starts when counters ship (daily_mobile route columns not present yet).",
+   "looksLimited = sent >= 50 today (>= 200 for 24h/7d/30d) with < 5% delivered, or Redis spam state limited/harsh; previous.mobilesLimited uses the rate rule only.",
+   "idle = an active promoteClients mobile with no sends in the window."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "reactions?window=7d": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "window": "7d",
+  "range": {
+   "from": "2026-10-24",
+   "to": "2026-10-30"
+  },
+  "previousRange": {
+   "from": "2026-10-17",
+   "to": "2026-10-23"
+  },
+  "scope": {
+   "client": null
+  },
+  "hoursElapsed": null,
+  "families": {
+   "tg-aut": {
+    "totals": {
+     "success": 70,
+     "restricted": 14,
+     "failed": 14,
+     "floods": 4,
+     "attempts": 98,
+     "successRate": 0.7143,
+     "restrictedRate": 0.1429,
+     "floodsPerMobileDay": 0.29,
+     "mobilesReacting": 2
+    },
+    "previous": {
+     "success": 70,
+     "restricted": 14,
+     "failed": 14,
+     "floods": 0,
+     "attempts": 98,
+     "successRate": 0.7143,
+     "restrictedRate": 0.1429,
+     "floodsPerMobileDay": 0,
+     "mobilesReacting": 2
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "success": 35,
+      "restricted": 7,
+      "failed": 7,
+      "floods": 2,
+      "attempts": 49,
+      "successRate": 0.7143,
+      "restrictedRate": 0.1429,
+      "floodsPerMobileDay": 0.29,
+      "mobilesReacting": 1,
+      "mobiles": 1,
+      "lastDay": "2026-10-30"
+     },
+     {
+      "clientId": "beta1",
+      "name": "Beta",
+      "success": 35,
+      "restricted": 7,
+      "failed": 7,
+      "floods": 2,
+      "attempts": 49,
+      "successRate": 0.7143,
+      "restrictedRate": 0.1429,
+      "floodsPerMobileDay": 0.29,
+      "mobilesReacting": 1,
+      "mobiles": 1,
+      "lastDay": "2026-10-30"
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0000",
+      "clientId": "alpha1",
+      "profile": null,
+      "success": 35,
+      "restricted": 7,
+      "failed": 7,
+      "floods": 2,
+      "successRate": 0.7143,
+      "restrictedRate": 0.1429,
+      "floodsPerDay": 0.29,
+      "lastDay": "2026-10-30",
+      "promoSent": 280,
+      "promoBanRate": 0.025,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": {
+       "connected": true,
+       "health": "live"
+      },
+      "silent": true
+     },
+     {
+      "mobile": "••••0000",
+      "clientId": "beta1",
+      "profile": "beta",
+      "success": 35,
+      "restricted": 7,
+      "failed": 7,
+      "floods": 2,
+      "successRate": 0.7143,
+      "restrictedRate": 0.1429,
+      "floodsPerDay": 0.29,
+      "lastDay": "2026-10-30",
+      "promoSent": 140,
+      "promoBanRate": 0.05,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": null,
+      "silent": false
+     }
+    ]
+   },
+   "promote": {
+    "totals": {
+     "success": 35,
+     "restricted": 7,
+     "failed": 7,
+     "floods": 2,
+     "attempts": 49,
+     "successRate": 0.7143,
+     "restrictedRate": 0.1429,
+     "floodsPerMobileDay": 0.29,
+     "mobilesReacting": 1
+    },
+    "previous": {
+     "success": 35,
+     "restricted": 7,
+     "failed": 7,
+     "floods": 0,
+     "attempts": 49,
+     "successRate": 0.7143,
+     "restrictedRate": 0.1429,
+     "floodsPerMobileDay": 0,
+     "mobilesReacting": 1
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "success": 35,
+      "restricted": 7,
+      "failed": 7,
+      "floods": 2,
+      "attempts": 49,
+      "successRate": 0.7143,
+      "restrictedRate": 0.1429,
+      "floodsPerMobileDay": 0.29,
+      "mobilesReacting": 1,
+      "mobiles": 2,
+      "lastDay": "2026-10-30"
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0001",
+      "clientId": "alpha1",
+      "profile": "alpha2",
+      "success": 35,
+      "restricted": 7,
+      "failed": 7,
+      "floods": 2,
+      "successRate": 0.7143,
+      "restrictedRate": 0.1429,
+      "floodsPerDay": 0.29,
+      "lastDay": "2026-10-30",
+      "promoSent": 700,
+      "promoBanRate": 0.01,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": {
+       "connected": true,
+       "health": "ok"
+      },
+      "silent": true
+     },
+     {
+      "mobile": "••••0002",
+      "clientId": "alpha1",
+      "profile": null,
+      "success": 0,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "successRate": null,
+      "restrictedRate": null,
+      "floodsPerDay": 0,
+      "lastDay": null,
+      "promoSent": 0,
+      "promoBanRate": null,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": null,
+      "silent": false
+     }
+    ]
+   }
+  },
+  "both": {
+   "success": 105,
+   "restricted": 21,
+   "failed": 21,
+   "floods": 6,
+   "attempts": 147,
+   "successRate": 0.7143,
+   "restrictedRate": 0.1429,
+   "floodsPerMobileDay": 0.29,
+   "mobilesReacting": 3
+  },
+  "fleet": null,
+  "daily": [
+   {
+    "day": "2026-10-24",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-24",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   },
+   {
+    "day": "2026-10-25",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-25",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   },
+   {
+    "day": "2026-10-26",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-26",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   },
+   {
+    "day": "2026-10-27",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-27",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   },
+   {
+    "day": "2026-10-28",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-28",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   },
+   {
+    "day": "2026-10-29",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-29",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   },
+   {
+    "day": "2026-10-30",
+    "family": "tg-aut",
+    "success": 8,
+    "restricted": 2,
+    "failed": 0,
+    "floods": 2
+   },
+   {
+    "day": "2026-10-30",
+    "family": "promote",
+    "success": 4,
+    "restricted": 1,
+    "failed": 0,
+    "floods": 1
+   }
+  ],
+  "now": {
+   "reactionsLastHour": 0,
+   "mobilesReacting": 0,
+   "mobilesCapped": 0,
+   "floodsLastHour": 0,
+   "mobilesPaused": 0
+  },
+  "restrictedChannels": {
+   "total": 0,
+   "byDay": []
+  },
+  "limits": {
+   "HOURLY_CAP": 150,
+   "CAPPED_AT": 145,
+   "SUCCESS_WARN": 0.7,
+   "SUCCESS_BAD": 0.5,
+   "RESTRICTED_WARN": 0.25,
+   "RESTRICTED_BAD": 0.4,
+   "FLOODS_PER_DAY_WARN": 10,
+   "FLOODS_PER_DAY_BAD": 30,
+   "SILENT_MIN_HOURS": 2
+  },
+  "notes": [
+   "7d/30d: closed IST days from daily_mobile; previous = the same number of days before.",
+   "restricted counts both reaction sends and message fetches refused with CHANNEL_RESTRICTED; floods are FLOOD_WAIT/PEER_FLOOD waits (not attempts).",
+   "capped = >= 145 reactions in the last hour (hourly cap 150, a code constant); silent = heartbeat up, nothing in the last hour and no reaction for 2 h.",
+   "restrictedChannels: fleet-wide (activeChannels.reactRestricted), refreshed hourly; not filtered by client."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ },
+ "reactions?window=today&client=alpha1": {
+  "generatedAt": "2026-10-31T10:00:00.000Z",
+  "window": "today",
+  "range": {
+   "from": "2026-10-31",
+   "to": "2026-10-31"
+  },
+  "previousRange": {
+   "from": "2026-10-30",
+   "to": "2026-10-30"
+  },
+  "scope": {
+   "client": "alpha1"
+  },
+  "hoursElapsed": 15.5,
+  "families": {
+   "tg-aut": {
+    "totals": {
+     "success": 0,
+     "restricted": 0,
+     "failed": 0,
+     "floods": 0,
+     "attempts": 0,
+     "successRate": null,
+     "restrictedRate": null,
+     "floodsPerMobileDay": 0,
+     "mobilesReacting": 0
+    },
+    "previous": {
+     "success": 4,
+     "restricted": 1,
+     "failed": 0,
+     "floods": 1,
+     "attempts": 5,
+     "successRate": 0.8,
+     "restrictedRate": 0.2,
+     "floodsPerMobileDay": null,
+     "mobilesReacting": null
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "success": 0,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "attempts": 0,
+      "successRate": null,
+      "restrictedRate": null,
+      "floodsPerMobileDay": 0,
+      "mobilesReacting": 0,
+      "mobiles": 1,
+      "lastDay": null
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0000",
+      "clientId": "alpha1",
+      "profile": null,
+      "success": 0,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "successRate": null,
+      "restrictedRate": null,
+      "floodsPerDay": 0,
+      "lastDay": null,
+      "promoSent": null,
+      "promoBanRate": null,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": {
+       "connected": true,
+       "health": "live"
+      },
+      "silent": true
+     }
+    ]
+   },
+   "promote": {
+    "totals": {
+     "success": 2,
+     "restricted": 0,
+     "failed": 0,
+     "floods": 0,
+     "attempts": 2,
+     "successRate": 1,
+     "restrictedRate": 0,
+     "floodsPerMobileDay": 0,
+     "mobilesReacting": 1
+    },
+    "previous": {
+     "success": 4,
+     "restricted": 1,
+     "failed": 0,
+     "floods": 1,
+     "attempts": 5,
+     "successRate": 0.8,
+     "restrictedRate": 0.2,
+     "floodsPerMobileDay": null,
+     "mobilesReacting": null
+    },
+    "clients": [
+     {
+      "clientId": "alpha1",
+      "name": "Alpha",
+      "success": 2,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "attempts": 2,
+      "successRate": 1,
+      "restrictedRate": 0,
+      "floodsPerMobileDay": 0,
+      "mobilesReacting": 1,
+      "mobiles": 2,
+      "lastDay": "2026-10-31"
+     }
+    ],
+    "mobiles": [
+     {
+      "mobile": "••••0001",
+      "clientId": "alpha1",
+      "profile": "alpha2",
+      "success": 2,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "successRate": 1,
+      "restrictedRate": 0,
+      "floodsPerDay": 0,
+      "lastDay": "2026-10-31",
+      "promoSent": null,
+      "promoBanRate": null,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": {
+       "connected": true,
+       "health": "ok"
+      },
+      "silent": true
+     },
+     {
+      "mobile": "••••0002",
+      "clientId": "alpha1",
+      "profile": null,
+      "success": 0,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "successRate": null,
+      "restrictedRate": null,
+      "floodsPerDay": 0,
+      "lastDay": null,
+      "promoSent": null,
+      "promoBanRate": null,
+      "live": {
+       "lastHour": 0,
+       "capped": false,
+       "floodsLastHour": 0,
+       "lastReactionAgeSec": null,
+       "pausedUntil": null,
+       "timeoutPauses": null,
+       "restrictedChannels": 0
+      },
+      "heartbeat": null,
+      "silent": false
+     }
+    ]
+   }
+  },
+  "both": {
+   "success": 2,
+   "restricted": 0,
+   "failed": 0,
+   "floods": 0,
+   "attempts": 2,
+   "successRate": 1,
+   "restrictedRate": 0,
+   "floodsPerMobileDay": 0,
+   "mobilesReacting": 1
+  },
+  "fleet": {
+   "both": {
+    "success": 3,
+    "restricted": 0,
+    "failed": 1,
+    "floods": 0,
+    "attempts": 4,
+    "successRate": 0.75,
+    "restrictedRate": 0,
+    "floodsPerMobileDay": 0,
+    "mobilesReacting": 2
+   },
+   "families": {
+    "tg-aut": {
+     "totals": {
+      "success": 1,
+      "restricted": 0,
+      "failed": 1,
+      "floods": 0,
+      "attempts": 2,
+      "successRate": 0.5,
+      "restrictedRate": 0,
+      "floodsPerMobileDay": 0,
+      "mobilesReacting": 1
+     }
+    },
+    "promote": {
+     "totals": {
+      "success": 2,
+      "restricted": 0,
+      "failed": 0,
+      "floods": 0,
+      "attempts": 2,
+      "successRate": 1,
+      "restrictedRate": 0,
+      "floodsPerMobileDay": 0,
+      "mobilesReacting": 1
+     }
+    }
+   }
+  },
+  "daily": [],
+  "now": {
+   "reactionsLastHour": 0,
+   "mobilesReacting": 0,
+   "mobilesCapped": 0,
+   "floodsLastHour": 0,
+   "mobilesPaused": 0
+  },
+  "restrictedChannels": {
+   "total": 0,
+   "byDay": []
+  },
+  "limits": {
+   "HOURLY_CAP": 150,
+   "CAPPED_AT": 145,
+   "SUCCESS_WARN": 0.7,
+   "SUCCESS_BAD": 0.5,
+   "RESTRICTED_WARN": 0.25,
+   "RESTRICTED_BAD": 0.4,
+   "FLOODS_PER_DAY_WARN": 10,
+   "FLOODS_PER_DAY_BAD": 30,
+   "SILENT_MIN_HOURS": 2
+  },
+  "notes": [
+   "today: counts since IST midnight (daily_mobile, ~5 min lag); previous = yesterday full day (daily_client), so compare rates and pace per hour, not counts.",
+   "restricted counts both reaction sends and message fetches refused with CHANNEL_RESTRICTED; floods are FLOOD_WAIT/PEER_FLOOD waits (not attempts).",
+   "capped = >= 145 reactions in the last hour (hourly cap 150, a code constant); silent = heartbeat up, nothing in the last hour and no reaction for 2 h.",
+   "restrictedChannels: fleet-wide (activeChannels.reactRestricted), refreshed hourly; not filtered by client."
+  ],
+  "cache": {
+   "history": "miss",
+   "today": "miss",
+   "ageSec": 0,
+   "historyAgeSec": 0,
+   "snapshot": "miss",
+   "snapshotSource": "build",
+   "snapshotAgeSec": 0
+  }
+ }
+}

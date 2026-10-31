@@ -106,3 +106,65 @@ export function clientDaysRange(days: number, now: number): DateRange & { start:
   const from = addDays(today, -(days - 1));
   return { from, to: today, start: istDayStart(from), end: now };
 }
+
+/** Longest from..to range accepted (owner 2026-10-31). */
+export const MAX_RANGE_DAYS = 31;
+/** Earliest `from` accepted, in days before today IST (keeps the current window inside the in-memory history). */
+export const RANGE_LOOKBACK_DAYS = 59;
+
+/** 'intraday' = today only; 'days' = closed IST days only; 'mixed' = closed days plus today (partial). */
+export type RangeKind = 'intraday' | 'days' | 'mixed';
+
+export interface RangeWindows {
+  now: number;
+  today: string;
+  /** Number of IST days in range (inclusive). */
+  days: number;
+  kind: RangeKind;
+  range: DateRange;
+  /** The same number of days immediately before `range`. */
+  prevRange: DateRange;
+  /** Current window [start, end): end = now when the range ends today. */
+  cur: Window;
+  /** Previous window [start, end): when the range ends today, its last day is cut at now - days. */
+  prev: Window;
+}
+
+/** Inclusive number of days from..to. */
+export function daysIn(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / DAY_MS) + 1;
+}
+
+/**
+ * Generalises resolvePeriod to any from..to (IST, inclusive, already validated): current =
+ * [istDayStart(from), min(now, istDayStart(to + 1))), previous = the same number of days before. When
+ * `to` is today the previous window's last day is cut at the same IST time (now - days).
+ * resolveRange(today, today) equals resolvePeriod('today'); resolveRange(today-7, today-1) equals '7d'.
+ */
+export function resolveRange(from: string, to: string, now: number): RangeWindows {
+  const today = istDate(now);
+  const days = daysIn(from, to);
+  const prevRange = { from: addDays(from, -days), to: addDays(to, -days) };
+  const endsToday = to === today;
+  const kind: RangeKind = endsToday ? (from === today ? 'intraday' : 'mixed') : 'days';
+  return {
+    now,
+    today,
+    days,
+    kind,
+    range: { from, to },
+    prevRange,
+    cur: { start: istDayStart(from), end: endsToday ? now : istDayStart(addDays(to, 1)) },
+    prev: { start: istDayStart(prevRange.from), end: endsToday ? now - days * DAY_MS : istDayStart(from) },
+  };
+}
+
+/** The legacy preset a from..to range is identical to on `today` (same windows, same response), else null. */
+export function presetOf(r: DateRange, today: string): MonitorPeriod | null {
+  if (r.from === today && r.to === today) return 'today';
+  const yday = addDays(today, -1);
+  if (r.to !== yday) return null;
+  if (r.from === addDays(today, -7)) return '7d';
+  if (r.from === addDays(today, -30)) return '30d';
+  return null;
+}

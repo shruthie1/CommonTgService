@@ -5,7 +5,7 @@
  */
 import { FamSplit, FAMILIES, Family, familyOf } from './monitor-family';
 import type { Credit } from './monitor-merge';
-import { addDays, DateRange, DAY_MS, istDate, resolvePeriod, Window } from './monitor-time';
+import { addDays, DateRange, DAY_MS, istDate, RangeKind, RangeWindows, resolvePeriod, Window } from './monitor-time';
 import { maskMobile, num, ratio } from './monitor-util';
 
 export type PromoWindow = 'today' | '24h' | '7d' | '30d';
@@ -48,7 +48,8 @@ export function reachAlertOf(reached: number | null | undefined, users: number |
 const LIMITED_SPAM = new Set(['limited', 'harsh']);
 
 export interface PromoWindows {
-  window: PromoWindow;
+  /** null = a from..to range (design 2026-10-31); see `days` / `kind`. */
+  window: PromoWindow | null;
   today: string;
   range: DateRange;
   previousRange: DateRange;
@@ -56,6 +57,9 @@ export interface PromoWindows {
   prev: Window;
   /** true = read from promotion_send (today, 24h); false = closed IST days from daily_mobile (7d, 30d). */
   intraday: boolean;
+  /** from..to ranges only: number of IST days and range kind ('days' or 'mixed'). */
+  days?: number;
+  kind?: RangeKind;
 }
 
 /**
@@ -368,13 +372,13 @@ function aggregate(rows: PromoRow[]): Map<string, Agg> {
 }
 
 /** "looks limited": enough sends in the window with almost none delivered, or Redis spam state limited/harsh. */
-export function looksLimited(window: PromoWindow, sent: number, delivered: number, spamStatus: string | null | undefined): boolean {
+export function looksLimited(window: PromoWindow | null, sent: number, delivered: number, spamStatus: string | null | undefined): boolean {
   const min = window === 'today' ? PROMO_LIMITS.LIMITED_MIN_SENDS_TODAY : PROMO_LIMITS.LIMITED_MIN_SENDS_WINDOW;
   const byRate = sent >= min && delivered / sent < PROMO_LIMITS.LIMITED_MAX_DELIVERED;
   return byRate || (!!spamStatus && LIMITED_SPAM.has(spamStatus));
 }
 
-function promo(aggs: Agg[], dms: number | null, window: PromoWindow, limited: (a: Agg) => boolean): Promo {
+function promo(aggs: Agg[], dms: number | null, window: PromoWindow | null, limited: (a: Agg) => boolean): Promo {
   const s = aggs.reduce(
     (t, a) => ({ sent: t.sent + a.sent, delivered: t.delivered + a.delivered, banned: t.banned + a.banned, failed: t.failed + a.failed }),
     { sent: 0, delivered: 0, banned: 0, failed: 0 },
@@ -397,7 +401,7 @@ const dmsOf = (split: FamSplit<number> | null, f: Family, id?: string): number |
 const scopedDms = (split: FamSplit<number> | null, f: Family, client: string | null) => dmsOf(split, f, client ?? undefined);
 
 export interface PromotionsBody {
-  window: PromoWindow;
+  window: PromoWindow | null;
   clientId: string | null;
   range: DateRange;
   previousRange: DateRange;
@@ -540,7 +544,14 @@ export function buildPromotions(i: PromoInputs): PromotionsBody {
   const unattributed = unSends || unDms ? { sends: unSends, dms: unDms } : null;
 
   if (w.window === '24h') notes.push('24h: previous.dms is null (DMs are kept per IST day); mobiles[].newDms / incomingDms = today since IST midnight.');
-  if (w.intraday) notes.push('today/24h sends come from promotion_send (per send); 7d/30d from daily_mobile (closed IST days).');
+  if (w.window === null) {
+    notes.push(
+      w.kind === 'mixed'
+        ? "range: closed IST days from daily_mobile plus today's sends from promotion_send; topError covers today's sends only; lastDay = last IST day with a daily_mobile row."
+        : 'range: closed IST days from daily_mobile; topError is null (daily_mobile keeps no error types); lastDay = last IST day with a daily_mobile row.',
+    );
+    notes.push(`range: previous = the ${w.days} whole IST days before (daily_mobile has no time of day, so the previous window is not cut at the current time).`);
+  } else if (w.intraday) notes.push('today/24h sends come from promotion_send (per send); 7d/30d from daily_mobile (closed IST days).');
   else notes.push('7d/30d: topError is null (daily_mobile keeps no error types); lastDay = last IST day with a daily_mobile row.');
   if (w.range.from < '2026-10-25' || w.previousRange.from < '2026-10-25') {
     notes.push('Per-family DMs (conversion_event.service) start 2026-10-25; earlier DMs count only in unattributed.');
@@ -635,4 +646,41 @@ export function funnelOrigins(
     revenue: ok ? money[k].revenue : null,
   });
   return { direct: out('direct', direct), routed: out('routed', routed), unattributed: out('unattributed', rest) };
+}
+
+// ---------------------------------------------------------------- from..to ranges (design 2026-10-31)
+
+/** PromoWindows of a from..to range (kind 'days' or 'mixed'; a today-only range uses window 'today'). */
+export function promoRangeWindows(r: RangeWindows): PromoWindows {
+  return { window: null, today: r.today, range: r.range, previousRange: r.prevRange, cur: r.cur, prev: r.prev, intraday: false, days: r.days, kind: r.kind };
+}
+
+const DAY_ROW_KEYS = new Set(['d', 'namespace', 'client_id', 'mobile', 'profile']);
+
+/**
+ * Per-day daily_mobile rows (promo_mobile_days) folded into the promo_mobiles_hist shape: one row per
+ * (current?, namespace, client, mobile) with numeric columns summed, profile = max non-null (as SQL
+ * max), last_day = latest day. Rows outside both ranges are skipped; `prev` null = no previous rows.
+ */
+export function foldMobileDays(rows: any[], cur: DateRange, prev: DateRange | null): any[] {
+  const out = new Map<string, any>();
+  for (const r of rows) {
+    const d = String(r.d);
+    const isCur = d >= cur.from && d <= cur.to;
+    const isPrev = !isCur && prev !== null && d >= prev.from && d <= prev.to;
+    if (!isCur && !isPrev) continue;
+    const k = `${isCur ? 1 : 0}|${r.namespace ?? ''}|${r.client_id ?? ''}|${r.mobile ?? ''}`;
+    let a = out.get(k);
+    if (!a) {
+      a = { cur: isCur, namespace: r.namespace ?? null, client_id: r.client_id ?? null, mobile: r.mobile ?? null, profile: null, last_day: null };
+      out.set(k, a);
+    }
+    if (r.profile && (a.profile === null || String(r.profile) > a.profile)) a.profile = String(r.profile);
+    if (a.last_day === null || d > a.last_day) a.last_day = d;
+    for (const [c, v] of Object.entries(r)) {
+      if (DAY_ROW_KEYS.has(c)) continue;
+      a[c] = (a[c] ?? 0) + num(v);
+    }
+  }
+  return [...out.values()];
 }

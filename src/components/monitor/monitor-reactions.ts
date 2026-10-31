@@ -268,7 +268,8 @@ export interface ReactInputs {
 }
 
 export interface ReactionsBody {
-  window: ReactWindow;
+  /** null = a from..to range (design 2026-10-31). */
+  window: ReactWindow | null;
   range: DateRange;
   previousRange: DateRange;
   scope: { client: string | null };
@@ -317,7 +318,7 @@ function aggregate(rows: ReactRow[]): Map<string, Agg> {
   return out;
 }
 
-const windowDays = (w: PromoWindows) => (w.window === '30d' ? 30 : w.window === '7d' ? 7 : 1);
+const windowDays = (w: PromoWindows) => (w.days !== undefined ? w.days : w.window === '30d' ? 30 : w.window === '7d' ? 7 : 1);
 
 /** Family / client / mobile numbers for one scope (client null = fleet). */
 function familiesFor(i: ReactInputs, client: string | null): Record<Family, FamilyReact> {
@@ -416,7 +417,13 @@ export function buildReactions(i: ReactInputs): ReactionsBody {
 
   const notes: string[] = [];
   if (w.intraday) notes.push('today: counts since IST midnight (daily_mobile, ~5 min lag); previous = yesterday full day (daily_client), so compare rates and pace per hour, not counts.');
-  else notes.push('7d/30d: closed IST days from daily_mobile; previous = the same number of days before.');
+  else if (w.window === null) {
+    notes.push(
+      w.kind === 'mixed'
+        ? `range: closed IST days plus today since IST midnight (daily_mobile, ~5 min lag); previous = the ${w.days} whole IST days before (not cut at the current time); floodsPerDay divides by ${w.days} days.`
+        : `range: closed IST days from daily_mobile; previous = the ${w.days} days before.`,
+    );
+  } else notes.push('7d/30d: closed IST days from daily_mobile; previous = the same number of days before.');
   const earliest = w.intraday ? w.range.from : w.previousRange.from;
   if (earliest < DAILY_MOBILE_FROM) notes.push(`Per-mobile reaction rows start ${DAILY_MOBILE_FROM} (daily_mobile); earlier days count as zero in totals and previous.`);
   if (!w.intraday && w.range.from < REACTIONS_DAILY_CLIENT_FROM) notes.push(`Daily reaction counters start ${REACTIONS_DAILY_CLIENT_FROM}.`);
@@ -426,7 +433,7 @@ export function buildReactions(i: ReactInputs): ReactionsBody {
   if (!i.live) notes.push('live state unavailable (Redis): now and mobiles[].live are null.');
 
   return {
-    window: w.window as ReactWindow,
+    window: w.window as ReactWindow | null,
     range: w.range,
     previousRange: w.intraday ? { from: addDays(w.today, -1), to: addDays(w.today, -1) } : w.previousRange,
     scope: { client },

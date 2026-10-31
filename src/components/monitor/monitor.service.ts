@@ -10,6 +10,7 @@ import {
   DailyClientRow,
   distinctDms,
   dmsByChannel,
+  isMergedDmsRow,
   dmsByDate,
   DmsDayRow,
   DmRow,
@@ -31,6 +32,7 @@ import {
   dmsFamilyDays,
   dmsFamilyRows,
   FamSend,
+  addFamSplits,
   FamSplit,
   Family,
   sendsByFamily,
@@ -40,9 +42,12 @@ import {
   buildPromotions,
   funnelOrigins,
   extrasFromToday,
+  foldMobileDays,
   heartbeatJoins,
   histBounds,
   PromoWindow,
+  promoRangeWindows,
+  PromoWindows,
   promoWindows,
   readBatch,
   redisBatch,
@@ -90,6 +95,7 @@ import {
   paidChatsSql,
   paidOriginSql,
   paymentRowsSql,
+  promoMobileDaysSql,
   promoMobilesHistSql,
   promoMobilesTodaySql,
   promoSendsSql,
@@ -109,9 +115,13 @@ import {
   istDayStart,
   istHour,
   MonitorPeriod,
+  presetOf,
   resolvePeriod,
+  RangeKind,
+  RangeWindows,
+  resolveRange,
 } from './monitor-time';
-import { FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
+import { DMS_ATTRIBUTION_FROM, FAMILY_DMS_FROM, historyNotes, maskMobile, maskPayload, num, ratio, REVENUE_HISTORY_FROM, withTimeout } from './monitor-util';
 
 export const MONITOR_REDIS = 'MONITOR_REDIS';
 
@@ -173,6 +183,63 @@ export const CLIENT_TTL_MS = TODAY_FRESH_MS;
 export const HEARTBEAT_INDEX_KEY = 'heartbeat::index';
 export const LIVE_SVCS = ['tg-aut', 'promote'] as const;
 export type LiveSvc = (typeof LIVE_SVCS)[number];
+
+/** Closed IST days in the shared per-day daily_mobile read behind promotions / reactions from..to ranges. */
+export const PROMO_DAYS_HISTORY = 62;
+/** A from..to snapshot whose range is closed: fresh this long, then served stale while it rebuilds, up to twice that. */
+export const RANGE_CLOSED_FRESH_MS = HISTORY_FRESH_MS;
+/** Snapshot names of from..to ranges: '<page>:r:<from>:<to>[:<client>]'. */
+export const RANGE_PAGE_RE = /:r:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})(?::|$)/;
+/** Fields only from..to responses carry; a legacy (period/days/window) response never has them. */
+export const RANGE_ONLY_FIELDS = ['rangeKind', 'clientsDaily', 'amountBuckets'] as const;
+/** Payment-size buckets of /monitor/fleet amountBuckets (tier ladder; >= ₹1,000 is never credited). */
+export const CLIENT_AMOUNT_BUCKETS = [
+  { bucket: '<100', lo: 0, hi: 100 },
+  { bucket: '100-199', lo: 100, hi: 200 },
+  { bucket: '200-349', lo: 200, hi: 350 },
+  { bucket: '350-599', lo: 350, hi: 600 },
+  { bucket: '600-999', lo: 600, hi: 1000 },
+] as const;
+
+/** Range of a from..to snapshot name, else null. */
+export function rangeOfPage(name: string): DateRange | null {
+  const m = RANGE_PAGE_RE.exec(name);
+  return m ? { from: m[1], to: m[2] } : null;
+}
+
+/** A copy of a response without the from..to-only fields (legacy params keep their exact payload). */
+/** Notes about range-only fields start with this; legacy responses drop them with the fields. */
+export const RANGE_ONLY_NOTE_PREFIX = 'clientsDaily';
+
+export function legacyOf<T>(v: T): T {
+  if (!v || typeof v !== 'object') return v;
+  const out: any = { ...(v as any) };
+  for (const k of RANGE_ONLY_FIELDS) delete out[k];
+  if (Array.isArray(out.notes)) out.notes = out.notes.filter((n: unknown) => !(typeof n === 'string' && n.startsWith(RANGE_ONLY_NOTE_PREFIX)));
+  return out;
+}
+
+/** One (client, IST day) row of /monitor/fleet clientsDaily; single-day ranges have one row per (client, hour). */
+export interface ClientDay {
+  date: string;
+  hour?: number;
+  clientId: string;
+  revenue: number;
+  payers: number;
+  /** null for an hour whose new users are not kept by hour (closed days other than yesterday) */
+  newUsers: number | null;
+  /** null before per-client DM attribution (2026-10-26) or when not kept by hour */
+  dms: number | null;
+  sends: number | null;
+  paidSameDay: number | null;
+}
+
+export interface AmountBucket {
+  clientId: string;
+  bucket: (typeof CLIENT_AMOUNT_BUCKETS)[number]['bucket'];
+  count: number;
+  revenue: number;
+}
 
 /** Paid chats: closed days are fixed once written (late sink rows aside), so up to 30 days are kept. */
 export const PAID_HIST_KEYS = 30;
@@ -316,7 +383,8 @@ export function fleetSummaryRow(f: FleetResponse): FleetClientRow & { grossReven
 
 export interface FleetResponse {
   generatedAt: string;
-  period: MonitorPeriod;
+  /** null for a from..to range that is not one of the presets */
+  period: MonitorPeriod | null;
   range: DateRange;
   previousRange: DateRange;
   fleet: Metrics;
@@ -325,6 +393,10 @@ export interface FleetResponse {
   notes: string[];
   timingsMs: Record<string, number>;
   cache: CacheInfo;
+  /** from..to responses only (stripped from legacy period responses) */
+  rangeKind?: RangeKind;
+  clientsDaily?: ClientDay[];
+  amountBuckets?: AmountBucket[];
 }
 
 export interface ClientMeta {
@@ -548,8 +620,18 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       maxKeys: 100,
       // a page with a failed section is served to its caller but never cached or persisted
       complete: (v) => !(v?.notes ?? []).some((n: unknown) => typeof n === 'string' && / unavailable: /.test(n)),
+      // from..to ranges: only ranges including today go to Redis; closed ranges are memory-only and stay fresh 10 min
+      persist: (name) => !this.closedRangePage(name),
+      freshMsOf: (name) => (this.closedRangePage(name) ? RANGE_CLOSED_FRESH_MS : undefined),
+      maxServeStaleMsOf: (name) => (this.closedRangePage(name) ? 2 * RANGE_CLOSED_FRESH_MS : undefined),
       onError: (what, err) => this.logger.warn(`monitor snapshot ${what} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
     });
+  }
+
+  /** true for a from..to snapshot whose range ends before today IST. */
+  private closedRangePage(name: string): boolean {
+    const r = rangeOfPage(name);
+    return !!r && r.to < istDate(Date.now());
   }
 
   // ---------------------------------------------------------------- snapshots + prewarm
@@ -615,6 +697,20 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
 
   private buildPage(page: string, background: boolean): Promise<any> {
     const now = Date.now();
+    const range = rangeOfPage(page);
+    if (range) {
+      const parts = page.split(':');
+      const client = parts[parts.length - 1];
+      const scoped = (c: string) => (c === '*' ? null : c);
+      const rw = resolveRange(range.from, range.to, now);
+      if (parts[0] === 'fleet') return this.buildFleetW(rw, null, now, background);
+      if (parts[0] === 'detail') return this.buildDetailW(null, { range: rw }, now, background);
+      if (parts[0] === 'client') return this.buildDetailW(parts[1], { range: rw }, now, background);
+      if (parts[0] === 'promotions') return this.buildPromotionsRange(rw, scoped(client), now, background);
+      if (parts[0] === 'reactions') return this.buildReactionsRange(rw, scoped(client), now, background);
+      if (parts[0] === 'funnel') return this.buildFunnelW(rw, null, scoped(client), now, background);
+      throw new Error(`unknown monitor page ${page}`);
+    }
     const [kind, a, b] = page.split(':');
     if (kind === 'fleet') return this.buildFleet(a as MonitorPeriod, now, background);
     if (kind === 'detail') return this.buildDetail(null, Number(b) as 7 | 30, now, background);
@@ -798,9 +894,10 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     }).then((l) => l.value);
   }
 
-  private mobilesHist(ctx: Ctx, from: string): Promise<MobileRow[]> {
-    return this.part<MobileRow[]>(ctx, 'history', `mobiles_hist:${from}`, (now, t, bg) =>
-      this.pgRows(mobilesSql('mobiles_hist', from, addDays(istDate(now), -1)), t, bg),
+  /** daily_mobile per mobile over from..yesterday, or from..to for a range closed before yesterday. */
+  private mobilesHist(ctx: Ctx, from: string, to?: string): Promise<MobileRow[]> {
+    return this.part<MobileRow[]>(ctx, 'history', to ? `mobiles_hist:${from}:${to}` : `mobiles_hist:${from}`, (now, t, bg) =>
+      this.pgRows(mobilesSql('mobiles_hist', from, to ?? addDays(istDate(now), -1)), t, bg),
     ).then((l) => l.value);
   }
 
@@ -881,37 +978,73 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   // ---------------------------------------------------------------- fleet
 
   async fleet(period: MonitorPeriod): Promise<FleetResponse> {
-    return this.snap<FleetResponse>(`fleet:${period}`);
+    return legacyOf(await this.snap<FleetResponse>(`fleet:${period}`));
+  }
+
+  /** Snapshot name of /monitor/fleet for a from..to range: the legacy preset key when identical (prewarmed, shared). */
+  fleetPage(r: DateRange, now = Date.now()): string {
+    return `fleet:${presetOf(r, istDate(now)) ?? `r:${r.from}:${r.to}`}`;
+  }
+
+  /** /monitor/fleet?from=&to=: the legacy fields plus rangeKind, clientsDaily and amountBuckets. */
+  async fleetRange(r: DateRange): Promise<FleetResponse> {
+    const page = this.fleetPage(r);
+    const v = await this.snap<FleetResponse>(page);
+    if (v.rangeKind !== undefined) return v;
+    // a preset snapshot built by an older build (e.g. read back from Redis) has no range fields: rebuild it once
+    const b = await this.snapshots.refresh(page, (bg) => this.buildPage(page, bg));
+    return withSnapshotCache({ value: b.value, at: b.at, state: 'miss', source: 'build' }, Date.now());
   }
 
   async buildFleet(period: MonitorPeriod, now: number, background = false): Promise<FleetResponse> {
-    const ctx = new Ctx(background);
-    const w = resolvePeriod(period, now);
-    const sparkFrom = addDays(w.today, -6);
-    const intraday = !w.wholeDays;
+    const p = resolvePeriod(period, now);
+    return this.buildFleetW(resolveRange(p.range.from, p.range.to, now), period, now, background);
+  }
 
-    const [meta, payH, payT, dcH, dmsH, dmY, dmT, live, cohH, cohT, cohY, pool] = await Promise.all([
+  /**
+   * /monitor/fleet for any window. The legacy periods are the 'intraday' (today) and 'days' (7d / 30d)
+   * kinds of this code; from..to adds other 'days' ranges and 'mixed' (closed days + today so far).
+   */
+  async buildFleetW(w: RangeWindows, period: MonitorPeriod | null, now: number, background = false): Promise<FleetResponse> {
+    const ctx = new Ctx(background);
+    const sparkFrom = addDays(w.today, -6);
+    const intraday = w.kind === 'intraday';
+    const mixed = w.kind === 'mixed';
+    const byDay = !intraday;
+    const yday = addDays(w.today, -1);
+    const singleYday = w.kind === 'days' && w.days === 1 && w.range.from === yday;
+    const closedTo = mixed ? yday : w.range.to;
+    const prevCovered = w.prevRange.from >= addDays(w.today, -HISTORY_DAYS);
+
+    const [meta, payH, payT, dcH, dcT, dmsH, dmY, dmT, live, cohH, cohT, cohY, pool, sendsYH, cohYH] = await Promise.all([
       this.section('clients', ctx, () => this.clientMeta(ctx)),
       this.section('revenue', ctx, () => this.payHist(ctx)),
       this.section('revenue_today', ctx, () => this.payToday(ctx)),
-      w.wholeDays ? this.section('sends', ctx, () => this.dcHist(ctx)) : null,
-      w.wholeDays ? this.section('dms', ctx, () => this.dmsHist(ctx)) : null,
-      intraday ? this.section('dms', ctx, () => this.dmRowsYday(ctx)) : null,
-      intraday ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
+      byDay ? this.section('sends', ctx, () => this.dcHist(ctx)) : null,
+      mixed ? this.section('sends_today', ctx, () => this.dcToday(ctx)) : null,
+      byDay ? this.section('dms', ctx, () => this.dmsHist(ctx)) : null,
+      intraday || singleYday ? this.section('dms', ctx, () => this.dmRowsYday(ctx)) : null,
+      intraday || mixed ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
       intraday ? this.section('sends', ctx, () => this.sendsLive(ctx)) : null,
-      w.wholeDays ? this.section('conversion', ctx, () => this.cohortsHist(ctx)) : null,
-      intraday ? this.section('conversion', ctx, () => this.cohortsToday(ctx)) : null,
+      byDay ? this.section('conversion', ctx, () => this.cohortsHist(ctx)) : null,
+      intraday || mixed ? this.section('conversion', ctx, () => this.cohortsToday(ctx)) : null,
       intraday ? this.section('conversion', ctx, () => this.cohortsYdayCut(ctx)) : null,
       this.section('pool', ctx, () => this.pool(ctx)),
+      singleYday ? this.section('hourly_sends', ctx, () => this.sendsYdayHourly(ctx)) : null,
+      singleYday ? this.section('hourly_new_users', ctx, () => this.cohortsYdayHourly(ctx)) : null,
     ]);
 
     // ---- revenue (today: today's rows vs yesterday's rows up to the same time)
     type Rev = ReturnType<typeof revenueBy>;
     let rev: Rev | null = null;
     let revPrev: Rev | null = null;
+    const curEnd = intraday || mixed ? (payT?.asOf ?? now) : w.cur.end;
     if (intraday) {
       if (payT) rev = revenueBy(payT.rows, w.cur.start, payT.asOf);
       if (payH) revPrev = revenueBy(payH, w.prev.start, (payT?.asOf ?? now) - DAY_MS);
+    } else if (mixed) {
+      if (payH && payT) rev = revenueBy([...payH, ...payT.rows], w.cur.start, payT.asOf);
+      if (payH) revPrev = revenueBy(payH, w.prev.start, (payT?.asOf ?? now) - w.days * DAY_MS);
     } else if (payH) {
       rev = revenueBy(payH, w.cur.start, w.cur.end);
       revPrev = revenueBy(payH, w.prev.start, w.prev.end);
@@ -923,11 +1056,23 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     let sendsPrev: Sends | null = null;
     let famSends: FamSplit<FamSend> | null = null;
     let famSendsPrev: FamSplit<FamSend> | null = null;
-    if (dcH) {
+    const inCur = (r: any) => r.d >= w.range.from && r.d <= w.range.to;
+    const inPrev = (r: any) => r.d >= w.prevRange.from && r.d <= w.prevRange.to;
+    if (mixed) {
+      if (dcH && dcT) {
+        const rows = [...dcH, ...dcT];
+        sends = sumDailyClient(rows, w.range.from, w.range.to);
+        famSends = sendsByFamily(rows, 'namespace', inCur);
+      }
+      if (dcH) {
+        sendsPrev = sumDailyClient(dcH, w.prevRange.from, w.prevRange.to);
+        famSendsPrev = sendsByFamily(dcH, 'namespace', inPrev);
+      }
+    } else if (dcH) {
       sends = sumDailyClient(dcH, w.range.from, w.range.to);
       sendsPrev = sumDailyClient(dcH, w.prevRange.from, w.prevRange.to);
-      famSends = sendsByFamily(dcH, 'namespace', (r) => r.d >= w.range.from && r.d <= w.range.to);
-      famSendsPrev = sendsByFamily(dcH, 'namespace', (r) => r.d >= w.prevRange.from && r.d <= w.prevRange.to);
+      famSends = sendsByFamily(dcH, 'namespace', inCur);
+      famSendsPrev = sendsByFamily(dcH, 'namespace', inPrev);
     } else if (live) {
       const isToday = (r: any) => r.today === true || r.today === 't';
       famSends = sendsByFamily(live.rows, 'service', isToday);
@@ -954,12 +1099,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     let dmsPrev: Dms | null = null;
     let famDms: FamSplit<number> | null = null;
     let famDmsPrev: FamSplit<number> | null = null;
-    if (dmsH) {
-      dms = sumDmsDays(dmsH, w.range.from, w.range.to);
-      dmsPrev = sumDmsDays(dmsH, w.prevRange.from, w.prevRange.to);
-      famDms = dmsFamilyDays(dmsH, w.range.from, w.range.to);
-      famDmsPrev = dmsFamilyDays(dmsH, w.prevRange.from, w.prevRange.to);
-    } else {
+    if (intraday) {
       if (dmT) {
         dms = distinctDms(dmT.rows);
         famDms = dmsFamilyRows(dmT.rows);
@@ -968,17 +1108,44 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         dmsPrev = distinctDms(dmY, (dmT?.asOf ?? now) - DAY_MS);
         famDmsPrev = dmsFamilyRows(dmY, (dmT?.asOf ?? now) - DAY_MS);
       }
+    } else if (dmsH) {
+      dms = sumDmsDays(dmsH, w.range.from, closedTo);
+      famDms = dmsFamilyDays(dmsH, w.range.from, closedTo);
+      if (mixed) {
+        if (dmT) {
+          const t = distinctDms(dmT.rows);
+          const byClient = new Map(dms.byClient);
+          for (const [k, v] of t.byClient) byClient.set(k, (byClient.get(k) ?? 0) + v);
+          dms = { byClient, total: dms.total + t.total };
+          famDms = addFamSplits(famDms, dmsFamilyRows(dmT.rows));
+        } else {
+          dms = null;
+          famDms = null;
+        }
+      }
+      dmsPrev = sumDmsDays(dmsH, w.prevRange.from, w.prevRange.to);
+      famDmsPrev = dmsFamilyDays(dmsH, w.prevRange.from, w.prevRange.to);
     }
 
     // ---- conversion cohorts (current / previous)
     let cohortCur: CohortRow[] | null = null;
     let cohortPrev: CohortRow[] | null = null;
-    if (cohH) {
-      cohortCur = cohH.filter((r) => r.d >= w.range.from && r.d <= w.range.to);
-      cohortPrev = cohH.filter((r) => r.d >= w.prevRange.from && r.d <= w.prevRange.to);
-    } else {
+    if (intraday) {
       cohortCur = cohT;
       cohortPrev = cohY;
+    } else if (cohH) {
+      cohortCur = cohH.filter((r) => r.d >= w.range.from && r.d <= closedTo);
+      if (mixed) cohortCur = cohT ? [...cohortCur, ...cohT] : null;
+      cohortPrev = cohH.filter((r) => r.d >= w.prevRange.from && r.d <= w.prevRange.to);
+    }
+
+    if (!prevCovered) {
+      revPrev = null;
+      sendsPrev = null;
+      famSendsPrev = null;
+      dmsPrev = null;
+      famDmsPrev = null;
+      cohortPrev = null;
     }
 
     // ---- spark: today-6 .. today (today partial)
@@ -997,9 +1164,9 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const cohortN = (rows: CohortRow[] | null | undefined, id?: string): number | null =>
       rows ? rows.filter((c) => id === undefined || c.c === id).reduce((s, c) => s + c.n, 0) : null;
     const nuCur = (id?: string): number | null =>
-      w.wholeDays ? (sends ? (id === undefined ? sends.total : sends.byClient.get(id))?.newUsers ?? 0 : null) : cohortN(cohortCur, id);
+      byDay ? (sends ? (id === undefined ? sends.total : sends.byClient.get(id))?.newUsers ?? 0 : null) : cohortN(cohortCur, id);
     const nuPrev = (id?: string): number | null =>
-      w.wholeDays ? (sendsPrev ? (id === undefined ? sendsPrev.total : sendsPrev.byClient.get(id))?.newUsers ?? 0 : null) : cohortN(cohortPrev, id);
+      byDay ? (sendsPrev ? (id === undefined ? sendsPrev.total : sendsPrev.byClient.get(id))?.newUsers ?? 0 : null) : cohortN(cohortPrev, id);
 
     // userData docs are swept after 30 days idle: a previous window starting before that horizon
     // has only sparse survivors, so its conversion is unknown (null), never 0.
@@ -1070,6 +1237,12 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         `previous = yesterday 00:00 to ${new Date(cutAt + 19_800_000).toISOString().slice(11, 16)} IST; today's sends come from promotion_send and new users/conversion from Mongo userData.`,
       );
     }
+    if (mixed) {
+      const cutAt = (payT?.asOf ?? now) - w.days * DAY_MS;
+      notes.push(
+        `range ends today (partial): previous revenue/payers stop at ${new Date(cutAt + 19_800_000).toISOString().slice(11, 16)} IST on ${w.prevRange.to}; previous sends, new users, DMs and conversion count whole days (daily counters); today's sends/new users come from daily_client (~5 min lag).`,
+      );
+    }
     notes.push(
       `byFamily splits sends/DMs into tg-aut and promote; rows without a family (promotion_send/conversion_event before 2026-10-25) count only in the merged numbers.`,
     );
@@ -1078,6 +1251,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         'previous.conversion is null: the previous window is older than ~30 days and userData docs are swept after 30 days idle. Current-window days older than ~30 days may also undercount.',
       );
     }
+    if (!prevCovered) notes.push(`previous is null: ${w.prevRange.from} is before the ${HISTORY_DAYS}-day history the monitor keeps.`);
+    const extras = this.fleetExtras(w, [...ids], curEnd, { payH, payT, dcH, dcT, dmsH, dmY, dmT, live, cohH, cohT, sendsYH, cohYH }, notes);
     return {
       generatedAt: new Date(now).toISOString(),
       period,
@@ -1089,7 +1264,155 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       notes,
       timingsMs: ctx.timings,
       cache: ctx.cache(Date.now()),
+      rangeKind: w.kind,
+      ...extras,
     };
+  }
+
+  /**
+   * clientsDaily (client × IST day; one day = client × hour) and amountBuckets for the fleet window,
+   * from the parts buildFleetW already loaded (no extra I/O). A field is left out when the credits (or,
+   * for the daily rows, daily_client) part failed; notes then already carry "<part> unavailable".
+   */
+  private fleetExtras(
+    w: RangeWindows,
+    ids: string[],
+    curEnd: number,
+    p: {
+      payH: Credit[] | null;
+      payT: AsOf<Credit[]> | null;
+      dcH: DailyClientRow[] | null;
+      dcT: DailyClientRow[] | null;
+      dmsH: DmsDayRow[] | null;
+      dmY: DmRow[] | null;
+      dmT: AsOf<DmRow[]> | null;
+      live: AsOf<any[]> | null;
+      cohH: CohortRow[] | null;
+      cohT: CohortRow[] | null;
+      sendsYH: any[] | null;
+      cohYH: CohortRow[] | null;
+    },
+    notes: string[],
+  ): { clientsDaily?: ClientDay[]; amountBuckets?: AmountBucket[] } {
+    const today = w.today;
+    const yday = addDays(today, -1);
+    const all = w.kind === 'intraday' ? (p.payT?.rows ?? null) : w.kind === 'mixed' ? (p.payH && p.payT ? [...p.payH, ...p.payT.rows] : null) : p.payH;
+    if (!all) return {};
+    const credits = all.filter((c) => c.client && c.ms >= w.cur.start && c.ms < curEnd);
+    const out: { clientsDaily?: ClientDay[]; amountBuckets?: AmountBucket[] } = {};
+    const sorted = [...ids].sort();
+
+    // amountBuckets: clean credits (payers' credits, under ₹1,000) per client and tier bucket
+    const bk = new Map<string, { count: number; revenue: number }>();
+    for (const c of credits) {
+      if (!c.clean) continue;
+      const b = CLIENT_AMOUNT_BUCKETS.find((x) => c.amount >= x.lo && c.amount < x.hi);
+      if (!b) continue;
+      const k = `${c.client}|${b.bucket}`;
+      const e = bk.get(k) ?? { count: 0, revenue: 0 };
+      e.count += 1;
+      e.revenue += c.revenue;
+      bk.set(k, e);
+    }
+    out.amountBuckets = sorted.flatMap((id) => CLIENT_AMOUNT_BUCKETS.map((b) => ({ clientId: id, bucket: b.bucket, ...(bk.get(`${id}|${b.bucket}`) ?? { count: 0, revenue: 0 }) })));
+
+    const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
+    const rev = new Map<string, number>();
+    const chats = new Map<string, Set<string>>();
+    const addCredit = (k: string, c: Credit) => {
+      add(rev, k, c.revenue);
+      if (!c.clean) return;
+      if (!chats.has(k)) chats.set(k, new Set());
+      chats.get(k)!.add(c.chat);
+    };
+
+    if (w.days === 1) {
+      // one day: per (client, IST hour) 0..23 (today: up to the current hour)
+      const date = w.range.from;
+      const isToday = date === today;
+      const isYday = date === yday;
+      for (const c of credits) addCredit(`${c.client}|${istHour(c.ms)}`, c);
+      const nu = new Map<string, number>();
+      const same = new Map<string, number>();
+      const coh = isToday ? p.cohT : isYday ? p.cohYH : null;
+      for (const c of coh ?? []) {
+        if (!c.c || c.d !== date || c.h === null) continue;
+        add(nu, `${c.c}|${c.h}`, c.n);
+        add(same, `${c.c}|${c.h}`, c.same);
+      }
+      const snd = new Map<string, number>();
+      const sendRows = isToday ? (p.live?.rows.filter((x) => x.today === true || x.today === 't') ?? null) : isYday ? p.sendsYH : null;
+      for (const x of sendRows ?? []) if (x.client_id) add(snd, `${x.client_id}|${num(x.h)}`, num(x.sent));
+      const dmSets = new Map<string, Set<string>>();
+      const dmRows = isToday ? (p.dmT?.rows ?? null) : isYday ? p.dmY : null;
+      for (const x of dmRows ?? []) {
+        const ms = new Date(x.ts).getTime();
+        if (!x.client_id || istDate(ms) !== date) continue;
+        const k = `${x.client_id}|${istHour(ms)}`;
+        if (!dmSets.has(k)) dmSets.set(k, new Set());
+        dmSets.get(k)!.add(x.conversion_id);
+      }
+      const dmsOk = !!dmRows && date >= DMS_ATTRIBUTION_FROM;
+      const lastHour = isToday ? istHour(curEnd) : 23;
+      out.clientsDaily = sorted.flatMap((id) =>
+        Array.from({ length: lastHour + 1 }, (_, hour) => {
+          const k = `${id}|${hour}`;
+          return {
+            date,
+            hour,
+            clientId: id,
+            revenue: rev.get(k) ?? 0,
+            payers: chats.get(k)?.size ?? 0,
+            newUsers: coh ? (nu.get(k) ?? 0) : null,
+            dms: dmsOk ? (dmSets.get(k)?.size ?? 0) : null,
+            sends: sendRows ? (snd.get(k) ?? 0) : null,
+            paidSameDay: coh ? (same.get(k) ?? 0) : null,
+          };
+        }),
+      );
+      if (!isToday && !isYday) notes.push('clientsDaily: one closed day other than yesterday is by hour for revenue/payers only; newUsers, dms, sends and paidSameDay are not kept by hour (null).');
+      else notes.push('clientsDaily (one day) is per client and IST hour; newUsers/paidSameDay by hour come from Mongo userData cohorts.');
+      return out;
+    }
+
+    // several days: per (client, IST day)
+    const mixed = w.kind === 'mixed';
+    const dcRows = mixed ? (p.dcH && p.dcT ? [...p.dcH, ...p.dcT] : null) : p.dcH;
+    if (!dcRows) return out;
+    for (const c of credits) addCredit(`${c.client}|${istDate(c.ms)}`, c);
+    const sent = new Map<string, number>();
+    const nu = new Map<string, number>();
+    for (const r of dcRows) {
+      if (!r.client_id || r.d < w.range.from || r.d > w.range.to) continue;
+      add(sent, `${r.client_id}|${r.d}`, num(r.sent));
+      add(nu, `${r.client_id}|${r.d}`, num(r.new_users));
+    }
+    const dmsBy = new Map<string, number>();
+    for (const r of p.dmsH ?? []) if (r.client_id && isMergedDmsRow(r)) add(dmsBy, `${r.client_id}|${r.d}`, num(r.dms));
+    if (mixed && p.dmT) for (const [id, n] of distinctDms(p.dmT.rows).byClient) add(dmsBy, `${id}|${today}`, n);
+    const same = new Map<string, number>();
+    for (const c of [...(p.cohH ?? []), ...(mixed ? (p.cohT ?? []) : [])]) if (c.c) add(same, `${c.c}|${c.d}`, c.same);
+    const dates = datesBetween(w.range.from, w.range.to);
+    out.clientsDaily = sorted.flatMap((id) =>
+      dates.map((date) => {
+        const k = `${id}|${date}`;
+        const isToday = date === today;
+        const dmsOk = date >= DMS_ATTRIBUTION_FROM && (isToday ? !!p.dmT : !!p.dmsH);
+        const cohOk = isToday ? !!p.cohT : !!p.cohH;
+        return {
+          date,
+          clientId: id,
+          revenue: rev.get(k) ?? 0,
+          payers: chats.get(k)?.size ?? 0,
+          newUsers: nu.get(k) ?? 0,
+          dms: dmsOk ? (dmsBy.get(k) ?? 0) : null,
+          sends: sent.get(k) ?? 0,
+          paidSameDay: cohOk ? (same.get(k) ?? 0) : null,
+        };
+      }),
+    );
+    notes.push('clientsDaily: payers are distinct per client and day (a chat paying on two days counts twice); revenue/newUsers/sends sum to the client rows; dms are null before per-client attribution (2026-10-26).');
+    return out;
   }
 
   // ---------------------------------------------------------------- client
@@ -1103,6 +1426,15 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     return this.snap(`detail:all:${days}`);
   }
 
+  /** /monitor/client/:id?from=&to=: daily and summary over the same from..to (no legacy key: legacy daily includes today). */
+  async clientRange(clientId: string, r: DateRange): Promise<any> {
+    return this.snap(`client:${clientId}:r:${r.from}:${r.to}`);
+  }
+
+  async fleetDetailRange(r: DateRange): Promise<any> {
+    return this.snap(`detail:all:r:${r.from}:${r.to}`);
+  }
+
   async buildClient(clientId: string, days: 7 | 30, now: number): Promise<any> {
     return this.buildDetail(clientId, days, now);
   }
@@ -1112,50 +1444,64 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Client detail for one client, or for the whole fleet when `scope` is null. */
-  private async buildDetail(scope: string | null, days: 7 | 30, now: number, background = false): Promise<any> {
+  private buildDetail(scope: string | null, days: 7 | 30, now: number, background = false): Promise<any> {
+    return this.buildDetailW(scope, { days }, now, background);
+  }
+
+  /**
+   * Client detail. Legacy `days`: daily = the last N IST days including today, summary = N complete days
+   * ending yesterday (/monitor/fleet?period=Nd). `range` (from..to): daily and summary both cover from..to;
+   * hourly (today vs yesterday) only when the range ends today, else null.
+   */
+  async buildDetailW(scope: string | null, spec: { days: 7 | 30 } | { range: RangeWindows }, now: number, background = false): Promise<any> {
     const ctx = new Ctx(background);
     const fleetScope = scope === null;
     const clientId = scope ?? FLEET_DETAIL_ID;
-    const r = clientDaysRange(days, now);
-    const today = r.to;
+    const rw = 'range' in spec ? spec.range : null;
+    const legacyDays = 'days' in spec ? spec.days : null;
+    const r = rw ? { from: rw.range.from, to: rw.range.to, start: rw.cur.start, end: rw.cur.end } : clientDaysRange(legacyDays!, now);
+    const today = istDate(now);
+    const withToday = r.to === today;
     const yday = addDays(today, -1);
     const today0 = istDayStart(today);
     const yday0 = today0 - DAY_MS;
     const inScope = (c: string | null) => fleetScope || c === scope;
+    const mobTo = rw && r.to < yday ? r.to : undefined;
+    const t = (on: boolean, name: string, fn: () => Promise<any>) => (on ? this.section(name, ctx, fn) : Promise.resolve(null));
 
     const [meta, fleet, payH, payT, dcH, dcT, dmsH, dmT, ydayHourly, live, mobH, mobT, channelRows, cohH, cohT, cohYH, ttfp, pool] = await Promise.all([
       this.section('clients', ctx, () => this.clientMeta(ctx)),
-      this.section('summary', ctx, () => this.buildFleet(days === 7 ? '7d' : '30d', now, background)),
+      this.section('summary', ctx, () => (rw ? this.buildFleetW(rw, presetOf(rw.range, today), now, background) : this.buildFleet(legacyDays === 7 ? '7d' : '30d', now, background))),
       this.section('payments', ctx, () => this.payHist(ctx)),
-      this.section('payments_today', ctx, () => this.payToday(ctx)),
+      t(withToday, 'payments_today', () => this.payToday(ctx)),
       this.section('daily_client', ctx, () => this.dcHist(ctx)),
-      this.section('daily_client_today', ctx, () => this.dcToday(ctx)),
+      t(withToday, 'daily_client_today', () => this.dcToday(ctx)),
       this.section('dms', ctx, () => this.dmsHist(ctx)),
-      this.section('dms_today', ctx, () => this.dmRowsToday(ctx)),
-      this.section('hourly_sends', ctx, () => this.sendsYdayHourly(ctx)),
-      this.section('hourly_sends_today', ctx, () => this.sendsLive(ctx)),
-      this.section('mobiles', ctx, () => this.mobilesHist(ctx, r.from)),
-      this.section('mobiles_today', ctx, () => this.mobilesToday(ctx)),
-      this.section('channels', ctx, () => this.topChannels(scope, r.from, r.start, today, ctx)),
+      t(withToday, 'dms_today', () => this.dmRowsToday(ctx)),
+      t(withToday, 'hourly_sends', () => this.sendsYdayHourly(ctx)),
+      t(withToday, 'hourly_sends_today', () => this.sendsLive(ctx)),
+      r.from <= yday ? this.section('mobiles', ctx, () => this.mobilesHist(ctx, r.from, mobTo)) : Promise.resolve([] as MobileRow[]),
+      t(withToday, 'mobiles_today', () => this.mobilesToday(ctx)),
+      this.section('channels', ctx, () => this.topChannels(scope, r.from, r.start, today, ctx, rw ? r.to : undefined)),
       this.section('conversion', ctx, () => this.cohortsHist(ctx)),
-      this.section('conversion_today', ctx, () => this.cohortsToday(ctx)),
-      this.section('hourly_new_users', ctx, () => this.cohortsYdayHourly(ctx)),
-      this.section('time_to_first_pay', ctx, () => this.timeToFirstPay(scope, r.start, ctx)),
+      t(withToday, 'conversion_today', () => this.cohortsToday(ctx)),
+      t(withToday, 'hourly_new_users', () => this.cohortsYdayHourly(ctx)),
+      this.section('time_to_first_pay', ctx, () => this.timeToFirstPay(scope, r.start, ctx, withToday ? undefined : r.end)),
       this.section('pool', ctx, () => this.pool(ctx)),
     ]);
     if (fleet) ctx.merge(fleet.cache, Date.now());
 
     const scoped = (cs: Credit[]) => cs.filter((c) => inScope(c.client));
     const histCredits = payH ? scoped(payH).filter((c) => c.ms >= Math.min(r.start, yday0)) : null;
-    const todayCredits = payT ? scoped(payT.rows) : null;
+    const todayCredits = withToday ? (payT ? scoped(payT.rows) : null) : [];
     const credits = histCredits && todayCredits ? [...histCredits, ...todayCredits] : null;
-    const inRange = credits?.filter((c) => c.ms >= r.start && c.ms < now) ?? null;
+    const inRange = credits?.filter((c) => c.ms >= r.start && c.ms < (withToday ? now : r.end)) ?? null;
     const creditsOf = (date: string) => (date === today ? todayCredits : histCredits);
 
     // ---- daily: closed days from history parts, today from today parts
     const dcBy = new Map([...(dcH ? dailyClientByDate(dcH, scope) : []), ...(dcT ? dailyClientByDate(dcT, scope) : [])]);
     const dmsBy = dmsH ? dmsByDate(dmsH, scope) : new Map<string, number>();
-    const dmsToday = dmT ? distinctDms(dmT.rows.filter((x) => inScope(x.client_id))).total : null;
+    const dmsToday = dmT ? distinctDms(dmT.rows.filter((x: DmRow) => inScope(x.client_id))).total : null;
     const famDcBy = new Map([...(dcH ? sendsByFamilyDate(dcH, scope) : []), ...(dcT ? sendsByFamilyDate(dcT, scope) : [])]);
     const famDmsBy = dmsH ? dmsFamilyByDate(dmsH, scope) : null;
     const famDmsToday = dmT ? dmsFamilyRows(dmT.rows, Number.POSITIVE_INFINITY, (x) => inScope(x.client_id)).total : null;
@@ -1263,8 +1609,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     }
 
     // ---- mobiles, channels, pool
-    const mobileRows = mobH && mobT ? mergeMobiles([...mobH, ...mobT], scope) : null;
-    if (mobH && !mobT) ctx.notes.push('mobiles unavailable: today part failed');
+    const mobileRows = mobH && (mobT || !withToday) ? mergeMobiles([...mobH, ...(mobT ?? [])], scope) : null;
+    if (mobH && withToday && !mobT) ctx.notes.push('mobiles unavailable: today part failed');
     const mobiles = mobileRows
       ? mobileRows.map((m) => ({
           mobile: maskMobile(m.mobile),
@@ -1306,7 +1652,13 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
 
     const notes = [...historyNotes([r, ...(fleet ? [fleet.previousRange] : [])], { mobiles: true }), ...ctx.notes];
     if (!fleetScope && meta && !metaRow) notes.push(`clientId ${clientId} is not in the clients collection.`);
-    notes.push(`daily covers ${r.from}..${r.to} IST; the last row (today) is partial. summary = ${days} complete IST days ending yesterday (same row as /monitor/fleet?period=${days}d${fleetScope ? ', fleet totals' : ''}).`);
+    if (rw) {
+      notes.push(
+        `daily and summary cover ${r.from}..${r.to} IST${withToday ? ' (today partial)' : ''}; previous = ${rw.prevRange.from}..${rw.prevRange.to}; hourly ${withToday ? '= today vs yesterday' : 'is null (the range does not include today)'}.`,
+      );
+    } else {
+      notes.push(`daily covers ${r.from}..${r.to} IST; the last row (today) is partial. summary = ${legacyDays} complete IST days ending yesterday (same row as /monitor/fleet?period=${legacyDays}d${fleetScope ? ', fleet totals' : ''}).`);
+    }
     if (fleetScope) {
       notes.push('channels = top 20 fleet-wide by attributed DMs (conversion_event, incl. DMs without a client before 2026-10-26); channels with sends but no DMs are not listed.');
       notes.push('mobiles = top 20 accounts fleet-wide by tg-aut new users; clientId = the client that owned the mobile on its last day in range.');
@@ -1319,11 +1671,12 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       clientId,
       name: fleetScope ? 'All clients' : (metaRow?.name ?? null),
       generatedAt: new Date(now).toISOString(),
-      days,
+      days: rw ? rw.days : legacyDays,
       range: { from: r.from, to: r.to },
+      ...(rw ? { previousRange: rw.prevRange, rangeKind: rw.kind } : {}),
       summary,
       daily,
-      hourly: { today: hourly(today), yesterday: hourly(yday) },
+      hourly: !rw || withToday ? { today: hourly(today), yesterday: hourly(yday) } : null,
       distributions: { amount, hourOfDay, timeToFirstPay, repeat },
       mobiles,
       channels,
@@ -1339,7 +1692,18 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
    * firstPaidAt index; a closed day's firstPaidAt values do not change), filtered per page in memory.
    * Today: only the chats with a credit row today (pay_today), through the chatId index.
    */
-  private async timeToFirstPay(scope: string | null, start: number, ctx: Ctx): Promise<Array<{ _id: number | string; n: number }>> {
+  private async timeToFirstPay(scope: string | null, start: number, ctx: Ctx, end?: number): Promise<Array<{ _id: number | string; n: number }>> {
+    if (end !== undefined) {
+      // a from..to range closed before today: closed-day rows only, [start, end)
+      const hist = await this.part<FirstPayRow[]>(
+        ctx,
+        'history',
+        'ttfp_hist',
+        (now, t) => this.mongoAgg('userData', firstPayRowsPipeline(this.historyStart(istDate(now)), istDayStart(istDate(now))), 'mongo.userData_ttfp_hist', t),
+        this.dailyCache,
+      );
+      return ttfpBuckets(hist.value, scope, start, end);
+    }
     const [hist, today] = await Promise.all([
       this.part<FirstPayRow[]>(
         ctx,
@@ -1375,14 +1739,19 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     start: number,
     today: string,
     ctx: Ctx,
+    to?: string,
   ): Promise<Array<{ channel_id: string; sent: number; dms: number }>> {
-    const today0 = istDayStart(today);
+    // a range closed before today: closed days from..to (the SQL's "today" bound becomes to + 1), no today rows
+    const closed = to !== undefined && to < today;
+    const endDay = closed ? addDays(to, 1) : today;
+    const today0 = istDayStart(endDay);
     const key = scope ?? '*';
+    const sfx = closed ? `:${to}` : '';
     const [hist, dmT] = await Promise.all([
-      this.part<any[]>(ctx, 'history', `channels_dms_hist:${key}:${from}`, (_now, t, bg) =>
-        this.pgRows(channelDmsHistSql(scope, from, today, start, today0), t, bg),
+      this.part<any[]>(ctx, 'history', `channels_dms_hist:${key}:${from}${sfx}`, (_now, t, bg) =>
+        this.pgRows(channelDmsHistSql(scope, from, endDay, start, today0), t, bg),
       ),
-      this.dmRowsToday(ctx),
+      closed ? Promise.resolve({ rows: [] as DmRow[], asOf: 0 }) : this.dmRowsToday(ctx),
     ]);
     const histDms = new Map<string, number>(hist.value.map((x) => [String(x.channel_id), num(x.dms)]));
     const top = rankChannels(histDms, dmsByChannel(dmT.rows, scope), 20);
@@ -1392,8 +1761,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const extra = top.map((c) => c.channel_id).filter((id) => !cand.has(id)).sort();
 
     const sendsHist = (ids: string[]) =>
-      this.part<any[]>(ctx, 'history', `channels_sends_hist:${key}:${from}:${ids.join(',')}`, (_now, t, bg) =>
-        this.pgRows(channelSendsHistSql(scope, ids, from, today, start, today0), t, bg),
+      this.part<any[]>(ctx, 'history', `channels_sends_hist:${key}:${from}${sfx}:${ids.join(',')}`, (_now, t, bg) =>
+        this.pgRows(channelSendsHistSql(scope, ids, from, endDay, start, today0), t, bg),
       );
     const sendsToday = (ids: string[]) =>
       this.part<any[]>(ctx, 'today', `channels_sends_today:${key}:${ids.join(',')}`, (now, t, bg) =>
@@ -1402,8 +1771,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const [h1, h2, t1, t2] = await Promise.all([
       candidates.length ? sendsHist(candidates) : null,
       extra.length ? sendsHist(extra) : null,
-      candidates.length ? sendsToday(candidates) : null,
-      extra.length ? sendsToday(extra) : null,
+      candidates.length && !closed ? sendsToday(candidates) : null,
+      extra.length && !closed ? sendsToday(extra) : null,
     ]);
     const sentBy = new Map<string, number>();
     for (const part of [h1, h2, t1, t2]) {
@@ -1622,6 +1991,24 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       dmsCur = dmsFamilyRows([...dmY.filter((r) => new Date(r.ts).getTime() >= from), ...dmT.rows]);
     }
 
+    return this.promotionsBody(ctx, w, rows, extraRows, dmsCur, dmsPrev, meta, assigned, live, client, routedCols, now);
+  }
+
+  /** Shared end of every promotions build: Redis spam/route state, heartbeats, body, client-scoped fleet block. */
+  private async promotionsBody(
+    ctx: Ctx,
+    w: PromoWindows,
+    rows: ReturnType<typeof rowsFromSends>,
+    extraRows: any[] | null,
+    dmsCur: FamSplit<number> | null,
+    dmsPrev: FamSplit<number> | null,
+    meta: ClientMeta[] | null,
+    assigned: Array<{ mobile: string; clientId: string | null }> | null,
+    live: LiveSnapshot | null,
+    client: string | null,
+    routedCols: string[],
+    now: number,
+  ): Promise<any> {
     // Redis spam + route state for every mobile on the page (unmasked here, masked in the body)
     // a client-scoped page also reads the other clients' mobiles: its fleet block uses the same rules
     const inScope = (_c: string | null) => true;
@@ -1669,6 +2056,119 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       timingsMs: ctx.timings,
       cache: ctx.cache(Date.now()),
     };
+  }
+
+  /**
+   * /monitor/promotions?from=&to=: a preset range (today, last 7 / 30 complete days) is the legacy
+   * window's snapshot plus rangeKind; any other range has its own snapshot built from the shared 62-day
+   * per-day daily_mobile read (closed days) plus today's sends when the range ends today.
+   */
+  async promotionsRange(r: DateRange, client: string | null): Promise<any> {
+    const preset = presetOf(r, istDate(Date.now()));
+    if (preset) return { ...(await this.promotions(preset, client)), rangeKind: preset === 'today' ? 'intraday' : 'days' };
+    return this.snap503(`promotions:r:${r.from}:${r.to}:${client ?? '*'}`, 'promotions');
+  }
+
+  /** A snapshot page whose failure is a 503 (promotions, reactions), as the legacy handlers. */
+  private async snap503(page: string, label: string): Promise<any> {
+    try {
+      return await this.snap(page);
+    } catch (err) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      this.logger.warn(`monitor ${page} failed: ${msg}`);
+      throw new ServiceUnavailableException(`${label} unavailable: ${msg}`);
+    }
+  }
+
+  /** daily_mobile per (IST day, namespace, client, mobile) over the last PROMO_DAYS_HISTORY closed days (one read, every range filters in memory). */
+  private promoMobileDays(ctx: Ctx, routed: string[]): Promise<any[]> {
+    return this.part<any[]>(ctx, 'history', `promo_mobile_days:${routed.join(',')}`, (now, t, bg) => {
+      const today = istDate(now);
+      return this.pgRows(promoMobileDaysSql(addDays(today, -PROMO_DAYS_HISTORY), addDays(today, -1), routed), t, bg);
+    }).then((l) => l.value);
+  }
+
+  async buildPromotionsRange(rw: RangeWindows, client: string | null, now: number, background = false): Promise<any> {
+    const ctx = new Ctx(background);
+    const w = promoRangeWindows(rw);
+    const mixed = rw.kind === 'mixed';
+    const closedTo = mixed ? addDays(rw.today, -1) : rw.range.to;
+    const prevCovered = rw.prevRange.from >= addDays(rw.today, -PROMO_DAYS_HISTORY);
+    const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
+    const routedCols = routed?.mobile ?? [];
+    const unavailable = (err: unknown): never => {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      throw new ServiceUnavailableException(`promotion sends unavailable: ${msg}`);
+    };
+
+    const [dayRows, sendsToday, mobT, meta, dmsH, dmT, assigned, live] = await Promise.all([
+      this.promoMobileDays(ctx, routedCols).catch(unavailable),
+      mixed ? this.promoSends(ctx, 'today').catch(unavailable) : null,
+      mixed ? this.section('mobiles_today', ctx, () => this.promoMobilesToday(ctx, routedCols)) : null,
+      this.section('clients', ctx, () => this.clientMeta(ctx)),
+      this.section('dms', ctx, () => this.dmsHist(ctx)),
+      mixed ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
+      this.section('assigned', ctx, () => this.promoteAssigned(ctx)),
+      this.section('heartbeats', ctx, async () => (await this.liveCache.get('all', () => this.loadLive())).value),
+    ]);
+
+    const folded = foldMobileDays(dayRows, { from: rw.range.from, to: closedTo }, prevCovered ? rw.prevRange : null);
+    const rows = [
+      ...rowsFromHist(folded, routedCols),
+      // today: sends from promotion_send (current rows only), first DMs / route counters / profile from daily_mobile
+      ...(sendsToday ? rowsFromSends(sendsToday).filter((r) => r.cur) : []),
+      ...(mobT ? rowsFromHist(mobT.map((r) => ({ ...r, cur: true, last_day: rw.today })), routedCols) : []),
+    ];
+
+    let dmsCur: FamSplit<number> | null = null;
+    let dmsPrev: FamSplit<number> | null = null;
+    if (dmsH) {
+      dmsCur = dmsFamilyDays(dmsH, rw.range.from, closedTo);
+      if (mixed) dmsCur = dmT ? addFamSplits(dmsCur, dmsFamilyRows(dmT.rows)) : null;
+      dmsPrev = prevCovered ? dmsFamilyDays(dmsH, rw.prevRange.from, rw.prevRange.to) : null;
+    }
+    if (!prevCovered) ctx.notes.push(`previous is empty: ${rw.prevRange.from} is before the ${PROMO_DAYS_HISTORY}-day per-mobile history the monitor keeps.`);
+    const out = await this.promotionsBody(ctx, w, rows, null, dmsCur, dmsPrev, meta, assigned, live, client, routedCols, now);
+    return { ...out, rangeKind: rw.kind };
+  }
+
+  async reactionsRange(r: DateRange, client: string | null): Promise<any> {
+    const preset = presetOf(r, istDate(Date.now()));
+    if (preset) return { ...(await this.reactions(preset, client)), rangeKind: preset === 'today' ? 'intraday' : 'days' };
+    return this.snap503(`reactions:r:${r.from}:${r.to}:${client ?? '*'}`, 'reactions');
+  }
+
+  async buildReactionsRange(rw: RangeWindows, client: string | null, now: number, background = false): Promise<any> {
+    const ctx = new Ctx(background);
+    const w = promoRangeWindows(rw);
+    const mixed = rw.kind === 'mixed';
+    const closedTo = mixed ? addDays(rw.today, -1) : rw.range.to;
+    const prevCovered = rw.prevRange.from >= addDays(rw.today, -PROMO_DAYS_HISTORY);
+    const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
+    const routedCols = routed?.mobile ?? [];
+    const unavailable = (err: unknown): never => {
+      const msg = String((err as Error)?.message ?? err).slice(0, 200);
+      throw new ServiceUnavailableException(`reaction counts unavailable: ${msg}`);
+    };
+    const [dayRows, mobT, dcH, dcT, meta, assigned, live, restricted] = await Promise.all([
+      this.promoMobileDays(ctx, routedCols).catch(unavailable),
+      mixed ? this.promoMobilesToday(ctx, routedCols).catch(unavailable) : null,
+      this.section('daily_client', ctx, () => this.dcHist(ctx)),
+      mixed ? this.section('daily_client_today', ctx, () => this.dcToday(ctx)) : null,
+      this.section('clients', ctx, () => this.clientMeta(ctx)),
+      this.section('assigned', ctx, () => this.promoteAssigned(ctx)),
+      this.section('heartbeats', ctx, async () => (await this.liveCache.get('all', () => this.loadLive())).value),
+      this.section('restricted_channels', ctx, () => this.restrictedChannels(ctx)),
+    ]);
+    const rows = [
+      ...reactRowsFromHist(foldMobileDays(dayRows, { from: rw.range.from, to: closedTo }, prevCovered ? rw.prevRange : null)),
+      ...(mobT ? reactRowsFromToday(mobT, rw.today) : []),
+    ];
+    const dcRows = mixed ? (dcH && dcT ? [...dcH, ...dcT] : null) : dcH;
+    if (!prevCovered) ctx.notes.push(`previous is empty: ${rw.prevRange.from} is before the ${PROMO_DAYS_HISTORY}-day per-mobile history the monitor keeps.`);
+    const out = await this.reactionsBody(ctx, w, rows, null, dcRows ? reactDaily(dcRows, rw.range.from, rw.range.to, client) : null, meta, assigned, live, restricted, client, now);
+    return { ...out, rangeKind: rw.kind };
   }
 
   // ---------------------------------------------------------------- reactions (reactions-tab design §4)
@@ -1735,6 +2235,35 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       this.section('restricted_channels', ctx, () => this.restrictedChannels(ctx)),
     ]);
     const rows = intraday ? reactRowsFromToday(mobileRows, w.today) : reactRowsFromHist(mobileRows);
+    return this.reactionsBody(
+      ctx,
+      w,
+      rows,
+      intraday && dcH ? yesterdayTotals(dcH, addDays(w.today, -1), client) : null,
+      !intraday && dcH ? reactDaily(dcH, w.range.from, w.range.to, client) : null,
+      meta,
+      assigned,
+      live,
+      restricted,
+      client,
+      now,
+    );
+  }
+
+  /** Shared end of every reactions build: known mobiles, Redis live state, body. */
+  private async reactionsBody(
+    ctx: Ctx,
+    w: PromoWindows,
+    rows: ReturnType<typeof reactRowsFromHist>,
+    yesterday: ReturnType<typeof yesterdayTotals> | null,
+    daily: ReturnType<typeof reactDaily> | null,
+    meta: ClientMeta[] | null,
+    assigned: Array<{ mobile: string; clientId: string | null }> | null,
+    live: LiveSnapshot | null,
+    restricted: { total: number; byDay: Array<{ day: string; n: number }> } | null,
+    client: string | null,
+    now: number,
+  ): Promise<any> {
 
     // mobiles listed even with no reactions: active promote mobiles + live tg-aut mobiles
     const entries = (live?.entries ?? []).map((e) => ({ svc: e.svc, clientId: e.clientId, payload: e.payload as Record<string, any> | null, state: classifyHeartbeat(e.payload, now).state }));
@@ -1753,8 +2282,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const body = buildReactions({
       w,
       rows,
-      yesterday: intraday && dcH ? yesterdayTotals(dcH, addDays(w.today, -1), client) : null,
-      daily: !intraday && dcH ? reactDaily(dcH, w.range.from, w.range.to, client) : null,
+      yesterday,
+      daily,
       live: reactLive,
       heartbeats: live ? heartbeatJoins(entries) : null,
       known,
@@ -1776,7 +2305,17 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   // ---------------------------------------------------------------- funnel (design-v2 P3)
 
   async funnel(period: MonitorPeriod, client: string | null): Promise<any> {
-    return this.snap(`funnel:${period}:${client ?? '*'}`);
+    return legacyOf(await this.snap(`funnel:${period}:${client ?? '*'}`));
+  }
+
+  /**
+   * /monitor/funnel?from=&to=: today is the legacy today snapshot; every other range has its own
+   * snapshot (its daily rows come from the range's detail page, not the legacy N-days-incl.-today one).
+   */
+  async funnelRange(r: DateRange, client: string | null): Promise<any> {
+    const preset = presetOf(r, istDate(Date.now()));
+    const v = await this.snap<any>(preset === 'today' ? `funnel:today:${client ?? '*'}` : `funnel:r:${r.from}:${r.to}:${client ?? '*'}`);
+    return v.rangeKind === undefined ? { ...v, rangeKind: 'intraday' } : v;
   }
 
   /**
@@ -1807,24 +2346,41 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   }
 
   async buildFunnel(period: MonitorPeriod, client: string | null, now: number, background = false): Promise<any> {
+    const p = resolvePeriod(period, now);
+    return this.buildFunnelW(resolveRange(p.range.from, p.range.to, now), period, client, now, background);
+  }
+
+  /** Funnel for any window: legacy periods (period set, legacy fleet/detail keys) or a from..to range (period null). */
+  async buildFunnelW(w: RangeWindows, period: MonitorPeriod | null, client: string | null, now: number, background = false): Promise<any> {
     const ctx = new Ctx(background);
-    const w = resolvePeriod(period, now);
-    const intraday = !w.wholeDays;
+    const intraday = w.kind === 'intraday';
+    const mixed = w.kind === 'mixed';
+    const byDay = !intraday;
+    const withToday = intraday || mixed;
+    const closedTo = mixed ? addDays(w.today, -1) : w.range.to;
+    const prevCovered = w.prevRange.from >= addDays(w.today, -HISTORY_DAYS);
     const days: 7 | 30 = period === '30d' ? 30 : 7;
+    const fleetPage = period ? `fleet:${period}` : this.fleetPage(w.range, now);
+    const detailPage = period
+      ? client
+        ? `client:${client}:${days}`
+        : `detail:all:${days}`
+      : `${client ? `client:${client}` : 'detail:all'}:r:${w.range.from}:${w.range.to}`;
     const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
     const routedCols = routed?.client ?? [];
-    const [fleet, payH, payT, origin, dmsH, dmY, dmT, dcH, dcT, routedRows, detail] = await Promise.all([
-      this.section('summary', ctx, () => this.snap<FleetResponse>(`fleet:${period}`)),
+    const [fleet, payH, payT, origin, dmsH, dmY, dmT, dcH, dcT, routedRows, routedToday, detail] = await Promise.all([
+      this.section('summary', ctx, () => this.snap<FleetResponse>(fleetPage)),
       this.section('revenue', ctx, () => this.payHist(ctx)),
-      intraday ? this.section('revenue_today', ctx, () => this.payToday(ctx)) : null,
+      withToday ? this.section('revenue_today', ctx, () => this.payToday(ctx)) : null,
       this.section('paid_origin', ctx, () => this.paidOrigin(ctx)),
-      w.wholeDays ? this.section('dms', ctx, () => this.dmsHist(ctx)) : null,
+      byDay ? this.section('dms', ctx, () => this.dmsHist(ctx)) : null,
       intraday ? this.section('dms', ctx, () => this.dmRowsYday(ctx)) : null,
-      intraday ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
-      w.wholeDays ? this.section('daily_client', ctx, () => this.dcHist(ctx)) : null,
-      intraday ? this.section('daily_client_today', ctx, () => this.dcToday(ctx)) : null,
+      withToday ? this.section('dms_today', ctx, () => this.dmRowsToday(ctx)) : null,
+      byDay ? this.section('daily_client', ctx, () => this.dcHist(ctx)) : null,
+      withToday ? this.section('daily_client_today', ctx, () => this.dcToday(ctx)) : null,
       routedCols.length ? this.section('routed', ctx, () => this.routedDaily(ctx, intraday ? 'today' : 'hist', routedCols)) : null,
-      w.wholeDays ? this.section('detail', ctx, () => this.snap<any>(client ? `client:${client}:${days}` : `detail:all:${days}`)) : null,
+      routedCols.length && mixed ? this.section('routed', ctx, () => this.routedDaily(ctx, 'today', routedCols)) : null,
+      byDay ? this.section('detail', ctx, () => this.snap<any>(detailPage)) : null,
     ]);
     if (fleet) ctx.merge(fleet.cache, Date.now());
     if (detail) ctx.merge(detail.cache, Date.now());
@@ -1834,17 +2390,32 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     let dmsCur: FamSplit<number> | null = null;
     let dmsPrev: FamSplit<number> | null = null;
     if (dmsH) {
-      dmsCur = dmsFamilyDays(dmsH, w.range.from, w.range.to);
+      dmsCur = dmsFamilyDays(dmsH, w.range.from, closedTo);
+      if (mixed) dmsCur = dmT ? addFamSplits(dmsCur, dmsFamilyRows(dmT.rows)) : null;
       dmsPrev = dmsFamilyDays(dmsH, w.prevRange.from, w.prevRange.to);
-    } else {
+    } else if (intraday) {
       if (dmT) dmsCur = dmsFamilyRows(dmT.rows);
       if (dmY) dmsPrev = dmsFamilyRows(dmY, (dmT?.asOf ?? now) - DAY_MS);
     }
 
     // credits of the window (current / previous)
-    const curCredits = intraday ? (payT ? payT.rows.filter((c) => c.ms >= w.cur.start && c.ms < payT.asOf) : null) : payH ? payH.filter((c) => c.ms >= w.cur.start && c.ms < w.cur.end) : null;
-    const prevEnd = intraday ? (payT?.asOf ?? now) - DAY_MS : w.prev.end;
-    const prevCredits = payH ? payH.filter((c) => c.ms >= w.prev.start && c.ms < prevEnd) : null;
+    const curCredits = intraday
+      ? payT
+        ? payT.rows.filter((c) => c.ms >= w.cur.start && c.ms < payT.asOf)
+        : null
+      : mixed
+        ? payH && payT
+          ? [...payH, ...payT.rows].filter((c) => c.ms >= w.cur.start && c.ms < payT.asOf)
+          : null
+        : payH
+          ? payH.filter((c) => c.ms >= w.cur.start && c.ms < w.cur.end)
+          : null;
+    const prevEnd = withToday ? (payT?.asOf ?? now) - w.days * DAY_MS : w.prev.end;
+    let prevCredits = payH ? payH.filter((c) => c.ms >= w.prev.start && c.ms < prevEnd) : null;
+    if (!prevCovered) {
+      prevCredits = null;
+      dmsPrev = null;
+    }
 
     const fleetRow = (f: FleetResponse | null) =>
       !f ? null : client === null ? { cur: f.fleet, prev: f.previous } : (() => {
@@ -1864,11 +2435,11 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       : null;
 
     // incoming promote DMs (daily_client promote-clients new_users) + route counters
-    const dcRows = (dcH ?? dcT ?? []).filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
-    const incoming = dcH || dcT ? dcRows.filter((r) => r.namespace === 'promote-clients').reduce((s, r) => s + num(r.ns_new_users), 0) : null;
+    const dcRows = (mixed ? [...(dcH ?? []), ...(dcT ?? [])] : (dcH ?? dcT ?? [])).filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
+    const incoming = (mixed ? dcH && dcT : dcH || dcT) ? dcRows.filter((r) => r.namespace === 'promote-clients').reduce((s, r) => s + num(r.ns_new_users), 0) : null;
     let routedOut: Record<string, number | boolean | null> | null = null;
-    if (routedRows) {
-      const sel = routedRows.filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
+    if (routedRows && (!mixed || routedToday)) {
+      const sel = [...routedRows, ...(mixed ? routedToday! : [])].filter((r) => r.d >= w.range.from && r.d <= w.range.to && inScope(r.client_id));
       const sumOf = (c: string) => (routedCols.includes(c) ? sel.reduce((s, r) => s + num(r[c]), 0) : null);
       const sent = sumOf('routes_sent');
       const reached = sumOf('routed_reached');
@@ -1928,11 +2499,14 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     if (routedCols.includes('routes_sent') && !routedCols.includes('routed_users')) notes.push('routed.routedUsers/reachRate/reachAlert: null until daily_client has the routed_users column (analytics upgrade 2026-10-30).');
     if (routedCols.includes('routed_users')) notes.push(`routed.reachRate = routedReached / routedUsers (users first routed per IST day per promote mobile); reachPerRouteMessage = routedReached / routesSent; reachAlert = routedUsers >= ${REACH_ALERT.MIN_USERS} and reachRate < ${REACH_ALERT.MAX_RATE}.`);
     if (intraday) notes.push('timeToFirstPay / repeat are 7d/30d only (null for today); payer origins refresh every 10 min.');
-    if (client !== null && fleet && !fleet.clients.some((c) => c.clientId === client)) notes.push(`clientId ${client} has no row in /monitor/fleet for ${period}.`);
+    if (client !== null && fleet && !fleet.clients.some((c) => c.clientId === client)) notes.push(`clientId ${client} has no row in /monitor/fleet for ${period ?? `${w.range.from}..${w.range.to}`}.`);
+    if (mixed) notes.push(`range ends today (partial): previous payers/revenue by origin stop at the same time on ${w.prevRange.to}; previous DMs count whole days.`);
+    if (!prevCovered) notes.push(`previous is null: ${w.prevRange.from} is before the ${HISTORY_DAYS}-day history the monitor keeps.`);
 
     return {
       generatedAt: new Date(now).toISOString(),
       period,
+      rangeKind: w.kind,
       clientId: client,
       range: w.range,
       previousRange: w.prevRange,

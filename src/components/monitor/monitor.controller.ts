@@ -1,6 +1,6 @@
 import { BadRequestException, Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { istDate, MONITOR_PERIODS, MonitorPeriod } from './monitor-time';
+import { addDays, DateRange, daysIn, istDate, MAX_RANGE_DAYS, MONITOR_PERIODS, MonitorPeriod, RANGE_LOOKBACK_DAYS } from './monitor-time';
 import { PROMO_WINDOWS, PromoWindow } from './monitor-promotions';
 import { REACT_WINDOWS, ReactWindow } from './monitor-reactions';
 import { REVENUE_HISTORY_FROM } from './monitor-util';
@@ -50,6 +50,33 @@ export function parsePaidDate(date: string | undefined, now: number): string {
   return date;
 }
 
+/**
+ * Optional IST range (design 2026-10-31 §4): `from` (+ optional `to`, default = from), both YYYY-MM-DD
+ * real dates, from <= to <= today IST, at most MAX_RANGE_DAYS days, from >= max(today - 59, 2026-10-04).
+ * null = no `from` (the legacy period/days/window param applies). 400 otherwise.
+ */
+export function parseRange(from: string | undefined, to: string | undefined, now: number): DateRange | null {
+  if (from === undefined || from === '') {
+    if (to !== undefined && to !== '') throw new BadRequestException('to requires from');
+    return null;
+  }
+  const realDate = (d: string, name: string) => {
+    if (!DATE_RE.test(d)) throw new BadRequestException(`${name} must be YYYY-MM-DD (IST)`);
+    const t = Date.parse(`${d}T00:00:00.000Z`);
+    if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== d) throw new BadRequestException(`${name} is not a calendar date`);
+  };
+  const end = to === undefined || to === '' ? from : to;
+  realDate(from, 'from');
+  realDate(end, 'to');
+  const today = istDate(now);
+  if (from > end) throw new BadRequestException('from must be on or before to');
+  if (end > today) throw new BadRequestException('to is in the future (IST)');
+  if (daysIn(from, end) > MAX_RANGE_DAYS) throw new BadRequestException(`range is longer than ${MAX_RANGE_DAYS} days`);
+  const floor = [addDays(today, -RANGE_LOOKBACK_DAYS), REVENUE_HISTORY_FROM].sort()[1];
+  if (from < floor) throw new BadRequestException(`from must be on or after ${floor}`);
+  return { from, to: end };
+}
+
 export function parseOptionalClientId(clientId?: string): string | null {
   if (clientId === undefined || clientId === '') return null;
   if (!CLIENT_ID_RE.test(clientId)) throw new BadRequestException('invalid clientId');
@@ -64,8 +91,11 @@ export class MonitorController {
 
   @Get('fleet')
   @ApiQuery({ name: 'period', required: false, enum: MONITOR_PERIODS })
-  async fleet(@Query('period') period?: string) {
-    return this.service.fleet(parsePeriod(period));
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD; with to, replaces the legacy param (max 31 days)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  async fleet(@Query('period') period?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const r = parseRange(from, to, Date.now());
+    return r ? this.service.fleetRange(r) : this.service.fleet(parsePeriod(period));
   }
 
   @Get('live')
@@ -77,8 +107,11 @@ export class MonitorController {
   /** Client-detail shape aggregated over every client. Declared before client/:clientId. */
   @Get('fleet/detail')
   @ApiQuery({ name: 'days', required: false, enum: ['7', '30'] })
-  fleetDetail(@Query('days') days?: string) {
-    return this.service.fleetDetail(parseDays(days));
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD; with to, replaces the legacy param (max 31 days)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  fleetDetail(@Query('days') days?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const r = parseRange(from, to, Date.now());
+    return r ? this.service.fleetDetailRange(r) : this.service.fleetDetail(parseDays(days));
   }
 
   /**
@@ -99,8 +132,12 @@ export class MonitorController {
   @Get('promotions')
   @ApiQuery({ name: 'window', required: false, enum: PROMO_WINDOWS })
   @ApiQuery({ name: 'client', required: false })
-  promotions(@Query('window') window?: string, @Query('client') client?: string) {
-    return this.service.promotions(parseWindow(window), parseOptionalClientId(client));
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD; with to, replaces the legacy param (max 31 days)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  promotions(@Query('window') window?: string, @Query('client') client?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const r = parseRange(from, to, Date.now());
+    const c = parseOptionalClientId(client);
+    return r ? this.service.promotionsRange(r, c) : this.service.promotions(parseWindow(window), c);
   }
 
   /**
@@ -111,23 +148,34 @@ export class MonitorController {
   @Get('reactions')
   @ApiQuery({ name: 'window', required: false, enum: REACT_WINDOWS })
   @ApiQuery({ name: 'client', required: false })
-  reactions(@Query('window') window?: string, @Query('client') client?: string) {
-    return this.service.reactions(parseReactWindow(window), parseOptionalClientId(client));
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD; with to, replaces the legacy param (max 31 days)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  reactions(@Query('window') window?: string, @Query('client') client?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const r = parseRange(from, to, Date.now());
+    const c = parseOptionalClientId(client);
+    return r ? this.service.reactionsRange(r, c) : this.service.reactions(parseReactWindow(window), c);
   }
 
   /** New users -> payers by origin (direct / routed / unattributed). Declared before client/:clientId. */
   @Get('funnel')
   @ApiQuery({ name: 'period', required: false, enum: MONITOR_PERIODS })
   @ApiQuery({ name: 'client', required: false })
-  funnel(@Query('period') period?: string, @Query('client') client?: string) {
-    return this.service.funnel(parsePeriod(period), parseOptionalClientId(client));
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD; with to, replaces the legacy param (max 31 days)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  funnel(@Query('period') period?: string, @Query('client') client?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const r = parseRange(from, to, Date.now());
+    const c = parseOptionalClientId(client);
+    return r ? this.service.funnelRange(r, c) : this.service.funnel(parsePeriod(period), c);
   }
 
   @Get('client/:clientId')
   @ApiParam({ name: 'clientId' })
   @ApiQuery({ name: 'days', required: false, enum: ['7', '30'] })
-  async client(@Param('clientId') clientId: string, @Query('days') days?: string) {
+  @ApiQuery({ name: 'from', required: false, description: 'IST YYYY-MM-DD; with to, replaces the legacy param (max 31 days)' })
+  @ApiQuery({ name: 'to', required: false, description: 'IST YYYY-MM-DD inclusive (default = from)' })
+  async client(@Param('clientId') clientId: string, @Query('days') days?: string, @Query('from') from?: string, @Query('to') to?: string) {
     if (!CLIENT_ID_RE.test(clientId ?? '')) throw new BadRequestException('invalid clientId');
-    return this.service.client(clientId, parseDays(days));
+    const r = parseRange(from, to, Date.now());
+    return r ? this.service.clientRange(clientId, r) : this.service.client(clientId, parseDays(days));
   }
 }

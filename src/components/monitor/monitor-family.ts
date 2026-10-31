@@ -206,3 +206,22 @@ export function byFamilyOfDate(
   });
   return { 'tg-aut': one('tg-aut'), promote: one('promote') };
 }
+
+/** Sum of two DM splits (closed days + today in a from..to range); null when either is null. */
+export function addFamSplits(a: FamSplit<number> | null, b: FamSplit<number> | null): FamSplit<number> | null {
+  if (!a || !b) return null;
+  const byClient = new Map<string, Record<Family, number>>();
+  for (const s of [a, b]) {
+    for (const [k, v] of s.byClient) {
+      const e = byClient.get(k) ?? perFam(() => 0);
+      e['tg-aut'] += v['tg-aut'];
+      e.promote += v.promote;
+      byClient.set(k, e);
+    }
+  }
+  return {
+    total: { 'tg-aut': a.total['tg-aut'] + b.total['tg-aut'], promote: a.total.promote + b.total.promote },
+    byClient,
+    unattributed: a.unattributed + b.unattributed,
+  };
+}
