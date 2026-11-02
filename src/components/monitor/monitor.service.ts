@@ -255,6 +255,7 @@ export interface PaidChat {
   credits: number;
   amount: number;
   ownerAmount: number;
+  /** API name kept (additive contract): true = an operator marked the chat a fake payer (payment_event.is_fake, 2026-11-02), not the cheatCount score. */
   cheatFlagged: boolean;
   firstCreditAt: string;
   lastCreditAt: string;

@@ -5,8 +5,9 @@ export type DailyMetric = 'promote' | 'reaction' | 'user';
 
 /**
  * `revenue` (number, same key as before) is the OWNER revenue: SUM(owner_amount) from the Postgres
- * view payment_event_owner (credits minus every credit of a chat cheat-flagged on any persona, or
- * with is_cheat). `grossRevenue` is SUM(amount) of the same rows (every credit, as `revenue` meant
+ * view payment_event_owner (credits minus every credit of a chat an operator marked as a fake payer,
+ * payment_event.is_fake on any of the chat's rows; owner 2026-11-02: the cheatCount complaint score no longer excludes revenue).
+ * `grossRevenue` is SUM(amount) of the same rows (every credit, as `revenue` meant
  * before 2026-10-28) and `flaggedRevenue` = grossRevenue - revenue. payment_event has
  * data from this IST day onward. Otherwise it is 0 and `revenueSource` says so: 'payment_event' |
  * 'payment_event_partial' (window starts before REVENUE_FROM_DAY) | 'unavailable' (0 means
@@ -110,8 +111,9 @@ export class DailyAnalyticsService {
 
   /**
    * Owner and gross revenue per (IST day, client) from payment_event_owner. Undefined if PG failed.
-   * `NOT is_cheat` alone is not the owner rule: tg-aut always writes is_cheat=false, so cheat-flagged
-   * chats (cheat_flag) are only excluded through the view's owner_amount.
+   * Use the view's owner_amount, not `NOT is_fake`: one is_fake row excludes every payment of the
+   * chat, including one that lands after the mark (is_fake is only set on rows present at mark time).
+   * is_cheat is an unused legacy column (always false).
    */
   private async pgRevenue(dates: string[], ctx: PgCtx): Promise<Map<string, Map<string, Rev>> | undefined> {
     const from = dates.find((d) => d >= REVENUE_FROM_DAY);

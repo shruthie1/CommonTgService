@@ -15,6 +15,7 @@ export interface PayRow {
   chat_id: string;
   amount: number | string;
   owner_amount: number | string;
+  /** payment_event_owner.cheat_flagged: since 2026-11-02 = operator fake-payment mark (payment_event.is_fake on any row of the chat), not the cheatCount score. */
   cheat_flagged: boolean | null;
 }
 
@@ -26,7 +27,7 @@ export interface Credit {
   /** owner revenue: owner_amount when amount < ₹1,000 (owner rule 8), else 0 */
   revenue: number;
   gross: number;
-  /** counts as a payer: under ₹1,000 and not cheat-flagged */
+  /** counts as a payer: under ₹1,000 and not fake-marked */
   clean: boolean;
 }
 

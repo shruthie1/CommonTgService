@@ -4,10 +4,13 @@ import { AnalyticsPgReader } from './analytics-pg.reader';
 import { AnalyticsHealthCheck } from './analytics-health.check';
 import { DailyAnalyticsController } from './daily-analytics.controller';
 
-/** Daily analytics are read only from Postgres (daily_client, daily_mobile, payment_event_owner); no Mongo models. */
+/**
+ * Daily analytics are read only from Postgres (daily_client, daily_mobile, payment_event_owner); no Mongo models.
+ * AnalyticsPgReader is exported so FakePaymentModule shares the one small pool (it calls fake_payment_mark/unmark).
+ */
 @Module({
   controllers: [DailyAnalyticsController],
   providers: [DailyAnalyticsService, AnalyticsPgReader, AnalyticsHealthCheck],
-  exports: [DailyAnalyticsService, AnalyticsHealthCheck],
+  exports: [DailyAnalyticsService, AnalyticsHealthCheck, AnalyticsPgReader],
 })
 export class DailyAnalyticsModule {}

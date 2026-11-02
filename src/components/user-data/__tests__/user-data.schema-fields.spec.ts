@@ -14,6 +14,8 @@ const base = (chatId: string): any => ({
 });
 const OWNED = { lifetimePaid: 499, lifetimeCredits: 2, creditKeys: ['k1', 'k2'], firstPaidAt: 1760000000000, msgCount: 7, windowCount: 3, graceFlag: true, lastPaidAt: 1760000500000 };
 
+jest.setTimeout(60_000);
+
 describe('UserData schema field contract', () => {
     let mongod: MongoMemoryServer;
     let connection: Connection;
@@ -21,13 +23,12 @@ describe('UserData schema field contract', () => {
     let service: UserDataService;
 
     beforeAll(async () => {
-        jest.setTimeout(60_000);
         mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
         connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'user-data-schema-fields' }).asPromise();
         model = connection.model<UserDataDocument>('UserDataSchemaFields', UserDataSchema);
         await model.init();
         service = new UserDataService(model as any);
-    });
+    }, 120_000); // hook timeout as an argument: jest.setTimeout inside the hook does not apply to the hook itself
     afterEach(async () => { await model.deleteMany({}); });
     afterAll(async () => { await connection.dropDatabase(); await connection.close(); await mongod.stop(); });
 
@@ -96,5 +97,37 @@ describe('UserData schema field contract', () => {
         await service.create(base('c5') as any);
         await service.update('p1', 'c5', { evilField: 'x' } as any);
         expect(await raw('c5')).not.toHaveProperty('evilField');
+    });
+    // Operator fake-payment mark (owner 2026-11-02): declared keys survive create/update/read; legacy docs load without them.
+    const FAKE = {
+        fakePaymentAt: new Date('2026-11-02T10:00:00Z'),
+        fakePaymentBy: 'ops-sai',
+        fakePaymentReason: 'edited receipt',
+        fakePaymentPrev: { payAmount: 350, canReply: 1 },
+    };
+
+    it('keeps the fake-payment mark fields on create and update', async () => {
+        await service.create({ ...base('f1'), ...FAKE } as any);
+        await service.create(base('f2') as any);
+        await service.update('p1', 'f2', { ...FAKE } as any);
+        for (const id of ['f1', 'f2']) {
+            const row: any = await raw(id);
+            for (const [k, v] of Object.entries(FAKE)) expect(row[k]).toEqual(v);
+        }
+        const doc: any = await service.findOne('p1', 'f1');
+        expect(new Date(doc.fakePaymentAt).toISOString()).toBe('2026-11-02T10:00:00.000Z');
+        expect(doc.fakePaymentReason).toBe('edited receipt');
+    });
+
+    it('does not materialise the fake-payment fields on a plain create, and a legacy doc without them loads and validates', async () => {
+        await service.create(base('f3') as any);
+        const row: any = await raw('f3');
+        for (const k of Object.keys(FAKE)) expect(row).not.toHaveProperty(k);
+        await model.collection.insertOne({ ...base('f4') });
+        const legacy: any = await model.findOne({ chatId: "f4" });
+        expect(legacy).not.toBeNull();
+        await expect(legacy.validate()).resolves.toBeUndefined();
+        expect(legacy.fakePaymentAt ?? null).toBeNull();
+        expect(legacy.toObject()).not.toHaveProperty('fakePaymentPrev');
     });
 });

@@ -10,7 +10,8 @@
  *  - TODAY: [IST today 00:00, now). Small, cached 60 s, refreshed in the background.
  *
  * Definitions (scratchpad metrics.md, 2026-10-28):
- *  - revenue = payment_event_owner.owner_amount with amount < 1000 (owner rule 8). Computed in memory
+ *  - revenue = payment_event_owner.owner_amount with amount < 1000 (owner rule 8); owner_amount is 0 for
+ *    every payment of an operator-marked fake payer (payment_event.is_fake, 2026-11-02; no longer the cheatCount score). Computed in memory
  *    from the raw credit rows (~250/day fleet-wide), so payers stay distinct over any window.
  *  - daily_client.revenue is always 0 and active_users is an event count: never read.
  *  - sends over whole days come from daily_client; promotion_send (raw, 30 d, no client index) only

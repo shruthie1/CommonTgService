@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateUserDataDto {
     @ApiProperty({ description: 'Chat ID' })
@@ -31,7 +31,7 @@ export class CreateUserDataDto {
     @ApiProperty({ description: 'highestPayAmount' })
     highestPayAmount: number;
 
-    @ApiProperty({ description: 'cheatCount', default: 0 })
+    @ApiProperty({ description: 'cheatCount: complaint score: how strongly the user feels cheated; never a fake-payment or revenue signal', default: 0 })
     cheatCount: number;
 
     @ApiProperty({ description: 'callTime', default: 0 })
@@ -69,4 +69,18 @@ export class CreateUserDataDto {
 
     @ApiProperty({ description: 'Unix timestamp of the latest attribution lookup', default: 0 })
     attributionUpdatedAt: number;
+
+    // Operator fake-payment mark (owner 2026-11-02). Optional; set them ONLY through POST /fake-payment/:chatId/mark |
+    // unmark, which also keeps Postgres payment_event.is_fake and the payers counters in step.
+    @ApiPropertyOptional({ description: 'When an operator marked this chat a fake payer (set by /fake-payment only). Absent = not marked.', type: String, format: 'date-time' })
+    fakePaymentAt?: Date | null;
+
+    @ApiPropertyOptional({ description: 'Operator who marked the fake payment (set by /fake-payment only)' })
+    fakePaymentBy?: string;
+
+    @ApiPropertyOptional({ description: 'Operator reason for the fake-payment mark (set by /fake-payment only)' })
+    fakePaymentReason?: string;
+
+    @ApiPropertyOptional({ description: 'payAmount / canReply before the mark; restored and unset by the unmark (set by /fake-payment only)' })
+    fakePaymentPrev?: { payAmount?: number; canReply?: number };
 }

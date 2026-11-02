@@ -85,6 +85,11 @@ export class UserData {
     @Prop({ required: true, default: 0 })
     highestPayAmount: number;
 
+    /**
+     * Complaint score: how strongly the user feels cheated; never a fake-payment or revenue signal (owner 2026-11-02).
+     * Raised by tg-aut on "fake/scam" in chat; drives complaint calls, grace and the 48 h block. The name is historical
+     * (60k docs, many readers). The operator's fake-payment mark is fakePaymentAt below. Postgres mirror: cheat_flag.
+     */
     @Prop({ required: true, default: 0 })
     cheatCount: number;
 
@@ -161,6 +166,29 @@ export class UserData {
      */
     @Prop({ type: mongoose.Schema.Types.Mixed, required: false, default: undefined })
     callProgress?: Record<string, { positionSec: number; durationSec: number | null; updatedAt: number; completed: boolean }>;
+
+    // ---- operator fake-payment mark (owner 2026-11-02; tg-platform docs/design/2026-11-02-fake-payment-flag.md) ----
+    // Written ONLY by FakePaymentService (POST /fake-payment/:chatId/mark | unmark) on EVERY persona row of the chatId.
+    // While set on any row: none of the user's payments count as revenue (Postgres payment_event.is_fake), tg-aut credits nothing
+    // and places no call, the user stays blocked. Optional, no defaults: absent = not marked. Also declared (optional)
+    // in CreateUserDataDto / UpdateUserDataDto for Swagger; a raw PATCH /userdata body can set them, but only the
+    // fake-payment endpoints keep Postgres payment_event.is_fake and the payers counters in step: use those.
+
+    /** When an operator marked this chat a fake payer. Absent/null = not marked. */
+    @Prop({ type: Date, required: false, default: undefined })
+    fakePaymentAt?: Date | null;
+
+    /** Who marked it (operator name typed in ops-ui). */
+    @Prop({ type: String, required: false })
+    fakePaymentBy?: string;
+
+    /** Why (operator's text, required to mark). */
+    @Prop({ type: String, required: false })
+    fakePaymentReason?: string;
+
+    /** payAmount / canReply this row had before the mark (one sub-object); the unmark restores them, then unsets it. */
+    @Prop({ type: mongoose.Schema.Types.Mixed, required: false, default: undefined })
+    fakePaymentPrev?: { payAmount?: number; canReply?: number };
 
 }
 

@@ -32,6 +32,7 @@ import { EventManagerModule } from './components/event-manager/event-manager.mod
 import { CollectionInsightsModule } from './components/collection-insights/collection-insights.module';
 import { DailyAnalyticsModule } from './components/daily-analytics/daily-analytics.module';
 import { MonitorModule } from './components/monitor/monitor.module';
+import { FakePaymentModule } from './components/fake-payment/fake-payment.module';
 import { FileModule } from './components/files/file.module';
 import { AppService } from './app.service';
 import { RuntimeConfigService } from './control-plane/config/runtime-config.service';
@@ -61,6 +62,7 @@ import { AccountMaintenanceService } from './control-plane/maintenance/account-m
     PromoteStatModule,
     DailyAnalyticsModule,
     MonitorModule,
+    FakePaymentModule,
     StatModule,
     Stat2Module,
     TgSignupModule,
