@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UserData, UserDataSchema } from '../user-data/schemas/user-data.schema';
 import { DailyAnalyticsModule } from '../daily-analytics/daily-analytics.module';
+import { PaymentProofsModule } from '../payment-proofs/payment-proofs.module';
 import { FakePaymentController } from './fake-payment.controller';
 import { FakePaymentService } from './fake-payment.service';
 
@@ -9,6 +10,7 @@ import { FakePaymentService } from './fake-payment.service';
 @Module({
     imports: [
         DailyAnalyticsModule,
+        PaymentProofsModule,
         MongooseModule.forFeature([{ name: UserData.name, schema: UserDataSchema, collection: 'userData' }]),
     ],
     controllers: [FakePaymentController],

@@ -15,5 +15,7 @@ import { PaymentProofsService } from './payment-proofs.service';
     ],
     controllers: [PaymentProofsController],
     providers: [PaymentProofsService],
+    /** FakePaymentService patches the list cache after a mark / unmark. */
+    exports: [PaymentProofsService],
 })
 export class PaymentProofsModule {}

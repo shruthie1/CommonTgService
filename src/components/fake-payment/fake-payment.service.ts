@@ -1,10 +1,11 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schema';
 import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytics-pg.reader';
 import { ChannelCategory } from '../bots/channel-category.enum';
 import { getBotsServiceInstance } from '../../utils';
+import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
 
 /**
  * Operator fake-payment mark (owner decision 2026-11-02; tg-platform docs/design/2026-11-02-fake-payment-flag.md).
@@ -68,7 +69,19 @@ export class FakePaymentService {
     constructor(
         @InjectModel(UserData.name) private readonly userDataModel: Model<UserDataDocument>,
         private readonly pg: AnalyticsPgReader,
+        /** Payments review list cache: patched after every userData write so the list shows the mark at once. */
+        @Optional() private readonly paymentProofs?: PaymentProofsService,
     ) {}
+
+    /** Mongo write, then the review-list cache patch (also after a partial bulkWrite failure). */
+    private async writeRows(chatId: string, ops: unknown[]): Promise<void> {
+        if (!ops.length) return;
+        try {
+            await this.userDataModel.bulkWrite(ops as any, { ordered: true });
+        } finally {
+            await this.paymentProofs?.chatChanged(chatId);
+        }
+    }
 
     private chatIdOrThrow(chatId: unknown): string {
         const id = typeof chatId === 'string' ? chatId.trim() : '';
@@ -162,7 +175,7 @@ export class FakePaymentService {
             // original fakePaymentPrev / fakePaymentAt so the unmark still restores the pre-mark values.
             : { updateOne: { filter: { _id: r._id }, update: { $set: { payAmount: 0, canReply: 0 } } } });
         const newlyMarked = rows.filter((r) => r.fakePaymentAt == null).length;
-        if (ops.length) await this.userDataModel.bulkWrite(ops as any, { ordered: true });
+        await this.writeRows(chatId, ops);
         const mongo = { rows: rows.length, newlyMarked };
 
         const pg = await this.pgCall<FakePaymentPgMark>('SELECT * FROM fake_payment_mark($1)', [chatId]);
@@ -223,7 +236,7 @@ export class FakePaymentService {
                 },
             };
         });
-        if (ops.length) await this.userDataModel.bulkWrite(ops as any, { ordered: true });
+        await this.writeRows(chatId, ops);
         const mongo = { rowsUnmarked: rows.length };
 
         const pg = await this.pgCall<FakePaymentPgUnmark>('SELECT * FROM fake_payment_unmark($1)', [chatId]);

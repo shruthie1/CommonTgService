@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schema';
@@ -21,6 +21,22 @@ const USERDATA_IN_CHUNK = 1_000;
 const CLIENT_HOST_TTL_MS = 5 * 60 * 1000;
 const CLIENT_ID_RE = /^[A-Za-z0-9_.-]{1,40}$/;
 const MAX_BY = 60;
+/**
+ * The whole-window read (rows + userData + review model) is shared by every list call. Prod 2026-11-03 (VM2 -> Atlas):
+ * ~8.5 s per call whatever the filters, so it is kept in memory: fresh for PAYMENT_PROOFS_LIST_CACHE_MS (default 60 s,
+ * 0 = off), then served stale while one background reload runs. review() and the fake-payment mark patch it in place.
+ */
+export const DEFAULT_LIST_CACHE_MS = 60_000;
+/** Entries: the default 7-day window plus a few explicit older `since` windows. */
+export const MAX_CACHED_WINDOWS = 4;
+const DEFAULT_WINDOW_KEY = 'default';
+
+export function listCacheMs(env: Record<string, string | undefined> = process.env): number {
+    const raw = env.PAYMENT_PROOFS_LIST_CACHE_MS;
+    if (raw === undefined || raw.trim() === '') return DEFAULT_LIST_CACHE_MS;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : DEFAULT_LIST_CACHE_MS;
+}
 
 /** Bulky / internal fields not sent to the UI (shadow vision run, perceptual hash, race-guard copies). */
 const ROW_PROJECTION = { shadow: 0, imageHash: 0, servedUtr: 0, servedSha: 0 } as const;
@@ -84,6 +100,17 @@ export interface ListResult {
 }
 
 type ChatInfo = { profile: string; username?: string; cheatCount?: number; fakePaymentAt?: Date };
+type ChatEntry = { rows: Map<string, ChatInfo>; marked: boolean; fakePaymentAt: Date | null };
+
+/** One whole-window read and what is derived from it (independent of the request's filters, sort and page). */
+interface WindowData {
+    loadedAt: number;
+    rows: PaymentProofRow[];
+    truncated: boolean;
+    chats: Map<string, ChatEntry>;
+    everything: { row: PaymentProofRow; c: ClassifiedProof }[];
+    reviewModel: ReviewModel;
+}
 
 /**
  * Payments review (contract section 2). Reads `paymentProofs` (tg-aut owned) + `userData` + `clients`; writes only
@@ -91,7 +118,12 @@ type ChatInfo = { profile: string; username?: string; cheatCount?: number; fakeP
  */
 @Injectable()
 export class PaymentProofsService {
+    private readonly logger = new Logger(PaymentProofsService.name);
     private clientHosts: { at: number; map: Map<string, string> } | null = null;
+    private readonly windows = new Map<string, WindowData>();
+    private readonly loading = new Map<string, { gen: number; promise: Promise<WindowData> }>();
+    /** Bumped by every write; a load started before a write is neither joined nor stored after it. */
+    private gen = 0;
 
     constructor(
         @InjectModel(PAYMENT_PROOF_MODEL) private readonly proofModel: Model<any>,
@@ -135,23 +167,9 @@ export class PaymentProofsService {
 
     async list(q: ListQuery, now = Date.now()): Promise<ListResult> {
         const p = this.parseQuery(q, now);
-        // The whole collection (7-day TTL) is read so the review model (signals across chats, per-day thresholds) does
-        // not change with the filters; since / client / minAmount are applied in memory. createdAt range on tg-aut's
-        // TTL index createdAt_ttl; no new index (prod 2026-11-03: 1,767 rows).
-        const from = Math.min(p.since, now - DEFAULT_WINDOW_MS);
-        const rows = await this.proofModel
-            .find({ createdAt: { $gte: new Date(from) } }, CLASSIFY_PROJECTION)
-            .sort({ createdAt: -1, _id: -1 })
-            .limit(MAX_WINDOW_ROWS + 1)
-            .lean<PaymentProofRow[]>()
-            .exec();
-        const truncated = rows.length > MAX_WINDOW_ROWS;
-        if (truncated) rows.length = MAX_WINDOW_ROWS;
-
-        const everything = rows.map((row) => ({ row, c: classify(row) }));
-        const chats = await this.chatInfo([...new Set(everything.map((x) => String(x.row.chatId)))]);
+        // Shared whole-window data (cached); since / client / minAmount / state / sort / paging are applied per request.
+        const { everything, chats, reviewModel, truncated } = await this.window(p.since, now);
         const isMarked = (chatId: string) => !!chats.get(chatId)?.marked;
-        const reviewModel = buildReviewModel(everything, isMarked, reviewOptionsFromEnv());
 
         const classified = everything.filter(({ row, c }) =>
             new Date(row.createdAt).getTime() >= p.since
@@ -218,9 +236,98 @@ export class PaymentProofsService {
         return { items, nextCursor, counts, reviewModel, truncated };
     }
 
+    /** The shared whole-window data: cached, single-flight, stale-while-revalidate (see DEFAULT_LIST_CACHE_MS). */
+    private async window(since: number, now: number): Promise<WindowData> {
+        // An explicit since older than the TTL widens the read (from = since); otherwise the window is the last 7 days.
+        const wide = since < now - DEFAULT_WINDOW_MS;
+        const ttl = listCacheMs();
+        if (ttl <= 0) return this.loadWindow(wide ? since : now - DEFAULT_WINDOW_MS, now);
+        const key = wide ? `since:${since}` : DEFAULT_WINDOW_KEY;
+        const hit = this.windows.get(key);
+        if (hit && now - hit.loadedAt < ttl) return hit;
+        const load = () => this.refreshWindow(key, wide ? since : now - DEFAULT_WINDOW_MS, now);
+        if (!hit) return load();
+        load().catch((err) => this.logger.error(`payment-proofs ${key} window reload failed; serving the copy from ${new Date(hit.loadedAt).toISOString()}: ${(err as Error)?.stack ?? err}`));
+        return hit;
+    }
+
+    private refreshWindow(key: string, from: number, now: number): Promise<WindowData> {
+        const running = this.loading.get(key);
+        if (running && running.gen === this.gen) return running.promise;
+        const gen = this.gen;
+        const promise: Promise<WindowData> = this.loadWindow(from, now)
+            .then((data) => {
+                if (gen === this.gen) {
+                    this.windows.delete(key);
+                    this.windows.set(key, data);
+                    while (this.windows.size > MAX_CACHED_WINDOWS) this.windows.delete(this.windows.keys().next().value as string);
+                }
+                return data;
+            })
+            .finally(() => { if (this.loading.get(key)?.promise === promise) this.loading.delete(key); });
+        this.loading.set(key, { gen, promise });
+        return promise;
+    }
+
+    private async loadWindow(from: number, now: number): Promise<WindowData> {
+        // The whole collection (7-day TTL) is read so the review model (signals across chats, per-day thresholds) does
+        // not change with the filters; since / client / minAmount are applied in memory. createdAt range on tg-aut's
+        // TTL index createdAt_ttl; no new index (prod 2026-11-03: 1,767 rows).
+        const rows = await this.proofModel
+            .find({ createdAt: { $gte: new Date(from) } }, CLASSIFY_PROJECTION)
+            .sort({ createdAt: -1, _id: -1 })
+            .limit(MAX_WINDOW_ROWS + 1)
+            .lean<PaymentProofRow[]>()
+            .exec();
+        const truncated = rows.length > MAX_WINDOW_ROWS;
+        if (truncated) rows.length = MAX_WINDOW_ROWS;
+        const chats = await this.chatInfo([...new Set(rows.map((row) => String(row.chatId)))]);
+        return this.derive({ loadedAt: now, rows, truncated, chats });
+    }
+
+    /** classify + review model from rows + chats (cheap; re-run after a patch since buildReviewModel sets c.repeat). */
+    private derive(d: Pick<WindowData, 'loadedAt' | 'rows' | 'truncated' | 'chats'>): WindowData {
+        const everything = d.rows.map((row) => ({ row, c: classify(row) }));
+        const reviewModel = buildReviewModel(everything, (chatId) => !!d.chats.get(chatId)?.marked, reviewOptionsFromEnv());
+        return { ...d, everything, reviewModel };
+    }
+
+    /**
+     * Re-reads what one write changed and patches every cached window in place, so the operator's next list shows it.
+     * If the re-read fails the cache is dropped (the next list reloads) and the error is logged.
+     */
+    private async patchWindows(what: string, apply: () => Promise<(w: WindowData) => WindowData | null>): Promise<void> {
+        this.gen++;
+        if (!this.windows.size) return;
+        try {
+            const patch = await apply();
+            for (const [key, w] of this.windows) {
+                const next = patch(w);
+                if (next) this.windows.set(key, next);
+            }
+        } catch (err) {
+            this.windows.clear();
+            this.logger.error(`payment-proofs cache patch after ${what} failed; cache dropped: ${(err as Error)?.stack ?? err}`);
+        }
+    }
+
+    /** Called by FakePaymentService after a mark / unmark wrote userData for the chat. */
+    async chatChanged(chatId: string): Promise<void> {
+        const id = String(chatId);
+        await this.patchWindows(`fake-payment ${id}`, async () => {
+            const fresh = (await this.chatInfo([id])).get(id);
+            return (w) => {
+                if (!w.rows.some((r) => String(r.chatId) === id)) return null;
+                const chats = new Map(w.chats);
+                if (fresh) chats.set(id, fresh); else chats.delete(id);
+                return this.derive({ ...w, chats });
+            };
+        });
+    }
+
     /** userData rows of the chats (index chatId_Profile): per-persona info + chat-level fake mark. */
     private async chatInfo(chatIds: string[]) {
-        const out = new Map<string, { rows: Map<string, ChatInfo>; marked: boolean; fakePaymentAt: Date | null }>();
+        const out = new Map<string, ChatEntry>();
         for (let i = 0; i < chatIds.length; i += USERDATA_IN_CHUNK) {
             const chunk = chatIds.slice(i, i + USERDATA_IN_CHUNK);
             const docs = await this.userDataModel
@@ -269,6 +376,15 @@ export class PaymentProofsService {
         const update = review ? { $set: { review } } : { $unset: { review: 1 } };
         const res = await this.proofModel.updateOne(filter, update).exec();
         if (!res.matchedCount) throw new NotFoundException('payment proof not found (gone after the 7-day TTL?)');
+        await this.patchWindows(`review ${proofId}`, async () => {
+            const fresh = new Map((await this.proofModel.find(filter, CLASSIFY_PROJECTION).lean<PaymentProofRow[]>().exec())
+                .map((r) => [String(r._id), r]));
+            return (w) => {
+                let hit = false;
+                const rows = w.rows.map((r) => { const f = fresh.get(String(r._id)); if (f) hit = true; return f ?? r; });
+                return hit ? this.derive({ ...w, rows }) : null;
+            };
+        });
         return { proofId, review };
     }
 }
