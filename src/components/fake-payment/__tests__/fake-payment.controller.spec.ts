@@ -1,7 +1,7 @@
 /**
- * FakePaymentController write-key check (review 2026-11-02): the global AuthGuard accepts the public legacy x-api-key,
- * so mark / unmark must also require x-ops-write-key = env OPS_WRITE_KEY. Real HTTP through Nest (no global guard
- * here: this tests the controller's own check); the service is a recorder.
+ * FakePaymentController (owner 2026-11-03): the separate x-ops-write-key was removed. mark / unmark are protected only
+ * by the global CMS AuthGuard (x-api-key) like every other CMS route; a sent x-ops-write-key header is ignored.
+ * Real HTTP through Nest (no global guard here: this tests the controller alone); the service is a recorder.
  */
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -9,7 +9,7 @@ import request from 'supertest';
 import { FakePaymentController } from '../fake-payment.controller';
 import { FakePaymentService } from '../fake-payment.service';
 
-describe('FakePaymentController: x-ops-write-key on mark and unmark', () => {
+describe('FakePaymentController: mark / unmark need no write key', () => {
     let app: INestApplication;
     const calls: string[] = [];
     const service = {
@@ -31,35 +31,24 @@ describe('FakePaymentController: x-ops-write-key on mark and unmark', () => {
         await app.close();
         if (saved === undefined) delete process.env.OPS_WRITE_KEY; else process.env.OPS_WRITE_KEY = saved;
     });
-    beforeEach(() => { calls.length = 0; });
+    beforeEach(() => { calls.length = 0; delete process.env.OPS_WRITE_KEY; });
 
     const body = { by: 'ops', reason: 'edited receipt' };
 
-    it.each(['mark', 'unmark'])('%s: 503 when OPS_WRITE_KEY is unset, service not called', async (action) => {
-        delete process.env.OPS_WRITE_KEY;
-        const res = await request(app.getHttpServer()).post(`/fake-payment/1118622422/${action}`).set('x-ops-write-key', 'anything').send(body);
-        expect(res.status).toBe(503);
-        expect(calls).toEqual([]);
-    });
-
-    it.each(['mark', 'unmark'])('%s: 401 when the header is missing or wrong (the legacy api key alone is not enough)', async (action) => {
-        process.env.OPS_WRITE_KEY = 's3cret';
-        const missing = await request(app.getHttpServer()).post(`/fake-payment/1118622422/${action}`).set('x-api-key', 'santoor').send(body);
-        const wrong = await request(app.getHttpServer()).post(`/fake-payment/1118622422/${action}`).set('x-ops-write-key', 's3cret2').send(body);
-        expect(missing.status).toBe(401);
-        expect(wrong.status).toBe(401);
-        expect(calls).toEqual([]);
-    });
-
-    it.each(['mark', 'unmark'])('%s: the right key reaches the service', async (action) => {
-        process.env.OPS_WRITE_KEY = 's3cret';
-        const res = await request(app.getHttpServer()).post(`/fake-payment/1118622422/${action}`).set('x-ops-write-key', 's3cret').send(body);
+    it.each(['mark', 'unmark'])('%s: works without x-ops-write-key and with OPS_WRITE_KEY unset', async (action) => {
+        const res = await request(app.getHttpServer()).post(`/fake-payment/1118622422/${action}`).set('x-api-key', 'santoor').send(body);
         expect(res.status).toBe(200);
         expect(calls).toEqual([`${action}:1118622422`]);
     });
 
-    it('status (read-only GET) needs no write key', async () => {
-        delete process.env.OPS_WRITE_KEY;
+    it('mark: a stray x-ops-write-key header is ignored even when OPS_WRITE_KEY is set', async () => {
+        process.env.OPS_WRITE_KEY = 's3cret';
+        const res = await request(app.getHttpServer()).post('/fake-payment/1118622422/mark').set('x-ops-write-key', 'wrong').send(body);
+        expect(res.status).toBe(200);
+        expect(calls).toEqual(['mark:1118622422']);
+    });
+
+    it('status (read-only GET) works', async () => {
         const res = await request(app.getHttpServer()).get('/fake-payment/1118622422');
         expect(res.status).toBe(200);
     });
