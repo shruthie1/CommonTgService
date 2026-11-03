@@ -70,11 +70,12 @@ describe('PaymentProofsService', () => {
     async function seed() {
         await proofs.collection.insertMany([
             // old shapes (no proofId / verdict)
-            proof({ servedAt: at(1), creditAmount: 20, amount: 20 }), // credited < 300: not review
-            proof({ servedAt: at(2), creditAmount: 350, amount: 350 }), // credited >= 300: review
-            proof({ ask: { kind: 'fraud', state: 'open', openedAt: at(3) } }), // fraud_ask: review + flagged
+            // chat 111 sent a fake (msg 3), so its credited proofs (1, 2, 8) carry a strong signal
+            proof({ servedAt: at(1), creditAmount: 20, amount: 20 }), // credited, strong: review
+            proof({ servedAt: at(2), creditAmount: 350, amount: 350 }), // credited, strong: review
+            proof({ ask: { kind: 'fraud', state: 'open', openedAt: at(3) } }), // fraud_ask: flagged only, not review
             proof({ ask: { kind: 'fraud', state: 'open', blockedAt: at(4) }, chatId: '222' }), // fake_blocked, marked
-            proof({ amount: 50 }), // other: review
+            proof({ amount: 50 }), // other (uncredited): not review
             // new shapes
             proof({ proofId: 'ramya1-111-6', telegramMsgId: 6, verdict: { outcome: 'not_ours', reasons: ['UPI_NOT_OURS'], payee: 'foreign', fakeScore: null, fakeSignals: [] }, amount: 100, payeeName: 'X STORES', image: { host: 'ramya1', bytes: 1234, mime: 'image/jpeg', stored: true }, ocr: { app: 'phonepe', note: 'hi' } }),
             proof({ proofId: 'kavya1-333-7', telegramMsgId: 7, clientId: 'kavya1', profile: 'kavya', chatId: '333', servedAt: at(7), creditAmount: 20, verdict: { outcome: 'credited', reasons: [], fakeScore: 55 } }),
@@ -84,11 +85,17 @@ describe('PaymentProofsService', () => {
         ]);
     }
 
-    it('counts every state over the window and lists the review queue newest first', async () => {
+    it('counts every state over the window; review = credited proofs at risk, riskiest ₹ first', async () => {
         await seed();
         const res = await service.list({}, NOW);
-        expect(res.counts).toEqual({ review: 6, flagged: 2, not_credited: 4, credited: 4, marked: 1, reviewed: 1, all: 8 });
-        expect(res.items.map((i) => i.telegramMsgId)).toEqual([2, 3, 4, 5, 6, 7]);
+        expect(res.counts).toEqual({ review: 3, reviewAmount: 390, flagged: 2, not_credited: 4, credited: 4, marked: 1, reviewed: 1, all: 8 });
+        // risk x ₹: 2 (85 x 350), 1 (85 x 20), 7 (70 x 20: fakeScore 55)
+        expect(res.items.map((i) => i.telegramMsgId)).toEqual([2, 1, 7]);
+        expect(res.items.map((i) => i.risk)).toEqual([85, 85, 70]);
+        expect(res.items[0]).toMatchObject({ inReview: true, strong: true, atRiskAmount: 350, repeat: false });
+        expect(res.items[0].riskReasons).toContain('Chat sent a fake receipt');
+        expect(res.reviewModel.options).toEqual({ dailyTarget: 20, riskFloor: 25, minAmount: 100, alwaysAmount: 200 });
+        expect((await service.list({ sort: 'time' }, NOW)).items.map((i) => i.telegramMsgId)).toEqual([1, 2, 7]);
         expect(res.nextCursor).toBeNull();
         expect(res.truncated).toBe(false);
     });
@@ -99,7 +106,7 @@ describe('PaymentProofsService', () => {
         const byMsg = new Map(items.map((i) => [i.telegramMsgId, i]));
         expect(byMsg.get(3)).toMatchObject({
             proofId: 'ramya1-111-3', outcome: 'fraud_ask', legacy: true, persona: 'ramya', username: 'u111', complaintScore: 2,
-            fakePaymentAt: null, clientHost: 'https://ramya1.paidgirls.site', inReview: true, flagged: true,
+            fakePaymentAt: null, clientHost: 'https://ramya1.paidgirls.site', inReview: false, flagged: true, atRiskAmount: 0,
         });
         expect(byMsg.get(4)).toMatchObject({ outcome: 'fake_blocked', username: 'u222', fakePaymentAt: new Date(NOW - 3600_000) });
         // kavya/333 has no userData row: persona falls back to the proof's profile
@@ -135,7 +142,11 @@ describe('PaymentProofsService', () => {
         expect(s.items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4]);
         const m = await service.list({ minAmount: '100', state: 'all' }, NOW);
         expect(m.items.map((i) => i.telegramMsgId)).toEqual([2, 6, 8]);
-        expect(m.counts).toMatchObject({ all: 3, credited: 2, review: 2 });
+        expect(m.counts).toMatchObject({ all: 3, credited: 2, review: 1, reviewAmount: 350 });
+        // the review model sees the whole collection: msg 1 stays strong although its chat's fake (msg 3) is filtered out
+        const recent = await service.list({ since: at(1.5).toISOString() }, NOW);
+        expect(recent.items.map((i) => i.telegramMsgId)).toEqual([1]);
+        expect((await service.list({ client: 'kavya1' }, NOW)).counts).toMatchObject({ review: 1, reviewAmount: 20 });
         const old = await service.list({ since: new Date(NOW - 9 * 86400_000).toISOString(), state: 'all' }, NOW);
         expect(old.counts.all).toBe(9);
     });
@@ -158,10 +169,37 @@ describe('PaymentProofsService', () => {
         expect(seen.length).toBe(7);
     });
 
+    it('repeats / re-sends never enter review; risk-order paging has no gaps or repeats', async () => {
+        const sha = 'b'.repeat(64);
+        await proofs.collection.insertMany([
+            proof({ chatId: '444', servedAt: at(50), creditAmount: 50, amount: 50, imageSha256: sha, createdAt: at(50) }),
+            proof({ chatId: '444', amount: 50, imageSha256: sha, createdAt: at(49) }), // legacy re-send of the credited image
+            proof({ chatId: '444', decision: 'REJECT_DUPLICATE', amount: 50, createdAt: at(48) }),
+            ...Array.from({ length: 5 }, (_, i) => proof({ chatId: `5${i}`, servedAt: at(60), creditAmount: 50 + i, amount: 50 + i, reasons: ['FAKE_TEXT'] })),
+        ]);
+        const all = await service.list({ state: 'all' }, NOW);
+        const resend = all.items.filter((i) => i.chatId === '444' && !i.servedAt);
+        expect(resend.map((i) => [i.repeat, i.inReview])).toEqual([[true, false], [true, false]]);
+        const seen: number[] = [];
+        let cursor: string | undefined;
+        let pages = 0;
+        do {
+            const r = await service.list({ limit: 2, cursor }, NOW);
+            seen.push(...r.items.map((i) => i.atRiskAmount));
+            expect(r.counts.review).toBe(5);
+            cursor = r.nextCursor ?? undefined;
+            pages++;
+        } while (cursor && pages < 10);
+        expect(seen).toEqual([54, 53, 52, 51, 50]);
+        // a cursor of one sort is refused by the other
+        const first = await service.list({ limit: 2 }, NOW);
+        await expect(service.list({ limit: 2, sort: 'time', cursor: first.nextCursor! }, NOW)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
     it('caps limit at 100 and rejects bad params', async () => {
         await proofs.collection.insertMany(Array.from({ length: 105 }, () => proof({})));
         expect((await service.list({ state: 'all', limit: '500' }, NOW)).items).toHaveLength(100);
-        for (const q of [{ state: 'nope' }, { since: 'yesterday' }, { limit: '0' }, { limit: '2.5' }, { minAmount: '-1' }, { cursor: 'zzz' }, { client: 'a b' }]) {
+        for (const q of [{ state: 'nope' }, { since: 'yesterday' }, { limit: '0' }, { limit: '2.5' }, { minAmount: '-1' }, { cursor: 'zzz' }, { client: 'a b' }, { sort: 'amount' }]) {
             await expect(service.list(q as any, NOW)).rejects.toBeInstanceOf(BadRequestException);
         }
     });
@@ -170,9 +208,9 @@ describe('PaymentProofsService', () => {
         await seed();
         const before = await service.list({}, NOW);
         const now = new Date(NOW);
-        const r = await service.review('ramya1-111-3', { state: 'ok', by: ' ops ' }, now);
-        expect(r).toEqual({ proofId: 'ramya1-111-3', review: { state: 'ok', by: 'ops', at: now } });
-        const row = await proofs.collection.findOne({ telegramMsgId: 3 });
+        const r = await service.review('ramya1-111-2', { state: 'ok', by: ' ops ' }, now);
+        expect(r).toEqual({ proofId: 'ramya1-111-2', review: { state: 'ok', by: 'ops', at: now } });
+        const row = await proofs.collection.findOne({ telegramMsgId: 2 });
         expect(row?.review).toEqual({ state: 'ok', by: 'ops', at: now });
         expect(row?.proofId).toBeUndefined(); // CMS never adds tg-aut fields
         const after = await service.list({}, NOW);
@@ -182,11 +220,12 @@ describe('PaymentProofsService', () => {
         await service.review('ramya1-111-6', { state: 'ok', by: 'ops' }, now);
         expect((await proofs.collection.findOne({ proofId: 'ramya1-111-6' }))?.review?.state).toBe('ok');
 
-        expect(await service.review('ramya1-111-3', { state: 'clear' })).toEqual({ proofId: 'ramya1-111-3', review: null });
-        expect((await proofs.collection.findOne({ telegramMsgId: 3 }))).not.toHaveProperty('review');
+        expect(await service.review('ramya1-111-2', { state: 'clear' })).toEqual({ proofId: 'ramya1-111-2', review: null });
+        expect((await proofs.collection.findOne({ telegramMsgId: 2 }))).not.toHaveProperty('review');
         // idempotent clear
-        await expect(service.review('ramya1-111-3', { state: 'clear' })).resolves.toEqual({ proofId: 'ramya1-111-3', review: null });
-        expect((await service.list({}, NOW)).counts.review).toBe(before.counts.review - 1);
+        await expect(service.review('ramya1-111-2', { state: 'clear' })).resolves.toEqual({ proofId: 'ramya1-111-2', review: null });
+        // msg 2 is back in review after the clear; msg 6 (not_ours, reviewed ok) was never in it
+        expect((await service.list({}, NOW)).counts.review).toBe(before.counts.review);
     });
 
     it('review rejects bad input and 404s a missing proof', async () => {

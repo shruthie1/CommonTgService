@@ -15,11 +15,26 @@ export const PROOF_STATES = ['review', 'flagged', 'not_credited', 'credited', 'm
 export type ProofState = (typeof PROOF_STATES)[number];
 export type ProofCounts = Record<ProofState, number>;
 
-/** fakeScore at or above this puts a proof in the review queue. */
+/** fakeScore at or above this is a strong fake signal. */
 export const REVIEW_FAKE_SCORE = 40;
-/** Every credited proof of at least this amount (₹) goes to the review queue. */
-export const REVIEW_CREDITED_AMOUNT = 300;
 export const FLAGGED_OUTCOMES: ReadonlySet<string> = new Set(['fraud_ask', 'fake_blocked', 'cross_client']);
+/** Outcomes where tg-aut judged the screenshot fake (a chat that sent one makes its credits suspect). */
+export const FAKE_OUTCOMES: ReadonlySet<string> = new Set(['fraud_ask', 'fake_blocked', 'cross_client', 'model_blocked']);
+/**
+ * Reason codes that say "this receipt is fake" (tg-aut processImage fraudReasons, paid-to-us tamper reasons, vision).
+ * Not fake: BLOCKED_IGNORED, OVER_1000, AMOUNT_TOO_SMALL, NOT_PAID_TO_US, NOT_FINISHED, REPEAT_* and the like.
+ */
+export const FAKE_REASON_CODES: ReadonlySet<string> = new Set([
+    'PERSONA_PAYEE', 'UPI_NOT_OURS', 'LAXMI_PAYEE', 'FAKE_TEXT', 'FUTURE_TIME', 'FUTURE_DATE', 'DATE_IN_FUTURE',
+    'UTR_REUSED', 'UTR_REUSED_OTHER_AMOUNT', 'UTR_MALFORMED', 'EDITED_PICTURE', 'AI_WATERMARK', 'GENERATOR_SUCCESS_TEXT',
+    'IMPOSSIBLE_REFERENCE', 'MASKED_TRANSACTION_ID', 'SAMPLE_PAYMENT', 'VISION_AUTHENTICITY', 'SECOND_FAKE',
+    'LLM_SECOND_OPINION_SUSPICIOUS', 'IMAGE_NEAR_DUPLICATE_OTHER_CHAT', 'DISCLAIMER_SHORT', 'DISCLAIMER_LONG',
+    'DISCLAIMER_MODEL_ONLY', 'BLOCKLIST_A', 'FAILED_PAYMENT_TO_SCREEN',
+]);
+
+export function isFakeReason(code: string): boolean {
+    return FAKE_REASON_CODES.has(code) || code.startsWith('LLM_FAKE_');
+}
 
 export interface ClassifiedProof {
     proofId: string;
@@ -31,9 +46,19 @@ export interface ClassifiedProof {
     /** creditAmount (the amount actually credited) else the amount read. */
     amount: number | null;
     reviewed: boolean;
+    /** In the review queue: set by buildReviewModel (classify alone leaves it false). */
     review: boolean;
     flagged: boolean;
     credited: boolean;
+    /** Review facts (buildReviewModel); defaults when the model did not run. */
+    risk: number;
+    riskReasons: string[];
+    /** Credited ₹ (0 when not credited): the revenue a Mark fake would remove. */
+    atRiskAmount: number;
+    /** Strong fake signal: enters the queue whatever the amount or threshold. */
+    strong: boolean;
+    /** Re-send of a screenshot already seen in the same chat (same sha256, or amount + payee + printed minute). */
+    repeat: boolean;
 }
 
 export function proofIdOf(row: Pick<PaymentProofRow, 'proofId' | 'clientId' | 'chatId' | 'telegramMsgId'>): string {
@@ -81,8 +106,6 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
     const amount = num(row.creditAmount) ?? num(row.amount);
     const credited = outcome === 'credited';
     const reviewed = row.review?.state === 'ok';
-    const needsLook = !credited || (fakeScore !== null && fakeScore >= REVIEW_FAKE_SCORE) || reasons.length > 0;
-    const bigCredit = credited && amount !== null && amount >= REVIEW_CREDITED_AMOUNT;
     return {
         proofId: proofIdOf(row),
         outcome,
@@ -91,9 +114,14 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
         fakeScore,
         amount,
         reviewed,
-        review: !reviewed && (needsLook || bigCredit),
+        review: false,
         flagged: FLAGGED_OUTCOMES.has(outcome),
         credited,
+        risk: 0,
+        riskReasons: [],
+        atRiskAmount: credited ? amount ?? 0 : 0,
+        strong: false,
+        repeat: outcome === 'repeat',
     };
 }
 
@@ -117,8 +145,240 @@ export function addToCounts(counts: ProofCounts, c: ClassifiedProof, marked: boo
     for (const s of PROOF_STATES) if (inState(c, marked, s)) counts[s]++;
 }
 
-/** Opaque keyset cursor over (createdAt desc, _id desc). */
-export interface ProofCursor { t: number; id: string }
+export interface ReviewOptions {
+    /** Review entries aimed for per IST day (strong entries count towards it and always enter). */
+    dailyTarget: number;
+    /** Lowest risk a non-strong credited proof needs to enter. */
+    riskFloor: number;
+    /** Below this credited ₹ only a strong signal enters. */
+    minAmount: number;
+    /** A credited, non-repeat proof above this ₹ (strictly) always enters, on top of the daily target (owner 2026-11-03). */
+    alwaysAmount: number;
+}
+export const DEFAULT_REVIEW_OPTIONS: ReviewOptions = { dailyTarget: 20, riskFloor: 25, minAmount: 100, alwaysAmount: 200 };
+
+function envNum(v: string | undefined, dflt: number): number {
+    if (v === undefined || v.trim() === '') return dflt;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : dflt;
+}
+
+/** REVIEW_DAILY_TARGET / REVIEW_RISK_FLOOR / REVIEW_MIN_AMOUNT / REVIEW_ALWAYS_AMOUNT (remote config copies into process.env). */
+export function reviewOptionsFromEnv(env: Record<string, string | undefined> = process.env): ReviewOptions {
+    return {
+        dailyTarget: Math.floor(envNum(env.REVIEW_DAILY_TARGET, DEFAULT_REVIEW_OPTIONS.dailyTarget)),
+        riskFloor: envNum(env.REVIEW_RISK_FLOOR, DEFAULT_REVIEW_OPTIONS.riskFloor),
+        minAmount: envNum(env.REVIEW_MIN_AMOUNT, DEFAULT_REVIEW_OPTIONS.minAmount),
+        alwaysAmount: envNum(env.REVIEW_ALWAYS_AMOUNT, DEFAULT_REVIEW_OPTIONS.alwaysAmount),
+    };
+}
+
+/** A client needs this many credited proofs in the window for its own amount percentiles (else all clients'). */
+export const MIN_CLIENT_CREDITS = 30;
+const MIN_MS = 60_000;
+const DAY_MS = 24 * 60 * MIN_MS;
+const IST_OFFSET_MS = 330 * MIN_MS;
+/** A receipt printed this long before it arrived is old for the risk score. */
+const OLD_RECEIPT_MS = 30 * MIN_MS;
+
+/** Risk points (sum capped at 100). Strong ones always enter the queue. */
+export const RISK = {
+    fakeReason: 70, fakeScore: 60, fakeSignal: 60, chatSentFake: 60, imageOtherChat: 70, creditedBefore: 60,
+    markedPayer: 60, amountP95: 40, amountP90: 30, amountP75: 15, burst: 15, personas: 15, oldReceipt: 15, timeUnknown: 10,
+} as const;
+
+export function istDay(ms: number): string {
+    return new Date(ms + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function shaOf(r: PaymentProofRow): string | null {
+    const s = r.imageSha256 || r.image?.sha256;
+    return typeof s === 'string' && s ? s : null;
+}
+function norm(v: unknown): string {
+    return typeof v === 'string' ? v.toLowerCase().replace(/\s+/g, '') : '';
+}
+function printedMs(r: PaymentProofRow): number | null {
+    return r.time?.state === 'known' && typeof r.time.epochMs === 'number' && Number.isFinite(r.time.epochMs) ? r.time.epochMs : null;
+}
+/** Same payment re-captured: amount + payee + printed minute (tg-aut payee rule 7). */
+function paymentKey(r: PaymentProofRow, amount: number | null): string | null {
+    const payee = norm(r.payeeUpiId) || norm(r.payeeName);
+    const ms = printedMs(r);
+    return amount !== null && payee && ms !== null ? `${amount}|${payee}|${Math.floor(ms / MIN_MS)}` : null;
+}
+function msOf(r: PaymentProofRow): number {
+    return new Date(r.createdAt).getTime();
+}
+/** Nearest-rank percentile of an ascending list. */
+function pct(sorted: number[], p: number): number {
+    return sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)];
+}
+function ordinal(n: number): string {
+    return n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`;
+}
+
+export interface ReviewItem { row: PaymentProofRow; c: ClassifiedProof }
+export interface ReviewModel {
+    options: ReviewOptions;
+    /** IST day -> lowest risk that entered without a strong signal (null = none did). */
+    thresholds: Record<string, number | null>;
+}
+
+/**
+ * The review queue (redesign 2026-11-03: revenue correctness + long-term blocking, post-hoc only). Fills risk /
+ * riskReasons / strong / repeat / review on every item, in place. Pass ALL rows of the collection (7-day TTL) so the
+ * signals and per-day thresholds do not depend on the list filters. Pure and deterministic; no I/O.
+ *
+ * review = credited AND not reviewed AND chat not marked fake AND (strong signal OR (not a repeat AND amount >
+ * alwaysAmount) OR (amount >= minAmount AND among the day's top max(0, dailyTarget - strong) other credited proofs by
+ * (risk, amount) with risk >= riskFloor)). Over-alwaysAmount entries are on top of the target and are not strong.
+ * Nothing uncredited enters (repeats, not_ours, not_receipt, old_time, over_limit, other, uncredited fakes = flagged).
+ */
+export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string) => boolean, options: ReviewOptions = DEFAULT_REVIEW_OPTIONS): ReviewModel {
+    const asc = [...items].sort((a, b) => msOf(a.row) - msOf(b.row) || (String(a.row._id) < String(b.row._id) ? -1 : 1));
+    const byChat = new Map<string, ReviewItem[]>();
+    const shaChats = new Map<string, Set<string>>();
+    const markedPayers = new Map<string, Set<string>>();
+    const fakeRows = new Map<string, Set<ReviewItem>>();
+    const overAlways = new Set<ReviewItem>();
+    for (const x of asc) {
+        const chat = String(x.row.chatId);
+        let list = byChat.get(chat);
+        if (!list) byChat.set(chat, (list = []));
+        list.push(x);
+        const sha = shaOf(x.row);
+        if (sha) {
+            if (!shaChats.has(sha)) shaChats.set(sha, new Set());
+            shaChats.get(sha)!.add(chat);
+        }
+        const payer = norm((x.row.ocr as { payerName?: unknown } | undefined)?.payerName);
+        if (payer && isMarked(chat)) {
+            if (!markedPayers.has(payer)) markedPayers.set(payer, new Set());
+            markedPayers.get(payer)!.add(chat);
+        }
+        if (FAKE_OUTCOMES.has(String(x.c.outcome)) || x.c.reasons.some(isFakeReason)) {
+            if (!fakeRows.has(chat)) fakeRows.set(chat, new Set());
+            fakeRows.get(chat)!.add(x);
+        }
+    }
+
+    // Amount percentiles of credited proofs, per client (enough rows) else all clients.
+    const amounts = new Map<string, number[]>();
+    const all: number[] = [];
+    for (const x of asc) {
+        if (!x.c.credited || x.c.amount === null) continue;
+        all.push(x.c.amount);
+        const k = String(x.row.clientId);
+        if (!amounts.has(k)) amounts.set(k, []);
+        amounts.get(k)!.push(x.c.amount);
+    }
+    const sortNum = (a: number, b: number) => a - b;
+    all.sort(sortNum);
+    for (const v of amounts.values()) v.sort(sortNum);
+    const distOf = (clientId: string) => {
+        const own = amounts.get(clientId);
+        return own && own.length >= MIN_CLIENT_CREDITS ? { list: own, scope: clientId } : { list: all, scope: 'all clients' };
+    };
+
+    for (const [chat, list] of byChat) {
+        const seenSha = new Set<string>();
+        const seenKey = new Set<string>();
+        const creditedSha = new Set<string>();
+        const creditedKey = new Set<string>();
+        for (let i = 0; i < list.length; i++) {
+            const x = list[i];
+            const r = x.row;
+            const sha = shaOf(r);
+            const key = paymentKey(r, num(r.amount) ?? x.c.amount);
+            x.c.repeat = x.c.outcome === 'repeat' || (!!sha && seenSha.has(sha)) || (!!key && seenKey.has(key));
+            const creditedBefore = (!!sha && creditedSha.has(sha)) || (!!key && creditedKey.has(key));
+            if (sha) seenSha.add(sha);
+            if (key) seenKey.add(key);
+            if (!x.c.credited) continue;
+            if (sha) creditedSha.add(sha);
+            if (key) creditedKey.add(key);
+
+            const reasons: string[] = [];
+            let risk = 0;
+            let strong = false;
+            const add = (pts: number, label: string, isStrong = false) => { risk += pts; reasons.push(label); strong ||= isStrong; };
+            const fakeCodes = x.c.reasons.filter(isFakeReason);
+            if (fakeCodes.length) add(RISK.fakeReason, `Fake sign: ${fakeCodes.join(', ')}`, true);
+            if (x.c.fakeScore !== null && x.c.fakeScore >= REVIEW_FAKE_SCORE) add(RISK.fakeScore, `Fake score ${x.c.fakeScore}`, true);
+            const signals = strings(r.verdict?.fakeSignals);
+            if (signals.length) add(RISK.fakeSignal, `Image model: ${signals.slice(0, 3).join(', ')}`, true);
+            const fakes = fakeRows.get(chat);
+            if (fakes && [...fakes].some((f) => f !== x)) add(RISK.chatSentFake, 'Chat sent a fake receipt', true);
+            if (sha && (shaChats.get(sha)?.size ?? 0) > 1) add(RISK.imageOtherChat, 'Same image used by another chat', true);
+            if (creditedBefore) add(RISK.creditedBefore, 'Same receipt credited before', true);
+            const payer = norm((r.ocr as { payerName?: unknown } | undefined)?.payerName);
+            if (payer && [...(markedPayers.get(payer) ?? [])].some((c) => c !== chat)) add(RISK.markedPayer, 'Payer of a marked-fake chat', true);
+
+            const amount = x.c.amount;
+            // Always reviewed, but not a fake signal: no risk points, strong stays false.
+            if (!x.c.repeat && amount !== null && amount > options.alwaysAmount) {
+                reasons.push(`Over ₹${options.alwaysAmount}`);
+                overAlways.add(x);
+            }
+            if (amount !== null) {
+                const d = distOf(String(r.clientId));
+                if (d.list.length) {
+                    const [p75, p90, p95] = [pct(d.list, 0.75), pct(d.list, 0.9), pct(d.list, 0.95)];
+                    if (amount > p95) add(RISK.amountP95, `Top 5% amount for ${d.scope} (> ₹${p95})`);
+                    else if (amount > p90) add(RISK.amountP90, `Top 10% amount for ${d.scope} (> ₹${p90})`);
+                    else if (amount > p75) add(RISK.amountP75, `Top 25% amount for ${d.scope} (> ₹${p75})`);
+                }
+            }
+            const t = msOf(r);
+            const day = list.slice(0, i + 1).filter((y) => y.c.credited && t - msOf(y.row) <= DAY_MS);
+            if (day.length >= 3) add(RISK.burst, `${ordinal(day.length)} credit in 24 h`);
+            const personas = new Set(day.map((y) => String(y.row.profile)));
+            if (personas.size >= 2) add(RISK.personas, `Paid on ${personas.size} personas in 24 h`);
+            const printed = printedMs(r);
+            if (printed === null) add(RISK.timeUnknown, 'Payment time not read');
+            else if (t - printed > OLD_RECEIPT_MS) add(RISK.oldReceipt, `Receipt ${Math.round((t - printed) / MIN_MS)} min old`);
+
+            x.c.risk = Math.min(100, risk);
+            x.c.riskReasons = reasons;
+            x.c.strong = strong;
+        }
+    }
+
+    // Per IST day: strong + over-alwaysAmount entries + the top other ones up to the target. Ranked over every credited proof of the
+    // day (reviewed / marked included) so a click does not pull another proof in.
+    const days = new Map<string, ReviewItem[]>();
+    for (const x of asc) {
+        if (!x.c.credited) continue;
+        const d = istDay(msOf(x.row));
+        if (!days.has(d)) days.set(d, []);
+        days.get(d)!.push(x);
+    }
+    const thresholds: Record<string, number | null> = {};
+    for (const [d, list] of days) {
+        const strongN = list.filter((x) => x.c.strong).length;
+        const slots = Math.max(0, options.dailyTarget - strongN);
+        const ranked = list
+            .filter((x) => !x.c.strong && !overAlways.has(x) && (x.c.amount ?? 0) >= options.minAmount && x.c.risk >= options.riskFloor)
+            .sort((a, b) => b.c.risk - a.c.risk || (b.c.amount ?? 0) - (a.c.amount ?? 0) || (String(b.row._id) < String(a.row._id) ? -1 : 1))
+            .slice(0, slots);
+        thresholds[d] = ranked.length ? ranked[ranked.length - 1].c.risk : null;
+        const picked = new Set(ranked);
+        for (const x of list) {
+            x.c.review = !x.c.reviewed && !isMarked(String(x.row.chatId)) && (x.c.strong || overAlways.has(x) || picked.has(x));
+        }
+    }
+    for (const x of asc) if (!x.c.credited) x.c.review = false;
+    return { options, thresholds };
+}
+
+/** Review queue order: risk x credited ₹ at risk. */
+export function priorityOf(c: ClassifiedProof): number {
+    return c.risk * c.atRiskAmount;
+}
+
+/** Opaque keyset cursor over (t desc, _id desc): t = createdAt ms, or priorityOf() when s = 'r' (risk order). */
+export interface ProofCursor { t: number; id: string; s?: 'r' }
 
 export function encodeCursor(c: ProofCursor): string {
     return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
@@ -129,7 +389,8 @@ export function decodeCursor(raw: unknown): ProofCursor | null {
     try {
         const v = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
         if (v && typeof v.t === 'number' && Number.isFinite(v.t) && typeof v.id === 'string' && /^[0-9a-f]{24}$/i.test(v.id)) {
-            return { t: v.t, id: v.id.toLowerCase() };
+            if (v.s !== undefined && v.s !== 'r') return null;
+            return v.s === 'r' ? { t: v.t, id: v.id.toLowerCase(), s: 'r' } : { t: v.t, id: v.id.toLowerCase() };
         }
     } catch { /* invalid cursor */ }
     return null;

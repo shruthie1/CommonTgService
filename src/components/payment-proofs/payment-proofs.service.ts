@@ -4,8 +4,8 @@ import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schema';
 import { PAYMENT_PROOF_MODEL, PaymentProofRow, ProofReview } from './schemas/payment-proof.schema';
 import {
-    ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, addToCounts, classify, decodeCursor, emptyCounts,
-    encodeCursor, inState, isAfterCursor, parseProofId,
+    ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, ReviewModel, addToCounts, buildReviewModel, classify,
+    decodeCursor, emptyCounts, encodeCursor, inState, isAfterCursor, parseProofId, priorityOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
 
 export const DEFAULT_LIMIT = 50;
@@ -13,7 +13,7 @@ export const MAX_LIMIT = 100;
 /** The TTL is 7 days, so this is the whole collection by default. */
 export const DEFAULT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /**
- * Rows read per list call (counts need the whole filtered window). Prod 2026-11-03: 1,756 rows in total at ~617 B,
+ * Rows read per list call (the review model needs the whole collection). Prod 2026-11-03: 1,756 rows in total at ~617 B,
  * so one call reads ~1 MB; the cap only guards against a runaway collection and sets `truncated`.
  */
 export const MAX_WINDOW_ROWS = 20_000;
@@ -32,7 +32,12 @@ const CLASSIFY_PROJECTION = {
     _id: 1, chatId: 1, profile: 1, clientId: 1, telegramMsgId: 1, createdAt: 1, amount: 1, creditAmount: 1, decision: 1,
     reasons: 1, servedAt: 1, 'ask.kind': 1, 'ask.blockedAt': 1, 'ask.reasons': 1, proofId: 1,
     'verdict.outcome': 1, 'verdict.reasons': 1, 'verdict.fakeScore': 1, 'review.state': 1,
+    // review model signals (re-sends, image reuse, payer, receipt age)
+    imageSha256: 1, 'image.sha256': 1, payeeUpiId: 1, payeeName: 1, 'time.state': 1, 'time.epochMs': 1,
+    'verdict.fakeSignals': 1, 'ocr.payerName': 1,
 } as const;
+export const PROOF_SORTS = ['risk', 'time'] as const;
+export type ProofSort = (typeof PROOF_SORTS)[number];
 
 export interface ListQuery {
     since?: string;
@@ -41,6 +46,8 @@ export interface ListQuery {
     minAmount?: string | number;
     limit?: string | number;
     cursor?: string;
+    /** risk (default for state=review: risk x credited ₹) or time (newest first; default for other states). */
+    sort?: string;
 }
 
 export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
@@ -53,6 +60,11 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
     amountValue: number | null;
     inReview: boolean;
     flagged: boolean;
+    risk: number;
+    riskReasons: string[];
+    atRiskAmount: number;
+    strong: boolean;
+    repeat: boolean;
     persona: string;
     username: string | null;
     complaintScore: number | null;
@@ -63,7 +75,10 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
 export interface ListResult {
     items: ProofItem[];
     nextCursor: string | null;
-    counts: ProofCounts;
+    /** counts.reviewAmount = credited ₹ of the review items (same filters). */
+    counts: ProofCounts & { reviewAmount: number };
+    /** The review rule's settings and per-IST-day risk threshold (whole collection, not the filters). */
+    reviewModel: ReviewModel;
     /** true when the window held more than MAX_WINDOW_ROWS rows (counts then cover only the newest ones). */
     truncated: boolean;
 }
@@ -108,21 +123,24 @@ export class PaymentProofsService {
             if (!Number.isInteger(limit) || limit < 1) throw new BadRequestException('limit must be an integer >= 1');
             limit = Math.min(limit, MAX_LIMIT);
         }
+        const sort = (q.sort === undefined || q.sort === '' ? (state === 'review' ? 'risk' : 'time') : String(q.sort)) as ProofSort;
+        if (!PROOF_SORTS.includes(sort)) throw new BadRequestException(`sort must be one of ${PROOF_SORTS.join('|')}`);
         let cursor = null;
         if (q.cursor !== undefined && q.cursor !== '') {
             cursor = decodeCursor(q.cursor);
-            if (!cursor) throw new BadRequestException('invalid cursor');
+            if (!cursor || (cursor.s === 'r') !== (sort === 'risk')) throw new BadRequestException('invalid cursor');
         }
-        return { since, client, state, minAmount, limit, cursor };
+        return { since, client, state, minAmount, limit, cursor, sort };
     }
 
     async list(q: ListQuery, now = Date.now()): Promise<ListResult> {
         const p = this.parseQuery(q, now);
-        const filter: Record<string, unknown> = { createdAt: { $gte: new Date(p.since) } };
-        if (p.client) filter.clientId = p.client;
-        // createdAt range on tg-aut's TTL index createdAt_ttl; no new index (prod 2026-11-03: 1,756 keys/docs, 6 ms).
+        // The whole collection (7-day TTL) is read so the review model (signals across chats, per-day thresholds) does
+        // not change with the filters; since / client / minAmount are applied in memory. createdAt range on tg-aut's
+        // TTL index createdAt_ttl; no new index (prod 2026-11-03: 1,767 rows).
+        const from = Math.min(p.since, now - DEFAULT_WINDOW_MS);
         const rows = await this.proofModel
-            .find(filter, CLASSIFY_PROJECTION)
+            .find({ createdAt: { $gte: new Date(from) } }, CLASSIFY_PROJECTION)
             .sort({ createdAt: -1, _id: -1 })
             .limit(MAX_WINDOW_ROWS + 1)
             .lean<PaymentProofRow[]>()
@@ -130,26 +148,31 @@ export class PaymentProofsService {
         const truncated = rows.length > MAX_WINDOW_ROWS;
         if (truncated) rows.length = MAX_WINDOW_ROWS;
 
-        const classified: { row: PaymentProofRow; c: ClassifiedProof }[] = [];
-        for (const row of rows) {
-            const c = classify(row);
-            if (p.minAmount !== null && (c.amount === null || c.amount < p.minAmount)) continue;
-            classified.push({ row, c });
-        }
+        const everything = rows.map((row) => ({ row, c: classify(row) }));
+        const chats = await this.chatInfo([...new Set(everything.map((x) => String(x.row.chatId)))]);
+        const isMarked = (chatId: string) => !!chats.get(chatId)?.marked;
+        const reviewModel = buildReviewModel(everything, isMarked, reviewOptionsFromEnv());
 
-        const chats = await this.chatInfo([...new Set(classified.map((x) => String(x.row.chatId)))]);
-        const counts = emptyCounts();
-        const page: { row: PaymentProofRow; c: ClassifiedProof; marked: boolean }[] = [];
-        let more = false;
+        const classified = everything.filter(({ row, c }) =>
+            new Date(row.createdAt).getTime() >= p.since
+            && (!p.client || row.clientId === p.client)
+            && (p.minAmount === null || (c.amount !== null && c.amount >= p.minAmount)));
+
+        const counts = { ...emptyCounts(), reviewAmount: 0 };
+        const inPage: { row: PaymentProofRow; c: ClassifiedProof; marked: boolean; t: number }[] = [];
         for (const x of classified) {
-            const marked = !!chats.get(String(x.row.chatId))?.marked;
+            const marked = isMarked(String(x.row.chatId));
             addToCounts(counts, x.c, marked);
-            if (more || !inState(x.c, marked, p.state)) continue;
-            const t = new Date(x.row.createdAt).getTime();
+            if (x.c.review) counts.reviewAmount += x.c.atRiskAmount;
+            if (!inState(x.c, marked, p.state)) continue;
+            const t = p.sort === 'risk' ? priorityOf(x.c) : new Date(x.row.createdAt).getTime();
             if (p.cursor && !isAfterCursor(t, String(x.row._id), p.cursor)) continue;
-            if (page.length < p.limit) page.push({ ...x, marked });
-            else more = true;
+            inPage.push({ ...x, marked, t });
         }
+        // rows are already (createdAt desc, _id desc); risk order needs a sort on (priority desc, _id desc).
+        if (p.sort === 'risk') inPage.sort((a, b) => b.t - a.t || (String(b.row._id) < String(a.row._id) ? -1 : 1));
+        const more = inPage.length > p.limit;
+        const page = inPage.slice(0, p.limit);
 
         const hosts = page.length ? await this.clientHostMap(now) : new Map<string, string>();
         const full = new Map<string, PaymentProofRow>();
@@ -176,6 +199,11 @@ export class PaymentProofsService {
                 amountValue: c.amount,
                 inReview: c.review,
                 flagged: c.flagged,
+                risk: c.risk,
+                riskReasons: c.riskReasons,
+                atRiskAmount: c.atRiskAmount,
+                strong: c.strong,
+                repeat: c.repeat,
                 persona: ud?.profile ?? row.profile,
                 username: ud?.username || null,
                 complaintScore: typeof ud?.cheatCount === 'number' ? ud.cheatCount : null,
@@ -185,9 +213,9 @@ export class PaymentProofsService {
         });
         const last = page[page.length - 1];
         const nextCursor = more && last
-            ? encodeCursor({ t: new Date(last.row.createdAt).getTime(), id: String(last.row._id) })
+            ? encodeCursor(p.sort === 'risk' ? { t: last.t, id: String(last.row._id), s: 'r' } : { t: last.t, id: String(last.row._id) })
             : null;
-        return { items, nextCursor, counts, truncated };
+        return { items, nextCursor, counts, reviewModel, truncated };
     }
 
     /** userData rows of the chats (index chatId_Profile): per-persona info + chat-level fake mark. */

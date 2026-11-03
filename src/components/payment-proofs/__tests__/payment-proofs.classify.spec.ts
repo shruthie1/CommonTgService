@@ -1,6 +1,7 @@
 /** Pure rules of the payments review screen (contract section 2): outcome derivation, states, proofId, cursor. */
 import {
-    classify, decodeCursor, deriveLegacyOutcome, encodeCursor, inState, isAfterCursor, parseProofId, proofIdOf,
+    DEFAULT_REVIEW_OPTIONS, buildReviewModel, classify, decodeCursor, deriveLegacyOutcome, encodeCursor, inState,
+    isAfterCursor, parseProofId, priorityOf, proofIdOf, reviewOptionsFromEnv,
 } from '../payment-proofs.classify';
 
 const base = (over: Record<string, unknown> = {}): any => ({
@@ -51,30 +52,192 @@ describe('new rows (verdict present)', () => {
     });
 });
 
-describe('review queue rule', () => {
-    const credited = (amount: number, verdict: Record<string, unknown> = {}) =>
-        base({ creditAmount: amount, servedAt: new Date(), verdict: { outcome: 'credited', reasons: [], fakeScore: null, ...verdict } });
+describe('review queue (redesign 2026-11-03: credited money that may be fake; repeats and uncredited never)', () => {
+    const T0 = Date.parse('2026-11-03T05:00:00Z'); // 10:30 IST
+    let n = 0;
+    const oid = () => (++n).toString(16).padStart(24, '0');
+    const row = (over: Record<string, unknown> = {}): any => base({
+        _id: oid(), telegramMsgId: n, createdAt: new Date(T0 + n * 60_000), time: { state: 'known', epochMs: T0 + n * 60_000 },
+        ...over,
+    });
+    const credited = (amount: number, over: Record<string, unknown> = {}) =>
+        row({ servedAt: new Date(), creditAmount: amount, amount, ...over });
+    const model = (rows: any[], marked: string[] = [], opts = DEFAULT_REVIEW_OPTIONS) => {
+        const items = rows.map((r) => ({ row: r, c: classify(r) }));
+        const m = buildReviewModel(items, (chat) => marked.includes(chat), opts);
+        return { items, m, c: (i: number) => items[i].c };
+    };
+    beforeEach(() => { n = 0; });
 
-    it('every not-credited proof is in review until reviewed', () => {
-        expect(classify(base()).review).toBe(true);
-        expect(classify(base({ review: { state: 'ok', by: 'ops', at: new Date() } })).review).toBe(false);
+    it.each(['fraud_ask', 'fake_blocked', 'cross_client', 'model_blocked', 'not_ours', 'not_receipt', 'old_time', 'over_limit', 'repeat', 'other'])(
+        'uncredited %s never enters review', (outcome) => {
+            const { c } = model([row({ chatId: '9', verdict: { outcome, reasons: ['PERSONA_PAYEE'], fakeScore: 90 } })]);
+            expect(c(0).review).toBe(false);
+            expect(c(0).atRiskAmount).toBe(0);
+        });
+
+    it('legacy uncredited rows (other / fraud ask / old_time) never enter review', () => {
+        const { items } = model([row(), row({ ask: { kind: 'fraud', state: 'open' } }), row({ ask: { kind: 'old_time' } })]);
+        expect(items.map((x) => x.c.review)).toEqual([false, false, false]);
     });
-    it('a clean credited proof under ₹300 is not in review', () => {
-        expect(classify(credited(299)).review).toBe(false);
+
+    it('a plain credited proof with no signal and ₹200 or less is not in review', () => {
+        const { c } = model([credited(200)]);
+        expect(c(0)).toMatchObject({ review: false, strong: false, atRiskAmount: 200 });
+        expect(c(0).riskReasons).not.toContain('Over ₹200');
     });
-    it('credited ≥ ₹300 is in review', () => {
-        expect(classify(credited(300)).review).toBe(true);
+
+    describe('over ₹200 always enters (owner 2026-11-03), on top of the daily target, not a strong signal', () => {
+        it('₹201 with no signal enters, labelled "Over ₹200", strong stays false and adds no risk points', () => {
+            const { c } = model([credited(201)]);
+            expect(c(0)).toMatchObject({ review: true, strong: false, repeat: false });
+            expect(c(0).riskReasons).toContain('Over ₹200');
+            expect(model([credited(200)]).c(0).review).toBe(false);
+        });
+        it('a repeat ₹500 (same image re-sent in the chat) does not enter by amount', () => {
+            const sha = 'f'.repeat(64);
+            const { c } = model([row({ imageSha256: sha, amount: 500 }), credited(500, { imageSha256: sha })]);
+            expect(c(1)).toMatchObject({ credited: true, repeat: true, strong: false, review: false });
+            expect(c(1).riskReasons).not.toContain('Over ₹200');
+        });
+        it('does not use a daily-target slot and does not count as strong for slots', () => {
+            const rows = [
+                ...Array.from({ length: 40 }, (_, i) => credited(50, { chatId: `c${i}` })),
+                credited(150, { chatId: 'mid', time: { state: 'unknown' } }), // > p90 ₹50 (p95 = ₹150 itself): 30 + time not read 10
+                credited(500, { chatId: 'big1' }), credited(900, { chatId: 'big2' }),
+            ];
+            const { items, m } = model(rows, [], { ...DEFAULT_REVIEW_OPTIONS, dailyTarget: 1 });
+            const inQ = items.filter((x) => x.c.review).map((x) => String(x.row.chatId)).sort();
+            expect(inQ).toEqual(['big1', 'big2', 'mid']);
+            expect(m.thresholds['2026-11-03']).toBe(40);
+        });
+        it('reviewed or marked-fake chats still leave the queue', () => {
+            const { c } = model([credited(500, { review: { state: 'ok', by: 'ops', at: new Date() } }), credited(500, { chatId: '77' })], ['77']);
+            expect([c(0).review, c(1).review]).toEqual([false, false]);
+        });
     });
-    it('credited with fakeScore ≥ 40 or any reason is in review', () => {
-        expect(classify(credited(20, { fakeScore: 39 })).review).toBe(false);
-        expect(classify(credited(20, { fakeScore: 40 })).review).toBe(true);
-        expect(classify(credited(20, { reasons: ['FUTURE_TIME'] })).review).toBe(true);
+
+    it('a non-fake reason (BLOCKED_IGNORED, OVER_1000) on a credited proof is not a signal', () => {
+        expect(model([credited(50, { reasons: ['BLOCKED_IGNORED'] })]).c(0).review).toBe(false);
     });
-    it('reviewed removes it from review but keeps it in reviewed/credited', () => {
-        const c = classify({ ...credited(600), review: { state: 'ok', by: 'ops', at: new Date() } });
-        expect(c.review).toBe(false);
-        expect(inState(c, false, 'reviewed')).toBe(true);
-        expect(inState(c, false, 'credited')).toBe(true);
+
+    it.each([
+        ['fake reason code', { reasons: ['PERSONA_PAYEE'] }, 'Fake sign: PERSONA_PAYEE'],
+        ['LLM_FAKE_* code', { reasons: ['LLM_FAKE_SUSPECTED'] }, 'Fake sign: LLM_FAKE_SUSPECTED'],
+        ['fakeScore >= 40', { proofId: 'x-1-1', verdict: { outcome: 'credited', reasons: [], fakeScore: 40 } }, 'Fake score 40'],
+        ['fakeSignals', { proofId: 'x-1-1', verdict: { outcome: 'credited', reasons: [], fakeScore: 10, fakeSignals: ['FONT_MISMATCH'] } }, 'Image model: FONT_MISMATCH'],
+    ])('credited + %s = strong, enters at any amount', (_n, over, label) => {
+        const { c } = model([credited(20, over)]);
+        expect(c(0)).toMatchObject({ review: true, strong: true });
+        expect(c(0).riskReasons).toContain(label);
+        expect(c(0).risk).toBeGreaterThanOrEqual(60);
+    });
+
+    it('fakeScore 39 alone is not strong', () => {
+        expect(model([credited(20, { proofId: 'x-1-1', verdict: { outcome: 'credited', reasons: [], fakeScore: 39 } })]).c(0).strong).toBe(false);
+    });
+
+    it('a chat that sent a fake receipt makes its credited proofs strong; the fake itself stays out (flagged only)', () => {
+        const { c } = model([credited(50, { chatId: '7' }), row({ chatId: '7', ask: { kind: 'fraud', blockedAt: new Date() } }), credited(50, { chatId: '8' })]);
+        expect(c(0)).toMatchObject({ review: true, strong: true });
+        expect(c(0).riskReasons).toContain('Chat sent a fake receipt');
+        expect(c(1)).toMatchObject({ review: false, flagged: true });
+        expect(c(2).review).toBe(false);
+    });
+
+    it('same image used by another chat is strong', () => {
+        const { c } = model([row({ chatId: '1', imageSha256: 'a'.repeat(64) }), credited(50, { chatId: '2', imageSha256: 'a'.repeat(64) })]);
+        expect(c(1)).toMatchObject({ review: true, strong: true, repeat: false });
+        expect(c(1).riskReasons).toContain('Same image used by another chat');
+    });
+
+    describe('legacy repeat detection (no verdict)', () => {
+        it('same sha256 as an earlier row of the chat = repeat, not review', () => {
+            const { c } = model([credited(350, { imageSha256: 'b'.repeat(64) }), row({ imageSha256: 'b'.repeat(64), amount: 350 })]);
+            expect(c(0).repeat).toBe(false);
+            expect(c(1)).toMatchObject({ outcome: 'other', legacy: true, repeat: true, review: false });
+        });
+        it('same amount + payee + printed minute = repeat; a different printed minute is a new payment', () => {
+            const printed = { state: 'known', epochMs: T0 - 5 * 60_000 };
+            const { c } = model([
+                credited(150, { payeeUpiId: 'Our@UPI', time: printed }),
+                row({ amount: 150, payeeUpiId: 'our@upi', time: { state: 'known', epochMs: printed.epochMs + 20_000 } }),
+                row({ amount: 150, payeeUpiId: 'our@upi', time: { state: 'known', epochMs: printed.epochMs + 3 * 60_000 } }),
+            ]);
+            expect([c(1).repeat, c(2).repeat]).toEqual([true, false]);
+            expect([c(1).review, c(2).review]).toEqual([false, false]);
+        });
+        it('a repeat in another chat is not a same-chat repeat', () => {
+            const { c } = model([row({ chatId: '1', imageSha256: 'c'.repeat(64) }), row({ chatId: '2', imageSha256: 'c'.repeat(64) })]);
+            expect(c(1).repeat).toBe(false);
+        });
+        it('the same receipt credited twice in the chat is strong (counted twice as revenue)', () => {
+            const { c } = model([credited(100, { imageSha256: 'd'.repeat(64) }), credited(100, { imageSha256: 'd'.repeat(64) })]);
+            expect(c(0).review).toBe(false);
+            expect(c(1)).toMatchObject({ repeat: true, strong: true, review: true });
+            expect(c(1).riskReasons).toContain('Same receipt credited before');
+        });
+        it('a credit after an uncredited try of the same image is the first credit, not strong', () => {
+            const { c } = model([row({ imageSha256: 'e'.repeat(64), amount: 50 }), credited(50, { imageSha256: 'e'.repeat(64) })]);
+            expect(c(1)).toMatchObject({ repeat: true, strong: false, review: false });
+        });
+    });
+
+    it('reviewed proofs and marked-fake chats are not in review', () => {
+        const fake = { reasons: ['FAKE_TEXT'] };
+        const { c } = model([credited(50, { ...fake, review: { state: 'ok', by: 'ops', at: new Date() } }), credited(50, { ...fake, chatId: '77' })], ['77']);
+        expect([c(0).review, c(1).review]).toEqual([false, false]);
+        expect(c(0).strong).toBe(true);
+    });
+
+    it('amount above the client percentiles adds risk; dynamic threshold keeps the day at the target', () => {
+        // 40 credits of ₹50 for one client + three big ones: p95 of the client = 50, so the big ones score "Top 5%".
+        const rows = [
+            ...Array.from({ length: 40 }, (_, i) => credited(50, { chatId: `c${i}` })),
+            credited(600, { chatId: 'b1' }), credited(500, { chatId: 'b2' }), credited(350, { chatId: 'b3' }),
+            credited(20, { chatId: 's1', reasons: ['UPI_NOT_OURS'] }),
+        ];
+        const opts = { dailyTarget: 3, riskFloor: 25, minAmount: 100, alwaysAmount: 1000 };
+        const { items, m } = model(rows, [], opts);
+        const inQ = items.filter((x) => x.c.review).map((x) => String(x.row.chatId));
+        // strong s1 always + 2 slots: b1/b2 (> p95 ₹350, risk 40) beat b3 (= p95, > p90: risk 30)
+        expect(inQ.sort()).toEqual(['b1', 'b2', 's1']);
+        expect(items.find((x) => x.row.chatId === 'b1')!.c.riskReasons[0]).toBe('Top 5% amount for keerthi2 (> ₹350)');
+        expect(items.find((x) => x.row.chatId === 'b3')!.c.riskReasons[0]).toBe('Top 10% amount for keerthi2 (> ₹50)');
+        expect(m.thresholds['2026-11-03']).toBe(40);
+    });
+
+    it('below minAmount only a strong signal enters; risk below the floor never does', () => {
+        const rows = [
+            ...Array.from({ length: 40 }, (_, i) => credited(20, { chatId: `c${i}` })),
+            credited(90, { chatId: 'small' }), // top 5% but under ₹100
+        ];
+        const { items } = model(rows);
+        expect(items.find((x) => x.row.chatId === 'small')!.c).toMatchObject({ risk: 40, review: false });
+        expect(items.filter((x) => x.c.review)).toHaveLength(0);
+    });
+
+    it('burst and multi-persona credits in 24 h add risk', () => {
+        const { c } = model([credited(50, { profile: 'a' }), credited(50, { profile: 'b' }), credited(50, { profile: 'a' })]);
+        expect(c(2).riskReasons).toEqual(expect.arrayContaining(['3rd credit in 24 h', 'Paid on 2 personas in 24 h']));
+    });
+
+    it('old receipt and unread payment time add risk', () => {
+        const { c } = model([credited(50, { time: { state: 'known', epochMs: T0 - 60 * 60_000 } }), credited(50, { chatId: '5', time: { state: 'unknown' } })]);
+        expect(c(0).riskReasons.some((r) => /^Receipt \d+ min old$/.test(r))).toBe(true);
+        expect(c(1).riskReasons).toContain('Payment time not read');
+    });
+
+    it('payer name of a marked-fake chat is strong on another chat', () => {
+        const { c } = model([row({ chatId: 'm', ocr: { payerName: 'Ravi K' } }), credited(50, { chatId: 'n', ocr: { payerName: 'ravi  k' } })], ['m']);
+        expect(c(1)).toMatchObject({ strong: true, review: true });
+    });
+
+    it('priority = risk x credited ₹; options come from env with defaults', () => {
+        const { c } = model([credited(20, { reasons: ['FAKE_TEXT'] })]);
+        expect(priorityOf(c(0))).toBe(c(0).risk * 20);
+        expect(reviewOptionsFromEnv({})).toEqual(DEFAULT_REVIEW_OPTIONS);
+        expect(reviewOptionsFromEnv({ REVIEW_DAILY_TARGET: '35', REVIEW_RISK_FLOOR: 'x', REVIEW_MIN_AMOUNT: '200', REVIEW_ALWAYS_AMOUNT: '300' })).toEqual({ dailyTarget: 35, riskFloor: 25, minAmount: 200, alwaysAmount: 300 });
     });
 });
 
@@ -114,6 +277,11 @@ describe('cursor', () => {
         expect(isAfterCursor(1000, '6ae96d2f023e6f34c07f2ff9', c)).toBe(true);
         expect(isAfterCursor(1000, c.id, c)).toBe(false);
         expect(isAfterCursor(1001, '000000000000000000000000', c)).toBe(false);
+    });
+    it('a risk-order cursor keeps its sort tag', () => {
+        const c = { t: 1400, id: '6ae96d2f023e6f34c07f2ffa', s: 'r' as const };
+        expect(decodeCursor(encodeCursor(c))).toEqual(c);
+        expect(decodeCursor(Buffer.from(JSON.stringify({ ...c, s: 'x' })).toString('base64url'))).toBeNull();
     });
     it.each(['', 'not-base64!', Buffer.from('{"t":"x","id":"y"}').toString('base64url'), Buffer.from('[1]').toString('base64url')])('rejects %j', (s) => {
         expect(decodeCursor(s)).toBeNull();

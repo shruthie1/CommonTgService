@@ -39,6 +39,12 @@ export interface PaymentProofRow {
     createdAt: Date;
     amount?: number;
     creditAmount?: number;
+    /** sha256 of the exact downloaded bytes (exact re-send detection). */
+    imageSha256?: string;
+    payeeUpiId?: string;
+    payeeName?: string;
+    /** Printed payment time as read: epochMs only when state 'known'. */
+    time?: { state?: string; epochMs?: number };
     decision?: string;
     reasons?: string[];
     servedAt?: Date;
