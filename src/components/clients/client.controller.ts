@@ -62,6 +62,16 @@ export class ClientController {
     return await this.clientService.findOneMasked(clientId);
   }
 
+  // Must stay above @Get(':clientId') so 'directory' is not read as a clientId.
+  @Get('directory')
+  @UseInterceptors(CloudflareCacheInterceptor)
+  @NoCache() // carries full mobiles: never let a CDN or browser cache it
+  @ApiOperation({ summary: 'Client directory for tg-chats: clientId, full mobile, last swap time only' })
+  @ApiOkResponse({ description: '{ items: [{ clientId, mobile, lastSwapAt }] } sorted by clientId' })
+  async findDirectory() {
+    return await this.clientService.findDirectory();
+  }
+
   @Get()
   @UseInterceptors(CloudflareCacheInterceptor)
   @NoCache() // full client docs carry sessions/passwords: never let a CDN or browser cache them

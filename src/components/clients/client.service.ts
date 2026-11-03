@@ -413,6 +413,39 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     return clients.map(({ session, mobile, password, degraded, swapRetry, deadMain, swapLease, swappedAt, sessionChangedAt, ...maskedClient }) => maskedClient);
   }
 
+  /**
+   * tg-chats client directory: clientId + full mobile + last swap time, nothing else.
+   * Reads Mongo with a strict projection (not the full-doc cache) so sessions/passwords never load.
+   * Cached in-process for DIRECTORY_CACHE_MS.
+   */
+  async findDirectory(): Promise<{ items: { clientId: string; mobile: string | null; lastSwapAt: string | null }[] }> {
+    const now = Date.now();
+    if (this.directoryCache && now - this.directoryCache.at < ClientService.DIRECTORY_CACHE_MS) {
+      return this.directoryCache.value;
+    }
+    const rows = await this.clientModel
+      .find({}, { _id: 0, clientId: 1, mobile: 1, swappedAt: 1 })
+      .sort({ clientId: 1 })
+      .lean<Pick<Client, 'clientId' | 'mobile' | 'swappedAt'>[]>()
+      .exec();
+    const items = rows
+      .map((r) => {
+        const t = r.swappedAt ? new Date(r.swappedAt) : null;
+        return {
+          clientId: String(r.clientId),
+          mobile: r.mobile ? String(r.mobile) : null,
+          lastSwapAt: t && !Number.isNaN(t.getTime()) ? t.toISOString() : null,
+        };
+      })
+      .sort((a, b) => (a.clientId < b.clientId ? -1 : a.clientId > b.clientId ? 1 : 0));
+    const value = { items };
+    this.directoryCache = { at: now, value };
+    return value;
+  }
+
+  private static readonly DIRECTORY_CACHE_MS = 30_000;
+  private directoryCache: { at: number; value: { items: { clientId: string; mobile: string | null; lastSwapAt: string | null }[] } } | null = null;
+
   async findOneMasked(clientId: string): Promise<Partial<Client>> {
     const client = await this.findOne(clientId, true);
     const { session, mobile, password, degraded, swapRetry, deadMain, swapLease, swappedAt, sessionChangedAt, ...maskedClient } = client;
