@@ -59,6 +59,8 @@ export interface ClassifiedProof {
     strong: boolean;
     /** Re-send of a screenshot already seen in the same chat (same sha256, or amount + payee + printed minute). */
     repeat: boolean;
+    /** Set on a reuse copy: the earliest proof with the same UTR (the original). buildReviewModel fills it. */
+    reusedFrom: { proofId: string; chatId: string; createdAt: string; amount: number | null } | null;
 }
 
 export function proofIdOf(row: Pick<PaymentProofRow, 'proofId' | 'clientId' | 'chatId' | 'telegramMsgId'>): string {
@@ -122,6 +124,7 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
         atRiskAmount: credited ? amount ?? 0 : 0,
         strong: false,
         repeat: outcome === 'repeat',
+        reusedFrom: null,
     };
 }
 
@@ -183,7 +186,7 @@ const OLD_RECEIPT_MS = 30 * MIN_MS;
 
 /** Risk points (sum capped at 100). Strong ones always enter the queue. */
 export const RISK = {
-    fakeReason: 70, fakeScore: 60, fakeSignal: 60, chatSentFake: 60, imageOtherChat: 70, creditedBefore: 60,
+    fakeReason: 70, fakeScore: 60, fakeSignal: 60, chatSentFake: 60, imageOtherChat: 70, creditedBefore: 60, utrReused: 70,
     markedPayer: 60, amountP95: 40, amountP90: 30, amountP75: 15, burst: 15, personas: 15, oldReceipt: 15, timeUnknown: 10,
 } as const;
 
@@ -194,6 +197,14 @@ export function istDay(ms: number): string {
 function shaOf(r: PaymentProofRow): string | null {
     const s = r.imageSha256 || r.image?.sha256;
     return typeof s === 'string' && s ? s : null;
+}
+/** UTRs shorter than this (after trim / uppercase / no spaces) are ignored as unread. */
+export const MIN_UTR_LENGTH = 6;
+/** Normalised UTR (trim, uppercase, no whitespace), or null when absent / shorter than MIN_UTR_LENGTH. */
+export function normUtr(v: unknown): string | null {
+    if (typeof v !== 'string') return null;
+    const u = v.trim().toUpperCase().replace(/\s+/g, '');
+    return u.length >= MIN_UTR_LENGTH ? u : null;
 }
 function norm(v: unknown): string {
     return typeof v === 'string' ? v.toLowerCase().replace(/\s+/g, '') : '';
@@ -242,6 +253,14 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
     const markedPayers = new Map<string, Set<string>>();
     const fakeRows = new Map<string, Set<ReviewItem>>();
     const overAlways = new Set<ReviewItem>();
+    // Reused receipts (owner 2026-11-04): a fraudster edits only the amount on an earlier genuine receipt, so the UTR
+    // repeats. The EARLIEST row with a UTR (or the first chat to send an image) is the original and is never flagged
+    // because of its later copies; a later row is a reuse copy when it is in another chat or reads another amount.
+    // A later row in the original's chat with the same amount is a plain re-send (repeat / credited-before rules).
+    const utrOriginal = new Map<string, ReviewItem>();
+    const utrCopies = new Set<ReviewItem>();
+    const shaFirstChat = new Map<string, string>();
+    const readAmount = (x: ReviewItem) => num(x.row.amount) ?? x.c.amount;
     for (const x of asc) {
         const chat = String(x.row.chatId);
         let list = byChat.get(chat);
@@ -251,6 +270,13 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
         if (sha) {
             if (!shaChats.has(sha)) shaChats.set(sha, new Set());
             shaChats.get(sha)!.add(chat);
+            if (!shaFirstChat.has(sha)) shaFirstChat.set(sha, chat);
+        }
+        const utr = normUtr(x.row.utr);
+        if (utr) {
+            const orig = utrOriginal.get(utr);
+            if (!orig) utrOriginal.set(utr, x);
+            else if (String(orig.row.chatId) !== chat || readAmount(orig) !== readAmount(x)) utrCopies.add(x);
         }
         const payer = norm((x.row.ocr as { payerName?: unknown } | undefined)?.payerName);
         if (payer && isMarked(chat)) {
@@ -290,14 +316,26 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
             const x = list[i];
             const r = x.row;
             const sha = shaOf(r);
+            const utr = normUtr(r.utr);
+            const copy = utrCopies.has(x);
+            if (copy) {
+                const orig = utrOriginal.get(utr!)!;
+                x.c.reusedFrom = { proofId: orig.c.proofId, chatId: String(orig.row.chatId), createdAt: new Date(orig.row.createdAt).toISOString(), amount: readAmount(orig) };
+            }
+            // A same-chat same-amount re-send of a UTR counts like a same-image re-send; a reuse copy does not.
+            const utrKey = utr && !copy ? `utr|${utr}` : null;
             const key = paymentKey(r, num(r.amount) ?? x.c.amount);
-            x.c.repeat = x.c.outcome === 'repeat' || (!!sha && seenSha.has(sha)) || (!!key && seenKey.has(key));
-            const creditedBefore = (!!sha && creditedSha.has(sha)) || (!!key && creditedKey.has(key));
+            x.c.repeat = x.c.outcome === 'repeat' || (!!sha && seenSha.has(sha)) || (!!key && seenKey.has(key))
+                || (!!utrKey && seenKey.has(utrKey));
+            const creditedBefore = (!!sha && creditedSha.has(sha)) || (!!key && creditedKey.has(key))
+                || (!!utrKey && creditedKey.has(utrKey));
             if (sha) seenSha.add(sha);
             if (key) seenKey.add(key);
+            if (utrKey) seenKey.add(utrKey);
             if (!x.c.credited) continue;
             if (sha) creditedSha.add(sha);
             if (key) creditedKey.add(key);
+            if (utrKey) creditedKey.add(utrKey);
 
             const reasons: string[] = [];
             let risk = 0;
@@ -309,8 +347,17 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
             const signals = strings(r.verdict?.fakeSignals);
             if (signals.length) add(RISK.fakeSignal, `Image model: ${signals.slice(0, 3).join(', ')}`, true);
             const fakes = fakeRows.get(chat);
-            if (fakes && [...fakes].some((f) => f !== x)) add(RISK.chatSentFake, 'Chat sent a fake receipt', true);
-            if (sha && (shaChats.get(sha)?.size ?? 0) > 1) add(RISK.imageOtherChat, 'Same image used by another chat', true);
+            // An edited copy of one of this chat's own earlier receipts says nothing about a UTR original of the chat
+            // (the genuine side, owner 2026-11-04). A copy of another chat's receipt still taints the chat.
+            const ownCopy = (f: ReviewItem) => !copy && !!utr && utrCopies.has(f)
+                && String(utrOriginal.get(normUtr(f.row.utr)!)!.row.chatId) === chat;
+            if (fakes && [...fakes].some((f) => f !== x && !ownCopy(f))) add(RISK.chatSentFake, 'Chat sent a fake receipt', true);
+            if (sha && (shaChats.get(sha)?.size ?? 0) > 1 && shaFirstChat.get(sha) !== chat) add(RISK.imageOtherChat, 'Same image used by another chat', true);
+            if (copy) {
+                const before = x.c.reusedFrom!.amount;
+                const now = readAmount(x);
+                add(RISK.utrReused, `Reused UTR of an earlier receipt${before !== null && before !== now ? ` (₹${before} before)` : ''}`, true);
+            }
             if (creditedBefore) add(RISK.creditedBefore, 'Same receipt credited before', true);
             const payer = norm((r.ocr as { payerName?: unknown } | undefined)?.payerName);
             if (payer && [...(markedPayers.get(payer) ?? [])].some((c) => c !== chat)) add(RISK.markedPayer, 'Payer of a marked-fake chat', true);

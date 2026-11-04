@@ -151,6 +151,75 @@ describe('review queue (redesign 2026-11-03: credited money that may be fake; re
         expect(c(1).riskReasons).toContain('Same image used by another chat');
     });
 
+    describe('reused UTR (owner 2026-11-04): the earliest receipt is the original, later edited copies are suspect', () => {
+        const U = 'T5551234567';
+        it('the original is not in review because of its later edited copy; the copy\'s fake does not taint it', () => {
+            const { c } = model([
+                credited(50, { chatId: '7', utr: U }),
+                row({ chatId: '7', utr: U.toLowerCase(), amount: 150, ask: { kind: 'fraud', blockedAt: new Date() }, reasons: ['UTR_REUSED_OTHER_AMOUNT'] }),
+            ]);
+            expect(c(0)).toMatchObject({ review: false, strong: false, reusedFrom: null });
+            expect(c(0).riskReasons).not.toContain('Chat sent a fake receipt');
+            expect(c(1)).toMatchObject({ review: false, flagged: true });
+            expect(c(1).reusedFrom).toMatchObject({ proofId: c(0).proofId, amount: 50 });
+        });
+        it('a later credited copy with another amount is strong: "Reused UTR of an earlier receipt"', () => {
+            const { c } = model([credited(50, { chatId: '7', utr: U }), credited(350, { chatId: '7', utr: ` ${U.slice(0, 5)} ${U.slice(5)} ` })]);
+            expect(c(0)).toMatchObject({ review: false, strong: false });
+            expect(c(1)).toMatchObject({ review: true, strong: true });
+            expect(c(1).riskReasons).toContain('Reused UTR of an earlier receipt (₹50 before)');
+        });
+        it('a copy in another chat (same amount) is strong; the earlier chat\'s original is not', () => {
+            const { c } = model([credited(100, { chatId: '1', utr: U }), credited(100, { chatId: '2', utr: U })]);
+            expect(c(0)).toMatchObject({ review: false, strong: false });
+            expect(c(1)).toMatchObject({ review: true, strong: true });
+            expect(c(1).riskReasons).toContain('Reused UTR of an earlier receipt');
+        });
+        it('edited copies of the chat\'s other originals do not taint an original either', () => {
+            const V = 'V7770001112';
+            const { c } = model([
+                credited(50, { chatId: '7', utr: U }), credited(50, { chatId: '7', utr: V }),
+                row({ chatId: '7', utr: V, amount: 350, reasons: ['UTR_REUSED_OTHER_AMOUNT'] }),
+            ]);
+            expect([c(0).riskReasons, c(1).riskReasons].flat()).not.toContain('Chat sent a fake receipt');
+            expect([c(0).review, c(1).review]).toEqual([false, false]);
+        });
+        it('a copy of ANOTHER chat\'s receipt still taints the copying chat\'s originals', () => {
+            const V = 'V7770001112';
+            const { c } = model([
+                credited(50, { chatId: '1', utr: V }), credited(50, { chatId: '7', utr: U }),
+                row({ chatId: '7', utr: V, amount: 350, reasons: ['UTR_REUSED_OTHER_AMOUNT'] }),
+            ]);
+            expect(c(0).review).toBe(false);
+            expect(c(1)).toMatchObject({ review: true, strong: true });
+            expect(c(1).riskReasons).toContain('Chat sent a fake receipt');
+        });
+        it('a fake from another UTR in the chat still makes the original strong', () => {
+            const { c } = model([credited(50, { chatId: '7', utr: U }), row({ chatId: '7', utr: 'X999888777', reasons: ['PERSONA_PAYEE'] })]);
+            expect(c(0)).toMatchObject({ review: true, strong: true });
+            expect(c(0).riskReasons).toContain('Chat sent a fake receipt');
+        });
+        it('a same-chat same-amount re-send is a repeat, not a reuse; credited twice = credited before', () => {
+            const { c } = model([row({ chatId: '7', utr: U, amount: 500 }), credited(500, { chatId: '7', utr: U }), credited(500, { chatId: '7', utr: U })]);
+            expect(c(1)).toMatchObject({ repeat: true, strong: false, review: false, reusedFrom: null });
+            expect(c(2)).toMatchObject({ strong: true, review: true });
+            expect(c(2).riskReasons).toContain('Same receipt credited before');
+            expect(c(2).riskReasons.some((r) => r.startsWith('Reused UTR'))).toBe(false);
+        });
+        it('empty or short UTRs are ignored', () => {
+            const { c } = model([credited(50, { chatId: '1', utr: '' }), credited(50, { chatId: '2', utr: '' }), credited(50, { chatId: '3', utr: ' 12 34 ' }), credited(50, { chatId: '4', utr: '1234' })]);
+            expect([0, 1, 2, 3].map((i) => c(i).review)).toEqual([false, false, false, false]);
+            expect([0, 1, 2, 3].map((i) => c(i).reusedFrom)).toEqual([null, null, null, null]);
+        });
+        it('same image in another chat: the first chat\'s proof is the original, only the later chat is strong', () => {
+            const sha = '9'.repeat(64);
+            const { c } = model([credited(50, { chatId: '1', imageSha256: sha }), credited(50, { chatId: '2', imageSha256: sha })]);
+            expect(c(0)).toMatchObject({ review: false, strong: false });
+            expect(c(1)).toMatchObject({ review: true, strong: true });
+            expect(c(1).riskReasons).toContain('Same image used by another chat');
+        });
+    });
+
     describe('legacy repeat detection (no verdict)', () => {
         it('same sha256 as an earlier row of the chat = repeat, not review', () => {
             const { c } = model([credited(350, { imageSha256: 'b'.repeat(64) }), row({ imageSha256: 'b'.repeat(64), amount: 350 })]);

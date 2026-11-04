@@ -19,9 +19,10 @@ export class PaymentProofsController {
             'review (revenue + long-term blocking, post-hoc; nothing in tg-aut reads it) = CREDITED AND not reviewed AND chat not ' +
             'marked fake AND (strong fake signal OR (credited ₹ >= REVIEW_MIN_AMOUNT (100) AND among the IST day\'s top ' +
             'REVIEW_DAILY_TARGET (20) minus strong, by risk, with risk >= REVIEW_RISK_FLOOR (25))). Strong: fake reason code, ' +
-            'fakeScore >= 40, fakeSignals, chat sent a fake receipt, same image in another chat, same receipt credited before, ' +
+            'fakeScore >= 40, fakeSignals, chat sent a fake receipt, same image in another chat (not the first chat), reused UTR of an ' +
+            'earlier receipt (another chat or amount; the earliest proof with a UTR is the original), same receipt credited before, ' +
             'payer of a marked-fake chat. Uncredited proofs (repeats, not_ours, not_receipt, old_time, over_limit, uncredited ' +
-            'fakes) never enter review. Items carry risk (0-100), riskReasons, atRiskAmount, strong, repeat; ' +
+            'fakes) never enter review. Items carry risk (0-100), riskReasons, atRiskAmount, strong, repeat, reusedFrom; ' +
             'counts.reviewAmount = credited ₹ in review. ' +
             'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = review.state ok. ' +
             'Rows without verdict (before tg-aut wrote one) get an outcome derived from servedAt / ask / decision (legacy: true). ' +
@@ -30,6 +31,7 @@ export class PaymentProofsController {
     })
     @ApiQuery({ name: 'since', required: false, description: 'ISO date; default now - 7 days (the TTL)' })
     @ApiQuery({ name: 'client', required: false, description: 'clientId' })
+    @ApiQuery({ name: 'chat', required: false, description: 'chatId: only this chat (counts too)' })
     @ApiQuery({ name: 'state', required: false, enum: PROOF_STATES, description: 'default review' })
     @ApiQuery({ name: 'minAmount', required: false, description: 'creditAmount (else amount read) >= n' })
     @ApiQuery({ name: 'limit', required: false, description: `default 50, max ${MAX_LIMIT}` })

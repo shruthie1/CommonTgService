@@ -138,6 +138,9 @@ describe('PaymentProofsService', () => {
         const k = await service.list({ client: 'kavya1', state: 'all' }, NOW);
         expect(k.items.map((i) => i.telegramMsgId)).toEqual([7]);
         expect(k.counts.all).toBe(1);
+        const ch = await service.list({ chat: '333', state: 'all' }, NOW);
+        expect(ch.items.map((i) => i.chatId)).toEqual(['333']);
+        expect(ch.counts.all).toBe(1);
         const s = await service.list({ since: at(4.5).toISOString(), state: 'all' }, NOW);
         expect(s.items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4]);
         const m = await service.list({ minAmount: '100', state: 'all' }, NOW);
@@ -196,10 +199,23 @@ describe('PaymentProofsService', () => {
         await expect(service.list({ limit: 2, sort: 'time', cursor: first.nextCursor! }, NOW)).rejects.toBeInstanceOf(BadRequestException);
     });
 
+    it('reused UTR: the earliest proof is the original (not in review), the later edited copy is; reusedFrom on the item', async () => {
+        await proofs.collection.insertMany([
+            proof({ chatId: '555', servedAt: at(10), creditAmount: 50, amount: 50, utr: '123456789012', createdAt: at(10) }),
+            proof({ chatId: '555', servedAt: at(5), creditAmount: 350, amount: 350, utr: '1234 5678 9012', createdAt: at(5) }),
+        ]);
+        const r = await service.list({ state: 'all', chat: '555' }, NOW);
+        const [copy, orig] = r.items; // newest first
+        expect(orig).toMatchObject({ amount: 50, inReview: false, strong: false, reusedFrom: null });
+        expect(copy).toMatchObject({ amount: 350, inReview: true, strong: true });
+        expect(copy.riskReasons).toContain('Reused UTR of an earlier receipt (₹50 before)');
+        expect(copy.reusedFrom).toMatchObject({ proofId: orig.proofId, chatId: '555', amount: 50 });
+    });
+
     it('caps limit at 100 and rejects bad params', async () => {
         await proofs.collection.insertMany(Array.from({ length: 105 }, () => proof({})));
         expect((await service.list({ state: 'all', limit: '500' }, NOW)).items).toHaveLength(100);
-        for (const q of [{ state: 'nope' }, { since: 'yesterday' }, { limit: '0' }, { limit: '2.5' }, { minAmount: '-1' }, { cursor: 'zzz' }, { client: 'a b' }, { sort: 'amount' }]) {
+        for (const q of [{ state: 'nope' }, { since: 'yesterday' }, { limit: '0' }, { limit: '2.5' }, { minAmount: '-1' }, { cursor: 'zzz' }, { client: 'a b' }, { chat: '12ab' }, { sort: 'amount' }]) {
             await expect(service.list(q as any, NOW)).rejects.toBeInstanceOf(BadRequestException);
         }
     });

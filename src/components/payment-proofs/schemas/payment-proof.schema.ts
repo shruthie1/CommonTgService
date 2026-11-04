@@ -41,6 +41,8 @@ export interface PaymentProofRow {
     creditAmount?: number;
     /** sha256 of the exact downloaded bytes (exact re-send detection). */
     imageSha256?: string;
+    /** Transaction id as read (tg-aut proof gate); the review model groups rows on it (reused receipts). */
+    utr?: string;
     payeeUpiId?: string;
     payeeName?: string;
     /** Printed payment time as read: epochMs only when state 'known'. */

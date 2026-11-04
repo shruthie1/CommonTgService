@@ -49,7 +49,7 @@ const CLASSIFY_PROJECTION = {
     reasons: 1, servedAt: 1, 'ask.kind': 1, 'ask.blockedAt': 1, 'ask.reasons': 1, proofId: 1,
     'verdict.outcome': 1, 'verdict.reasons': 1, 'verdict.fakeScore': 1, 'review.state': 1,
     // review model signals (re-sends, image reuse, payer, receipt age)
-    imageSha256: 1, 'image.sha256': 1, payeeUpiId: 1, payeeName: 1, 'time.state': 1, 'time.epochMs': 1,
+    imageSha256: 1, 'image.sha256': 1, utr: 1, payeeUpiId: 1, payeeName: 1, 'time.state': 1, 'time.epochMs': 1,
     'verdict.fakeSignals': 1, 'ocr.payerName': 1,
 } as const;
 export const PROOF_SORTS = ['risk', 'time'] as const;
@@ -58,6 +58,8 @@ export type ProofSort = (typeof PROOF_SORTS)[number];
 export interface ListQuery {
     since?: string;
     client?: string;
+    /** chatId: one chat's proofs (the review details sheet's history; additive 2026-11-04). */
+    chat?: string;
     state?: string;
     minAmount?: string | number;
     limit?: string | number;
@@ -81,6 +83,8 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
     atRiskAmount: number;
     strong: boolean;
     repeat: boolean;
+    /** Reuse copy: the earliest proof with the same UTR (additive 2026-11-04). */
+    reusedFrom: ClassifiedProof['reusedFrom'];
     persona: string;
     username: string | null;
     complaintScore: number | null;
@@ -142,6 +146,11 @@ export class PaymentProofsService {
             if (!CLIENT_ID_RE.test(String(q.client))) throw new BadRequestException('client must be a clientId');
             client = String(q.client);
         }
+        let chat: string | undefined;
+        if (q.chat !== undefined && q.chat !== '') {
+            if (!/^-?\d{1,20}$/.test(String(q.chat))) throw new BadRequestException('chat must be a chatId');
+            chat = String(q.chat);
+        }
         const state = (q.state === undefined || q.state === '' ? 'review' : String(q.state)) as ProofState;
         if (!PROOF_STATES.includes(state)) throw new BadRequestException(`state must be one of ${PROOF_STATES.join('|')}`);
         let minAmount: number | null = null;
@@ -162,7 +171,7 @@ export class PaymentProofsService {
             cursor = decodeCursor(q.cursor);
             if (!cursor || (cursor.s === 'r') !== (sort === 'risk')) throw new BadRequestException('invalid cursor');
         }
-        return { since, client, state, minAmount, limit, cursor, sort };
+        return { since, client, chat, state, minAmount, limit, cursor, sort };
     }
 
     async list(q: ListQuery, now = Date.now()): Promise<ListResult> {
@@ -174,6 +183,7 @@ export class PaymentProofsService {
         const classified = everything.filter(({ row, c }) =>
             new Date(row.createdAt).getTime() >= p.since
             && (!p.client || row.clientId === p.client)
+            && (!p.chat || String(row.chatId) === p.chat)
             && (p.minAmount === null || (c.amount !== null && c.amount >= p.minAmount)));
 
         const counts = { ...emptyCounts(), reviewAmount: 0 };
@@ -222,6 +232,7 @@ export class PaymentProofsService {
                 atRiskAmount: c.atRiskAmount,
                 strong: c.strong,
                 repeat: c.repeat,
+                reusedFrom: c.reusedFrom,
                 persona: ud?.profile ?? row.profile,
                 username: ud?.username || null,
                 complaintScore: typeof ud?.cheatCount === 'number' ? ud.cheatCount : null,
