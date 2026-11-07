@@ -195,6 +195,12 @@ describe('UsersService (real Mongo)', () => {
             expect(promoteClientService.markAsInactive).toHaveBeenCalledWith(mobile, 'lost');
         });
 
+        test('a cutover opId is passed through to both pool cascades; without one the call is unchanged', async () => {
+            await service.expireAccount('919999000009', 'USER_DEACTIVATED', { opId: 'shruthi1:1762509600000' });
+            expect(bufferClientService.markAsInactive).toHaveBeenCalledWith('919999000009', 'USER_DEACTIVATED', { opId: 'shruthi1:1762509600000' });
+            expect(promoteClientService.markAsInactive).toHaveBeenCalledWith('919999000009', 'USER_DEACTIVATED', { opId: 'shruthi1:1762509600000' });
+        });
+
         test('updateMany throw is swallowed (does not throw)', async () => {
             jest.spyOn(model, 'updateMany').mockReturnValueOnce({ exec: () => Promise.reject(new Error('db')) } as any);
             await expect(service.expireAccount('919999000002')).resolves.toBeUndefined();

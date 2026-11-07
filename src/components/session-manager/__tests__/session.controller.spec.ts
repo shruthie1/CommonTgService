@@ -102,6 +102,15 @@ describe('SessionController', () => {
             });
         });
 
+        it('P4 verification fix 3: PARKED_SESSION_BUSY maps to 429 with the code in the body (even without retryable)', async () => {
+            svc.findRecentValidSession.mockResolvedValue({ success: false });
+            svc.createSession.mockResolvedValue({ success: false, error: 'parked', code: 'PARKED_SESSION_BUSY' });
+            await expect(controller.createSession({ mobile: '123' } as any)).rejects.toMatchObject({
+                status: HttpStatus.TOO_MANY_REQUESTS,
+                response: { code: 'PARKED_SESSION_BUSY', retryable: true },
+            });
+        });
+
         it('rethrows HttpException unchanged from inner call', async () => {
             const inner = new HttpException({ success: false, message: 'custom' }, HttpStatus.BAD_REQUEST);
             svc.findRecentValidSession.mockRejectedValue(inner);
@@ -243,6 +252,31 @@ describe('SessionController', () => {
             svc.getOldestSessionOrCreate.mockResolvedValue({ success: false, code: 'RATE_LIMIT_EXCEEDED', message: 'rl', retryable: true });
             await expect(controller.getOldestSessionOrCreate({ mobile: '123' } as any)).rejects.toMatchObject({
                 status: HttpStatus.TOO_MANY_REQUESTS,
+            });
+        });
+
+        it('P4 verification fix 3: maps PARKED_SESSION_BUSY to 429 (same as /session/create), retryable in the body', async () => {
+            svc.getOldestSessionOrCreate.mockResolvedValue({ success: false, code: 'PARKED_SESSION_BUSY', message: 'parked', retryable: true });
+            await expect(controller.getOldestSessionOrCreate({ mobile: '123' } as any)).rejects.toMatchObject({
+                status: HttpStatus.TOO_MANY_REQUESTS,
+                response: { code: 'PARKED_SESSION_BUSY', retryable: true },
+            });
+            svc.getOldestSessionOrCreate.mockResolvedValue({ success: false, code: 'PARKED_SESSION_BUSY', message: 'parked' });
+            await expect(controller.getOldestSessionOrCreate({ mobile: '123' } as any)).rejects.toMatchObject({
+                status: HttpStatus.TOO_MANY_REQUESTS,
+                response: { retryable: true },
+            });
+        });
+
+        it('review L7: a retryable failure that is not PARKED_SESSION_BUSY keeps its previous status (400), not 429', async () => {
+            svc.getOldestSessionOrCreate.mockResolvedValue({ success: false, code: 'FALLBACK_CREATION_FAILED', message: 'later', retryable: true });
+            await expect(controller.getOldestSessionOrCreate({ mobile: '123' } as any)).rejects.toMatchObject({
+                status: HttpStatus.BAD_REQUEST,
+                response: { code: 'FALLBACK_CREATION_FAILED', retryable: true },
+            });
+            svc.getOldestSessionOrCreate.mockResolvedValue({ success: false, code: 'WHATEVER', message: 'later', retryable: true });
+            await expect(controller.getOldestSessionOrCreate({ mobile: '123' } as any)).rejects.toMatchObject({
+                status: HttpStatus.BAD_REQUEST,
             });
         });
 

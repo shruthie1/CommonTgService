@@ -1,6 +1,7 @@
 import { Controller, Post, Body, HttpException, HttpStatus, Get, Query, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { SessionService } from './session.service';
+import { PARKED_SESSION_BUSY } from '../clients/parked-session-guard';
 import { IsString, IsOptional, IsBoolean, IsNumber, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -168,13 +169,16 @@ export class SessionController {
                     isNew: true
                 };
             } else {
+                // P4 verification fix 3: the parked-responder guard refusal is retryable (429), like /session/oldest.
+                const retryable = !!result.retryable || result.code === PARKED_SESSION_BUSY;
                 throw new HttpException(
                     {
                         success: false,
                         message: result.error,
-                        retryable: result.retryable
+                        retryable,
+                        ...(result.code ? { code: result.code } : {})
                     },
-                    result.retryable ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_REQUEST
+                    retryable ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.BAD_REQUEST
                 );
             }
         } catch (error) {
@@ -371,6 +375,9 @@ export class SessionController {
             } else {
                 // Determine appropriate HTTP status based on error type
                 let httpStatus = HttpStatus.BAD_REQUEST;
+                // P4 verification fix 3 / review L7: only PARKED_SESSION_BUSY adds a 429 here; any other retryable
+                // failure (e.g. FALLBACK_CREATION_FAILED) keeps its previous status. The body's retryable flag is additive.
+                const retryable = !!result.retryable || result.code === PARKED_SESSION_BUSY;
 
                 if (result.code === 'NO_SESSION_FOUND') {
                     httpStatus = HttpStatus.NOT_FOUND;
@@ -378,6 +385,8 @@ export class SessionController {
                     httpStatus = HttpStatus.TOO_MANY_REQUESTS;
                 } else if (result.code === 'FALLBACK_DISABLED') {
                     httpStatus = HttpStatus.NOT_FOUND;
+                } else if (result.code === PARKED_SESSION_BUSY) {
+                    httpStatus = HttpStatus.TOO_MANY_REQUESTS;
                 }
 
                 throw new HttpException(
@@ -385,7 +394,7 @@ export class SessionController {
                         success: false,
                         message: result.message,
                         code: result.code,
-                        retryable: result.retryable || false
+                        retryable
                     },
                     httpStatus
                 );

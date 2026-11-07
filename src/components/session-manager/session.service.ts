@@ -1,3 +1,4 @@
+import { checkParkedSession, describeParkedVerdict, PARKED_SESSION_BUSY, type ParkedSessionVerdict } from '../clients/parked-session-guard';
 import { Injectable } from '@nestjs/common';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
@@ -24,7 +25,10 @@ export interface SessionCreationResult {
     session?: string;
     error?: string;
     retryable?: boolean;
+    /** Machine-readable refusal (additive): 'PARKED_SESSION_BUSY' = the parked-responder guard refused. */
+    code?: string;
 }
+
 
 export class SessionManager {
     private static instance: SessionManager | null = null;
@@ -515,6 +519,23 @@ export class SessionService {
         this.sessionAuditService = sessionAuditService;
     }
 
+    /** Parked-responder guard (clients/parked-session-guard.ts): busy / unreadable = refuse. */
+    private parkedSessionVerdict(mobile: string): Promise<ParkedSessionVerdict> {
+        const db = typeof this.sessionAuditService?.parkedGuardDb === 'function' ? this.sessionAuditService.parkedGuardDb() : null;
+        return checkParkedSession(db, mobile);
+    }
+
+    /**
+     * P4 re-review L3: the guard again right before a connect inside a long flow (an episode can open between the
+     * entry check and the 2nd / 3rd strategy or the next audit candidate). Null = free; else the refusal result.
+     */
+    private async parkedRefusal(mobile: string, step: string): Promise<SessionCreationResult | null> {
+        const parked = await this.parkedSessionVerdict(mobile);
+        if (!parked.busy) return null;
+        this.logger.info(mobile, `Session ${step} refused: ${describeParkedVerdict(parked)}`);
+        return { success: false, error: `Account is in use by the parked responder (${parked.reason}); try again later`, retryable: true, code: PARKED_SESSION_BUSY };
+    }
+
     private getCredentials(mobile: string): ITelegramCredentials {
         return getTelegramCredentialsForMobile(mobile);
     }
@@ -641,6 +662,14 @@ export class SessionService {
             return { success: false, error: 'Mobile number is required or must be extractable from session', retryable: false };
         }
 
+        // Parked responder (tg-platform design 2026-11-05 "P4 review fixes" item 1): the old-session and audit-session
+        // strategies connect stored session strings, which can be the pool key a parked pass is using. Fail closed.
+        const parked = await this.parkedSessionVerdict(mobile);
+        if (parked.busy) {
+            this.logger.info(mobile, `Session creation refused: ${describeParkedVerdict(parked)}`);
+            return { success: false, error: `Account is in use by the parked responder (${parked.reason}); try again later`, retryable: true, code: PARKED_SESSION_BUSY };
+        }
+
         // Check rate limit
         const rateLimitCheck = this.checkRateLimit(mobile);
         if (!rateLimitCheck.allowed) {
@@ -666,6 +695,8 @@ export class SessionService {
             }
 
             // PRIORITY 2: Try with existing manager (mobile-based)
+            const refusedBefore2 = await this.parkedRefusal(mobile, 'creation (priority 2)');
+            if (refusedBefore2) return refusedBefore2;
             this.logger.info(mobile, 'Trying with existing manager (Priority 2)');
             const managerResult = await this.sessionManager.createSession({
                 ...options,
@@ -682,6 +713,7 @@ export class SessionService {
             // PRIORITY 3: Try with audit sessions (fallback)
             this.logger.info(mobile, 'Trying with audit sessions (Priority 3)');
             const auditResult = await this.tryAuditSessions(mobile, options);
+            if (auditResult.code === PARKED_SESSION_BUSY) return auditResult;
             if (auditResult.success) {
                 await this.updateAuditOnSuccess(mobile, auditResult.session!, SessionCreationMethod.OLD_SESSION);
                 return auditResult;
@@ -718,6 +750,9 @@ export class SessionService {
 
             for (let i = 0; i < Math.min(auditSessions.length, 2); i++) {
                 const auditSession = auditSessions[i];
+                // P4 re-review L3: every audit candidate connects a stored string (it can be a pool key).
+                const refused = await this.parkedRefusal(mobile, `creation (audit session ${i + 1})`);
+                if (refused) return refused;
 
                 try {
                     const result = await this.sessionManager.createSession({
@@ -892,8 +927,23 @@ export class SessionService {
                 };
             }
 
+            // Parked responder guard (P4 review item 1): validating audit sessions connects them. Fail closed.
+            const parked = await this.parkedSessionVerdict(mobile);
+            if (parked.busy) {
+                this.logger.info(mobile, `Oldest-session lookup refused: ${describeParkedVerdict(parked)}`);
+                return {
+                    success: false,
+                    message: `Account is in use by the parked responder (${parked.reason}); try again later`,
+                    code: PARKED_SESSION_BUSY,
+                    retryable: true,
+                };
+            }
+
             // Step 1: Try to find the oldest valid session within the specified age limit
             const oldestSessionResult = await this.findOldestValidSession(mobile, maxAgeDays);
+            if (oldestSessionResult.parkedBusy) {
+                return { success: false, message: oldestSessionResult.error, code: PARKED_SESSION_BUSY, retryable: true };
+            }
 
             if (oldestSessionResult.success && oldestSessionResult.session) {
                 this.logger.info(mobile, 'Oldest valid session found, updating usage and returning');
@@ -952,11 +1002,13 @@ export class SessionService {
                 };
             } else {
                 this.logger.error(mobile, 'Failed to create fallback session', createResult.error);
+                // Review L7: surface the parked-responder refusal as its own code (the controller maps only that to 429).
+                const parkedBusy = createResult.code === PARKED_SESSION_BUSY;
                 return {
                     success: false,
                     message: `Failed to create fallback session: ${createResult.error}`,
-                    code: 'FALLBACK_CREATION_FAILED',
-                    retryable: createResult.retryable || false
+                    code: parkedBusy ? PARKED_SESSION_BUSY : 'FALLBACK_CREATION_FAILED',
+                    retryable: parkedBusy || createResult.retryable || false
                 };
             }
 
@@ -978,6 +1030,8 @@ export class SessionService {
         success: boolean;
         session?: SessionAudit;
         error?: string;
+        /** P4 re-review L3: the parked guard refused before a candidate's validation connect. */
+        parkedBusy?: boolean;
     }> {
         try {
             // Calculate the cutoff date
@@ -1018,6 +1072,9 @@ export class SessionService {
             }
 
             for (const candidate of validSessions) {
+                // P4 re-review L3: validation connects the audit string; re-check before EACH candidate.
+                const refused = await this.parkedRefusal(mobile, 'oldest-session validation');
+                if (refused) return { success: false, error: refused.error, parkedBusy: true };
                 this.logger.info(mobile, `Validating candidate session created at ${candidate.createdAt}`);
                 const validationResult = await this.sessionManager.validateSession(candidate.sessionString!, mobile);
                 if (validationResult.isValid) {

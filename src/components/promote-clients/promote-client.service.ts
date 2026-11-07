@@ -253,6 +253,13 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             const newUser = new this.promoteClientModel(promoteClientData);
             return newUser.save();
         }));
+        // accountRoleEvents (S1, additive): a pool doc created here (POST /promoteclients, createOrUpdate's create branch)
+        // is an enrolment. An old main's pool return goes to bufferClients only, never here. Fire-and-forget; never
+        // throws or delays the create.
+        this.recordRoleEvent({
+            mobile: canonicalMobile, clientId: promoteClient.clientId ?? null, event: 'enrolled', pool: 'promote', by: 'cms:promote-create',
+            reasonCode: 'enrolment', details: { availableDate: promoteClient.availableDate ?? null, status },
+        });
         await this.sendAccountNotice(
             {
                 severity: 'success',
@@ -426,6 +433,7 @@ export class PromoteClientService extends BaseClientService<PromoteClientDocumen
             withPoolClaimOrRefuse: (m, fn) => this.withPoolClaimOrRefuse(m, fn),
             safeUnregisterClient: (m) => this.safeUnregisterClient(m),
             enrolmentInactiveSince: () => ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS),
+            logger: this.logger,
         };
     }
 

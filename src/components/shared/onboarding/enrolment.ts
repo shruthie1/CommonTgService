@@ -17,6 +17,7 @@ import { withEnrollmentLock } from '../enrollment-lock';
 import { describeClaimHolder, ensurePoolClaimIndex, withPoolClaim } from './pool-claim';
 import { WarmupPhase } from '../warmup-phases';
 import type { PoolProfile } from './pool-profile';
+import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
 
 export interface EnrolmentLogger {
     debug(message: string, ...rest: unknown[]): void;
@@ -136,6 +137,11 @@ export async function enrolPoolClientFromUser(
             return true;
         }
         if (!enrolled) return false;
+        // accountRoleEvents (S1, additive): fire-and-forget; never throws or delays enrolment.
+        recordAccountRoleEventSoon(accountRoleEventsCollectionOf(port.model), {
+            mobile: canonical, clientId: targetClientId, event: 'enrolled', pool, by: 'cms:auto-enrol',
+            reasonCode: 'enrolment', details: { availableDate: targetAvailableDate },
+        }, { logger });
 
         logger.log(`Created ${profile.label}Client for ${targetClientId} with availability ${targetAvailableDate}`);
         await port.sendAccountNotice({

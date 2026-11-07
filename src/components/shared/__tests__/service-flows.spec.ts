@@ -24,6 +24,8 @@ jest.mock('../../../utils/logbots', () => ({
 
 class TestBaseService extends BaseClientService<BaseClientDocument> {
     protected otherPoolModel(): any { return null; }
+    /** Parked-responder guard (P4 review): free here; covered in base-client.coverage.spec. */
+    protected async parkedSessionVerdict(): Promise<any> { return { busy: false }; }
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
     public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => null);
@@ -136,7 +138,7 @@ function createQueryChain(executor: () => any) {
 }
 
 function makeBufferService(bufferModel: any, clientsList: any[] = [{ clientId: 'client-1', mobile: 'main-1' }]) {
-    return new BufferClientService(
+    const svc = new BufferClientService(
         bufferModel as any,
         { hasActiveClientSetup: jest.fn(() => false) } as any,
         {} as any,
@@ -147,10 +149,13 @@ function makeBufferService(bufferModel: any, clientsList: any[] = [{ clientId: '
         {} as any,
         { sendMessageByCategory: jest.fn() } as any,
     );
+    // Parked-responder guard (P4 review): free here; the guard itself is covered in base-client.coverage.spec.
+    jest.spyOn(svc as any, 'parkedSessionVerdict').mockResolvedValue({ busy: false });
+    return svc;
 }
 
 function makePromoteService(promoteModel: any, clientsList: any[] = [{ clientId: 'client-1', mobile: 'main-1' }]) {
-    return new PromoteClientService(
+    const svc = new PromoteClientService(
         promoteModel as any,
         { hasActiveClientSetup: jest.fn(() => false) } as any,
         {} as any,
@@ -161,6 +166,9 @@ function makePromoteService(promoteModel: any, clientsList: any[] = [{ clientId:
         {} as any,
         { sendMessageByCategory: jest.fn() } as any,
     );
+    // Parked-responder guard (P4 review): free here; the guard itself is covered in base-client.coverage.spec.
+    jest.spyOn(svc as any, 'parkedSessionVerdict').mockResolvedValue({ busy: false });
+    return svc;
 }
 
 describe('Service flow reliability', () => {

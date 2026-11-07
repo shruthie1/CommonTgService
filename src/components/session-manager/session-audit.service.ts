@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { SessionAudit, SessionAuditDocument, SessionStatus, SessionCreationMethod } from './schemas/sessions.schema';
 import { CreateSessionAuditDto, UpdateSessionAuditDto, SessionAuditQueryDto, SessionAuditStatsDto } from './dto/session-audit.dto';
 import { TelegramLogger } from '../Telegram/utils/telegram-logger';
+import type { ParkedGuardDb } from '../clients/parked-session-guard';
 
 @Injectable()
 export class SessionAuditService {
@@ -13,6 +14,14 @@ export class SessionAuditService {
         @InjectModel(SessionAudit.name) private sessionAuditModel: Model<SessionAuditDocument>,
     ) {
         this.logger = new TelegramLogger('SessionAuditService');
+    }
+
+    /**
+     * The Mongo connection, for the parked-responder session guard in SessionService
+     * (clients/parked-session-guard.ts). Null when unavailable (the guard then fails closed).
+     */
+    parkedGuardDb(): ParkedGuardDb | null {
+        return (this.sessionAuditModel as unknown as { db?: ParkedGuardDb })?.db ?? null;
     }
 
     /**

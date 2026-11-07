@@ -113,6 +113,31 @@ describe('ClientService (real Mongo)', () => {
       expect(after?.session).toBe('GOOD-SESSION');
     });
 
+    test('parked cutover hook (P2): a manual mobile change stops the new main\'s open parking episode', async () => {
+      const doc = makeClientDoc({ clientId: 'cid-manual', mobile: '15551110002' });
+      await model.create(doc);
+      (service as any).clientsMap.set('cid-manual', doc);
+      const hook = jest.spyOn(service as any, 'prepareNewMainForLive');
+      const episodes = connection.collection('parkedAccounts');
+      await episodes.deleteMany({});
+      await episodes.insertOne({ _id: 'promote:15552220002:1' as any, mobile: '15552220002', open: true, state: 'active', version: 0 });
+
+      await service.update('cid-manual', { mobile: '+15552220002' } as any);
+      await hook.mock.results[0]?.value;
+
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(hook).toHaveBeenCalledWith('cid-manual', '15552220002');
+      const ep = await episodes.findOne({ _id: 'promote:15552220002:1' as any });
+      expect(ep?.state).toBe('stopped');
+      expect(ep?.stopReason).toBe('became_main');
+
+      hook.mockClear();
+      await service.update('cid-manual', { name: 'Renamed' } as any);
+      await service.update('cid-manual', { mobile: '15552220002' } as any); // same mobile: no cutover
+      expect(hook).not.toHaveBeenCalled();
+      hook.mockRestore();
+    });
+
     test('update throws NotFound (not phantom upsert) when clientId does not exist', async () => {
       await expect(service.update('does-not-exist', { name: 'X' } as any))
         .rejects.toBeInstanceOf(BadRequestException); // wrapped
@@ -171,6 +196,39 @@ describe('ClientService (real Mongo)', () => {
       const after = await model.findOne({ clientId: 'cid-cut' }).lean();
       expect(after?.session).toBe('OLD-SESSION');
       expect(after?.mobile).toBe('15551110000');
+    });
+
+    test('parked cutover hook (P2): the new main\'s open parking episode is stopped BEFORE deployKey restarts tg-aut', async () => {
+      const existing = makeClientDoc({ clientId: 'cid-park', mobile: '15551110001', deployKey: 'https://example.com/deploy-park' });
+      await model.create(existing);
+      (service as any).clientsMap.set('cid-park', existing);
+      const episodes = connection.collection('parkedAccounts');
+      await episodes.deleteMany({});
+      await episodes.insertOne({ _id: 'tg-aut:15552220001:1' as any, mobile: '15552220001', open: true, state: 'active', version: 0 });
+
+      telegramService.getActiveClientSetup.mockReturnValue({
+        archiveOld: false, clientId: 'cid-park', existingMobile: '15551110001', formalities: false,
+        newMobile: '15552220001', reason: undefined, days: 0,
+      });
+      const { connectionManager } = require('../../Telegram/utils/connection-manager');
+      connectionManager.getClient.mockResolvedValue({ getMe: async () => ({ username: 'newtg' }) });
+      // The transaction needs a replica set; this test is about ordering, so the commit is stubbed.
+      jest.spyOn(service as any, 'commitClientCutover').mockResolvedValue({});
+      jest.spyOn(service as any, 'handleReplacedClient').mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'notify').mockResolvedValue(undefined);
+      const { fetchWithTimeout } = require('../../../utils/fetchWithTimeout');
+      let episodeAtDeploy: any = 'deploy never called';
+      fetchWithTimeout.mockImplementation(async (url: string) => {
+        if (url === 'https://example.com/deploy-park') episodeAtDeploy = await episodes.findOne({ _id: 'tg-aut:15552220001:1' as any });
+        return undefined;
+      });
+
+      await service.updateClientSession('NEW-SESSION', '15552220001');
+
+      expect(episodeAtDeploy).not.toBe('deploy never called');
+      expect(episodeAtDeploy.state).toBe('stopped');
+      expect(episodeAtDeploy.stopReason).toBe('became_main');
+      expect('open' in episodeAtDeploy).toBe(false);
     });
   });
 });

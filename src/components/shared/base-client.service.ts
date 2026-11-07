@@ -53,6 +53,9 @@ import {
     WARMUP_PHASE_THRESHOLDS,
 } from './warmup-phases';
 import { canonicalizeMobile, mobilesEqual } from './mobile-utils';
+import { checkParkedSession, describeParkedVerdict, PARKED_SESSION_BUSY, type ParkedGuardDb, type ParkedSessionVerdict } from '../clients/parked-session-guard';
+import { maskMobile } from '../monitor/monitor-util';
+import { accountRoleEventsCollectionOf, classifyRoleEventReason, recordAccountRoleEventSoon, type AccountRoleEventInput } from '../clients/account-role-events';
 
 /**
  * Configuration constants that differ between buffer and promote clients.
@@ -826,8 +829,12 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
 
     // ---- Status (pool-onboarding M7: was two identical copies, differing only in the pool label) ----
 
-    /** Update status; notifies ACCOUNT_NOTIFICATIONS on success and failure, rethrows on failure. */
-    async updateStatus(mobile: string, status: ClientStatusType, message?: string): Promise<TDoc> {
+    /**
+     * Update status; notifies ACCOUNT_NOTIFICATIONS on success and failure, rethrows on failure.
+     * `roleEvent.permanent` (deactivateClient only) lands in the accountRoleEvents row as details.permanent, so a
+     * retirement can be told from a temporary deactivation; omitted (unknown) for direct calls.
+     */
+    async updateStatus(mobile: string, status: ClientStatusType, message?: string, roleEvent: { permanent?: boolean; opId?: string | null } = {}): Promise<TDoc> {
         const pool = this.clientType;
         const Pool = pool === 'buffer' ? 'Buffer' : 'Promote';
         const updateData: BaseClientUpdate = { status };
@@ -838,6 +845,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         try {
             const updated = await this.update(mobile, updateData);
             this.logger.log(`${Pool} client ${mobile} status updated to ${status}`);
+            // accountRoleEvents (S1, additive): every deactivateClient / markAsInactive / markAsActive and the
+            // expireAccount cascade land here. Fire-and-forget; never throws or delays the status write.
+            // Not deduped: update() returns only the AFTER doc, so a no-op (already inactive / already active) cannot
+            // be told apart without an extra read (markAsInactive already skips an inactive doc). Design S1 review fixes.
+            this.recordRoleEvent({
+                mobile, clientId: (updated as { clientId?: string | null } | null)?.clientId ?? null,
+                event: status === 'inactive' ? 'retired' : 'reactivated', pool, by: 'cms:status', reason: message ?? null,
+                reasonCode: classifyRoleEventReason(message, 'status_change'),
+                details: typeof roleEvent.permanent === 'boolean' ? { permanent: roleEvent.permanent } : undefined,
+                // A cutover's old-main retirement (expireAccount cascade from handleReplacedClient) carries the cutover opId.
+                opId: roleEvent.opId ?? undefined,
+            });
             this.botsService.sendMessageByCategory(
                 ChannelCategory.ACCOUNT_NOTIFICATIONS,
                 {
@@ -875,14 +894,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     }
 
     /** Idempotent: no record, or already inactive -> no write and no duplicate notice (expireAccount cascade). */
-    async markAsInactive(mobile: string, reason: string): Promise<TDoc | null> {
+    async markAsInactive(mobile: string, reason: string, roleEvent?: { opId?: string | null }): Promise<TDoc | null> {
         try {
             const existing = await this.findOne(mobile, false);
             if (!existing || existing.status === 'inactive') {
                 return existing;
             }
             this.logger.log(`Marking ${this.clientType} client ${mobile} as inactive: ${reason}`);
-            return await this.updateStatus(mobile, 'inactive', reason);
+            return await this.updateStatus(mobile, 'inactive', reason, roleEvent?.opId ? { opId: roleEvent.opId } : {});
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`Failed to mark ${this.clientType} client ${mobile} as inactive: ${errorMessage}`);
@@ -1501,7 +1520,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
     ): Promise<boolean> {
         const taggedReason = this.classifyInactivationReason(reason, options.permanent);
         try {
-            await this.updateStatus(mobile, 'inactive', taggedReason);
+            await this.updateStatus(mobile, 'inactive', taggedReason, { permanent: options.permanent === true });
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`Failed to deactivate ${this.clientType} client ${mobile}: ${errorMessage}`);
@@ -2370,6 +2389,10 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         try {
             await sleep(ClientHelperUtils.gaussianRandom(20000, 2500, 15000, 25000));
             const rotated = await this.rotateSession(doc.mobile);
+            if (rotated === null) {
+                // Review M1: parked-busy is a skip, not a failure (lastUpdateAttempt above gives the cooldown).
+                return { updateCount: 0, updateSummary: 'ready_rotation_parked_busy' };
+            }
             if (rotated) {
                 this.sendAccountNotice(
                     this.warmupNotice('success', 'Warmup complete', doc.mobile, [{ label: 'Session', value: 'rotated', code: false }, { label: 'Channels', value: doc.channels || 0, code: false }])
@@ -2468,8 +2491,13 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             lastUpdateFailure: doc.lastUpdateFailure || null,
         });
 
+        let readyRecorded = false;
         if (warmupAction.phase !== doc.warmupPhase) {
             await this.update(doc.mobile, { warmupPhase: warmupAction.phase });
+            if (warmupAction.phase === WarmupPhase.READY) {
+                this.recordRoleEvent({ mobile: doc.mobile, clientId: doc.clientId ?? null, event: 'ready', pool: this.clientType, by: 'cms:warmup', reason: `${doc.warmupPhase} -> ready`, reasonCode: 'warmup' });
+                readyRecorded = true;
+            }
         }
 
         // ── Fast-path: actions that need no TG connection — skip all sleeps ──
@@ -2485,6 +2513,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         if (warmupAction.action === 'advance_to_ready') {
             await this.update(doc.mobile, { warmupPhase: WarmupPhase.READY });
             this.logger.log(`Client ${doc.mobile} advanced to READY`);
+            if (!readyRecorded && doc.warmupPhase !== WarmupPhase.READY) {
+                this.recordRoleEvent({ mobile: doc.mobile, clientId: doc.clientId ?? null, event: 'ready', pool: this.clientType, by: 'cms:warmup', reason: `${doc.warmupPhase} -> ready`, reasonCode: 'warmup' });
+            }
             this.sendAccountNotice(
                 this.warmupNotice('success', 'Warmup ready', doc.mobile, [{ label: 'Channels', value: doc.channels || 0, code: false }], 'Eligible for rotation')
             );
@@ -2552,8 +2583,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     this.logger.log(`Finished remove_external_login_sessions for ${doc.mobile}: updateCount=${updateCount}`);
                     return { updateCount, updateSummary: updateCount > 0 ? 'remove_external_login_sessions' : null };
 
-                case 'rotate_session':
-                    updateCount = (await this.rotateSession(doc.mobile)) ? 1 : 0;
+                case 'rotate_session': {
+                    const rotated = await this.rotateSession(doc.mobile);
+                    if (rotated === null) {
+                        // Review M1: parked-busy is a skip, not a failure: cooldown only, no fail count, no notice.
+                        await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
+                        return { updateCount: 0, updateSummary: 'rotate_session_parked_busy' };
+                    }
+                    updateCount = rotated ? 1 : 0;
                     if (updateCount > 0) {
                         this.sendAccountNotice(
                             this.warmupNotice('success', 'Warmup complete', doc.mobile, [{ label: 'Session', value: 'rotated', code: false }, { label: 'Channels', value: doc.channels || 0, code: false }])
@@ -2569,6 +2606,7 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         );
                     }
                     return { updateCount, updateSummary: updateCount > 0 ? 'rotate_session' : null };
+                }
 
                 default:
                     await this.update(doc.mobile, { lastUpdateAttempt: new Date() });
@@ -3216,6 +3254,14 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             // from the pool doc's own identity (mobile + tgId + a session to seed with).
             // Prefer the pool doc's stored session; fall back to the active session so the
             // required unique `session` field is always populated.
+            // P4 re-review L4: this path seeds users.session with the POOL session and then connects it
+            // (createDistinctSessionString below), the key a parked pass may be using. Busy / unreadable guard →
+            // nothing is created or connected this time (fail closed; the caller sees "no backup" and retries later).
+            const parked = await this.parkedSessionVerdict(mobile);
+            if (parked.busy) {
+                this.logger.warn(`Orphaned pool record ${maskMobile(mobile)}: users backfill skipped, ${describeParkedVerdict(parked)}`);
+                return null;
+            }
             const poolDoc = await this.model.findOne({ mobile }).lean<{ tgId?: string | number | null; session?: string | null }>().exec();
             const seedSession = (poolDoc?.session && String(poolDoc.session).trim()) || active;
             const healed = await this.usersService.backfillFromPool({
@@ -3790,12 +3836,33 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         return true;
     }
 
+    /** accountRoleEvents (S1): fire-and-forget append; never throws, never awaited. */
+    protected recordRoleEvent(input: AccountRoleEventInput): void {
+        try {
+            recordAccountRoleEventSoon(accountRoleEventsCollectionOf(this.model), input, { logger: this.logger });
+        } catch { /* history is best-effort; the role change already happened */ }
+    }
+
+    /**
+     * Parked-responder guard (tg-platform design 2026-11-05 "P4 review fixes" item 1): heal / rotate connect the POOL
+     * session, the same key tg-platform's parked pass uses. Busy (open episode, live parked lease, or the check
+     * failed = fail closed) → the caller skips the mobile this run. MIRROR: clients/parked-session-guard.ts.
+     */
+    protected async parkedSessionVerdict(mobile: string): Promise<ParkedSessionVerdict> {
+        return checkParkedSession((this.model as unknown as { db?: ParkedGuardDb })?.db, mobile);
+    }
+
     /**
      * Keep the existing active session on the buffer/promote client doc.
      * Reuse an existing distinct users backup when it is live for the same mobile,
      * otherwise create and persist a fresh distinct backup.
+     *
+     * Returns true (rotated), false (refused or failed: a warmup failure) or null = SKIPPED because the parked-responder
+     * guard says the pool session may be in use (review M1: not a failure; the caller retries after its cooldown
+     * without counting a failed attempt or sending a "Warmup failed" notice). null is falsy, so a caller that only
+     * tests truthiness still never treats a skip as a rotation.
      */
-    async rotateSession(mobile: string): Promise<boolean> {
+    async rotateSession(mobile: string): Promise<boolean | null> {
         let activeClient: TelegramClient | null = null;
         try {
             // Session creation is irreversible operational work. Keep the safety
@@ -3830,6 +3897,18 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                         ? `missing prerequisites ${missingPrerequisites.join(', ')}`
                         : 'session rotation already recorded'}`,
                 );
+                return false;
+            }
+
+            const parked = await this.parkedSessionVerdict(mobile);
+            if (parked.busy) {
+                // Round 3: only a parked responder actually holding the account is a quiet skip (null). An unreadable
+                // guard (guard_unavailable / read_error) refuses as a counted failure (false), as before the guard.
+                if (parked.reason === 'open_episode' || parked.reason === 'parked_lease') {
+                    this.logger.warn(`Session rotation skipped for ${maskMobile(mobile)}: ${describeParkedVerdict(parked)}`);
+                    return null;
+                }
+                this.logger.warn(`Session rotation refused for ${maskMobile(mobile)}: ${describeParkedVerdict(parked)}`);
                 return false;
             }
 
@@ -3920,6 +3999,8 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             skipped: 0,
             errors: [] as Array<{ mobile: string; error: string; action: string }>,
         };
+        /** P4 re-review nit: pool docs whose mobile is not a string (the guard cannot check them): counted, logged once. */
+        let nonStringMobiles = 0;
 
         // Fetch all active clients that are NOT currently in use
         const clients = await this.model.find({
@@ -3933,6 +4014,19 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         for (const doc of clients) {
             const mobile = doc.mobile;
             const session = doc.session;
+            if (typeof mobile !== 'string') {
+                nonStringMobiles++;
+                results.skipped++;
+                continue;
+            }
+
+            // Parked responder: never connect a pool session a parked pass may be using (fail closed).
+            const parked = await this.parkedSessionVerdict(mobile);
+            if (parked.busy) {
+                this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: skipped, ${describeParkedVerdict(parked)}`);
+                results.skipped++;
+                continue;
+            }
 
             if (!session?.trim()) {
                 this.logger.warn(`[HealSessions] ${mobile}: no session string stored — attempting users-session recovery`);
@@ -3996,6 +4090,11 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
                     await this.update(mobile, { session: createResult.session });
                     results.healed++;
                     this.logger.log(`[HealSessions] ${mobile}: session healed ✓`);
+                } else if (createResult.retryable === true || createResult.code === PARKED_SESSION_BUSY) {
+                    // P4 re-review SB: a retryable refusal (the parked guard inside createSession, rate limit,
+                    // creation in progress, a transient error) is NOT a dead account: skip, never deactivate.
+                    this.logger.warn(`[HealSessions] ${maskMobile(mobile)}: session creation deferred (retryable) — ${createResult.error}`);
+                    results.skipped++;
                 } else {
                     this.logger.warn(`[HealSessions] ${mobile}: session creation failed — ${createResult.error}`);
                     const deactivated = await this.deactivateClient(mobile, `Session heal: creation failed — ${createResult.error}`, { permanent: true });
@@ -4014,6 +4113,9 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
             await sleep(5000);
         }
 
+        if (nonStringMobiles > 0) {
+            this.logger.warn(`[HealSessions] ${nonStringMobiles} ${this.clientType} pool doc(s) with a non-string mobile skipped (parked guard cannot check them)`);
+        }
         this.logger.log(
             `[HealSessions] Complete: ${results.total} total, ${results.healthy} healthy, ` +
             `${results.healed} healed, ${results.deactivated} deactivated, ${results.skipped} skipped`

@@ -17,6 +17,7 @@ import { withEnrollmentLock } from '../enrollment-lock';
 import { WarmupPhase } from '../warmup-phases';
 import { enrolmentEligibilityFilter, enrolmentIneligibilityReasons } from './candidate-source';
 import { ONBOARDING_PACING, type PoolProfile } from './pool-profile';
+import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
 
 export interface SetAsPort {
     profile: Readonly<PoolProfile>;
@@ -37,6 +38,8 @@ export interface SetAsPort {
     safeUnregisterClient(mobile: string): Promise<void>;
     /** Auto-enrol inactivity cutoff (YYYY-MM-DD): the owner must not have been active since. */
     enrolmentInactiveSince(): string;
+    /** accountRoleEvents failure warnings (optional: the event is best-effort either way). */
+    logger?: { warn(message: string, meta?: unknown): void };
 }
 
 interface ClientCount { _id: string; count: number }
@@ -137,6 +140,11 @@ export async function setAsPoolClient(
                 }, { returnDocument: 'after', upsert: true })
                 .exec();
         }));
+        // accountRoleEvents (S1, additive): fire-and-forget; never throws or delays set-as.
+        recordAccountRoleEventSoon(accountRoleEventsCollectionOf(port.model), {
+            mobile: canonicalMobile, clientId: targetClientId ?? null, event: 'enrolled', pool: profile.kind, by: 'cms:set-as',
+            reasonCode: 'enrolment', details: { availableDate },
+        }, { logger: port.logger });
     } catch (error) {
         const errorDetails = cfg.errorContext
             ? parseError(error, `${cfg.errorContext} ${canonicalMobile}`)

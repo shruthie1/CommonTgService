@@ -334,4 +334,97 @@ describe('spam-aware setupClient swap', () => {
       expect(svc.usersService.expireAccount).toHaveBeenCalledTimes(1);
     });
   });
+
+  // P4 re-review L1 (tg-platform design 2026-11-05 "P4 re-review fixes"): a buffer with an OPEN parkedAccounts episode
+  // (an old main resting after its swap, possibly being answered by a parked pass) is never picked as a replacement.
+  describe('parked-episode exclusion (P4 re-review L1)', () => {
+    const fresh = (mobile: string) => cand(mobile, { spamStatus: 'free', spamCheckedAt: new Date(Date.now() - HOUR) });
+    const withEpisodes = (svc: any, find: jest.Mock) => {
+      svc.clientModel.db = { collection: jest.fn((name: string) => (name === 'parkedAccounts' ? { find } : null)) };
+      return svc;
+    };
+
+    test('a candidate with an open episode (stored with +) is skipped; the next one is used; one read for the list', async () => {
+      const find = jest.fn(() => ({ toArray: jest.fn().mockResolvedValue([{ mobile: '+919000000101' }]) }));
+      const svc = withEpisodes(makeService(), find);
+      const warn = jest.spyOn((svc as any).logger, 'warn');
+      const got = await svc.findSafeSetupBufferCandidate([fresh('919000000101'), fresh('919000000102')], 'main-session');
+      expect(got.mobile).toBe('919000000102');
+      expect(find).toHaveBeenCalledTimes(1);
+      // P4 verification fix 2: one read of every open episode per swap (cached for all tiers), not per candidate list.
+      // Final review M1: only UNEXPIRED open episodes (server clock).
+      expect((find.mock.calls[0] as any[])[0]).toEqual({ open: true, mobile: { $type: 'string' }, $expr: { $gt: ['$expiresAt', '$$NOW'] } });
+      // Review M3: the mobile is masked in the log (last 4 digits).
+      expect(warn).toHaveBeenCalledWith('Skipping setup candidate ••••0101: open parked-responder episode');
+      expect(bufferClientService.getOrEnsureDistinctUsersBackupSession).not.toHaveBeenCalledWith('919000000101', expect.anything());
+    });
+
+    test('P4 verification fix 2: the read time counts in spentMs; a second candidate list of the same swap reuses the read', async () => {
+      const [c4, c5, c6] = [fresh('919000000104'), fresh('919000000105'), fresh('919000000106')]; // fresh verdicts: no probe
+      let now = Date.now();
+      const clock = jest.spyOn(Date, 'now').mockImplementation(() => now);
+      try {
+        const find = jest.fn(() => ({ toArray: jest.fn(async () => { now += 1_500; return [{ mobile: '919000000104' }]; }) }));
+        const svc = withEpisodes(makeService(), find);
+        const parkedScan = {};
+        const budget = { clientId: 'c1', remaining: 3, spentMs: 0, skipped: [], parkedScan };
+        const got = await svc.findSafeSetupBufferCandidate([c4, c5], 'main-session', budget);
+        expect(got.mobile).toBe('919000000105');
+        expect(budget.spentMs).toBe(1_500);
+        // Another tier's budget of the same swap: no second read, no extra time.
+        const next = { clientId: 'c1', remaining: 3, spentMs: 0, skipped: [], parkedScan };
+        expect((await svc.findSafeSetupBufferCandidate([c4, c6], 'main-session', next)).mobile).toBe('919000000106');
+        expect(find).toHaveBeenCalledTimes(1);
+        expect(next.spentMs).toBe(0);
+      } finally {
+        clock.mockRestore();
+      }
+    });
+
+    // Review M8: parkedControl is passed; an episode of a disabled app/client does not exclude its candidate.
+    test('M8: parkedControl disabling tg-aut → the open-episode candidate is NOT skipped; enabled → skipped', async () => {
+      const docs = (tgAutEnabled: boolean) => (filter: any) => (filter._id === 'global' ? { enabled: true } : filter._id === 'tg-aut' ? { enabled: tgAutEnabled } : null);
+      for (const [enabled, expected] of [[false, '919000000111'], [true, '919000000112']] as const) {
+        const find = jest.fn((_filter: any) => ({ toArray: jest.fn().mockResolvedValue([{ mobile: '919000000111' }]) }));
+        const control = { findOne: jest.fn(async (filter: any) => docs(enabled)(filter)) };
+        const svc: any = makeService();
+        svc.clientModel.db = { collection: jest.fn((name: string) => (name === 'parkedAccounts' ? { find } : name === 'parkedControl' ? control : null)) };
+        const got = await svc.findSafeSetupBufferCandidate([fresh('919000000111'), fresh('919000000112')], 'main-session', { clientId: 'c1', remaining: 3, spentMs: 0, skipped: [] });
+        expect(got.mobile).toBe(expected);
+        expect(control.findOne).toHaveBeenCalled();
+        if (enabled) expect((find.mock.calls[0] as any[])[0].$or).toEqual([{ app: 'tg-aut' }]);
+        else expect(find).not.toHaveBeenCalled();
+      }
+    });
+
+    test('M8: an unreadable parkedControl → every open episode excludes (fail closed), logged', async () => {
+      const find = jest.fn(() => ({ toArray: jest.fn().mockResolvedValue([{ mobile: '919000000113' }]) }));
+      const control = { findOne: jest.fn().mockRejectedValue(new Error('control down')) };
+      const svc: any = makeService();
+      svc.clientModel.db = { collection: jest.fn((name: string) => (name === 'parkedAccounts' ? { find } : name === 'parkedControl' ? control : null)) };
+      const warn = jest.spyOn((svc as any).logger, 'warn');
+      const got = await svc.findSafeSetupBufferCandidate([fresh('919000000113'), fresh('919000000114')], 'main-session', { clientId: 'c1', remaining: 3, spentMs: 0, skipped: [] });
+      expect(got.mobile).toBe('919000000114');
+      expect(warn).toHaveBeenCalledWith('[c1] parkedControl unreadable; every open parked episode excludes its candidate', { error: 'control down' });
+    });
+
+    test('episode read error → logged, nothing excluded (best effort)', async () => {
+      const find = jest.fn(() => ({ toArray: jest.fn().mockRejectedValue(new Error('mongo down')) }));
+      const svc = withEpisodes(makeService(), find);
+      const warn = jest.spyOn((svc as any).logger, 'warn');
+      const got = await svc.findSafeSetupBufferCandidate([fresh('919000000103')], 'main-session', { clientId: 'c1', remaining: 3, spentMs: 0, skipped: [] });
+      expect(got.mobile).toBe('919000000103');
+      expect(warn).toHaveBeenCalledWith('[c1] Parked episode check of setup candidates failed; excluding none', { error: 'mongo down' });
+    });
+
+    test('a short / malformed pool mobile does not throw; it is counted and still considered', async () => {
+      const find = jest.fn(() => ({ toArray: jest.fn().mockResolvedValue([]) }));
+      const svc = withEpisodes(makeService(), find);
+      const warn = jest.spyOn((svc as any).logger, 'warn');
+      const got = await svc.findSafeSetupBufferCandidate([fresh('905')], 'main-session', { clientId: 'c1', remaining: 3, spentMs: 0, skipped: [] });
+      expect(got.mobile).toBe('905');
+      expect(find).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith('[c1] 1 setup candidate(s) with a non-phone mobile were not checked for parked episodes');
+    });
+  });
 });

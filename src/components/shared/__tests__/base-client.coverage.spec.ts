@@ -77,6 +77,10 @@ const telegramClientFactory = (jest.requireMock('telegram').TelegramClient as an
 // ─── TestBaseService (mirrors the established pattern) ───────────────────────
 class TestBaseService extends BaseClientService<BaseClientDocument> {
     protected otherPoolModel(): any { return null; }
+    /** Parked-responder guard (P4 review): free by default; tests set it busy. The real check is in parked-session-guard.spec. */
+    public parkedVerdict: any = { busy: false };
+    public readonly parkedChecks: string[] = [];
+    protected async parkedSessionVerdict(mobile: string): Promise<any> { this.parkedChecks.push(mobile); return this.parkedVerdict; }
     private readonly mockModel: any;
     public readonly updateMock = jest.fn(async (_mobile: string, updateDto: any) => updateDto);
     public readonly updateStatusMock = jest.fn(async (_mobile: string, _status: string, _message?: string) => ({ mobile: _mobile, status: _status }));
@@ -2768,5 +2772,146 @@ describe('isSensitiveWarmupAction (sub-cap classifier)', () => {
         for (const a of ['set_privacy', 'delete_photos', 'update_name_bio', 'upload_photo', 'organic_only', 'wait', 'join_channels', 'advance_to_ready', undefined]) {
             expect(s.pub.isSensitiveWarmupAction(a as any)).toBe(false);
         }
+    });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// Parked-responder guard (tg-platform design 2026-11-05 "P4 review fixes" item 1)
+// ─────────────────────────────────────────────────────────────────────────
+describe('parked-responder guard on pool-session connects', () => {
+    function makeHealModel(docs: any[]) {
+        return { find: jest.fn(() => ({ select: jest.fn(() => ({ exec: jest.fn(async () => docs) })) })) };
+    }
+
+    test('healDeadSessions skips a parked mobile: no connect, no session creation, counted as skipped', async () => {
+        const service = new TestBaseService(makeHealModel([{ mobile: '919000000001', session: 'pool-key' }, { mobile: '919000000002', session: 'other' }]));
+        const connect = jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue({ destroy: jest.fn() });
+        service.parkedVerdict = { busy: true, reason: 'open_episode' };
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        const r = await service.healDeadSessions();
+        expect(warn.mock.calls.map((c) => c[0])).toContain('[HealSessions] ••••0001: skipped, parked responder guard: open_episode');
+        expect(connect).not.toHaveBeenCalled();
+        expect(service.sessionServiceMock.createSession).not.toHaveBeenCalled();
+        expect(r.skipped).toBe(2);
+        expect(service.parkedChecks).toEqual(['919000000001', '919000000002']);
+    });
+
+    test('healDeadSessions skips the missing-session recovery path too', async () => {
+        const service = new TestBaseService(makeHealModel([{ mobile: '919000000003', session: '' }]));
+        const recover = jest.spyOn(service as any, 'resolveActiveSessionForRotation');
+        service.parkedVerdict = { busy: true, reason: 'read_error' };
+        const r = await service.healDeadSessions();
+        expect(recover).not.toHaveBeenCalled();
+        expect(r.skipped).toBe(1);
+    });
+
+    test('rotateSession refuses a parked mobile before resolving or connecting the pool session', async () => {
+        const service = new TestBaseService();
+        const resolve = jest.spyOn(service as any, 'resolveActiveSessionForRotation');
+        const connect = jest.spyOn(service as any, 'createVerifiedSessionClient');
+        service.parkedVerdict = { busy: true, reason: 'parked_lease' };
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        // Review M1: null = skipped (parked busy), distinct from false = failed.
+        await expect(service.rotateSession('919000000004')).resolves.toBeNull();
+        // Review M3: masked mobile in the new log line.
+        expect(warn).toHaveBeenCalledWith('Session rotation skipped for ••••0004: parked responder guard: parked_lease');
+        expect(resolve).not.toHaveBeenCalled();
+        expect(connect).not.toHaveBeenCalled();
+    });
+
+    test.each(['guard_unavailable', 'read_error'])('round 3: rotateSession with an unreadable guard (%s) is a counted failure (false), not a quiet skip', async (reason) => {
+        const service = new TestBaseService();
+        const resolve = jest.spyOn(service as any, 'resolveActiveSessionForRotation');
+        service.parkedVerdict = { busy: true, reason };
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        await expect(service.rotateSession('919000000004')).resolves.toBe(false);
+        expect(warn).toHaveBeenCalledWith(`Session rotation refused for ••••0004: parked responder guard: ${reason}`);
+        expect(resolve).not.toHaveBeenCalled();
+    });
+
+    test('round 3: rotateSession quietly skips (null) only for open_episode / parked_lease', async () => {
+        for (const reason of ['open_episode', 'parked_lease']) {
+            const service = new TestBaseService();
+            service.parkedVerdict = { busy: true, reason };
+            await expect(service.rotateSession('919000000004')).resolves.toBeNull();
+        }
+    });
+
+    test('the real verdict reads parkedAccounts/accountLeases through model.db; no db handle = busy (fail closed)', async () => {
+        const verdictOf = (model: any) => (BaseClientService.prototype as any).parkedSessionVerdict.call({ model }, '919000000005');
+        await expect(verdictOf({})).resolves.toEqual({ busy: true, reason: 'guard_unavailable' });
+        const seen: string[] = [];
+        // Review M8: parkedControl enables the episode's app (every control doc enabled here).
+        const db = { collection: (name: string) => ({ findOne: async () => { seen.push(name); return name === 'parkedAccounts' ? { _id: 'e' } : name === 'parkedControl' ? { enabled: true } : null; } }) };
+        await expect(verdictOf({ db })).resolves.toEqual({ busy: true, reason: 'open_episode' });
+        expect([...new Set(seen)].sort()).toEqual(['accountLeases', 'parkedAccounts', 'parkedControl']);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// P4 re-review (tg-platform design 2026-11-05 "P4 re-review fixes"): SB, L4, non-string mobiles
+// ─────────────────────────────────────────────────────────────────────────
+describe('P4 re-review: heal and orphan backfill around the parked guard', () => {
+    function makeHealModel(docs: any[]) {
+        return { find: jest.fn(() => ({ select: jest.fn(() => ({ exec: jest.fn(async () => docs) })) })) };
+    }
+
+    test('SB: createSession refused by the parked guard (retryable, PARKED_SESSION_BUSY) → skipped, never deactivated', async () => {
+        const service = new TestBaseService(makeHealModel([{ mobile: '919000000011', session: 'dead-pool-key' }]));
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue(null);
+        const deactivate = jest.spyOn(service as any, 'deactivateClient').mockResolvedValue(true);
+        service.sessionServiceMock.createSession.mockResolvedValueOnce({
+            success: false, error: 'Account is in use by the parked responder (open_episode); try again later', retryable: true, code: 'PARKED_SESSION_BUSY',
+        });
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        const r = await service.healDeadSessions();
+        expect(deactivate).not.toHaveBeenCalled();
+        expect(r).toMatchObject({ total: 1, skipped: 1, deactivated: 0, healed: 0 });
+        // Review M3: masked mobile.
+        expect(warn.mock.calls.map((c) => c[0])).toContain('[HealSessions] ••••0011: session creation deferred (retryable) — Account is in use by the parked responder (open_episode); try again later');
+    });
+
+    test('SB: any retryable creation failure (rate limit) → skipped; a non-retryable one still deactivates', async () => {
+        const service = new TestBaseService(makeHealModel([{ mobile: '919000000012', session: 'k1' }, { mobile: '919000000013', session: 'k2' }]));
+        jest.spyOn(service as any, 'createVerifiedSessionClient').mockResolvedValue(null);
+        const deactivate = jest.spyOn(service as any, 'deactivateClient').mockResolvedValue(true);
+        service.sessionServiceMock.createSession
+            .mockResolvedValueOnce({ success: false, error: 'Rate limit exceeded', retryable: true })
+            .mockResolvedValueOnce({ success: false, error: 'All session creation strategies failed', retryable: false });
+        const r = await service.healDeadSessions();
+        expect(deactivate).toHaveBeenCalledTimes(1);
+        expect(deactivate.mock.calls[0][0]).toBe('919000000013');
+        expect(r).toMatchObject({ skipped: 1, deactivated: 1 });
+    });
+
+    test('nit: pool docs with a non-string mobile are skipped without a guard call and counted in one warn', async () => {
+        const service = new TestBaseService(makeHealModel([{ mobile: 919000000014, session: 's' }, { mobile: null, session: 's' }]));
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        const r = await service.healDeadSessions();
+        expect(service.parkedChecks).toEqual([]);
+        expect(r.skipped).toBe(2);
+        expect(warn.mock.calls.map((c) => c[0])).toContain('[HealSessions] 2 buffer pool doc(s) with a non-string mobile skipped (parked guard cannot check them)');
+    });
+
+    test('L4: orphaned pool record + parked guard busy → no users backfill, no connect, returns null', async () => {
+        const service = new TestBaseService({ findOne: jest.fn(() => ({ lean: () => ({ exec: async () => ({ tgId: '42', session: 'pool-key' }) }) })) });
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([]);
+        service.parkedVerdict = { busy: true, reason: 'open_episode' };
+        const create = jest.spyOn(service as any, 'createDistinctSessionString');
+        const warn = jest.spyOn((service as any).logger, 'warn');
+        await expect(service.getOrEnsureDistinctUsersBackupSession('919000000015', 'active-key')).resolves.toBeNull();
+        expect(warn.mock.calls.map((c) => c[0])).toContain('Orphaned pool record ••••0015: users backfill skipped, parked responder guard: open_episode');
+        expect(service.usersServiceMock.backfillFromPool).not.toHaveBeenCalled();
+        expect(create).not.toHaveBeenCalled();
+        expect(service.parkedChecks).toEqual(['919000000015']);
+    });
+
+    test('L4: guard free → the orphan backfill proceeds as before (backfillFromPool with the pool session)', async () => {
+        const service = new TestBaseService({ findOne: jest.fn(() => ({ lean: () => ({ exec: async () => ({ tgId: '43', session: 'pool-key' }) }) })) });
+        service.usersServiceMock.findByMobileAnyStatus.mockResolvedValueOnce([]);
+        service.usersServiceMock.backfillFromPool.mockResolvedValueOnce({ tgId: '43', mobile: '919000000016', session: 'distinct-backup' });
+        await expect(service.getOrEnsureDistinctUsersBackupSession('919000000016', 'active-key')).resolves.toMatchObject({ session: 'distinct-backup' });
+        expect(service.usersServiceMock.backfillFromPool).toHaveBeenCalledWith({ mobile: '919000000016', tgId: '43', session: 'pool-key' });
     });
 });

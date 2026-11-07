@@ -60,6 +60,8 @@ function makeStubAudit(overrides: any = {}) {
         findRecentSessions: jest.fn().mockResolvedValue([]),
         getSessionsFormobile: jest.fn().mockResolvedValue([]),
         revokeSession: jest.fn().mockResolvedValue({}),
+        // Parked-responder guard (P4 review): no open episode, no parked lease.
+        parkedGuardDb: jest.fn(() => ({ collection: () => ({ findOne: jest.fn().mockResolvedValue(null) }) })),
         ...overrides,
     };
 }
@@ -442,6 +444,90 @@ describe('session.service', () => {
             service = new SessionService(audit);
         });
 
+        describe('parked-responder guard (P4 review item 1)', () => {
+            const busyDb = (collectionWithHit: string) => ({
+                // Review M8: parkedControl docs enabled, so an open episode counts.
+                collection: (name: string) => ({ findOne: jest.fn().mockResolvedValue(name === collectionWithHit ? { _id: 'x' } : name === 'parkedControl' ? { enabled: true } : null) }),
+            });
+
+            it('createSession refuses a mobile with an open parked episode before any strategy runs', async () => {
+                audit.parkedGuardDb = jest.fn(() => busyDb('parkedAccounts'));
+                const strategies = jest.spyOn((service as any).sessionManager, 'createSession');
+                const r = await service.createSession({ mobile: '919000000001', oldSession: 'pool-key' } as any);
+                expect(r.success).toBe(false);
+                expect(r.retryable).toBe(true);
+                expect(r.error).toMatch(/parked responder \(open_episode\)/);
+                expect(strategies).not.toHaveBeenCalled();
+                expect(audit.getSessionsFormobile).not.toHaveBeenCalled();
+            });
+
+            it('createSession refuses on a live parked lease, and when the guard cannot read (fail closed)', async () => {
+                audit.parkedGuardDb = jest.fn(() => busyDb('accountLeases'));
+                expect((await service.createSession({ mobile: '919000000002' } as any)).error).toMatch(/parked_lease/);
+                audit.parkedGuardDb = jest.fn(() => ({ collection: () => ({ findOne: jest.fn().mockRejectedValue(new Error('mongo down')) }) }));
+                expect((await service.createSession({ mobile: '919000000003' } as any)).error).toMatch(/read_error/);
+                delete audit.parkedGuardDb;
+                expect((await service.createSession({ mobile: '919000000004' } as any)).error).toMatch(/guard_unavailable/);
+            });
+
+            // P4 re-review L3: an episode can open AFTER the entry check; the guard runs again before each connect.
+            const openAfter = (freeChecks: number) => {
+                let n = 0;
+                return {
+                    collection: (name: string) => ({
+                        findOne: jest.fn(async () => {
+                            if (name === 'parkedControl') return { enabled: true }; // review M8
+                            if (name !== 'parkedAccounts') return null;
+                            n += 1;
+                            return n > freeChecks ? { _id: 'ep' } : null;
+                        }),
+                    }),
+                };
+            };
+
+            it('L3: createSession re-checks before each audit session: an episode opened mid-flow stops the 2nd audit connect', async () => {
+                { const db = openAfter(3); audit.parkedGuardDb = jest.fn(() => db); } // entry, before priority 2, before audit 1 → free; audit 2 → busy
+                audit.getSessionsFormobile = jest.fn().mockResolvedValue([{ sessionString: 'audit-1' }, { sessionString: 'audit-2' }]);
+                const connects = jest.spyOn((service as any).sessionManager, 'createSession').mockResolvedValue({ success: false, error: 'dead' });
+                const r = await service.createSession({ mobile: '919000000006' } as any);
+                expect(connects).toHaveBeenCalledTimes(2); // existing manager + audit 1
+                expect((connects.mock.calls[1][0] as any).oldSession).toBe('audit-1');
+                expect(r).toMatchObject({ success: false, retryable: true, code: 'PARKED_SESSION_BUSY' });
+                expect(r.error).toBe('Account is in use by the parked responder (open_episode); try again later');
+            });
+
+            it('L3: createSession re-checks before priority 2 (existing manager)', async () => {
+                { const db = openAfter(1); audit.parkedGuardDb = jest.fn(() => db); }
+                const connects = jest.spyOn((service as any).sessionManager, 'createSession').mockResolvedValue({ success: false, error: 'dead' });
+                const r = await service.createSession({ mobile: '919000000007', oldSession: 'caller-key' } as any);
+                expect(connects).toHaveBeenCalledTimes(1); // the caller's old session only
+                expect(r.code).toBe('PARKED_SESSION_BUSY');
+            });
+
+            it('L3: getOldestSessionOrCreate re-checks before each candidate validation and never falls back to creation', async () => {
+                { const db = openAfter(2); audit.parkedGuardDb = jest.fn(() => db); } // entry + candidate 1 free; candidate 2 busy
+                const old = new Date(Date.now() - 3 * 86_400_000);
+                const row = (s: string, t: number) => ({ mobile: '919000000008', sessionString: s, isActive: true, status: 'active', createdAt: new Date(old.getTime() + t), lastUsedAt: old, usageCount: 0 });
+                audit.querySessionAudits = jest.fn().mockResolvedValue({ sessions: [row('cand-1', 0), row('cand-2', 1000)] });
+                const validate = jest.spyOn((service as any).sessionManager, 'validateSession').mockResolvedValue({ isValid: false, error: 'timeout' });
+                const create = jest.spyOn(service, 'createSession');
+                const r = await service.getOldestSessionOrCreate({ mobile: '919000000008' });
+                expect(validate).toHaveBeenCalledTimes(1);
+                expect(validate.mock.calls[0][0]).toBe('cand-1');
+                expect(create).not.toHaveBeenCalled();
+                expect(r).toMatchObject({ success: false, code: 'PARKED_SESSION_BUSY', retryable: true });
+            });
+
+            it('getOldestSessionOrCreate refuses before validating any audit session', async () => {
+                audit.parkedGuardDb = jest.fn(() => busyDb('parkedAccounts'));
+                const r = await service.getOldestSessionOrCreate({ mobile: '919000000005' });
+                expect(r.success).toBe(false);
+                expect(r.code).toBe('PARKED_SESSION_BUSY');
+                expect(audit.querySessionAudits).not.toHaveBeenCalled();
+                expect(audit.getSessionsFormobile).not.toHaveBeenCalled();
+            });
+        });
+
         describe('createSession', () => {
             it('rejects invalid options', async () => {
                 const r = await service.createSession(null as any);
@@ -770,6 +856,14 @@ describe('session.service', () => {
                 jest.spyOn(service, 'createSession').mockResolvedValue({ success: false, error: 'no', retryable: true });
                 const r = await service.getOldestSessionOrCreate({ mobile: '919999999999' });
                 expect(r.code).toBe('FALLBACK_CREATION_FAILED');
+                expect(r.retryable).toBe(true);
+            });
+
+            it('review L7: a fallback refused by the parked guard surfaces PARKED_SESSION_BUSY (retryable)', async () => {
+                audit.querySessionAudits.mockResolvedValue({ sessions: [], total: 0 });
+                jest.spyOn(service, 'createSession').mockResolvedValue({ success: false, error: 'parked', retryable: true, code: 'PARKED_SESSION_BUSY' });
+                const r = await service.getOldestSessionOrCreate({ mobile: '919999999998' });
+                expect(r.code).toBe('PARKED_SESSION_BUSY');
                 expect(r.retryable).toBe(true);
             });
 

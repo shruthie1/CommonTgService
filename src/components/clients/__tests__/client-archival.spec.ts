@@ -302,7 +302,7 @@ describe('Client Pool Return', () => {
                 // session was rotated — a fact — and nulling it destroyed that history for 274 of
                 // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
                 // returning primary from re-rotating. Asserted absent below.
-            }));
+            }), { suppressEnrolledEvent: true });
             // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
             // missing, so removing the old assertion alone would not catch a regression.
             expect(bufferService.createOrUpdate).not.toHaveBeenCalledWith(
@@ -322,7 +322,7 @@ describe('Client Pool Return', () => {
 
             expect(bufferService.createOrUpdate).toHaveBeenCalledWith('80001', expect.objectContaining({
                 status: 'inactive',
-            }));
+            }), { suppressEnrolledEvent: true });
         });
 
         it('sets status=active when days <= 35', async () => {
@@ -336,7 +336,7 @@ describe('Client Pool Return', () => {
 
             expect(bufferService.createOrUpdate).toHaveBeenCalledWith('80001', expect.objectContaining({
                 status: 'active',
-            }));
+            }), { suppressEnrolledEvent: true });
         });
 
         it('calculates availableDate as the requested number of days from now', async () => {
@@ -610,7 +610,7 @@ describe('Client Pool Return', () => {
             expect(bufferService.createOrUpdate).toHaveBeenCalledWith('80001', expect.objectContaining({
                 status: 'active',
                 warmupPhase: WarmupPhase.SESSION_ROTATED,
-            }));
+            }), { suppressEnrolledEvent: true });
         });
 
         it('account limited → buffer returned with limit reason', async () => {
@@ -625,7 +625,7 @@ describe('Client Pool Return', () => {
 
             expect(bufferService.createOrUpdate).toHaveBeenCalledWith('80001', expect.objectContaining({
                 status: 'inactive', // days=45 > 35
-            }));
+            }), { suppressEnrolledEvent: true });
         });
     });
 });

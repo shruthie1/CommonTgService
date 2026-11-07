@@ -327,7 +327,7 @@ describe('ClientService coverage', () => {
                 // session was rotated — a fact — and nulling it destroyed that history for 274 of
                 // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
                 // returning primary from re-rotating. Asserted absent below.
-            }));
+            }), { suppressEnrolledEvent: true });
             // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
             // missing, so removing the old assertion alone would not catch a regression.
             expect(bufferClientService.createOrUpdate).not.toHaveBeenCalledWith(
@@ -781,7 +781,7 @@ describe('ClientService coverage', () => {
                 // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
                 // returning primary from re-rotating. Asserted absent below.
                 availableDate: expectedDateStr,
-            }));
+            }), { suppressEnrolledEvent: true });
             // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
             // missing, so removing the old assertion alone would not catch a regression.
             expect(bufferClientService.createOrUpdate).not.toHaveBeenCalledWith(
@@ -828,7 +828,7 @@ describe('ClientService coverage', () => {
                 // session was rotated — a fact — and nulling it destroyed that history for 274 of
                 // 353 buffer accounts. Rotation is one-time, so a retained stamp correctly keeps a
                 // returning primary from re-rotating. Asserted absent below.
-            }));
+            }), { suppressEnrolledEvent: true });
             // Pin the ABSENCE explicitly — objectContaining ignores keys that are simply
             // missing, so removing the old assertion alone would not catch a regression.
             expect(bufferClientService.createOrUpdate).not.toHaveBeenCalledWith(
@@ -1226,7 +1226,7 @@ describe('ClientService coverage', () => {
                 { tgId: 'tg', mobile: '15554443004' } as any,
                 '15554443004',
                 0,
-            )).resolves.toBeUndefined();
+            )).resolves.toBe(false); // P4: a failed return is `false` (no parked swap episode is opened)
         });
     });
 
@@ -1369,7 +1369,7 @@ describe('ClientService coverage', () => {
             );
             expect(bufferClientService.createOrUpdate).toHaveBeenCalledWith('15551110010', expect.objectContaining({
                 status: 'inactive',
-            }));
+            }), { suppressEnrolledEvent: true });
         });
 
         it('updateClient throws when telegram client / me are missing (895,898 true arms)', async () => {

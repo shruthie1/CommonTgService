@@ -49,6 +49,11 @@ import { ClientHelperUtils } from '../shared/client-helper.utils';
 import { ActiveClientSetup } from '../Telegram/manager/types';
 import { downloadFileFromUrl } from '../Telegram/manager/helpers';
 import { canonicalizeMobile } from '../shared/mobile-utils';
+import { prepareParkedCutover, ParkedCutoverCollection } from './parked-cutover';
+import { openSwapEpisode, SwapEpisodeCollection, SwapEpisodeControlCollection } from './parked-swap-episode';
+import { openParkedEpisodeMobiles, parkedCanonicalMobile, ParkedEpisodeFindCollection, ParkedGuardCollection } from './parked-session-guard';
+import { maskMobile } from '../monitor/monitor-util';
+import { accountRoleEventsCollectionOf, AccountRoleEventInput, AccountRoleReasonCode, recordAccountRoleEventSoon } from './account-role-events';
 import { buildSpamEligibleFilter } from '../buffer-clients/schemas/buffer-client.schema';
 import { probeSpamBot, SpamProbeResult, SPAMBOT_TOTAL_TIMEOUT_MS } from '../Telegram/utils/spambot-probe';
 import {
@@ -116,6 +121,17 @@ const SETUP_PROBE_TIME_BUDGET_MS = 45_000;
 /** Do not start a probe with less than this left of the request budget; it could not finish. */
 const MIN_SETUP_PROBE_MS = 8_000;
 
+/** One swap's open parked-episode read (P4 verification fix 2). */
+interface ParkedOpenScan {
+  read?: Promise<Set<string>>;
+}
+/**
+ * Which tiers skip a buffer with an open parked episode (P4 verification fix 2): only the PREFERRED tier (due scan).
+ * The rescue tier (permanent-replacement future fallback) and the degraded tiers 2-4 may pick one (logged): the
+ * cutover hook stops the parked pass before the new main connects.
+ */
+type ParkedEpisodePolicy = 'exclude' | 'allow';
+
 interface SetupProbeBudget {
   clientId: string;
   remaining: number;
@@ -130,6 +146,11 @@ interface SetupProbeBudget {
   leaseOwner?: string;
   /** Swap-maintenance job run: never create a backup session; candidates need a stored distinct one. */
   jobPass?: boolean;
+  /**
+   * P4 verification fix 2: the open parked-episode read, shared by every budget of one swap (read ONCE per swap;
+   * its time counts in the spentMs of the budget that triggered it).
+   */
+  parkedScan?: ParkedOpenScan;
 }
 
 /** One row of a swap-maintenance pass (rescue / upgrade / pool refill). */
@@ -386,6 +407,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         return client.save();
       });
       this.clientsMap.set(createdClient.clientId, createdClient.toObject());
+      // accountRoleEvents (S1, additive): the client's first main. Fire-and-forget; never throws or delays.
+      this.recordRoleEvent({
+        mobile: createData.mobile, clientId: createdClient.clientId, event: 'became_main', pool: 'main', by: 'cms:create',
+        reason: 'client created', reasonCode: 'manual',
+      });
       this.logger.log(`Client created: ${createdClient.clientId}`);
       return createdClient;
     } catch (error) {
@@ -509,11 +535,17 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // The dead-main evidence describes the old mobile / old session only: a new mobile or a new
       // session (a manual re-login: the account was fixed) drops it, or rescue would retire a healthy main.
       let clientUpdate: Record<string, unknown> = { $set: cleanUpdateDto };
+      let newMainMobile: string | null = null;
+      let oldMainMobile: string | null = null;
       if (cleanUpdateDto.mobile !== undefined || cleanUpdateDto.session !== undefined) {
         const current = await this.clientModel.findOne({ clientId }, { mobile: 1, session: 1, degraded: 1, deadMain: 1 })
           .lean<Pick<Client, 'mobile' | 'session' | 'degraded' | 'deadMain'>>().exec();
         const mobileChanged = !!current && cleanUpdateDto.mobile !== undefined && this.canonicalMobile(current.mobile) !== cleanUpdateDto.mobile;
         const sessionChanged = !!current && cleanUpdateDto.session !== undefined && current.session !== cleanUpdateDto.session;
+        if (mobileChanged) {
+          newMainMobile = cleanUpdateDto.mobile as string;
+          oldMainMobile = current!.mobile ?? null;
+        }
         const unset: Record<string, ''> = {};
         if (mobileChanged && current!.degraded && (cleanUpdateDto as { degraded?: unknown }).degraded === undefined) {
           unset.degraded = '';
@@ -550,6 +582,19 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       }
       this.clientsMap.set(clientId, updatedClient);
       this.performPostUpdateTasks(updatedClient);
+      if (newMainMobile) {
+        // Parked responder (tg-platform design 2026-11-05 §7.3.1, P2): a manual mobile change installs a new
+        // main too, so stop its open parking episode and ask a parked holder to yield. NOT awaited (unlike
+        // updateClientSession, which awaits it because it restarts tg-aut via deployKey right after):
+        // update() restarts nothing, so there is no restart to order against, and blocking this HTTP call
+        // for up to the 20 s wait would gain nothing. The restarted tg-aut's own live acquire also asks a
+        // parked holder to yield and waits for it. prepareNewMainForLive never throws; the catch is a backstop.
+        void this.prepareNewMainForLive(clientId, newMainMobile).catch(() => undefined);
+        // accountRoleEvents (S1, additive): fire-and-forget; never throws or delays this call. oldMainMobile comes from
+        // the pre-read above: update() returns the AFTER doc, so a cutover landing between that read and this write
+        // would make swapped_out name the wrong account (known gap, design S1 review fixes; rare: admin call).
+        this.recordMainChangeEvents(clientId, oldMainMobile, newMainMobile, 'cms:manual-update', 'manual update', null, randomUUID(), 'manual');
+      }
       this.logger.log(`Client updated: ${clientId}`);
       return updatedClient;
     } catch (error) {
@@ -976,8 +1021,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       clientId,
       setupClientQueryDto.mobile ? { $eq: setupClientQueryDto.mobile, $nin: busyMobiles } : { $nin: busyMobiles },
     );
+    const parkedScan: ParkedOpenScan = {}; // one open parked-episode read per swap, shared by every tier's budget
     const newProbeBudget = (): SetupProbeBudget => ({
-      clientId, remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [],
+      clientId, remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [], parkedScan,
       ...(internal.leaseOwner ? { leaseOwner: internal.leaseOwner } : {}),
       ...(internal.jobPass ? { jobPass: true } : {}),
     });
@@ -1013,7 +1059,8 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         10,
       );
       fallbackBudget = newProbeBudget();
-      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget);
+      // Rescue tier: an open parked episode does not exclude (P4 verification fix 2).
+      newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget, {}, 'allow');
       usedFutureAvailableFallback = !!newBufferClient;
       this.logger.warn(`[${clientId}] Permanent replacement fallback scan completed`, {
         existingMobile: existingClientMobile,
@@ -1291,13 +1338,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         throw new BadRequestException(`Invalid replacement session for ${newMobile}`);
       }
       const mirroredActiveName = this.buildMirroredActiveName(bufferDoc, existingClient.name);
-      await this.commitClientCutover(clientId, existingMobile, {
+      const degradedPlan = this.degradedPlanFor(clientId, newMobile);
+      const committedClient = await this.commitClientCutover(clientId, existingMobile, {
         mobile: newMobile,
         username: updatedUsername,
         session: newSession,
         name: mirroredActiveName,
-      }, this.degradedPlanFor(clientId, newMobile));
+      }, degradedPlan);
       cutoverCommitted = true;
+      // accountRoleEvents (S1, additive): after the commit, fire-and-forget; never throws or delays the swap. The opId
+      // (clientId + clients.swappedAt ms) links this pair with the old main's return in handleReplacedClient.
+      this.recordMainChangeEvents(clientId, existingMobile, newMobile, 'cms:cutover', reason, degradedPlan,
+        this.cutoverRoleEventOpId(clientId, committedClient?.swappedAt) ?? randomUUID());
       this.logger.info(`[${clientId}] Cutover committed`, {
         existingMobile,
         newMobile,
@@ -1309,6 +1361,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // via persona verifier + CMS photo refresh endpoint. No delayed update needed —
       // avoids a second connection racing with tg-aut's own startup.
       this.logger.debug(`[${clientId}] Skipping delayed profile refresh — tg-aut handles on startup`);
+      // Parked responder (tg-platform design 2026-11-05 §7.3.1, P2): before tg-aut connects the new main,
+      // stop its open parking episode and wait ≤ 20 s (PARKED_PREEMPT_WAIT_MS) for any parked pass on it to let go. Never throws.
+      await this.prepareNewMainForLive(clientId, newMobile);
       try {
         if (existingClient.deployKey) {
           this.logger.info(`[${clientId}] Triggering deploy restart after cutover`, { deployKeyPresent: true });
@@ -1326,7 +1381,10 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         formalities,
         days,
       });
-      await this.handleReplacedClient(existingClient, existingMobile, formalities, returnOldToPool, days, reason);
+      await this.handleReplacedClient(existingClient, existingMobile, formalities, returnOldToPool, days, reason, {
+        swappedAt: committedClient?.swappedAt ? new Date(committedClient.swappedAt) : null,
+        persona: existingClient.dbcoll || '',
+      });
       this.logger.info(`[${clientId}] Client session cutover finished`, { existingMobile, newMobile });
       await this.notify({ severity: 'success', title: 'Swap complete', fields: [{ label: 'Client ID', value: clientId }, { label: 'Old mobile', value: existingMobile }, { label: 'New mobile', value: newMobile }] });
     } catch (error) {
@@ -1346,6 +1404,28 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       await connectionManager.unregisterClient(newMobile);
       this.telegramService.clearActiveClientSetup(newMobile);
       this.logger.debug(`[${clientId}] Cleared active setup state`, { newMobile });
+    }
+  }
+
+  /**
+   * Parked-responder cutover hook (P2): stop the new main's open parking episode and wait for a parked
+   * tg-platform holder to release it, before deployKey. Additive and best-effort: errors are logged and
+   * the cutover continues (sessions are non-renewable; a failed swap is worse than a logged warning).
+   */
+  private async prepareNewMainForLive(clientId: string, newMobile: string): Promise<void> {
+    try {
+      const db = this.clientModel.db;
+      await prepareParkedCutover(
+        {
+          episodes: db.collection('parkedAccounts') as unknown as ParkedCutoverCollection,
+          leases: db.collection('accountLeases') as unknown as ParkedCutoverCollection,
+        },
+        { mobile: this.canonicalMobile(newMobile), clientId },
+        // accountRoleEvents: `unparked` for the episode this stop closes (split doc §4.2).
+        { logger: this.logger, roleEvents: accountRoleEventsCollectionOf(this.clientModel) },
+      );
+    } catch (error) {
+      this.logger.warn(`[${clientId}] Parked cutover hook failed; continuing the cutover`, { newMobile: maskMobile(newMobile), error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -1433,10 +1513,13 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     returnOldToPool: boolean,
     days: number,
     reason?: string,
+    swap?: { swappedAt: Date | null; persona: string },
   ) {
+    // accountRoleEvents: the old main's return / retirement is part of the cutover operation (same opId).
+    const roleOpId = this.cutoverRoleEventOpId(existingClient.clientId, swap?.swappedAt);
     try {
       if (this.isPermanentReplacementReason(reason)) {
-        await this.retireReplacedMobile(existingMobile, reason);
+        await this.retireReplacedMobile(existingMobile, reason, roleOpId);
         return;
       }
 
@@ -1444,7 +1527,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       if (!existingClientUser) {
         const reasonMessage = `Pool return failed: user document missing for replaced mobile ${existingMobile}`;
         this.logger.warn(reasonMessage);
-        await this.retireReplacedMobile(existingMobile, reasonMessage);
+        await this.retireReplacedMobile(existingMobile, reasonMessage, roleOpId);
         await this.notify({ severity: 'warning', title: 'Pool return', summary: 'User doc missing, buffer inactivated', fields: [{ label: 'Mobile', value: existingMobile }] });
         return;
       }
@@ -1454,13 +1537,28 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         this.logger.log('Formalities skipped');
       }
       if (returnOldToPool) {
-        await this.returnOldClientToBufferPool(existingClient, existingClientUser, existingMobile, days);
+        const returnedActive = await this.returnOldClientToBufferPool(existingClient, existingClientUser, existingMobile, days, reason, roleOpId);
+        // Parked responder (tg-platform design 2026-11-05 §7.3.2, P4): the old main is back in the pool, so its
+        // client's tg-aut can answer the DMs still arriving on it. Not on a permanent retire, a skipped or failed
+        // return, or an inactive return (days > 35). openSwapEpisode never throws.
+        // Fire-and-forget (P4 review nit): the "Swap complete" notice after this must not wait on the episode write;
+        // the write is bounded by its own client-side deadline and logs its own outcome.
+        if (returnedActive && swap?.swappedAt) {
+          void this.openParkedSwapEpisode(existingClient.clientId, existingMobile, swap.swappedAt, swap.persona, reason, days)
+            .catch((error: unknown) => this.logger.warn(`[${existingClient.clientId}] Parked swap episode hook rejected; the swap is unaffected`, {
+              oldMobile: maskMobile(existingMobile), error: error instanceof Error ? error.message : String(error),
+            }));
+        }
       } else {
         await this.bufferClientService.update(existingMobile, {
           inUse: false,
           lastUsed: new Date(),
           status: 'inactive',
           message: reason || 'Deactivated during client swap (pool return skipped)',
+        });
+        this.recordRoleEvent({
+          mobile: existingMobile, clientId: existingClient.clientId, event: 'retired', pool: 'buffer', by: 'cms:pool-return-skipped',
+          reason: reason || 'pool return skipped', opId: roleOpId, details: { permanent: false },
         });
         this.logger.log('Replaced-client pool return skipped');
         await this.notify({ title: 'Return skipped', summary: 'Account is inactivated', fields: [{ label: 'Mobile', value: existingMobile }] });
@@ -1469,9 +1567,96 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const errorDetails = parseError(e, `Error returning replaced client to buffer pool: ${existingMobile}`, false);
       const errorMessage = e instanceof Error ? e.message : String(e);
       if (isPermanentError(errorDetails)) {
-        await this.retireReplacedMobile(existingMobile, errorMessage);
+        await this.retireReplacedMobile(existingMobile, errorMessage, roleOpId);
       }
       await this.notify({ severity: 'error', title: 'Return failed', fields: [{ label: 'Mobile', value: existingMobile }], details: errorMessage?.substring(0, 500), detailsTitle: 'Error message' });
+    }
+  }
+
+  /**
+   * P4 re-review L1 / P4 verification fix 2: mobiles with an OPEN parkedAccounts episode, read ONCE per swap (cached
+   * on the budget's shared parkedScan) and timed into that budget's spentMs (SETUP_PROBE_TIME_BUDGET_MS). Best-effort:
+   * a read error / timeout is logged and excludes nothing (the cutover hook and the parked lease still protect the
+   * session). Never throws.
+   */
+  private parkedOpenOnce(budget: SetupProbeBudget): Promise<Set<string>> {
+    const scan = budget.parkedScan ?? (budget.parkedScan = {});
+    if (!scan.read) {
+      scan.read = (async () => {
+        const startedAt = Date.now();
+        try {
+          let collection: ParkedEpisodeFindCollection | null = null;
+          let control: ParkedGuardCollection | null = null;
+          try {
+            collection = (this.clientModel?.db?.collection('parkedAccounts') as unknown as ParkedEpisodeFindCollection) ?? null;
+            // Review M8: only episodes of an app/client parkedControl enables exclude a candidate.
+            control = (this.clientModel?.db?.collection('parkedControl') as unknown as ParkedGuardCollection) ?? null;
+          } catch {
+            /* a handle that throws stays null: no episodes = exclude none; no control = every open episode counts */
+          }
+          const result = await openParkedEpisodeMobiles(collection, { control });
+          if (result.error) {
+            this.logger.warn(`[${budget.clientId}] Parked episode check of setup candidates failed; excluding none`, { error: result.error });
+          } else if (result.controlError) {
+            this.logger.warn(`[${budget.clientId}] parkedControl unreadable; every open parked episode excludes its candidate`, { error: result.controlError });
+          }
+          return result.open;
+        } finally {
+          budget.spentMs += Date.now() - startedAt;
+        }
+      })();
+    }
+    return scan.read;
+  }
+
+  /** accountRoleEvents (S1): fire-and-forget append; never throws, never awaited. */
+  private recordRoleEvent(input: AccountRoleEventInput): void {
+    try {
+      recordAccountRoleEventSoon(accountRoleEventsCollectionOf(this.clientModel), input, { logger: this.logger });
+    } catch { /* history is best-effort; the role change already happened */ }
+  }
+
+  /** One cutover's opId: `<clientId>:<clients.swappedAt ms>` (the commit stamps swappedAt once). Null without it. */
+  private cutoverRoleEventOpId(clientId: string, swappedAt: Date | string | null | undefined): string | null {
+    const ms = swappedAt ? new Date(swappedAt).getTime() : NaN;
+    return Number.isFinite(ms) ? `${clientId}:${ms}` : null;
+  }
+
+  /**
+   * A client's main changed: became_main for the new account, swapped_out for the old one (when known). Both carry
+   * the same opId; reasonCode is derived from the reason unless given.
+   */
+  private recordMainChangeEvents(
+    clientId: string,
+    oldMobile: string | null,
+    newMobile: string,
+    by: string,
+    reason: string | null | undefined,
+    plan: DegradedSwapPlan | null | undefined,
+    opId: string,
+    reasonCode?: AccountRoleReasonCode,
+  ): void {
+    this.recordRoleEvent({
+      mobile: newMobile, clientId, event: 'became_main', pool: 'main', by, reason: reason ?? null, reasonCode, opId, fromMobile: oldMobile,
+      fromClientId: plan?.fromClientId ?? null,
+      details: plan ? { tier: plan.pickTier, markerTier: plan.markerTier ?? null } : undefined,
+    });
+    if (oldMobile) {
+      this.recordRoleEvent({ mobile: oldMobile, clientId, event: 'swapped_out', pool: 'main', by, reason: reason ?? null, reasonCode, opId, toMobile: newMobile });
+    }
+  }
+
+  private async openParkedSwapEpisode(clientId: string, oldMobile: string, swappedAt: Date, persona: string, reason?: string, swapDays?: number): Promise<void> {
+    try {
+      await openSwapEpisode(
+        this.clientModel.db.collection('parkedAccounts') as unknown as SwapEpisodeCollection,
+        { mobile: this.canonicalMobile(oldMobile), clientId, persona, reason: reason || 'unspecified', swappedAt, swapDays },
+        // Final review M1: opens only while parkedControl enables tg-aut for this client.
+        // accountRoleEvents: `parked` for the new episode, `unparked` for a superseded one (split doc §4.2).
+        { logger: this.logger, control: this.clientModel.db.collection('parkedControl') as unknown as SwapEpisodeControlCollection, roleEvents: accountRoleEventsCollectionOf(this.clientModel) },
+      );
+    } catch (error) {
+      this.logger.warn(`[${clientId}] Parked swap episode hook failed; the swap is unaffected`, { oldMobile: maskMobile(oldMobile), error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -1488,14 +1673,18 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
    * matching buffer/promote pool record — so the dead mobile can never be
    * re-selected. expireAccount is idempotent and safe even if no pool record
    * exists for this mobile.
+   *
+   * `roleOpId` (cutover callers only): the cutover's accountRoleEvents opId, passed through expireAccount to the
+   * pool `retired` events so the old main's retirement links to the swap. Omitted = the call is unchanged.
    */
-  private async retireReplacedMobile(mobile: string, reason: string): Promise<void> {
+  private async retireReplacedMobile(mobile: string, reason: string, roleOpId?: string | null): Promise<void> {
     if (await this.isAlreadyRetired(mobile)) {
       this.logger.log(`Replaced account ${mobile} is already retired; not retired or announced again`);
       return;
     }
     try {
-      await this.usersService.expireAccount(mobile, reason);
+      if (roleOpId) await this.usersService.expireAccount(mobile, reason, { opId: roleOpId });
+      else await this.usersService.expireAccount(mobile, reason);
       this.logger.warn(`Replaced account retired (expired + pools deactivated)`, { mobile, reason: reason.substring(0, 160) });
       await this.notify({ severity: 'warning', title: 'Inactivated', fields: [{ label: 'Mobile', value: mobile }, { label: 'Reason', value: reason.substring(0, 120), code: false }] });
     } catch (error) {
@@ -1555,7 +1744,9 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     existingClientUser: User,
     existingMobile: string,
     days: number,
-  ) {
+    reason?: string,
+    roleOpId?: string | null,
+  ): Promise<boolean> {
     let existingBufferClient: Awaited<ReturnType<BufferClientService['findOne']>> | null = null;
     try {
       await this.assertDistinctUserBackupSession(existingMobile, existingClient.session);
@@ -1597,9 +1788,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         // has no stamp is left untouched rather than being stamped with a fabricated value.
         message: 'Returned to buffer pool; channel capacity will be verified',
       };
+      // suppressEnrolledEvent: when the old main had no buffer doc, createOrUpdate creates one; this return records
+      // `returned` below, so the create must not also record `enrolled` (S1 re-review fix).
       const updatedBufferClient = await this.bufferClientService.createOrUpdate(
         existingMobile,
         bufferClientDto,
+        { suppressEnrolledEvent: true },
       );
       // Identifiers only: the buffer doc carries the live Telegram session (PENDING 24-5).
       this.logger.log('Client returned to buffer pool', {
@@ -1608,13 +1802,19 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         status: updatedBufferClient?.status,
         availableDate,
       });
+      this.recordRoleEvent({
+        mobile: existingMobile, clientId: updatedBufferClient?.clientId ?? existingClient.clientId, event: 'returned', pool: 'buffer',
+        by: 'cms:pool-return', reason: reason ?? null, opId: roleOpId, details: { status: bufferClientDto.status ?? null, days, availableDate },
+      });
       await this.notify({ title: 'Returned to pool', fields: [{ label: 'Mobile', value: existingMobile }, { label: 'Available date', value: availableDate, code: false }] });
+      // True only when the old main is back as ACTIVE supply (the parked swap episode needs an active pool row).
+      return bufferClientDto.status === 'active';
     } catch (error) {
       const errorDetails = parseError(error, `Error returning old client to buffer pool: ${existingMobile}`, true);
       await this.notify({ severity: 'error', title: 'Return error', fields: [{ label: 'Mobile', value: existingMobile }], details: errorDetails.message?.substring(0, 500), detailsTitle: 'Error message' });
       if (isPermanentError(errorDetails)) {
         this.logger.log('Marking replaced buffer inactive:', existingMobile);
-        await this.retireReplacedMobile(existingMobile, errorDetails.message);
+        await this.retireReplacedMobile(existingMobile, errorDetails.message, roleOpId);
         // await this.bufferClientService.remove(existingClientUser.mobile, 'Deactivated user');
       } else {
         // Transient failure: the cutover already happened, so the old primary is no longer
@@ -1622,16 +1822,24 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         // reservation and push availability forward so it returns to the buffer pool for a
         // later retry instead of being stranded inUse=true (excluded from every selection).
         const retryAvailableDate = this.resolveReturnAvailableDate(existingBufferClient, days);
-        await this.bufferClientService.update(existingMobile, {
+        const released = await this.bufferClientService.update(existingMobile, {
           inUse: false,
           status: 'active',
           availableDate: retryAvailableDate,
           message: `Pool return retry after transient error: ${errorDetails.message?.substring(0, 160)}`,
-        }).catch((updateError) => {
+        }).then(() => true).catch((updateError) => {
           this.logger.error(`Failed to release stranded pool-return reservation for ${existingMobile}: ${parseError(updateError, '', false).message}`);
+          return false;
         });
+        if (released) {
+          this.recordRoleEvent({
+            mobile: existingMobile, clientId: existingClient.clientId, event: 'returned', pool: 'buffer', by: 'cms:pool-return-retry',
+            reason: reason ?? null, opId: roleOpId, details: { status: 'active', days, availableDate: retryAvailableDate, error: errorDetails.message ?? null },
+          });
+        }
         this.logger.log(`Released pool-return reservation for ${existingMobile} after transient error; available ${retryAvailableDate}`);
       }
+      return false;
     }
   }
 
@@ -1647,9 +1855,23 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     existingClientSession: string,
     probeBudget: SetupProbeBudget = { clientId: '-', remaining: MAX_SETUP_PROBES, spentMs: 0, skipped: [] },
     accept: SwapProbeAcceptance = {},
+    parkedPolicy: ParkedEpisodePolicy = 'exclude',
   ): Promise<SafeSetupBufferCandidate | null> {
+    let parkedOpen = new Set<string>();
+    if (parkedPolicy === 'exclude' && candidates?.length) {
+      const nonPhone = candidates.filter((c) => c?.mobile && parkedCanonicalMobile(c.mobile) === null).length;
+      if (nonPhone > 0) {
+        this.logger.warn(`[${probeBudget.clientId}] ${nonPhone} setup candidate(s) with a non-phone mobile were not checked for parked episodes`);
+      }
+      if (candidates.some((c) => parkedCanonicalMobile(c?.mobile) !== null)) parkedOpen = await this.parkedOpenOnce(probeBudget);
+    }
     for (const candidate of candidates) {
       if (!candidate?.mobile || !candidate?.session) continue;
+      if (parkedOpen.size > 0 && parkedOpen.has(parkedCanonicalMobile(candidate.mobile) ?? '')) {
+        // P4 re-review L1: a parked pass may be answering on this buffer (an old main resting after its swap).
+        this.logger.warn(`Skipping setup candidate ${maskMobile(candidate.mobile)}: open parked-responder episode`);
+        continue;
+      }
       if (candidate.session === existingClientSession) {
         this.logger.warn(`Skipping setup candidate ${candidate.mobile}: session matches current main client`);
         continue;
@@ -1695,6 +1917,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         const verdict = probeBudget.lastVerdict as SetupProbeBudget['lastVerdict'];
         // An inconclusive probe tells us nothing about the limit: keep the stored one.
         const storedLimitedUntil = candidate.limitedUntil ? new Date(candidate.limitedUntil) : null;
+        if (parkedPolicy === 'allow') {
+          const canonical = parkedCanonicalMobile(candidate.mobile);
+          if (canonical && (await this.parkedOpenOnce(probeBudget)).has(canonical)) {
+            this.logger.warn(`[${probeBudget.clientId}] Rescue/degraded tier picked ${maskMobile(candidate.mobile)} with an open parked-responder episode (allowed: the cutover hook stops the parked pass)`);
+          }
+        }
         picked = true; // keeps its lease through the cutover; runSetup releases it
         return {
           mobile: candidate.mobile,
@@ -1886,7 +2114,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         candidateCount: candidates.length,
         healthyCount: healthy.length,
       });
-      const candidate = await this.findSafeSetupBufferCandidate(healthy, existingClient.session, budget, probeAcceptanceForTier(tier));
+      const candidate = await this.findSafeSetupBufferCandidate(healthy, existingClient.session, budget, probeAcceptanceForTier(tier), 'allow');
       if (candidate) return { tier, candidate };
     }
     return null;
@@ -1929,7 +2157,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     });
     for (const { siblingId, spares } of ranked) {
       const tryable = spares.slice(0, spares.length - SIBLING_MIN_SPARES_AFTER);
-      const candidate = await this.findSafeSetupBufferCandidate(tryable, existingClient.session, budget, probeAcceptanceForTier(2));
+      const candidate = await this.findSafeSetupBufferCandidate(tryable, existingClient.session, budget, probeAcceptanceForTier(2), 'allow');
       if (candidate) return { candidate, fromClientId: siblingId };
       if (budget.remaining <= 0) break;
     }

@@ -493,7 +493,11 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return normalized;
     }
 
-    async create(bufferClient: CreateBufferClientDto): Promise<BufferClientDocument> {
+    /**
+     * `opts.suppressEnrolledEvent`: the caller records its own accountRoleEvents row for this write (the old main's
+     * pool return records `returned`), so no `enrolled` is appended here. Default: recorded as before.
+     */
+    async create(bufferClient: CreateBufferClientDto, opts?: { suppressEnrolledEvent?: boolean }): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(bufferClient.mobile);
         const status = bufferClient.status || 'active';
         const session = this.normalizeSessionForWrite(bufferClient.session);
@@ -524,6 +528,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             };
             return this.bufferClientModel.create({ ...createData });
         }));
+        // accountRoleEvents (S1, additive): a pool doc created here (POST /bufferclients, createOrUpdate's create branch,
+        // the old main's first return) is an enrolment. Fire-and-forget; never throws or delays the create.
+        // The pool return (client.service returnOldClientToBufferPool) suppresses it: it writes `returned` itself.
+        if (!opts?.suppressEnrolledEvent) {
+            this.recordRoleEvent({
+                mobile: canonicalMobile, clientId: bufferClient.clientId ?? null, event: 'enrolled', pool: 'buffer', by: 'cms:buffer-create',
+                reasonCode: 'enrolment', details: { availableDate: bufferClient.availableDate ?? null, status },
+            });
+        }
         this.logger.log(`Buffer Client Created:\n\nMobile: ${canonicalMobile}`);
         await this.sendAccountNotice(
             {
@@ -591,7 +604,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         return updatedBufferClient;
     }
 
-    async createOrUpdate(mobile: string, createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto): Promise<BufferClientDocument> {
+    /** `opts` reaches only the create branch (see create()); the update branch records no role event either way. */
+    async createOrUpdate(
+        mobile: string,
+        createorUpdateBufferClientDto: CreateBufferClientDto | UpdateBufferClientDto,
+        opts?: { suppressEnrolledEvent?: boolean },
+    ): Promise<BufferClientDocument> {
         const canonicalMobile = this.canonicalMobile(mobile);
         if (await this.existsByMobile(canonicalMobile)) {
             const updateDto: UpdateBufferClientDto = {
@@ -605,7 +623,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 mobile: canonicalMobile,
                 status: (createorUpdateBufferClientDto as CreateBufferClientDto).status || 'active',
             } as CreateBufferClientDto;
-            return this.create(createDto);
+            return this.create(createDto, opts);
         }
     }
 
@@ -831,6 +849,7 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             withPoolClaimOrRefuse: (m, fn) => this.withPoolClaimOrRefuse(m, fn),
             safeUnregisterClient: (m) => this.safeUnregisterClient(m),
             enrolmentInactiveSince: () => ClientHelperUtils.getDateStringDaysAgo(this.INACTIVE_USER_CUTOFF_DAYS, this.ONE_DAY_MS),
+            logger: this.logger,
         };
     }
 

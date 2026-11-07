@@ -93,8 +93,14 @@ export class UsersService {
   async expireAccount(
     mobile: string,
     reason: string = 'Account permanently lost (session revoked / banned / deactivated)',
+    roleEvent?: { opId?: string | null },
   ): Promise<void> {
     const canonicalMobile = this.canonicalMobile(mobile);
+    // accountRoleEvents: a cutover's old-main retirement passes its opId through to the pool `retired` events.
+    // Other callers pass nothing and the cascade call is unchanged (two arguments).
+    const cascadeArgs: [string, string, { opId: string }?] = roleEvent?.opId
+      ? [canonicalMobile, reason, { opId: roleEvent.opId }]
+      : [canonicalMobile, reason];
 
     // 1. Mark ALL user docs for this mobile expired. The users collection stores
     //    one doc per session (not per person), so a mobile can have multiple
@@ -114,14 +120,14 @@ export class UsersService {
     await Promise.allSettled([
       (async () => {
         try {
-          await this.bufferClientService.markAsInactive(canonicalMobile, reason);
+          await this.bufferClientService.markAsInactive(...cascadeArgs);
         } catch (error) {
           this.logger.error(`expireAccount: failed to deactivate buffer client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
         }
       })(),
       (async () => {
         try {
-          await this.promoteClientService.markAsInactive(canonicalMobile, reason);
+          await this.promoteClientService.markAsInactive(...cascadeArgs);
         } catch (error) {
           this.logger.error(`expireAccount: failed to deactivate promote client ${canonicalMobile}: ${error instanceof Error ? error.message : String(error)}`);
         }

@@ -502,6 +502,51 @@ describe('processClient — all exit paths', () => {
         );
     });
 
+    // Review M1 (CMS): rotateSession returns null when the parked-responder guard says busy. That is a SKIP: no
+    // failedUpdateAttempts, no "Warmup failed" notice (and so no 3-strike backoff); only the cooldown stamp.
+    const readyDoc = () => makeDoc({
+        warmupPhase: WarmupPhase.READY,
+        privacyUpdatedAt: daysAgo(12, mockNow),
+        twoFASetAt: daysAgo(11, mockNow),
+        otherAuthsRemovedAt: daysAgo(10, mockNow),
+        profilePicsDeletedAt: daysAgo(9, mockNow),
+        nameBioUpdatedAt: daysAgo(8, mockNow),
+        usernameUpdatedAt: daysAgo(7, mockNow),
+        profilePicsUpdatedAt: daysAgo(6, mockNow),
+    });
+    const noFailureRecorded = (mobile: string) => {
+        expect(service.updateMock).not.toHaveBeenCalledWith(mobile, expect.objectContaining({ failedUpdateAttempts: expect.anything() }));
+        expect(service.updateMock).not.toHaveBeenCalledWith(mobile, expect.objectContaining({ lastUpdateFailure: expect.anything() }));
+        expect(service.botsServiceMock.sendMessageByCategory).not.toHaveBeenCalledWith(
+            expect.anything(), expect.objectContaining({ title: expect.stringContaining('Warmup failed') }),
+        );
+    };
+
+    test('review M1: processClient rotate_session parked-busy (null) → skip: cooldown stamp only, no failure, no notice', async () => {
+        jest.spyOn(service, 'rotateSession').mockResolvedValue(null);
+        const doc = readyDoc();
+        const result = await service.processClient(doc, { clientId: 'c1' } as Client);
+        expect(result).toEqual({ updateCount: 0, updateSummary: 'rotate_session_parked_busy' });
+        expect(service.updateMock).toHaveBeenCalledWith(doc.mobile, { lastUpdateAttempt: expect.any(Date) });
+        noFailureRecorded(doc.mobile);
+    });
+
+    test('review M1: processReadyRotation parked-busy (null) → skip: no failure, no notice', async () => {
+        jest.spyOn(service, 'rotateSession').mockResolvedValue(null);
+        const doc = readyDoc();
+        const result = await (service as any).processReadyRotation(doc, { clientId: 'c1' } as Client);
+        expect(result).toEqual({ updateCount: 0, updateSummary: 'ready_rotation_parked_busy' });
+        noFailureRecorded(doc.mobile);
+    });
+
+    test('review M1: processReadyRotation real failure (false) still counts a failure and notifies', async () => {
+        jest.spyOn(service, 'rotateSession').mockResolvedValue(false);
+        const doc = readyDoc();
+        const result = await (service as any).processReadyRotation(doc, { clientId: 'c1' } as Client);
+        expect(result.updateSummary).toBe('ready_rotation_attempt_failed');
+        expect(service.updateMock).toHaveBeenCalledWith(doc.mobile, expect.objectContaining({ failedUpdateAttempts: 1 }));
+    });
+
     test('EXIT 12: TG operation throws → catch block increments failures', async () => {
         jest.spyOn(service as any, 'updatePrivacySettings').mockRejectedValue(new Error('TG_NETWORK_ERROR'));
         const doc = makeDoc({
@@ -855,6 +900,7 @@ describe('set2fa branches', () => {
             doc.mobile,
             'inactive',
             expect.stringContaining('Foreign 2FA'),
+            { permanent: true }, // accountRoleEvents details.permanent (deactivateClient permanent retirement)
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalled();
     });
@@ -945,6 +991,7 @@ describe('removeExternalLoginSessions branches', () => {
             doc.mobile,
             'inactive',
             expect.stringContaining('session_revoked'),
+            { permanent: true }, // accountRoleEvents details.permanent (deactivateClient permanent retirement)
         );
         expect(service.botsServiceMock.sendMessageByCategory).toHaveBeenCalledWith(
             expect.anything(),
