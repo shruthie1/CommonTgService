@@ -2,7 +2,7 @@
  * PaymentProofsService: real Mongo (mongodb-memory-server) + real service. paymentProofs rows are inserted in the
  * shapes tg-aut writes (old rows without proofId/verdict, new rows with them); userData + clients are joined.
  */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import mongoose, { Connection, Model, Types } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { UserDataDocument, UserDataSchema } from '../../user-data/schemas/user-data.schema';
@@ -79,26 +79,29 @@ describe('PaymentProofsService', () => {
             // new shapes
             proof({ proofId: 'ramya1-111-6', telegramMsgId: 6, verdict: { outcome: 'not_ours', reasons: ['UPI_NOT_OURS'], payee: 'foreign', fakeScore: null, fakeSignals: [] }, amount: 100, payeeName: 'X STORES', image: { host: 'ramya1', bytes: 1234, mime: 'image/jpeg', stored: true }, ocr: { app: 'phonepe', note: 'hi' } }),
             proof({ proofId: 'kavya1-333-7', telegramMsgId: 7, clientId: 'kavya1', profile: 'kavya', chatId: '333', servedAt: at(7), creditAmount: 20, verdict: { outcome: 'credited', reasons: [], fakeScore: 55 } }),
-            proof({ proofId: 'ramya1-111-8', telegramMsgId: 8, servedAt: at(8), creditAmount: 100, verdict: { outcome: 'credited', reasons: [] }, review: { state: 'ok', by: 'ops', at: at(1) } }),
+            proof({ proofId: 'ramya1-111-8', telegramMsgId: 8, servedAt: at(8), creditAmount: 100, verdict: { outcome: 'credited', reasons: [] }, review: { decision: 'fine', at: at(1) } }),
             // outside the default 7-day window
             proof({ createdAt: new Date(NOW - 8 * 86400_000) }),
         ]);
     }
 
-    it('counts every state over the window; review = credited proofs at risk, riskiest ₹ first', async () => {
+    it('lists every proof newest first (default state=all); counts keep every key; review = credited proofs at risk', async () => {
         await seed();
         const res = await service.list({}, NOW);
         expect(res.counts).toEqual({ review: 3, reviewAmount: 390, flagged: 2, not_credited: 4, credited: 4, marked: 1, reviewed: 1, all: 8 });
-        // risk x ₹: 2 (85 x 350), 1 (85 x 20), 7 (70 x 20: fakeScore 55)
-        expect(res.items.map((i) => i.telegramMsgId)).toEqual([2, 1, 7]);
-        expect(res.items.map((i) => i.risk)).toEqual([85, 85, 70]);
-        expect(res.items[0]).toMatchObject({ inReview: true, strong: true, atRiskAmount: 350, repeat: false });
-        expect(res.items[0].riskReasons).toContain('Chat sent a fake receipt');
+        expect(res.items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+        const byMsg = new Map(res.items.map((i) => [i.telegramMsgId, i]));
+        expect([1, 2, 7].map((m) => byMsg.get(m)!.risk)).toEqual([85, 85, 70]);
+        expect(byMsg.get(2)).toMatchObject({ strong: true, atRiskAmount: 350, repeat: false });
+        expect(byMsg.get(2)!.riskReasons).toContain('Chat sent a fake receipt');
+        expect(byMsg.get(8)!.stamp).toEqual({ decision: 'fine', at: at(1).toISOString() });
+        for (const i of res.items) expect(i).not.toHaveProperty('inReview');
         expect(res.reviewModel.options).toEqual({ dailyTarget: 20, riskFloor: 25, minAmount: 100, alwaysAmount: 200 });
-        expect((await service.list({ sort: 'time' }, NOW)).items.map((i) => i.telegramMsgId)).toEqual([1, 2, 7]);
+        expect((await service.list({ sort: 'time', state: 'all' }, NOW)).items.map((i) => i.telegramMsgId)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
         expect(res.nextCursor).toBeNull();
         expect(res.truncated).toBe(false);
     });
+
 
     it('joins userData (persona, username, complaintScore, fakePaymentAt) and clients.repl; hides bulky fields', async () => {
         await seed();
@@ -106,7 +109,7 @@ describe('PaymentProofsService', () => {
         const byMsg = new Map(items.map((i) => [i.telegramMsgId, i]));
         expect(byMsg.get(3)).toMatchObject({
             proofId: 'ramya1-111-3', outcome: 'fraud_ask', legacy: true, persona: 'ramya', username: 'u111', complaintScore: 2,
-            fakePaymentAt: null, clientHost: 'https://ramya1.paidgirls.site', inReview: false, flagged: true, atRiskAmount: 0,
+            fakePaymentAt: null, clientHost: 'https://ramya1.paidgirls.site', flagged: true, atRiskAmount: 0,
         });
         expect(byMsg.get(4)).toMatchObject({ outcome: 'fake_blocked', username: 'u222', fakePaymentAt: new Date(NOW - 3600_000) });
         // kavya/333 has no userData row: persona falls back to the proof's profile
@@ -119,18 +122,6 @@ describe('PaymentProofsService', () => {
             expect(i).not.toHaveProperty('servedSha');
             expect(typeof i._id).toBe('string');
         }
-    });
-
-    it.each([
-        ['flagged', [3, 4]],
-        ['not_credited', [3, 4, 5, 6]],
-        ['credited', [1, 2, 7, 8]],
-        ['marked', [4]],
-        ['reviewed', [8]],
-    ])('state=%s', async (state, msgs) => {
-        await seed();
-        const { items } = await service.list({ state }, NOW);
-        expect(items.map((i) => i.telegramMsgId)).toEqual(msgs);
     });
 
     it('filters by client, since and minAmount (counts follow the filters)', async () => {
@@ -172,7 +163,7 @@ describe('PaymentProofsService', () => {
         expect(seen.length).toBe(7);
     });
 
-    it('repeats / re-sends never enter review; risk-order paging has no gaps or repeats', async () => {
+    it('repeats / re-sends never enter review; a cursor of the removed risk order is refused', async () => {
         const sha = 'b'.repeat(64);
         await proofs.collection.insertMany([
             proof({ chatId: '444', servedAt: at(50), creditAmount: 50, amount: 50, imageSha256: sha, createdAt: at(50) }),
@@ -182,21 +173,12 @@ describe('PaymentProofsService', () => {
         ]);
         const all = await service.list({ state: 'all' }, NOW);
         const resend = all.items.filter((i) => i.chatId === '444' && !i.servedAt);
-        expect(resend.map((i) => [i.repeat, i.inReview])).toEqual([[true, false], [true, false]]);
-        const seen: number[] = [];
-        let cursor: string | undefined;
-        let pages = 0;
-        do {
-            const r = await service.list({ limit: 2, cursor }, NOW);
-            seen.push(...r.items.map((i) => i.atRiskAmount));
-            expect(r.counts.review).toBe(5);
-            cursor = r.nextCursor ?? undefined;
-            pages++;
-        } while (cursor && pages < 10);
-        expect(seen).toEqual([54, 53, 52, 51, 50]);
-        // a cursor of one sort is refused by the other
-        const first = await service.list({ limit: 2 }, NOW);
-        await expect(service.list({ limit: 2, sort: 'time', cursor: first.nextCursor! }, NOW)).rejects.toBeInstanceOf(BadRequestException);
+        expect(resend.map((i) => i.repeat)).toEqual([true, true]);
+        // only the five FAKE_TEXT credits are in review: not the credited original nor its re-sends
+        expect(all.counts.review).toBe(5);
+        expect(all.counts.reviewAmount).toBe(50 + 51 + 52 + 53 + 54);
+        const risk = Buffer.from(JSON.stringify({ t: 1400, id: String(all.items[0]._id), s: 'r' }), 'utf8').toString('base64url');
+        await expect(service.list({ limit: 2, cursor: risk }, NOW)).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('reused UTR: the earliest proof is the original (not in review), the later edited copy is; reusedFrom on the item', async () => {
@@ -206,8 +188,9 @@ describe('PaymentProofsService', () => {
         ]);
         const r = await service.list({ state: 'all', chat: '555' }, NOW);
         const [copy, orig] = r.items; // newest first
-        expect(orig).toMatchObject({ amount: 50, inReview: false, strong: false, reusedFrom: null });
-        expect(copy).toMatchObject({ amount: 350, inReview: true, strong: true });
+        expect(orig).toMatchObject({ amount: 50, strong: false, reusedFrom: null });
+        expect(copy).toMatchObject({ amount: 350, strong: true });
+        expect(r.counts).toMatchObject({ review: 1, reviewAmount: 350 });
         expect(copy.riskReasons).toContain('Reused UTR of an earlier receipt (₹50 before)');
         expect(copy.reusedFrom).toMatchObject({ proofId: orig.proofId, chatId: '555', amount: 50 });
     });
@@ -215,42 +198,10 @@ describe('PaymentProofsService', () => {
     it('caps limit at 100 and rejects bad params', async () => {
         await proofs.collection.insertMany(Array.from({ length: 105 }, () => proof({})));
         expect((await service.list({ state: 'all', limit: '500' }, NOW)).items).toHaveLength(100);
-        for (const q of [{ state: 'nope' }, { since: 'yesterday' }, { limit: '0' }, { limit: '2.5' }, { minAmount: '-1' }, { cursor: 'zzz' }, { client: 'a b' }, { chat: '12ab' }, { sort: 'amount' }]) {
+        for (const q of [{ state: 'nope' }, { since: 'yesterday' }, { limit: '0' }, { limit: '2.5' }, { minAmount: '-1' }, { cursor: 'zzz' }, { client: 'a b' }, { chat: '12ab' }, { sort: 'amount' },
+            // removed 2026-11-07
+            { sort: 'risk' }, ...['review', 'flagged', 'not_credited', 'credited', 'marked', 'reviewed'].map((state) => ({ state }))]) {
             await expect(service.list(q as any, NOW)).rejects.toBeInstanceOf(BadRequestException);
         }
-    });
-
-    it('review ok / clear on an old row (no proofId) and a new row; removes it from the review count', async () => {
-        await seed();
-        const before = await service.list({}, NOW);
-        const now = new Date(NOW);
-        const r = await service.review('ramya1-111-2', { state: 'ok', by: ' ops ' }, now);
-        expect(r).toEqual({ proofId: 'ramya1-111-2', review: { decision: 'fine', at: now } });
-        const row = await proofs.collection.findOne({ telegramMsgId: 2 });
-        expect(row?.review).toEqual({ decision: 'fine', at: now });
-        expect(row?.proofId).toBeUndefined(); // CMS never adds tg-aut fields
-        const after = await service.list({}, NOW);
-        expect(after.counts.review).toBe(before.counts.review - 1);
-        expect(after.counts.reviewed).toBe(before.counts.reviewed + 1);
-
-        await service.review('ramya1-111-6', { state: 'ok', by: 'ops' }, now);
-        expect((await proofs.collection.findOne({ proofId: 'ramya1-111-6' }))?.review?.decision).toBe('fine');
-
-        expect(await service.review('ramya1-111-2', { state: 'clear' })).toEqual({ proofId: 'ramya1-111-2', review: null });
-        expect((await proofs.collection.findOne({ telegramMsgId: 2 }))).not.toHaveProperty('review');
-        // idempotent clear
-        await expect(service.review('ramya1-111-2', { state: 'clear' })).resolves.toEqual({ proofId: 'ramya1-111-2', review: null });
-        // msg 2 is back in review after the clear; msg 6 (not_ours, reviewed ok) was never in it
-        expect((await service.list({}, NOW)).counts.review).toBe(before.counts.review);
-    });
-
-    it('review rejects bad input and 404s a missing proof', async () => {
-        await seed();
-        await expect(service.review('bad', { state: 'ok', by: 'ops' })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.review('ramya1-111-3', { state: 'maybe', by: 'ops' })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.review('ramya1-111-3', { state: 'ok' })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.review('ramya1-111-999', { state: 'ok', by: 'ops' })).rejects.toBeInstanceOf(NotFoundException);
-        // client must match too
-        await expect(service.review('kavya1-111-3', { state: 'ok', by: 'ops' })).rejects.toBeInstanceOf(NotFoundException);
     });
 });

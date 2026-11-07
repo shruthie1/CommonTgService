@@ -1,6 +1,6 @@
 /**
  * PaymentProofsService views + chat actions (redesign 2026-11-07) over real Mongo (mongodb-memory-server):
- * GET ?view=check|muted|refused, POST chat/:chatId/review, closeFraudAsks; the cached window follows every write.
+ * GET ?view=check|muted|refused, POST chat/:chatId/actions, closeFraudAsks; the cached window follows every write.
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import mongoose, { Connection, Model, Types } from 'mongoose';
@@ -107,22 +107,6 @@ describe('PaymentProofsService views', () => {
     it('rejects an unknown view or client', async () => {
         await expect(service.views({ view: 'x' }, NOW)).rejects.toBeInstanceOf(BadRequestException);
         await expect(service.views({ view: 'check', client: 'a b' }, NOW)).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it('reviewChat marks the chat\'s credited unreviewed proofs, drops it from check (cache patched), idempotent', async () => {
-        await service.views({ view: 'check' }, NOW); // fill the cache
-        const res = await service.reviewChat('100', { by: 'ops' });
-        expect([...res.reviewed].sort()).toEqual(['ramya1-100-1', 'ramya1-100-2']);
-        expect((await service.views({ view: 'check' }, NOW)).entries).toEqual([]);
-        expect((await service.reviewChat('100', { by: 'ops' })).reviewed).toEqual([]);
-        const rows = await proofs.collection.find({ chatId: '100' }).toArray();
-        expect(rows.every((x) => x.review?.decision === 'fine' && !('by' in x.review))).toBe(true);
-    });
-
-    it('reviewChat with proofIds marks only those; rejects ids of another chat and a missing by', async () => {
-        expect((await service.reviewChat('100', { by: 'ops', proofIds: ['ramya1-100-1'] })).reviewed).toEqual(['ramya1-100-1']);
-        await expect(service.reviewChat('100', { by: 'ops', proofIds: ['ramya1-200-3'] })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.reviewChat('100', {})).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('closeFraudAsks resolves the open fraud asks of the chat; the muted view then shows source unknown', async () => {

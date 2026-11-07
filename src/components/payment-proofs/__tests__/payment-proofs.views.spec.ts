@@ -135,7 +135,7 @@ describe('view check ("Check these"): one entry per chat', () => {
     it('leaves marked and muted chats to the muted view; a fully stamped chat carries its stamp; a partly stamped one none', () => {
         const v = views([
             credited(300, { chatId: 'mk' }),
-            credited(300, { chatId: 'rv', review: { state: 'ok', by: 'x', at: new Date(T0) } }),
+            credited(300, { chatId: 'rv', review: { decision: 'fine', at: new Date(T0) } }),
             credited(300, { chatId: 'pt' }),
             credited(250, { chatId: 'pt', review: { decision: 'fine', at: new Date(T0) } }),
             credited(300, { chatId: 'mu' }),
@@ -260,8 +260,9 @@ describe('view refused ("Refused but looks genuine")', () => {
 describe('review stamp (owner 2026-11-07)', () => {
     const at = new Date(T0 + 3_600_000);
     const genuine = (over: Record<string, unknown> = {}) => refused('fraud_ask', ['NO_REAL_REFERENCE'], { chatId: 'R', ...over });
-    it('stampOf: legacy ok reads as fine; a later block or ask on the row voids the stamp (it resurfaces)', () => {
-        expect(stampOf({ review: { state: 'ok', by: 'x', at } })).toEqual({ decision: 'fine', at: at.toISOString() });
+    it('stampOf: the removed legacy { state: ok } shape is no stamp; a later block or ask on the row voids the stamp (it resurfaces)', () => {
+        expect(stampOf({ review: { state: 'ok', by: 'x', at } as any })).toBeNull();
+        expect(stampOf({ review: { decision: 'fine', at } })).toEqual({ decision: 'fine', at: at.toISOString() });
         expect(stampOf({ review: { decision: 'fake', at }, ask: { blockedAt: new Date(at.getTime() - 1) } })?.decision).toBe('fake');
         expect(stampOf({ review: { decision: 'fine', at }, ask: { blockedAt: new Date(at.getTime() + 15 * 60_000) } })).toBeNull();
         expect(stampOf({ review: { decision: 'fine', at }, ask: { openedAt: new Date(at.getTime() + 1) } })).toBeNull();

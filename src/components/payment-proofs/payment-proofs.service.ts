@@ -5,7 +5,7 @@ import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schem
 import { PAYMENT_PROOF_MODEL, PaymentProofRow, ProofReview, REVIEW_DECISIONS, ReviewDecision } from './schemas/payment-proof.schema';
 import {
     ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, ReviewModel, addToCounts, buildReviewModel, classify,
-    decodeCursor, emptyCounts, encodeCursor, inState, isAfterCursor, parseProofId, priorityOf, proofIdOf, reviewOptionsFromEnv,
+    decodeCursor, emptyCounts, encodeCursor, isAfterCursor, parseProofId, proofIdOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
 import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews, isHiddenEntry } from './payment-proofs.views';
 
@@ -21,11 +21,10 @@ export const MAX_WINDOW_ROWS = 20_000;
 const USERDATA_IN_CHUNK = 1_000;
 const CLIENT_HOST_TTL_MS = 5 * 60 * 1000;
 const CLIENT_ID_RE = /^[A-Za-z0-9_.-]{1,40}$/;
-const MAX_BY = 60;
 /**
  * The whole-window read (rows + userData + review model) is shared by every list call. Prod 2026-11-03 (VM2 -> Atlas):
  * ~8.5 s per call whatever the filters, so it is kept in memory: fresh for PAYMENT_PROOFS_LIST_CACHE_MS (default 60 s,
- * 0 = off), then served stale while one background reload runs. review() and the fake-payment mark patch it in place.
+ * 0 = off), then served stale while one background reload runs. stampChat() and the fake-payment mark patch it in place.
  */
 export const DEFAULT_LIST_CACHE_MS = 60_000;
 /** Entries: the default 7-day window plus a few explicit older `since` windows. */
@@ -60,7 +59,7 @@ const CHAT_USER_PROJECTION = {
     _id: 0, chatId: 1, profile: 1, clientId: 1, username: 1, cheatCount: 1, canReply: 1, payAmount: 1, fakePaymentAt: 1,
     fakePaymentBy: 1, fakePaymentReason: 1, fakePaymentPrev: 1, fakePaymentProofIds: 1, fakePaymentHistory: 1,
 } as const;
-export const PROOF_SORTS = ['risk', 'time'] as const;
+export const PROOF_SORTS = ['time'] as const;
 export type ProofSort = (typeof PROOF_SORTS)[number];
 
 export interface ListQuery {
@@ -68,11 +67,12 @@ export interface ListQuery {
     client?: string;
     /** chatId: one chat's proofs (the review details sheet's history; additive 2026-11-04). */
     chat?: string;
+    /** all (the default; the only state since 2026-11-07). */
     state?: string;
     minAmount?: string | number;
     limit?: string | number;
     cursor?: string;
-    /** risk (default for state=review: risk x credited ₹) or time (newest first; default for other states). */
+    /** time (newest first; the default and the only sort since 2026-11-07). */
     sort?: string;
 }
 
@@ -84,7 +84,6 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
     reasons: string[];
     fakeScore: number | null;
     amountValue: number | null;
-    inReview: boolean;
     /** The operator's stamp if it still holds (classify stampOf); null = not reviewed. */
     stamp: ClassifiedProof['stamp'];
     flagged: boolean;
@@ -105,7 +104,7 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
 export interface ListResult {
     items: ProofItem[];
     nextCursor: string | null;
-    /** counts.reviewAmount = credited ₹ of the review items (same filters). */
+    /** counts.reviewAmount = credited ₹ of the review-rule proofs (same filters); kept for tg-chats' pre-views page. */
     counts: ProofCounts & { reviewAmount: number };
     /** The review rule's settings and per-IST-day risk threshold (whole collection, not the filters). */
     reviewModel: ReviewModel;
@@ -172,7 +171,7 @@ export class PaymentProofsService {
             if (!/^-?\d{1,20}$/.test(String(q.chat))) throw new BadRequestException('chat must be a chatId');
             chat = String(q.chat);
         }
-        const state = (q.state === undefined || q.state === '' ? 'review' : String(q.state)) as ProofState;
+        const state = (q.state === undefined || q.state === '' ? 'all' : String(q.state)) as ProofState;
         if (!PROOF_STATES.includes(state)) throw new BadRequestException(`state must be one of ${PROOF_STATES.join('|')}`);
         let minAmount: number | null = null;
         if (q.minAmount !== undefined && q.minAmount !== '') {
@@ -185,19 +184,19 @@ export class PaymentProofsService {
             if (!Number.isInteger(limit) || limit < 1) throw new BadRequestException('limit must be an integer >= 1');
             limit = Math.min(limit, MAX_LIMIT);
         }
-        const sort = (q.sort === undefined || q.sort === '' ? (state === 'review' ? 'risk' : 'time') : String(q.sort)) as ProofSort;
+        const sort = (q.sort === undefined || q.sort === '' ? 'time' : String(q.sort)) as ProofSort;
         if (!PROOF_SORTS.includes(sort)) throw new BadRequestException(`sort must be one of ${PROOF_SORTS.join('|')}`);
         let cursor = null;
         if (q.cursor !== undefined && q.cursor !== '') {
             cursor = decodeCursor(q.cursor);
-            if (!cursor || (cursor.s === 'r') !== (sort === 'risk')) throw new BadRequestException('invalid cursor');
+            if (!cursor) throw new BadRequestException('invalid cursor');
         }
         return { since, client, chat, state, minAmount, limit, cursor, sort };
     }
 
     async list(q: ListQuery, now = Date.now()): Promise<ListResult> {
         const p = this.parseQuery(q, now);
-        // Shared whole-window data (cached); since / client / minAmount / state / sort / paging are applied per request.
+        // Shared whole-window data (cached); since / client / chat / minAmount / paging are applied per request.
         const { everything, chats, reviewModel, truncated } = await this.window(p.since, now);
         const isMarked = (chatId: string) => !!chats.get(chatId)?.marked;
 
@@ -213,13 +212,11 @@ export class PaymentProofsService {
             const marked = isMarked(String(x.row.chatId));
             addToCounts(counts, x.c, marked);
             if (x.c.review) counts.reviewAmount += x.c.atRiskAmount;
-            if (!inState(x.c, marked, p.state)) continue;
-            const t = p.sort === 'risk' ? priorityOf(x.c) : new Date(x.row.createdAt).getTime();
+            // rows are already (createdAt desc, _id desc), the page order.
+            const t = new Date(x.row.createdAt).getTime();
             if (p.cursor && !isAfterCursor(t, String(x.row._id), p.cursor)) continue;
             inPage.push({ ...x, marked, t });
         }
-        // rows are already (createdAt desc, _id desc); risk order needs a sort on (priority desc, _id desc).
-        if (p.sort === 'risk') inPage.sort((a, b) => b.t - a.t || (String(b.row._id) < String(a.row._id) ? -1 : 1));
         const more = inPage.length > p.limit;
         const page = inPage.slice(0, p.limit);
 
@@ -246,7 +243,6 @@ export class PaymentProofsService {
                 reasons: c.reasons,
                 fakeScore: c.fakeScore,
                 amountValue: c.amount,
-                inReview: c.review,
                 stamp: c.stamp,
                 flagged: c.flagged,
                 risk: c.risk,
@@ -263,9 +259,7 @@ export class PaymentProofsService {
             } as ProofItem;
         });
         const last = page[page.length - 1];
-        const nextCursor = more && last
-            ? encodeCursor(p.sort === 'risk' ? { t: last.t, id: String(last.row._id), s: 'r' } : { t: last.t, id: String(last.row._id) })
-            : null;
+        const nextCursor = more && last ? encodeCursor({ t: last.t, id: String(last.row._id) }) : null;
         return { items, nextCursor, counts, reviewModel, truncated };
     }
 
@@ -443,33 +437,6 @@ export class PaymentProofsService {
     }
 
     /**
-     * "Looks fine" on a whole chat: review 'ok' on its credited, not yet reviewed proofs (only `proofIds` when given:
-     * the ones the operator saw). Idempotent; returns the proof ids it marked.
-     */
-    async reviewChat(chatId: string, body: { by?: string; proofIds?: unknown }, now = new Date()): Promise<{ chatId: string; reviewed: string[] }> {
-        const id = String(chatId ?? '').trim();
-        if (!/^-?\d{1,20}$/.test(id)) throw new BadRequestException('chatId must be a chatId');
-        const by = typeof body?.by === 'string' ? body.by.trim().slice(0, MAX_BY) : '';
-        if (!by) throw new BadRequestException('by is required');
-        let only: Set<string> | null = null;
-        if (body?.proofIds !== undefined) {
-            if (!Array.isArray(body.proofIds) || body.proofIds.some((p) => parseProofId(p)?.chatId !== id)) {
-                throw new BadRequestException('proofIds must be proof ids of this chat');
-            }
-            only = new Set(body.proofIds as string[]);
-        }
-        const rows = await this.proofModel.find({ chatId: id }, CLASSIFY_PROJECTION).lean<PaymentProofRow[]>().exec();
-        const todo = rows.map((row) => ({ row, c: classify(row) }))
-            .filter(({ c }) => c.credited && !c.reviewed && (!only || only.has(c.proofId)));
-        if (todo.length) {
-            const review: ProofReview = { decision: 'fine', at: now };
-            await this.proofModel.updateMany({ _id: { $in: todo.map((x) => x.row._id) } }, { $set: { review } }).exec();
-            await this.patchWindows(`review chat ${id}`, () => this.rereadChat(id));
-        }
-        return { chatId: id, reviewed: todo.map((x) => x.c.proofId) };
-    }
-
-    /**
      * The operator's stamp on exactly the proofs a card showed (POST chat/:chatId/actions). The state change itself
      * (mark fake, unblock) stays on its own endpoint, called first by tg-chats. A proof that arrived after the card
      * loaded is not in proofIds, so it stays unreviewed.
@@ -518,32 +485,5 @@ export class PaymentProofsService {
             const rows = w.rows.map((r) => { const f = fresh.get(String(r._id)); if (f) hit = true; return f ?? r; });
             return hit ? this.derive({ ...w, rows }) : null;
         };
-    }
-
-    /** Sets (state 'ok') or clears the operator review on one proof. Idempotent. */
-    async review(proofId: string, body: { state?: string; by?: string }, now = new Date()): Promise<{ proofId: string; review: ProofReview | null }> {
-        const key = parseProofId(proofId);
-        if (!key) throw new BadRequestException('proofId must be <clientId>-<chatId>-<telegramMsgId>');
-        const state = body?.state;
-        if (state !== 'ok' && state !== 'clear') throw new BadRequestException("state must be 'ok' or 'clear'");
-        const by = typeof body?.by === 'string' ? body.by.trim().slice(0, MAX_BY) : '';
-        if (state === 'ok' && !by) throw new BadRequestException('by is required');
-        // (chatId, clientId, telegramMsgId) identifies the row for old (no proofId) and new rows alike; chatId leads
-        // the existing chatId_1_createdAt_-1 index.
-        const filter = { chatId: key.chatId, clientId: key.clientId, telegramMsgId: key.telegramMsgId };
-        const review: ProofReview | null = state === 'ok' ? { decision: 'fine', at: now } : null;
-        const update = review ? { $set: { review } } : { $unset: { review: 1 } };
-        const res = await this.proofModel.updateOne(filter, update).exec();
-        if (!res.matchedCount) throw new NotFoundException('payment proof not found (gone after the 7-day TTL?)');
-        await this.patchWindows(`review ${proofId}`, async () => {
-            const fresh = new Map((await this.proofModel.find(filter, CLASSIFY_PROJECTION).lean<PaymentProofRow[]>().exec())
-                .map((r) => [String(r._id), r]));
-            return (w) => {
-                let hit = false;
-                const rows = w.rows.map((r) => { const f = fresh.get(String(r._id)); if (f) hit = true; return f ?? r; });
-                return hit ? this.derive({ ...w, rows }) : null;
-            };
-        });
-        return { proofId, review };
     }
 }

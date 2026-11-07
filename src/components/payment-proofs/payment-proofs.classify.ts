@@ -11,9 +11,13 @@ import { PaymentProofRow, ProofOutcome, ReviewDecision } from './schemas/payment
  *    old_time; decision REJECT_DUPLICATE = repeat, BLOCK = fake_blocked, ASK_PROOF = fraud_ask; else 'other'.
  *    (Prod 2026-11-03: 1,756 rows, all old shape, all decision ACCEPT, no reasons.)
  */
-export const PROOF_STATES = ['review', 'flagged', 'not_credited', 'credited', 'marked', 'reviewed', 'all'] as const;
+/** GET /payment-proofs (no view) lists every proof; the per-state lists were removed 2026-11-07 (views replace them). */
+export const PROOF_STATES = ['all'] as const;
 export type ProofState = (typeof PROOF_STATES)[number];
-export type ProofCounts = Record<ProofState, number>;
+/** Keys of the list's counts: kept because tg-chats' pre-views review page still reads counts[state]. */
+export const COUNT_STATES = ['review', 'flagged', 'not_credited', 'credited', 'marked', 'reviewed', 'all'] as const;
+export type CountState = (typeof COUNT_STATES)[number];
+export type ProofCounts = Record<CountState, number>;
 
 /** fakeScore at or above this is a strong fake signal. */
 export const REVIEW_FAKE_SCORE = 40;
@@ -109,11 +113,11 @@ export interface ReviewStamp { decision: ReviewDecision; at: string }
 /**
  * The operator's stamp on a row, or null when there is none or it no longer holds: the payment check opened or
  * blocked an ask on the row after the stamp (e.g. a fraud block 15 min later), so the row needs another look.
- * The legacy { state: 'ok' } shape reads as 'fine'. tg-aut and CMS clocks differ slightly; accepted (owner 2026-11-07).
+ * tg-aut and CMS clocks differ slightly; accepted (owner 2026-11-07).
  */
 export function stampOf(row: Pick<PaymentProofRow, 'review' | 'ask'>): ReviewStamp | null {
     const r = row.review;
-    const decision = r?.decision ?? (r?.state === 'ok' ? 'fine' : undefined);
+    const decision = r?.decision;
     const at = r?.at ? new Date(r.at).getTime() : NaN;
     if (!decision || !Number.isFinite(at)) return null;
     const changedAfter = [row.ask?.blockedAt, row.ask?.openedAt].some((v) => !!v && new Date(v).getTime() > at);
@@ -154,7 +158,7 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
     };
 }
 
-export function inState(c: ClassifiedProof, marked: boolean, state: ProofState): boolean {
+export function inState(c: ClassifiedProof, marked: boolean, state: CountState): boolean {
     switch (state) {
         case 'review': return c.review;
         case 'flagged': return c.flagged;
@@ -171,7 +175,7 @@ export function emptyCounts(): ProofCounts {
 }
 
 export function addToCounts(counts: ProofCounts, c: ClassifiedProof, marked: boolean): void {
-    for (const s of PROOF_STATES) if (inState(c, marked, s)) counts[s]++;
+    for (const s of COUNT_STATES) if (inState(c, marked, s)) counts[s]++;
 }
 
 export interface ReviewOptions {
@@ -454,13 +458,8 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
     return { options, thresholds };
 }
 
-/** Review queue order: risk x credited ₹ at risk. */
-export function priorityOf(c: ClassifiedProof): number {
-    return c.risk * c.atRiskAmount;
-}
-
-/** Opaque keyset cursor over (t desc, _id desc): t = createdAt ms, or priorityOf() when s = 'r' (risk order). */
-export interface ProofCursor { t: number; id: string; s?: 'r' }
+/** Opaque keyset cursor over (t desc, _id desc): t = createdAt ms. */
+export interface ProofCursor { t: number; id: string }
 
 export function encodeCursor(c: ProofCursor): string {
     return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
@@ -471,8 +470,9 @@ export function decodeCursor(raw: unknown): ProofCursor | null {
     try {
         const v = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
         if (v && typeof v.t === 'number' && Number.isFinite(v.t) && typeof v.id === 'string' && /^[0-9a-f]{24}$/i.test(v.id)) {
-            if (v.s !== undefined && v.s !== 'r') return null;
-            return v.s === 'r' ? { t: v.t, id: v.id.toLowerCase(), s: 'r' } : { t: v.t, id: v.id.toLowerCase() };
+            // A cursor with s (the removed risk order) is no longer valid.
+            if (v.s !== undefined) return null;
+            return { t: v.t, id: v.id.toLowerCase() };
         }
     } catch { /* invalid cursor */ }
     return null;

@@ -15,29 +15,30 @@ export class PaymentProofsController {
 
     @Get()
     @ApiOperation({
-        summary: 'Payment screenshots for review: filtered, cursor-paged, with counts per state and userData/client join',
+        summary: 'Every payment screenshot (state=all, newest first): filtered, cursor-paged, with counts and userData/client join',
         description:
-            'review (revenue + long-term blocking, post-hoc; nothing in tg-aut reads it) = CREDITED AND not reviewed AND chat not ' +
+            'Since 2026-11-07 the only state is all and the only sort time; the per-state lists and the risk order were removed ' +
+            '(the views replace them). counts keep their per-state keys and reviewAmount. ' +
+            'review rule (revenue + long-term blocking, post-hoc; nothing in tg-aut reads it) = CREDITED AND not reviewed AND chat not ' +
             'marked fake AND (strong fake signal OR (credited ₹ >= REVIEW_MIN_AMOUNT (100) AND among the IST day\'s top ' +
             'REVIEW_DAILY_TARGET (20) minus strong, by risk, with risk >= REVIEW_RISK_FLOOR (25))). Strong: fake reason code, ' +
             'fakeScore >= 40, fakeSignals, chat sent a fake receipt, same image in another chat (not the first chat), reused UTR of an ' +
             'earlier receipt (another chat or amount; the earliest proof with a UTR is the original), same receipt credited before, ' +
             'payer of a marked-fake chat. Uncredited proofs (repeats, not_ours, not_receipt, old_time, over_limit, uncredited ' +
             'fakes) never enter review. Items carry risk (0-100), riskReasons, atRiskAmount, strong, repeat, reusedFrom; ' +
-            'counts.reviewAmount = credited ₹ in review. ' +
+            'counts.review = proofs the rule picks, counts.reviewAmount = their credited ₹. ' +
             'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = a stamp that still holds (item.stamp). ' +
             'Rows without verdict (before tg-aut wrote one) get an outcome derived from servedAt / ask / decision (legacy: true). ' +
-            'state=review defaults to sort=risk (risk x atRiskAmount), other states to newest first; counts cover ' +
-            'since/client/minAmount (not state/cursor); the review model always uses the whole 7-day collection.',
+            'counts cover since/client/chat/minAmount (not cursor); the review model always uses the whole 7-day collection.',
     })
     @ApiQuery({ name: 'since', required: false, description: 'ISO date; default now - 7 days (the TTL)' })
     @ApiQuery({ name: 'client', required: false, description: 'clientId' })
     @ApiQuery({ name: 'chat', required: false, description: 'chatId: only this chat (counts too)' })
-    @ApiQuery({ name: 'state', required: false, enum: PROOF_STATES, description: 'default review' })
+    @ApiQuery({ name: 'state', required: false, enum: PROOF_STATES, description: 'default all' })
     @ApiQuery({ name: 'minAmount', required: false, description: 'creditAmount (else amount read) >= n' })
     @ApiQuery({ name: 'limit', required: false, description: `default 50, max ${MAX_LIMIT}` })
     @ApiQuery({ name: 'cursor', required: false, description: 'nextCursor from the previous page (same sort)' })
-    @ApiQuery({ name: 'sort', required: false, enum: PROOF_SORTS, description: 'default risk for state=review, else time' })
+    @ApiQuery({ name: 'sort', required: false, enum: PROOF_SORTS, description: 'default time' })
     @ApiQuery({
         name: 'view', required: false, enum: REVIEW_VIEWS,
         description: 'Redesign 2026-11-07 (additive; without view the response above is unchanged). check = one entry per chat ' +
@@ -51,15 +52,6 @@ export class PaymentProofsController {
         return this.service.list(query ?? {});
     }
 
-    @Post('chat/:chatId/review')
-    @HttpCode(200)
-    @ApiOperation({ summary: "Looks fine on a whole chat: stamp decision 'fine' on its credited, unreviewed proofs (only proofIds when given). Idempotent" })
-    @ApiParam({ name: 'chatId' })
-    @ApiBody({ schema: { type: 'object', required: ['by'], properties: { by: { type: 'string' }, proofIds: { type: 'array', items: { type: 'string' } } } } })
-    reviewChat(@Param('chatId') chatId: string, @Body() body: { by?: string; proofIds?: unknown }) {
-        return this.service.reviewChat(chatId, body ?? {});
-    }
-
     @Post('chat/:chatId/actions')
     @HttpCode(200)
     @ApiOperation({
@@ -70,14 +62,5 @@ export class PaymentProofsController {
     @ApiBody({ schema: { type: 'object', required: ['decision', 'proofIds'], properties: { decision: { type: 'string', enum: ['fine', 'fake', 'unblocked'] }, proofIds: { type: 'array', maxItems: MAX_STAMP_IDS, items: { type: 'string' } } } } })
     stampChat(@Param('chatId') chatId: string, @Body() body: { decision?: unknown; proofIds?: unknown }) {
         return this.service.stampChat(chatId, body ?? {});
-    }
-
-    @Post(':proofId/review')
-    @HttpCode(200)
-    @ApiOperation({ summary: "Set (state 'ok' = stamp decision 'fine') or clear the operator review of one proof (idempotent)" })
-    @ApiParam({ name: 'proofId', description: '<clientId>-<chatId>-<telegramMsgId>' })
-    @ApiBody({ schema: { type: 'object', required: ['state'], properties: { state: { type: 'string', enum: ['ok', 'clear'] }, by: { type: 'string', description: "required for 'ok'" } } } })
-    review(@Param('proofId') proofId: string, @Body() body: { state?: string; by?: string }) {
-        return this.service.review(proofId, body ?? {});
     }
 }

@@ -6,7 +6,7 @@ import * as mongoose from 'mongoose';
  *
  * CMS never creates or alters indexes or the collection: autoIndex / autoCreate are off and no index is declared
  * (tg-aut's ensureIndexes owns them). strict:false keeps every field tg-aut writes (old and new row shapes) and lets
- * the review endpoint $set / $unset `review` without a schema migration. The only CMS write is `review`.
+ * the stamp endpoint $set `review` without a schema migration. The only CMS write is `review`.
  */
 export const PAYMENT_PROOF_COLLECTION = 'paymentProofs';
 export const PAYMENT_PROOF_MODEL = 'PaymentProof';
@@ -27,15 +27,12 @@ export const REVIEW_DECISIONS = ['fine', 'fake', 'unblocked', 'past'] as const;
 export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
 
 /**
- * The operator's stamp (CMS-owned; tg-aut never writes it). Rows stamped before 2026-11-07 have the legacy shape
- * { state: 'ok', by, at }, read as decision 'fine'.
+ * The operator's stamp (CMS-owned; tg-aut never writes it). The legacy { state: 'ok', by, at } rows were rewritten to
+ * { decision, at } on 2026-11-07 (countDocuments after: 0 rows with review.state or review.by).
  */
 export interface ProofReview {
-    decision?: ReviewDecision;
+    decision: ReviewDecision;
     at: Date;
-    /** Legacy shape only. */
-    state?: 'ok';
-    by?: string;
 }
 
 /** Fields CMS reads. Old rows (before tg-aut wrote proofId / verdict / image / ocr) lack the optional new ones. */

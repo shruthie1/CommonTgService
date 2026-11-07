@@ -1,6 +1,6 @@
 /**
  * PaymentProofsService list cache (prod 2026-11-03: every list re-read the whole 7-day window, ~8.5 s on VM2):
- * single-flight, 60 s fresh, stale-while-revalidate, patched in place by review() and the fake-payment mark.
+ * single-flight, 60 s fresh, stale-while-revalidate, patched in place by stampChat() and the fake-payment mark.
  * Real Mongo (mongodb-memory-server) + real services; the window read is counted on proofModel.find.
  */
 import mongoose, { Connection, Model, Types } from 'mongoose';
@@ -108,16 +108,14 @@ describe('PaymentProofsService list cache', () => {
         expect(client.counts.all).toBe(1);
     });
 
-    it('(c) review() is reflected by the next list without a window re-read', async () => {
+    it('(c) stampChat() is reflected by the next list without a window re-read', async () => {
         const before = await service.list({}, NOW);
         expect(before.counts.review).toBe(2);
-        await service.review('ramya1-111-2', { state: 'ok', by: 'ops' }, new Date(NOW));
+        await service.stampChat('111', { decision: 'fine', proofIds: ['ramya1-111-2'] }, new Date(NOW));
         const after = await service.list({}, NOW);
         expect(after.counts.review).toBe(1);
         expect(after.counts.reviewed).toBe(1);
-        expect(after.items.map((i) => i.telegramMsgId)).not.toContain(2);
-        await service.review('ramya1-111-2', { state: 'clear' });
-        expect((await service.list({}, NOW)).counts.review).toBe(2);
+        expect(after.items.find((i) => i.telegramMsgId === 2)?.stamp).toEqual({ decision: 'fine', at: new Date(NOW).toISOString() });
         expect(windowFinds()).toBe(1);
     });
 

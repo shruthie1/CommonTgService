@@ -1,7 +1,7 @@
 /** Pure rules of the payments review screen (contract section 2): outcome derivation, states, proofId, cursor. */
 import {
     DEFAULT_REVIEW_OPTIONS, buildReviewModel, classify, decodeCursor, deriveLegacyOutcome, encodeCursor, inState,
-    isAfterCursor, parseProofId, priorityOf, proofIdOf, reviewOptionsFromEnv,
+    isAfterCursor, parseProofId, proofIdOf, reviewOptionsFromEnv,
 } from '../payment-proofs.classify';
 
 const base = (over: Record<string, unknown> = {}): any => ({
@@ -112,7 +112,7 @@ describe('review queue (redesign 2026-11-03: credited money that may be fake; re
             expect(m.thresholds['2026-11-03']).toBe(40);
         });
         it('reviewed or marked-fake chats still leave the queue', () => {
-            const { c } = model([credited(500, { review: { state: 'ok', by: 'ops', at: new Date() } }), credited(500, { chatId: '77' })], ['77']);
+            const { c } = model([credited(500, { review: { decision: 'fine', at: new Date() } }), credited(500, { chatId: '77' })], ['77']);
             expect([c(0).review, c(1).review]).toEqual([false, false]);
         });
     });
@@ -254,7 +254,7 @@ describe('review queue (redesign 2026-11-03: credited money that may be fake; re
 
     it('reviewed proofs and marked-fake chats are not in review', () => {
         const fake = { reasons: ['FAKE_TEXT'] };
-        const { c } = model([credited(50, { ...fake, review: { state: 'ok', by: 'ops', at: new Date() } }), credited(50, { ...fake, chatId: '77' })], ['77']);
+        const { c } = model([credited(50, { ...fake, review: { decision: 'fine', at: new Date() } }), credited(50, { ...fake, chatId: '77' })], ['77']);
         expect([c(0).review, c(1).review]).toEqual([false, false]);
         expect(c(0).strong).toBe(true);
     });
@@ -302,9 +302,7 @@ describe('review queue (redesign 2026-11-03: credited money that may be fake; re
         expect(c(1)).toMatchObject({ strong: true, review: true });
     });
 
-    it('priority = risk x credited ₹; options come from env with defaults', () => {
-        const { c } = model([credited(20, { reasons: ['FAKE_TEXT'] })]);
-        expect(priorityOf(c(0))).toBe(c(0).risk * 20);
+    it('options come from env with defaults', () => {
         expect(reviewOptionsFromEnv({})).toEqual(DEFAULT_REVIEW_OPTIONS);
         expect(reviewOptionsFromEnv({ REVIEW_DAILY_TARGET: '35', REVIEW_RISK_FLOOR: 'x', REVIEW_MIN_AMOUNT: '200', REVIEW_ALWAYS_AMOUNT: '300' })).toEqual({ dailyTarget: 35, riskFloor: 25, minAmount: 200, alwaysAmount: 300 });
     });
@@ -347,9 +345,9 @@ describe('cursor', () => {
         expect(isAfterCursor(1000, c.id, c)).toBe(false);
         expect(isAfterCursor(1001, '000000000000000000000000', c)).toBe(false);
     });
-    it('a risk-order cursor keeps its sort tag', () => {
-        const c = { t: 1400, id: '6ae96d2f023e6f34c07f2ffa', s: 'r' as const };
-        expect(decodeCursor(encodeCursor(c))).toEqual(c);
+    it('a cursor of the removed risk order (any sort tag) is refused', () => {
+        const c = { t: 1400, id: '6ae96d2f023e6f34c07f2ffa' };
+        expect(decodeCursor(Buffer.from(JSON.stringify({ ...c, s: 'r' })).toString('base64url'))).toBeNull();
         expect(decodeCursor(Buffer.from(JSON.stringify({ ...c, s: 'x' })).toString('base64url'))).toBeNull();
     });
     it.each(['', 'not-base64!', Buffer.from('{"t":"x","id":"y"}').toString('base64url'), Buffer.from('[1]').toString('base64url')])('rejects %j', (s) => {
