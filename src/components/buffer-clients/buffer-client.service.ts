@@ -528,6 +528,8 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             };
             return this.bufferClientModel.create({ ...createData });
         }));
+        // S3 snapshot facets (additive): the created doc is the full snapshot; fire-and-forget.
+        this.mirrorAccountFacets(result, 'cms:buffer-create');
         // accountRoleEvents (S1, additive): a pool doc created here (POST /bufferclients, createOrUpdate's create branch,
         // the old main's first return) is an enrolment. Fire-and-forget; never throws or delays the create.
         // The pool return (client.service returnOldClientToBufferPool) suppresses it: it writes `returned` itself.
@@ -601,6 +603,9 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
         if (!updatedBufferClient) {
             throw new NotFoundException(`BufferClient with mobile ${mobile} not found`);
         }
+        // S3 snapshot facets (additive): every base-client flow writes through here (status, warmup phases / steps,
+        // health-check stamps, username). Mirrors the AFTER doc; fire-and-forget, never changes the result.
+        this.mirrorAccountFacets(updatedBufferClient, 'cms:buffer-update');
         return updatedBufferClient;
     }
 

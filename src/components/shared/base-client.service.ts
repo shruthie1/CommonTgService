@@ -56,6 +56,7 @@ import { canonicalizeMobile, mobilesEqual } from './mobile-utils';
 import { checkParkedSession, describeParkedVerdict, PARKED_SESSION_BUSY, type ParkedGuardDb, type ParkedSessionVerdict } from '../clients/parked-session-guard';
 import { maskMobile } from '../monitor/monitor-util';
 import { accountRoleEventsCollectionOf, classifyRoleEventReason, recordAccountRoleEventSoon, type AccountRoleEventInput } from '../clients/account-role-events';
+import { mirrorPoolDocFacetsSoon, mirrorPoolFacetsByQuerySoon } from './account-pool-facets';
 
 /**
  * Configuration constants that differ between buffer and promote clients.
@@ -3834,6 +3835,27 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         }
 
         return true;
+    }
+
+    /**
+     * S3 snapshot facets (tg-platform design 2026-11-07-account-collection-split, "S3 implementation"): mirror the
+     * AFTER doc of a pool write into accountWarmup / accountMembership / accountIdentity. Fire-and-forget; never
+     * throws, never awaited, never changes the write's result.
+     */
+    protected mirrorAccountFacets(doc: unknown, by: string): void {
+        try {
+            mirrorPoolDocFacetsSoon(this.model, this.clientType, doc, by, this.logger);
+        } catch { /* mirroring is best-effort; the pool write already happened */ }
+    }
+
+    /**
+     * S3: re-read and mirror the pool docs matching `filter` (writes made inside a transaction, e.g. the cutover).
+     * Fire-and-forget: the read runs in the background with a deadline; never throws, never delays the caller.
+     */
+    mirrorAccountFacetsByQuery(filter: Record<string, unknown>, by: string): void {
+        try {
+            mirrorPoolFacetsByQuerySoon(this.model, this.clientType, filter, by, this.logger);
+        } catch { /* best-effort */ }
     }
 
     /** accountRoleEvents (S1): fire-and-forget append; never throws, never awaited. */

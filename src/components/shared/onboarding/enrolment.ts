@@ -18,6 +18,7 @@ import { describeClaimHolder, ensurePoolClaimIndex, withPoolClaim } from './pool
 import { WarmupPhase } from '../warmup-phases';
 import type { PoolProfile } from './pool-profile';
 import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
+import { mirrorPoolDocFacetsSoon } from '../account-pool-facets';
 
 export interface EnrolmentLogger {
     debug(message: string, ...rest: unknown[]): void;
@@ -122,7 +123,7 @@ export async function enrolPoolClientFromUser(
                 logger.warn(`Skipping ${pool} enrollment for ${document.mobile}: now enrolled in ${already}`);
                 return false;
             }
-            await port.model.findOneAndUpdate(
+            const after = await port.model.findOneAndUpdate(
                 { mobile: document.mobile },
                 {
                     $set: {
@@ -134,6 +135,8 @@ export async function enrolPoolClientFromUser(
                 },
                 { returnDocument: 'after', upsert: true },
             ).exec();
+            // S3 snapshot facets (additive): mirror the AFTER doc; fire-and-forget, never throws or delays enrolment.
+            mirrorPoolDocFacetsSoon(port.model, pool, after, 'cms:auto-enrol', logger);
             return true;
         }
         if (!enrolled) return false;

@@ -18,6 +18,7 @@ import { WarmupPhase } from '../warmup-phases';
 import { enrolmentEligibilityFilter, enrolmentIneligibilityReasons } from './candidate-source';
 import { ONBOARDING_PACING, type PoolProfile } from './pool-profile';
 import { accountRoleEventsCollectionOf, recordAccountRoleEventSoon } from '../../clients/account-role-events';
+import { mirrorPoolDocFacetsSoon } from '../account-pool-facets';
 
 export interface SetAsPort {
     profile: Readonly<PoolProfile>;
@@ -129,7 +130,7 @@ export async function setAsPoolClient(
             if (already && already !== profile.collection) {
                 throw new BadRequestException(`Mobile ${canonicalMobile} is already enrolled in ${already}; refusing to create a cross-pool ${cfg.entityName}`);
             }
-            await port.model
+            const after = await port.model
                 .findOneAndUpdate({ mobile: canonicalMobile }, {
                     $set: {
                         ...poolDoc,
@@ -139,6 +140,8 @@ export async function setAsPoolClient(
                     },
                 }, { returnDocument: 'after', upsert: true })
                 .exec();
+            // S3 snapshot facets (additive): mirror the AFTER doc; fire-and-forget, never throws or delays set-as.
+            mirrorPoolDocFacetsSoon(port.model, profile.kind, after, 'cms:set-as', port.logger);
         }));
         // accountRoleEvents (S1, additive): fire-and-forget; never throws or delays set-as.
         recordAccountRoleEventSoon(accountRoleEventsCollectionOf(port.model), {

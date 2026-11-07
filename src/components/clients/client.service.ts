@@ -54,6 +54,7 @@ import { openSwapEpisode, SwapEpisodeCollection, SwapEpisodeControlCollection } 
 import { openParkedEpisodeMobiles, parkedCanonicalMobile, ParkedEpisodeFindCollection, ParkedGuardCollection } from './parked-session-guard';
 import { maskMobile } from '../monitor/monitor-util';
 import { accountRoleEventsCollectionOf, AccountRoleEventInput, AccountRoleReasonCode, recordAccountRoleEventSoon } from './account-role-events';
+import { accountHealthCollectionOf, recordAccountHealthSoon } from '../shared/account-health';
 import { buildSpamEligibleFilter } from '../buffer-clients/schemas/buffer-client.schema';
 import { probeSpamBot, SpamProbeResult, SPAMBOT_TOTAL_TIMEOUT_MS } from '../Telegram/utils/spambot-probe';
 import {
@@ -1350,6 +1351,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       // (clientId + clients.swappedAt ms) links this pair with the old main's return in handleReplacedClient.
       this.recordMainChangeEvents(clientId, existingMobile, newMobile, 'cms:cutover', reason, degradedPlan,
         this.cutoverRoleEventOpId(clientId, committedClient?.swappedAt) ?? randomUUID());
+      // S3 snapshot facets (additive): the cutover wrote the buffer docs inside its transaction (setPrimaryInUse incl.
+      // the stale in-use revoke, degraded reassignClientId), so re-read this client's buffer docs + both mobiles after
+      // the commit and mirror them. Fire-and-forget; never throws or delays the swap.
+      try {
+        this.bufferClientService.mirrorAccountFacetsByQuery?.(
+          { $or: [{ clientId }, { mobile: { $in: [newMobile, existingMobile].filter((m): m is string => typeof m === 'string' && !!m) } }] },
+          'cms:cutover',
+        );
+      } catch { /* best-effort; the cutover is committed */ }
       this.logger.info(`[${clientId}] Cutover committed`, {
         existingMobile,
         newMobile,
@@ -2046,6 +2056,15 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     }
     try {
       await this.bufferClientService.update(candidate.mobile, patch);
+      // accountHealth (S2 dual-write, MIRROR of the bufferClients verdict above; its spamCheckedAt is the mirror's
+      // verdictAt, accountHealth derives its own status-change spamCheckedAt). Only after the pool write succeeded, so
+      // the mirror never gets ahead of the old field. Fire-and-forget; never throws or delays.
+      try {
+        recordAccountHealthSoon(accountHealthCollectionOf(this.clientModel), {
+          mobile: candidate.mobile, by: 'cms:swap-probe',
+          verdict: { spamStatus: patch.spamStatus, limitedUntil: patch.limitedUntil, verdictAt: patch.spamCheckedAt, spamCheckSource: patch.spamCheckSource },
+        }, { logger: this.logger });
+      } catch { /* best-effort mirror */ }
     } catch (error) {
       this.logger.warn(`[${budget.clientId}] Failed to persist SpamBot result for ${candidate.mobile}: ${parseError(error, '', false).message}`);
     }
