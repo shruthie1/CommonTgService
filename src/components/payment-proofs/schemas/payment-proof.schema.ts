@@ -23,10 +23,19 @@ export interface ProofVerdict {
     fakeSignals?: string[];
 }
 
+export const REVIEW_DECISIONS = ['fine', 'fake', 'unblocked', 'past'] as const;
+export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
+
+/**
+ * The operator's stamp (CMS-owned; tg-aut never writes it). Rows stamped before 2026-11-07 have the legacy shape
+ * { state: 'ok', by, at }, read as decision 'fine'.
+ */
 export interface ProofReview {
-    state: 'ok';
-    by: string;
+    decision?: ReviewDecision;
     at: Date;
+    /** Legacy shape only. */
+    state?: 'ok';
+    by?: string;
 }
 
 /** Fields CMS reads. Old rows (before tg-aut wrote proofId / verdict / image / ocr) lack the optional new ones. */

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PROOF_STATES } from './payment-proofs.classify';
-import { ListQuery, MAX_LIMIT, PROOF_SORTS, PaymentProofsService, ViewQuery } from './payment-proofs.service';
+import { ListQuery, MAX_LIMIT, MAX_STAMP_IDS, PROOF_SORTS, PaymentProofsService, ViewQuery } from './payment-proofs.service';
 import { REVIEW_VIEWS } from './payment-proofs.views';
 
 /**
@@ -25,7 +25,7 @@ export class PaymentProofsController {
             'payer of a marked-fake chat. Uncredited proofs (repeats, not_ours, not_receipt, old_time, over_limit, uncredited ' +
             'fakes) never enter review. Items carry risk (0-100), riskReasons, atRiskAmount, strong, repeat, reusedFrom; ' +
             'counts.reviewAmount = credited ₹ in review. ' +
-            'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = review.state ok. ' +
+            'flagged = outcome fraud_ask|fake_blocked|cross_client; marked = chat has userData.fakePaymentAt; reviewed = a stamp that still holds (item.stamp). ' +
             'Rows without verdict (before tg-aut wrote one) get an outcome derived from servedAt / ask / decision (legacy: true). ' +
             'state=review defaults to sort=risk (risk x atRiskAmount), other states to newest first; counts cover ' +
             'since/client/minAmount (not state/cursor); the review model always uses the whole 7-day collection.',
@@ -45,6 +45,7 @@ export class PaymentProofsController {
             '(source, when, why, evidence); refused = uncredited proofs that look genuine. Response { view, entries, counts, ' +
             'truncated }; only client applies.',
     })
+    @ApiQuery({ name: 'includeReviewed', required: false, description: "view only: '1' also returns stamped entries (entry.stamp set) and marked chats with no proof left; counts never include them" })
     list(@Query() query: ListQuery & ViewQuery) {
         if (query?.view !== undefined && query.view !== '') return this.service.views(query);
         return this.service.list(query ?? {});
@@ -52,16 +53,28 @@ export class PaymentProofsController {
 
     @Post('chat/:chatId/review')
     @HttpCode(200)
-    @ApiOperation({ summary: "Looks fine on a whole chat: review 'ok' on its credited, unreviewed proofs (only proofIds when given). Idempotent" })
+    @ApiOperation({ summary: "Looks fine on a whole chat: stamp decision 'fine' on its credited, unreviewed proofs (only proofIds when given). Idempotent" })
     @ApiParam({ name: 'chatId' })
     @ApiBody({ schema: { type: 'object', required: ['by'], properties: { by: { type: 'string' }, proofIds: { type: 'array', items: { type: 'string' } } } } })
     reviewChat(@Param('chatId') chatId: string, @Body() body: { by?: string; proofIds?: unknown }) {
         return this.service.reviewChat(chatId, body ?? {});
     }
 
+    @Post('chat/:chatId/actions')
+    @HttpCode(200)
+    @ApiOperation({
+        summary: "Stamp the proofs a review card showed: review = { decision, at }. Mark fake / unblock stay on /fake-payment (called first). " +
+            'A stamp stops holding when tg-aut later opens or blocks an ask on the row',
+    })
+    @ApiParam({ name: 'chatId' })
+    @ApiBody({ schema: { type: 'object', required: ['decision', 'proofIds'], properties: { decision: { type: 'string', enum: ['fine', 'fake', 'unblocked'] }, proofIds: { type: 'array', maxItems: MAX_STAMP_IDS, items: { type: 'string' } } } } })
+    stampChat(@Param('chatId') chatId: string, @Body() body: { decision?: unknown; proofIds?: unknown }) {
+        return this.service.stampChat(chatId, body ?? {});
+    }
+
     @Post(':proofId/review')
     @HttpCode(200)
-    @ApiOperation({ summary: "Set (state 'ok') or clear the operator review of one proof (idempotent)" })
+    @ApiOperation({ summary: "Set (state 'ok' = stamp decision 'fine') or clear the operator review of one proof (idempotent)" })
     @ApiParam({ name: 'proofId', description: '<clientId>-<chatId>-<telegramMsgId>' })
     @ApiBody({ schema: { type: 'object', required: ['state'], properties: { state: { type: 'string', enum: ['ok', 'clear'] }, by: { type: 'string', description: "required for 'ok'" } } } })
     review(@Param('proofId') proofId: string, @Body() body: { state?: string; by?: string }) {

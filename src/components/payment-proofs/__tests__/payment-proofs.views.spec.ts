@@ -3,8 +3,8 @@
  * "Fake & muted" (one entry per muted / marked chat) and "Refused but looks genuine" (one entry per proof).
  * Pure rules over rows already run through classify + buildReviewModel; fixtures are small realistic chats.
  */
-import { DEFAULT_REVIEW_OPTIONS, buildReviewModel, classify } from '../payment-proofs.classify';
-import { ChatUser, buildViews, isRealFakeReason } from '../payment-proofs.views';
+import { DEFAULT_REVIEW_OPTIONS, buildReviewModel, classify, stampOf } from '../payment-proofs.classify';
+import { ChatUser, buildViews, isHiddenEntry, isRealFakeReason } from '../payment-proofs.views';
 
 const T0 = Date.parse('2026-11-06T06:00:00Z'); // 11:30 IST
 let n = 0;
@@ -132,16 +132,18 @@ describe('view check ("Check these"): one entry per chat', () => {
         expect(v.check).toEqual([]);
     });
 
-    it('excludes chats marked fake and chats whose credited proofs are all reviewed; flags muted and already-reviewed', () => {
+    it('leaves marked and muted chats to the muted view; a fully stamped chat carries its stamp; a partly stamped one none', () => {
         const v = views([
             credited(300, { chatId: 'mk' }),
-            credited(300, { chatId: 'rv', review: { state: 'ok', by: 'x', at: new Date() } }),
+            credited(300, { chatId: 'rv', review: { state: 'ok', by: 'x', at: new Date(T0) } }),
+            credited(300, { chatId: 'pt' }),
+            credited(250, { chatId: 'pt', review: { decision: 'fine', at: new Date(T0) } }),
             credited(300, { chatId: 'mu' }),
-            credited(250, { chatId: 'mu', review: { state: 'ok', by: 'x', at: new Date() } }),
         ], [user('mk', 'ramya', { fakePaymentAt: new Date(T0), canReply: 0 }), user('mu', 'ramya', { canReply: 0 })]);
-        expect(v.check.map((e) => e.chatId)).toEqual(['mu']);
-        expect(v.check[0]).toMatchObject({ muted: true, marked: false, reviewed: true, reviewedCount: 1, totalCredited: 550 });
+        expect(v.check.map((e) => [e.chatId, e.stamp])).toEqual([['pt', null], ['rv', { decision: 'fine', at: new Date(T0).toISOString() }]]);
+        expect(v.check[0]).toMatchObject({ reviewed: true, reviewedCount: 1, totalCredited: 550 });
         expect(v.check[0].pendingProofIds).toHaveLength(1);
+        expect(v.muted.map((e) => e.chatId).sort()).toEqual(['mk', 'mu']);
     });
 
     it('sorts fake-signal chats first, then by unreviewed credited ₹', () => {
@@ -252,5 +254,44 @@ describe('view refused ("Refused but looks genuine")', () => {
     it('credited proofs and marked chats never appear', () => {
         expect(views([credited(100, { chatId: 'R' })]).refused).toEqual([]);
         expect(views([genuine()], [user('R', 'ramya', { fakePaymentAt: new Date(T0), canReply: 0 })]).refused).toEqual([]);
+    });
+});
+
+describe('review stamp (owner 2026-11-07)', () => {
+    const at = new Date(T0 + 3_600_000);
+    const genuine = (over: Record<string, unknown> = {}) => refused('fraud_ask', ['NO_REAL_REFERENCE'], { chatId: 'R', ...over });
+    it('stampOf: legacy ok reads as fine; a later block or ask on the row voids the stamp (it resurfaces)', () => {
+        expect(stampOf({ review: { state: 'ok', by: 'x', at } })).toEqual({ decision: 'fine', at: at.toISOString() });
+        expect(stampOf({ review: { decision: 'fake', at }, ask: { blockedAt: new Date(at.getTime() - 1) } })?.decision).toBe('fake');
+        expect(stampOf({ review: { decision: 'fine', at }, ask: { blockedAt: new Date(at.getTime() + 15 * 60_000) } })).toBeNull();
+        expect(stampOf({ review: { decision: 'fine', at }, ask: { openedAt: new Date(at.getTime() + 1) } })).toBeNull();
+        expect(stampOf({ review: { at } as any })).toBeNull();
+        expect(stampOf({})).toBeNull();
+    });
+
+    it('a check entry is stamped only when every card proof is, and a fraud block after the stamp brings it back', () => {
+        const stamped = { review: { decision: 'fine', at } };
+        const v1 = views([credited(600, { chatId: 'S', ...stamped }), credited(600, { chatId: 'S', ...stamped })]);
+        expect(v1.check[0].stamp).toEqual({ decision: 'fine', at: at.toISOString() });
+        expect(isHiddenEntry(v1.check[0])).toBe(true);
+        const v2 = views([credited(600, { chatId: 'S', ...stamped }), credited(600, { chatId: 'S', ...stamped, ask: { kind: 'fraud', blockedAt: new Date(at.getTime() + 60_000) } })]);
+        expect(v2.check[0].stamp).toBeNull();
+    });
+
+    it('one tab per chat: muted wins over check and refused, check over refused', () => {
+        const v = views([
+            credited(600, { chatId: 'A' }), genuine({ chatId: 'A' }), // canReply 0: muted only
+            credited(600, { chatId: 'B' }), genuine({ chatId: 'B', createdAt: new Date(T0 + 40 * 3_600_000), time: { state: 'known', epochMs: T0 + 40 * 3_600_000 - 60_000 } }), // check only
+            genuine({ chatId: 'C' }), // refused
+        ], [user('A', 'ramya', { canReply: 0 })]);
+        expect(v.muted.map((e) => e.chatId)).toEqual(['A']);
+        expect(v.check.map((e) => e.chatId)).toEqual(['B']);
+        expect(v.refused.map((e) => e.chatId)).toEqual(['C']);
+    });
+
+    it('a marked chat with no proof left is hidden (nothing to stamp)', () => {
+        const v = views([], [user('Z', 'ramya', { fakePaymentAt: new Date(T0), canReply: 0 })]);
+        expect(v.muted[0]).toMatchObject({ chatId: 'Z', stamp: null, noProofs: true });
+        expect(isHiddenEntry(v.muted[0])).toBe(true);
     });
 });

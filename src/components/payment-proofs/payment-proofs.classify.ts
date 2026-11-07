@@ -1,4 +1,4 @@
-import { PaymentProofRow, ProofOutcome } from './schemas/payment-proof.schema';
+import { PaymentProofRow, ProofOutcome, ReviewDecision } from './schemas/payment-proof.schema';
 
 /**
  * Pure classification of `paymentProofs` rows for the payments review screen (contract: owner-approved scope
@@ -45,7 +45,10 @@ export interface ClassifiedProof {
     fakeScore: number | null;
     /** creditAmount (the amount actually credited) else the amount read. */
     amount: number | null;
+    /** stamp !== null. */
     reviewed: boolean;
+    /** The operator's stamp, if it still holds (see stampOf). */
+    stamp: ReviewStamp | null;
     /** In the review queue: set by buildReviewModel (classify alone leaves it false). */
     review: boolean;
     flagged: boolean;
@@ -101,6 +104,22 @@ function num(v: unknown): number | null {
     return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+export interface ReviewStamp { decision: ReviewDecision; at: string }
+
+/**
+ * The operator's stamp on a row, or null when there is none or it no longer holds: the payment check opened or
+ * blocked an ask on the row after the stamp (e.g. a fraud block 15 min later), so the row needs another look.
+ * The legacy { state: 'ok' } shape reads as 'fine'. tg-aut and CMS clocks differ slightly; accepted (owner 2026-11-07).
+ */
+export function stampOf(row: Pick<PaymentProofRow, 'review' | 'ask'>): ReviewStamp | null {
+    const r = row.review;
+    const decision = r?.decision ?? (r?.state === 'ok' ? 'fine' : undefined);
+    const at = r?.at ? new Date(r.at).getTime() : NaN;
+    if (!decision || !Number.isFinite(at)) return null;
+    const changedAfter = [row.ask?.blockedAt, row.ask?.openedAt].some((v) => !!v && new Date(v).getTime() > at);
+    return changedAfter ? null : { decision, at: new Date(at).toISOString() };
+}
+
 export function classify(row: PaymentProofRow): ClassifiedProof {
     const verdict = row.verdict && typeof row.verdict === 'object' ? row.verdict : null;
     const legacy = !verdict || typeof verdict.outcome !== 'string' || !verdict.outcome;
@@ -111,7 +130,7 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
     const fakeScore = legacy ? null : num(verdict!.fakeScore);
     const amount = num(row.creditAmount) ?? num(row.amount);
     const credited = outcome === 'credited';
-    const reviewed = row.review?.state === 'ok';
+    const stamp = stampOf(row);
     return {
         proofId: proofIdOf(row),
         outcome,
@@ -119,7 +138,8 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
         reasons,
         fakeScore,
         amount,
-        reviewed,
+        reviewed: stamp !== null,
+        stamp,
         review: false,
         flagged: FLAGGED_OUTCOMES.has(outcome),
         credited,

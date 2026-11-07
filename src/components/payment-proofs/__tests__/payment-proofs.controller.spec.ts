@@ -12,6 +12,7 @@ describe('PaymentProofsController', () => {
         list: async (q: unknown) => { calls.push(['list', q]); return { items: [], nextCursor: null, counts: {}, truncated: false }; },
         views: async (q: unknown) => { calls.push(['views', q]); return { view: 'check', entries: [], counts: { check: 0, muted: 0, refused: 0 }, truncated: false }; },
         reviewChat: async (chatId: string, body: any) => { calls.push(['reviewChat', chatId, body]); return { chatId, reviewed: [] }; },
+        stampChat: async (chatId: string, body: any) => { calls.push(['stampChat', chatId, body]); return { chatId, decision: body.decision, stamped: 1 }; },
         review: async (id: string, body: any) => {
             calls.push(['review', id, body]);
             if (body.state === 'bad') throw new BadRequestException('state');
@@ -55,5 +56,13 @@ describe('PaymentProofsController', () => {
         const res = await request(app.getHttpServer()).post('/payment-proofs/chat/111/review').send({ by: 'ops', proofIds: ['ramya1-111-3'] });
         expect(res.status).toBe(200);
         expect(calls).toEqual([['reviewChat', '111', { by: 'ops', proofIds: ['ramya1-111-3'] }]]);
+    });
+
+    it('POST /payment-proofs/chat/:chatId/actions stamps; includeReviewed passes through to the views', async () => {
+        const res = await request(app.getHttpServer()).post('/payment-proofs/chat/111/actions').send({ decision: 'fake', proofIds: ['ramya1-111-3'] });
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ chatId: '111', decision: 'fake', stamped: 1 });
+        await request(app.getHttpServer()).get('/payment-proofs?view=check&includeReviewed=1');
+        expect(calls).toEqual([['stampChat', '111', { decision: 'fake', proofIds: ['ramya1-111-3'] }], ['views', { view: 'check', includeReviewed: '1' }]]);
     });
 });

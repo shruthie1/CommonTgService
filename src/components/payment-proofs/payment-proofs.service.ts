@@ -2,12 +2,12 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schema';
-import { PAYMENT_PROOF_MODEL, PaymentProofRow, ProofReview } from './schemas/payment-proof.schema';
+import { PAYMENT_PROOF_MODEL, PaymentProofRow, ProofReview, REVIEW_DECISIONS, ReviewDecision } from './schemas/payment-proof.schema';
 import {
     ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, ReviewModel, addToCounts, buildReviewModel, classify,
     decodeCursor, emptyCounts, encodeCursor, inState, isAfterCursor, parseProofId, priorityOf, proofIdOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
-import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews } from './payment-proofs.views';
+import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews, isHiddenEntry } from './payment-proofs.views';
 
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 100;
@@ -48,7 +48,7 @@ const ROW_PROJECTION = { shadow: 0, imageHash: 0, servedUtr: 0, servedSha: 0 } a
 const CLASSIFY_PROJECTION = {
     _id: 1, chatId: 1, profile: 1, clientId: 1, telegramMsgId: 1, createdAt: 1, amount: 1, creditAmount: 1, decision: 1,
     reasons: 1, servedAt: 1, 'ask.kind': 1, 'ask.blockedAt': 1, 'ask.reasons': 1, proofId: 1,
-    'verdict.outcome': 1, 'verdict.reasons': 1, 'verdict.fakeScore': 1, 'review.state': 1,
+    'verdict.outcome': 1, 'verdict.reasons': 1, 'verdict.fakeScore': 1, review: 1,
     // review model signals (re-sends, image reuse, payer, receipt age)
     imageSha256: 1, 'image.sha256': 1, utr: 1, payeeUpiId: 1, payeeName: 1, 'time.state': 1, 'time.epochMs': 1,
     'verdict.fakeSignals': 1, 'ocr.payerName': 1,
@@ -85,6 +85,8 @@ export interface ProofItem extends Omit<PaymentProofRow, '_id'> {
     fakeScore: number | null;
     amountValue: number | null;
     inReview: boolean;
+    /** The operator's stamp if it still holds (classify stampOf); null = not reviewed. */
+    stamp: ClassifiedProof['stamp'];
     flagged: boolean;
     risk: number;
     riskReasons: string[];
@@ -113,7 +115,9 @@ export interface ListResult {
 
 type ChatEntry = { rows: Map<string, ChatUser>; marked: boolean; fakePaymentAt: Date | null };
 
-export interface ViewQuery { view?: string; client?: string }
+export interface ViewQuery { view?: string; client?: string; includeReviewed?: string }
+/** Most proofs one stamp call takes (a card shows a chat's 7 days of proofs). */
+export const MAX_STAMP_IDS = 200;
 export interface ViewResult {
     view: ReviewView;
     entries: ReviewViews[ReviewView];
@@ -243,6 +247,7 @@ export class PaymentProofsService {
                 fakeScore: c.fakeScore,
                 amountValue: c.amount,
                 inReview: c.review,
+                stamp: c.stamp,
                 flagged: c.flagged,
                 risk: c.risk,
                 riskReasons: c.riskReasons,
@@ -368,8 +373,15 @@ export class PaymentProofsService {
                 .find({ chatId: { $in: chunk } }, CHAT_USER_PROJECTION)
                 .lean<ChatUser[]>()
                 .exec();
+            // Display name (owner 2026-11-07): tg-aut stores userData.username as `@username || firstName`, so it is a
+            // first name exactly when the person has no Telegram handle (userIdentity.handle; index chatId_1). Live
+            // 2026-11-07, 1,000 newest chats: username = handle on 425/426 with a handle, a first name on 574/574 without.
+            const handles = new Map((await this.proofModel.db.collection('userIdentity')
+                .find({ chatId: { $in: chunk } }, { projection: { _id: 0, chatId: 1, handle: 1 } }).toArray())
+                .map((x) => [String(x.chatId), typeof x.handle === 'string' && x.handle ? x.handle : null]));
             for (const d of docs) {
                 const key = String(d.chatId);
+                d.name = handles.has(key) && !handles.get(key) && d.username ? d.username : null;
                 let e = out.get(key);
                 if (!e) { e = { rows: new Map(), marked: false, fakePaymentAt: null }; out.set(key, e); }
                 e.rows.set(String(d.profile), d);
@@ -407,13 +419,13 @@ export class PaymentProofsService {
             if (!CLIENT_ID_RE.test(String(q.client))) throw new BadRequestException('client must be a clientId');
             client = String(q.client);
         }
+        const all = q.includeReviewed === '1' || q.includeReviewed === 'true';
         const w = await this.window(now - DEFAULT_WINDOW_MS, now);
-        const keep = (e: { clients?: string[]; clientId?: string }) => !client || (e.clients ? e.clients.includes(client) : e.clientId === client);
-        const filtered = {
-            check: w.views.check.filter(keep),
-            muted: w.views.muted.filter(keep),
-            refused: w.views.refused.filter(keep),
-        };
+        const ofClient = (e: { clients?: string[]; clientId?: string }) => !client || (e.clients ? e.clients.includes(client) : e.clientId === client);
+        const visible = <T extends Parameters<typeof isHiddenEntry>[0]>(xs: T[]) => xs.filter((e) => !isHiddenEntry(e));
+        const mine = { check: w.views.check.filter(ofClient), muted: w.views.muted.filter(ofClient), refused: w.views.refused.filter(ofClient) };
+        const open = { check: visible(mine.check), muted: visible(mine.muted), refused: visible(mine.refused) };
+        const filtered = all ? mine : open;
         const hosts = await this.clientHostMap(now);
         const withHost = <T extends { clientId: string }>(c: T) => ({ ...c, clientHost: hosts.get(c.clientId) ?? null });
         const entries = view === 'check'
@@ -424,7 +436,8 @@ export class PaymentProofsService {
         return {
             view,
             entries,
-            counts: { check: filtered.check.length, muted: filtered.muted.length, refused: filtered.refused.length },
+            // Always the entries still to review (stamped ones not counted), also with includeReviewed.
+            counts: { check: open.check.length, muted: open.muted.length, refused: open.refused.length },
             truncated: w.truncated,
         };
     }
@@ -449,11 +462,34 @@ export class PaymentProofsService {
         const todo = rows.map((row) => ({ row, c: classify(row) }))
             .filter(({ c }) => c.credited && !c.reviewed && (!only || only.has(c.proofId)));
         if (todo.length) {
-            const review: ProofReview = { state: 'ok', by, at: now };
+            const review: ProofReview = { decision: 'fine', at: now };
             await this.proofModel.updateMany({ _id: { $in: todo.map((x) => x.row._id) } }, { $set: { review } }).exec();
             await this.patchWindows(`review chat ${id}`, () => this.rereadChat(id));
         }
         return { chatId: id, reviewed: todo.map((x) => x.c.proofId) };
+    }
+
+    /**
+     * The operator's stamp on exactly the proofs a card showed (POST chat/:chatId/actions). The state change itself
+     * (mark fake, unblock) stays on its own endpoint, called first by tg-chats. A proof that arrived after the card
+     * loaded is not in proofIds, so it stays unreviewed.
+     */
+    async stampChat(chatId: string, body: { decision?: unknown; proofIds?: unknown }, now = new Date()): Promise<{ chatId: string; decision: ReviewDecision; stamped: number }> {
+        const id = String(chatId ?? '').trim();
+        if (!/^-?\d{1,20}$/.test(id)) throw new BadRequestException('chatId must be a chatId');
+        const decision = body?.decision as ReviewDecision;
+        if (!REVIEW_DECISIONS.includes(decision) || decision === 'past') throw new BadRequestException('decision must be fine|fake|unblocked');
+        const ids = body?.proofIds;
+        if (!Array.isArray(ids) || !ids.length || ids.length > MAX_STAMP_IDS) throw new BadRequestException(`proofIds: 1 to ${MAX_STAMP_IDS} proof ids`);
+        const keys = ids.map((p) => parseProofId(p));
+        if (keys.some((k) => k?.chatId !== id)) throw new BadRequestException('proofIds must be proof ids of this chat');
+        // (chatId, clientId, telegramMsgId) identifies old (no proofId) and new rows alike; chatId leads chatId_1_createdAt_-1.
+        const filter = { chatId: id, $or: keys.map((k) => ({ clientId: k!.clientId, telegramMsgId: k!.telegramMsgId })) };
+        const review: ProofReview = { decision, at: now };
+        const res = await this.proofModel.updateMany(filter, { $set: { review } }).exec();
+        if (!res.matchedCount) throw new NotFoundException('no such proof of this chat (gone after the 7-day TTL?)');
+        await this.patchWindows(`stamp chat ${id}`, () => this.rereadChat(id));
+        return { chatId: id, decision, stamped: res.matchedCount };
     }
 
     /**
@@ -495,7 +531,7 @@ export class PaymentProofsService {
         // (chatId, clientId, telegramMsgId) identifies the row for old (no proofId) and new rows alike; chatId leads
         // the existing chatId_1_createdAt_-1 index.
         const filter = { chatId: key.chatId, clientId: key.clientId, telegramMsgId: key.telegramMsgId };
-        const review: ProofReview | null = state === 'ok' ? { state: 'ok', by, at: now } : null;
+        const review: ProofReview | null = state === 'ok' ? { decision: 'fine', at: now } : null;
         const update = review ? { $set: { review } } : { $unset: { review: 1 } };
         const res = await this.proofModel.updateOne(filter, update).exec();
         if (!res.matchedCount) throw new NotFoundException('payment proof not found (gone after the 7-day TTL?)');

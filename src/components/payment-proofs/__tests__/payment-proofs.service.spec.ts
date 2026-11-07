@@ -225,16 +225,16 @@ describe('PaymentProofsService', () => {
         const before = await service.list({}, NOW);
         const now = new Date(NOW);
         const r = await service.review('ramya1-111-2', { state: 'ok', by: ' ops ' }, now);
-        expect(r).toEqual({ proofId: 'ramya1-111-2', review: { state: 'ok', by: 'ops', at: now } });
+        expect(r).toEqual({ proofId: 'ramya1-111-2', review: { decision: 'fine', at: now } });
         const row = await proofs.collection.findOne({ telegramMsgId: 2 });
-        expect(row?.review).toEqual({ state: 'ok', by: 'ops', at: now });
+        expect(row?.review).toEqual({ decision: 'fine', at: now });
         expect(row?.proofId).toBeUndefined(); // CMS never adds tg-aut fields
         const after = await service.list({}, NOW);
         expect(after.counts.review).toBe(before.counts.review - 1);
         expect(after.counts.reviewed).toBe(before.counts.reviewed + 1);
 
         await service.review('ramya1-111-6', { state: 'ok', by: 'ops' }, now);
-        expect((await proofs.collection.findOne({ proofId: 'ramya1-111-6' }))?.review?.state).toBe('ok');
+        expect((await proofs.collection.findOne({ proofId: 'ramya1-111-6' }))?.review?.decision).toBe('fine');
 
         expect(await service.review('ramya1-111-2', { state: 'clear' })).toEqual({ proofId: 'ramya1-111-2', review: null });
         expect((await proofs.collection.findOne({ telegramMsgId: 2 }))).not.toHaveProperty('review');

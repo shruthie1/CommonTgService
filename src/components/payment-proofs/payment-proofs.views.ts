@@ -1,5 +1,5 @@
 import { PaymentProofRow } from './schemas/payment-proof.schema';
-import { REVIEW_FAKE_SCORE, ReviewItem, ReviewOptions, istDay } from './payment-proofs.classify';
+import { REVIEW_FAKE_SCORE, ReviewItem, ReviewOptions, ReviewStamp, istDay } from './payment-proofs.classify';
 
 /**
  * Payments review views (tg-chats redesign phase 1, owner approved 2026-11-07). Pure; reads only what tg-aut and the
@@ -15,6 +15,11 @@ import { REVIEW_FAKE_SCORE, ReviewItem, ReviewOptions, istDay } from './payment-
  *           blockedAt) or unknown (abuse cheatCount bans and ops blocks record nothing; cheatCount is reset to 0).
  *  - refused ("Refused but looks genuine"): one entry per uncredited proof that passes every genuine check and was
  *           not credited later in the chat within 24 h.
+ *
+ * A chat is in one view only: muted, else check, else refused. Every entry carries `stamp`: the operator's latest
+ * stamp when every proof its card shows is stamped (check: history, muted: evidence or else all its proofs, refused:
+ * the proof), else null. The service hides stamped entries (and marked chats with no proof left, which cannot be
+ * stamped) unless includeReviewed=1; see isHiddenEntry.
  */
 
 /** Reason codes that prove the receipt itself was tampered with (exact codes or prefixes). */
@@ -43,6 +48,8 @@ export interface ChatUser {
     profile: string;
     clientId?: string;
     username?: string;
+    /** Display name: userData.username when it is a first name (no Telegram handle), else null. Set by the service. */
+    name?: string | null;
     canReply?: number;
     payAmount?: number;
     cheatCount?: number;
@@ -79,6 +86,7 @@ export interface CheckReason { kind: 'fake' | 'high'; label: string; proofId: st
 export interface CheckEntry {
     chatId: string;
     username: string | null;
+    name: string | null;
     clients: string[];
     personas: string[];
     reasons: CheckReason[];
@@ -94,6 +102,7 @@ export interface CheckEntry {
     reviewed: boolean;
     muted: boolean;
     marked: boolean;
+    stamp: ReviewStamp | null;
 }
 
 export type MuteSource = 'operator_mark' | 'fraud_block' | 'unknown';
@@ -101,6 +110,7 @@ export type MuteSource = 'operator_mark' | 'fraud_block' | 'unknown';
 export interface MutedEntry {
     chatId: string;
     username: string | null;
+    name: string | null;
     clients: string[];
     personas: { profile: string; clientId: string | null; canReply: number | null }[];
     source: MuteSource;
@@ -117,11 +127,21 @@ export interface MutedEntry {
     /** Paid real money and no own fake sign anywhere: probably muted by mistake. */
     likelyWrong: boolean;
     history: FakePaymentHistoryEntry[];
+    stamp: ReviewStamp | null;
+    /** A marked chat with no proof left in the window: nothing to stamp. */
+    noProofs: boolean;
 }
 
 export interface RefusedEntry extends ProofCard {
     username: string | null;
+    name: string | null;
     refusedReason: string;
+    stamp: ReviewStamp | null;
+}
+
+/** Hidden unless includeReviewed=1: stamped, or a marked chat with no proof to stamp. */
+export function isHiddenEntry(e: { stamp: ReviewStamp | null; noProofs?: boolean }): boolean {
+    return e.stamp !== null || e.noProofs === true;
 }
 
 export interface ReviewViews { check: CheckEntry[]; muted: MutedEntry[]; refused: RefusedEntry[] }
@@ -161,6 +181,9 @@ const iso = (v: unknown): string | null => {
     return Number.isFinite(t) ? new Date(t).toISOString() : null;
 };
 const uniqSorted = (xs: (string | undefined | null)[]) => [...new Set(xs.filter((x): x is string => !!x))].sort();
+/** The latest stamp when every proof is stamped, else null (also for none). */
+const stampOfAll = (xs: ReviewItem[]): ReviewStamp | null =>
+    xs.length && xs.every((x) => x.c.stamp) ? xs.map((x) => x.c.stamp!).sort((a, b) => (a.at < b.at ? 1 : -1))[0] : null;
 
 export function proofCard({ row, c }: ReviewItem): ProofCard {
     return {
@@ -192,6 +215,9 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
     const marked = (chat: string) => (users.get(chat) ?? []).some((u) => !!u.fakePaymentAt);
     const muted = (chat: string) => (users.get(chat) ?? []).some((u) => u.canReply === 0);
     const usernameOf = (chat: string) => (users.get(chat) ?? []).map((u) => u.username).find((s) => !!s) ?? null;
+    const nameOf = (chat: string) => (users.get(chat) ?? []).map((u) => u.name).find((s) => !!s) ?? null;
+    /** In the muted view (which wins over check and refused). */
+    const inMuted = (chat: string) => marked(chat) || (muted(chat) && (byChat.get(chat)?.length ?? 0) > 0);
 
     /** This proof's own fake signs (labels); empty = none. */
     const ownSigns = (x: ReviewItem): string[] => {
@@ -247,11 +273,13 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
 
     const check: CheckEntry[] = [];
     for (const [chat, list] of byChat) {
-        if (marked(chat)) continue;
+        if (inMuted(chat)) continue;
         const creditedRows = list.filter((x) => x.c.credited);
         const pending = creditedRows.filter((x) => !x.c.reviewed);
         const reasons: CheckReason[] = [];
-        for (const x of pending) {
+        // Every credited proof, stamped or not: a stamped chat is still an entry (hidden by default), and a new
+        // unstamped screenshot in it brings it back.
+        for (const x of creditedRows) {
             for (const label of fake.get(x) ?? []) reasons.push({ kind: 'fake', label, proofId: x.c.proofId });
             if (over.has(x)) reasons.push({ kind: 'high', label: `High value: ₹${x.c.amount} (over ₹${options.alwaysAmount})`, proofId: x.c.proofId });
             else if (topN.has(x)) reasons.push({ kind: 'high', label: `Top risk today: ${x.c.baseReasons.join('; ')}`, proofId: x.c.proofId });
@@ -259,15 +287,17 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
         if (!reasons.length) continue;
         const sum = (xs: ReviewItem[]) => xs.reduce((s, x) => s + x.c.atRiskAmount, 0);
         const reviewedCount = creditedRows.filter((x) => x.c.reviewed).length;
+        const history = list.filter((x) => x.c.credited || !x.c.repeat);
         check.push({
             chatId: chat,
             username: usernameOf(chat),
+            name: nameOf(chat),
             clients: uniqSorted(list.map((x) => String(x.row.clientId))),
             personas: uniqSorted(list.map((x) => String(x.row.profile))),
             reasons,
             fakeSignal: reasons.some((r) => r.kind === 'fake'),
             highValue: reasons.some((r) => r.kind === 'high'),
-            history: list.filter((x) => x.c.credited || !x.c.repeat).map(proofCard),
+            history: history.map(proofCard),
             totalCredited: sum(creditedRows),
             unreviewedCredited: sum(pending),
             pendingProofIds: pending.map((x) => x.c.proofId),
@@ -275,6 +305,7 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             reviewed: reviewedCount > 0,
             muted: muted(chat),
             marked: false,
+            stamp: stampOfAll(history),
         });
     }
     check.sort((a, b) => Number(b.fakeSignal) - Number(a.fakeSignal) || b.unreviewedCredited - a.unreviewedCredited || (a.chatId < b.chatId ? -1 : 1));
@@ -290,9 +321,11 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
         const blocks = list.filter((x) => x.row.ask?.kind === 'fraud' && x.row.ask.state === 'open' && !!x.row.ask.blockedAt && !(x.row.ask as { closedAt?: unknown }).closedAt);
         const markRow = rows.filter((u) => !!u.fakePaymentAt).sort((a, b) => new Date(a.fakePaymentAt!).getTime() - new Date(b.fakePaymentAt!).getTime())[0];
         let entry: Pick<MutedEntry, 'source' | 'at' | 'by' | 'reason' | 'reasonCodes' | 'evidence' | 'preMarkCanReply'>;
+        let shown = list;
         if (markRow) {
             const ids = new Set(markRow.fakePaymentProofIds ?? []);
             const evidence = ids.size ? list.filter((x) => ids.has(x.c.proofId)) : creditedRows;
+            if (evidence.length) shown = evidence;
             entry = {
                 source: 'operator_mark', at: iso(markRow.fakePaymentAt), by: markRow.fakePaymentBy ?? null,
                 reason: markRow.fakePaymentReason ?? null, reasonCodes: [], evidence: evidence.map(proofCard),
@@ -300,6 +333,7 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             };
         } else if (blocks.length) {
             const latest = Math.max(...blocks.map((x) => new Date(x.row.ask!.blockedAt!).getTime()));
+            shown = blocks;
             entry = {
                 source: 'fraud_block', at: iso(latest), by: null, reason: null,
                 reasonCodes: uniqSorted(blocks.flatMap((x) => x.row.ask?.reasons ?? [])), evidence: blocks.map(proofCard), preMarkCanReply: null,
@@ -310,6 +344,7 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
         mutedEntries.push({
             chatId: chat,
             username: usernameOf(chat),
+            name: nameOf(chat),
             clients: uniqSorted([...rows.map((u) => u.clientId), ...list.map((x) => String(x.row.clientId))]),
             personas: [...rows].sort((a, b) => (a.profile < b.profile ? -1 : 1))
                 .map((u) => ({ profile: u.profile, clientId: u.clientId ?? null, canReply: typeof u.canReply === 'number' ? u.canReply : null })),
@@ -319,14 +354,17 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             likelyWrong: creditedAmount > 0 && !ownFakeSign,
             history: rows.flatMap((u) => u.fakePaymentHistory ?? []).filter((h, i, all) =>
                 all.findIndex((o) => o.action === h.action && iso(o.at) === iso(h.at)) === i),
+            stamp: stampOfAll(shown),
+            noProofs: list.length === 0,
         });
     }
     mutedEntries.sort((a, b) => Number(b.likelyWrong) - Number(a.likelyWrong) || b.creditedAmount - a.creditedAmount
         || (new Date(b.at ?? 0).getTime() - new Date(a.at ?? 0).getTime()) || (a.chatId < b.chatId ? -1 : 1));
 
     const refused: RefusedEntry[] = [];
+    const inCheck = new Set(check.map((e) => e.chatId));
     for (const [chat, list] of byChat) {
-        if (marked(chat)) continue;
+        if (inMuted(chat) || inCheck.has(chat)) continue;
         for (const x of list) {
             if (x.c.credited || x.c.repeat || !looksGenuine(x)) continue;
             const t = msOf(x.row);
@@ -337,7 +375,9 @@ export function buildViews(items: ReviewItem[], users: Map<string, ChatUser[]>, 
             refused.push({
                 ...proofCard(x),
                 username: usernameOf(chat),
+                name: nameOf(chat),
                 refusedReason: x.c.reasons.length ? `${label}: ${x.c.reasons.join(', ')}` : label,
+                stamp: x.c.stamp,
             });
         }
     }
