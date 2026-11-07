@@ -2,6 +2,13 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnava
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytics-pg.reader';
+import {
+  ACCOUNT_HEALTH_READ_COLLECTION,
+  AccountFacetReadMode,
+  accountFacetReadCollectionOf,
+  accountFacetReadMode,
+  resolveAccountHealthViews,
+} from '../shared/account-facet-read';
 import { CacheState, ConcurrencyGate, SnapshotCache, SnapshotResult, SnapshotSource, SnapshotStore, SwrCache, TtlCache } from './monitor-cache';
 import {
   addBuckets,
@@ -51,6 +58,7 @@ import {
   promoWindows,
   readBatch,
   redisBatch,
+  spamStateFromHealth,
   rowsFromHist,
   rowsFromSends,
   reachAlertOf,
@@ -74,11 +82,15 @@ import {
 } from './monitor-reactions';
 import {
   bufferPoolPipeline,
+  bufferPoolRowsPipeline,
   CohortRow,
   flattenCohort,
   mapTtfp,
   MONGO_MAX_TIME_MS,
+  PoolHealthRow,
+  poolCountsFromRows,
   promotePoolPipeline,
+  promotePoolRowsPipeline,
   firstPayRowsPipeline,
   FirstPayRow,
   ttfpBuckets,
@@ -977,11 +989,26 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     return this.part<Pool>(ctx, 'history', 'pool', (now, t) => this.poolByClient(now, istDate(now), t), this.poolCache).then((l) => l.value);
   }
 
+  /** R11 shadow: the last background compare (tests await it). */
+  poolHealthShadow: Promise<void> | null = null;
+
   private async poolByClient(now: number, today: string, t: Record<string, number>): Promise<Pool> {
-    const [buf, prom] = await Promise.all([
-      this.mongoAgg('bufferClients', bufferPoolPipeline(now, today), 'mongo.bufferClients_pool', t),
-      this.mongoAgg('promoteClients', promotePoolPipeline(), 'mongo.promoteClients_pool', t),
-    ]);
+    // R11 (account split reader switch): mode read synchronously first; off = today's $group reads only.
+    const healthMode = accountFacetReadMode('health', 'R11');
+    const [buf, prom] =
+      healthMode === 'on'
+        ? await this.poolCountsByHealth(now, today, t, 'on')
+        : await Promise.all([
+            this.mongoAgg('bufferClients', bufferPoolPipeline(now, today), 'mongo.bufferClients_pool', t),
+            this.mongoAgg('promoteClients', promotePoolPipeline(), 'mongo.promoteClients_pool', t),
+          ]);
+    if (healthMode === 'shadow') {
+      // old counts are returned; the per-row read + accountHealth compare run in the background (own timings)
+      this.poolHealthShadow = this.poolCountsByHealth(now, today, {}, 'shadow').then(
+        () => undefined,
+        (err) => this.logger.warn(`monitor R11 shadow read failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
+      );
+    }
     const out: Pool = new Map();
     const get = (id: unknown) => {
       // null / missing / '' clientId all land on the unassigned key
@@ -1006,6 +1033,34 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       c.promoteWarming += num(p.warming);
     }
     return out;
+  }
+
+  /**
+   * R11 shadow / on: per-row pool reads (same row set as the $group pipelines) + ONE accountHealth read for every
+   * buffer and promote mobile, folded back into the $group output shapes. A pool read error throws as today; an
+   * accountHealth read error keeps the pool flags (resolveAccountHealthViews never throws).
+   */
+  private async poolCountsByHealth(
+    now: number,
+    today: string,
+    t: Record<string, number>,
+    mode: AccountFacetReadMode,
+  ): Promise<[Array<Record<string, unknown>>, Array<Record<string, unknown>>]> {
+    const [bufRows, promRows] = await Promise.all([
+      this.mongoAgg<PoolHealthRow>('bufferClients', bufferPoolRowsPipeline(now, today), 'mongo.bufferClients_pool_rows', t),
+      this.mongoAgg<PoolHealthRow>('promoteClients', promotePoolRowsPipeline(), 'mongo.promoteClients_pool_rows', t),
+    ]);
+    const rows = [...bufRows, ...promRows];
+    const views = await resolveAccountHealthViews(
+      accountFacetReadCollectionOf({ db: this.connection }, ACCOUNT_HEALTH_READ_COLLECTION),
+      'R11',
+      rows.map((r) => ({ mobile: r.m, doc: { spamStatus: r.s, limitedUntil: r.lu, spamCheckedAt: r.at } })),
+      { mode, logger: this.logger },
+    );
+    return [
+      poolCountsFromRows('buffer', bufRows, views.slice(0, bufRows.length), now),
+      poolCountsFromRows('promote', promRows, views.slice(bufRows.length), now),
+    ];
   }
 
   /**
@@ -1978,6 +2033,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     promote: Set<string>,
     ctx: Ctx,
   ): Promise<{ spam: Map<string, SpamState | null>; route: Map<string, RouteState> } | null> {
+    // R12 (account split reader switch): mode read synchronously first; off = tg::acct only.
+    const healthMode = accountFacetReadMode('health', 'R12');
     if (typeof this.redis?.readPipeline !== 'function') {
       ctx.notes.push('spam/route state not read: Redis pipeline not configured.');
       return null;
@@ -1987,10 +2044,34 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const t = Date.now();
     try {
       const results = await withTimeout(this.redis.readPipeline(cmds), LIVE_REDIS_DEADLINE_MS, 'redis account state');
-      return readBatch(mobiles, promote, results);
+      const out = readBatch(mobiles, promote, results);
+      if (healthMode === 'off') return out;
+      return { spam: await this.spamByHealth(mobiles, out.spam, healthMode), route: out.route };
     } finally {
       ctx.timings['redis.account_state'] = Date.now() - t;
     }
+  }
+
+  /**
+   * R12 shadow / on: ONE accountHealth read for every mobile of the page; the old side is tg::acct (checkedAt = the
+   * verdict time). shadow returns `spam` itself (compare in the background); on applies spamStateFromHealth. Never
+   * throws (a read error keeps tg::acct).
+   */
+  private async spamByHealth(mobiles: string[], spam: Map<string, SpamState | null>, mode: AccountFacetReadMode): Promise<Map<string, SpamState | null>> {
+    const views = await resolveAccountHealthViews(
+      accountFacetReadCollectionOf({ db: this.connection }, ACCOUNT_HEALTH_READ_COLLECTION),
+      'R12',
+      mobiles.map((m) => {
+        const s = spam.get(m) ?? null;
+        return { mobile: m, doc: { spamStatus: s?.status ?? null, limitedUntil: s?.limitedUntil ?? null, spamCheckedAt: s?.checkedAt ?? null } };
+      }),
+      { mode, logger: this.logger },
+    );
+    if (mode !== 'on') return spam;
+    const now = Date.now();
+    const out = new Map<string, SpamState | null>();
+    mobiles.forEach((m, i) => out.set(m, spamStateFromHealth(spam.get(m) ?? null, views[i], now)));
+    return out;
   }
 
   async buildPromotions(window: PromoWindow, client: string | null, now: number, background = false): Promise<any> {

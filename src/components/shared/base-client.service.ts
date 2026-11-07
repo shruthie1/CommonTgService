@@ -57,6 +57,7 @@ import { checkParkedSession, describeParkedVerdict, PARKED_SESSION_BUSY, type Pa
 import { maskMobile } from '../monitor/monitor-util';
 import { accountRoleEventsCollectionOf, classifyRoleEventReason, recordAccountRoleEventSoon, type AccountRoleEventInput } from '../clients/account-role-events';
 import { mirrorPoolDocFacetsSoon, mirrorPoolFacetsByQuerySoon } from './account-pool-facets';
+import type { AccountHealthView } from './account-facet-read';
 
 /**
  * Configuration constants that differ between buffer and promote clients.
@@ -3421,9 +3422,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
         const operationalChannelThreshold = this.config.operationalChannelThreshold ?? MIN_CHANNELS_FOR_MATURING;
 
         const supplyAdjustments: Array<{ mobile?: string; from: string; to: string | null }> = [];
+        // Reader R10 of the account split (S2) is the spam projection above; its only consumer is R4
+        // (adjustSupplyDateForPoolState). null = no accountHealth read (base / promote, or R4 off): no extra await.
+        const pendingHealth = this.supplyHealthViews(activeDocs);
+        const supplyHealth = pendingHealth ? await pendingHealth : null;
+        const healthByDoc = supplyHealth ? new Map<unknown, AccountHealthView>(activeDocs.map((doc, i) => [doc, supplyHealth[i]])) : null;
         for (const doc of activeDocs) {
             const baseDate = this.getOperationalAvailabilityDateString(doc, today.getTime());
-            const operationalDate = this.adjustSupplyDateForPoolState(doc, baseDate, Date.now());
+            const operationalDate = healthByDoc
+                ? this.adjustSupplyDateForPoolState(doc, baseDate, Date.now(), healthByDoc.get(doc))
+                : this.adjustSupplyDateForPoolState(doc, baseDate, Date.now());
             if (baseDate && operationalDate !== baseDate) {
                 supplyAdjustments.push({ mobile: (doc as { mobile?: string }).mobile, from: baseDate, to: operationalDate });
             }
@@ -3587,8 +3595,16 @@ export abstract class BaseClientService<TDoc extends BaseClientDocument> impleme
      * live selection excludes some accounts (buffer: spam-limited) overrides this so replenishment
      * counts exactly what selection can use — null drops the account from supply.
      */
-    protected adjustSupplyDateForPoolState(_doc: unknown, date: string | null, _now: number): string | null {
+    protected adjustSupplyDateForPoolState(_doc: unknown, date: string | null, _now: number, _health?: AccountHealthView): string | null {
         return date;
+    }
+
+    /**
+     * Reader R4 hook (account split S2): accountHealth views for the supply docs (same order), or null = no read.
+     * Default null (promote decides nothing on spam fields); the buffer pool returns null while R4 is off.
+     */
+    protected supplyHealthViews(_docs: unknown[]): Promise<AccountHealthView[]> | null {
+        return null;
     }
 
     protected getExtraAvailabilityFilter(): Record<string, unknown> {

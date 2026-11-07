@@ -75,7 +75,8 @@ export function flattenCohort(rows: Array<{ _id: { c?: string; d: string; h?: nu
 }
 
 /** Accounts whose spamStatus is 'harsh'. */
-const HARSH_SUM = { $sum: { $cond: [{ $eq: ['$spamStatus', 'harsh'] }, 1, 0] } };
+const HARSH_COND = { $eq: ['$spamStatus', 'harsh'] };
+const HARSH_SUM = { $sum: { $cond: [HARSH_COND, 1, 0] } };
 
 /**
  * Accounts still warming up (enrolled..maturing; a missing or empty warmupPhase counts as enrolled).
@@ -88,7 +89,8 @@ export const WARMING_PHASES: string[] = [
   WarmupPhase.GROWING,
   WarmupPhase.MATURING,
 ];
-const WARMING_SUM = { $sum: { $cond: [{ $in: [{ $ifNull: ['$warmupPhase', ''] }, ['', ...WARMING_PHASES]] }, 1, 0] } };
+const WARMING_COND = { $in: [{ $ifNull: ['$warmupPhase', ''] }, ['', ...WARMING_PHASES]] };
+const WARMING_SUM = { $sum: { $cond: [WARMING_COND, 1, 0] } };
 
 /**
  * Pool depth per clientId. eligible mirrors the CMS handleSetupClient gates as in
@@ -96,7 +98,6 @@ const WARMING_SUM = { $sum: { $cond: [{ $in: [{ $ifNull: ['$warmupPhase', ''] },
  * not expired" checks).
  */
 export function bufferPoolPipeline(now: number, todayIst: string, clientId?: string): object[] {
-  const nowDate = new Date(now);
   return [
     ...(clientId ? [{ $match: { clientId } }] : []),
     {
@@ -107,31 +108,31 @@ export function bufferPoolPipeline(now: number, todayIst: string, clientId?: str
         warming: WARMING_SUM,
         eligible: {
           $sum: {
-            $cond: [
-              {
-                $and: [
-                  { $eq: ['$status', 'active'] },
-                  { $ne: ['$inUse', true] },
-                  { $eq: ['$warmupPhase', 'session_rotated'] },
-                  { $gte: [{ $ifNull: ['$channels', 0] }, 200] },
-                  { $lte: ['$createdAt', new Date(now - 15 * DAY_MS)] },
-                  {
-                    $or: [
-                      { $ne: ['$spamStatus', 'harsh'] },
-                      { $lte: [{ $ifNull: ['$spamCheckedAt', new Date(0)] }, new Date(now - 30 * DAY_MS)] },
-                    ],
-                  },
-                  { $not: [{ $gt: [{ $ifNull: ['$limitedUntil', new Date(0)] }, nowDate] }] },
-                  { $lte: ['$availableDate', todayIst] },
-                ],
-              },
-              1,
-              0,
-            ],
+            $cond: [{ $and: eligibleConds(now, todayIst) }, 1, 0],
           },
         },
       },
     },
+  ];
+}
+
+/** The eligible gates in order; [5] and [6] are the spam gates (harsh rest 30 d on spamCheckedAt, limit lifted). */
+function eligibleConds(now: number, todayIst: string): object[] {
+  const nowDate = new Date(now);
+  return [
+    { $eq: ['$status', 'active'] },
+    { $ne: ['$inUse', true] },
+    { $eq: ['$warmupPhase', 'session_rotated'] },
+    { $gte: [{ $ifNull: ['$channels', 0] }, 200] },
+    { $lte: ['$createdAt', new Date(now - 15 * DAY_MS)] },
+    {
+      $or: [
+        { $ne: ['$spamStatus', 'harsh'] },
+        { $lte: [{ $ifNull: ['$spamCheckedAt', new Date(0)] }, new Date(now - 30 * DAY_MS)] },
+      ],
+    },
+    { $not: [{ $gt: [{ $ifNull: ['$limitedUntil', new Date(0)] }, nowDate] }] },
+    { $lte: ['$availableDate', todayIst] },
   ];
 }
 
@@ -149,6 +150,115 @@ export function promotePoolPipeline(clientId?: string): object[] {
       },
     },
   ];
+}
+
+// ---------------------------------------------------------------- R11 (account split reader switch)
+
+/**
+ * R11, ACCOUNT_HEALTH_READ shadow / on only: one small row per pool doc (every doc the $group pipelines count, same
+ * $match) with the spam fields and the old flags COMPUTED BY MONGO from the same expressions as bufferPoolPipeline:
+ * h = harsh, sg = the two spam gates of eligible, g = the other eligible gates, w = warming. A row whose accountHealth
+ * verdict does not win keeps these flags, so on mode with no winning facet doc gives exactly the $group counts.
+ */
+export function bufferPoolRowsPipeline(now: number, todayIst: string, clientId?: string): object[] {
+  const conds = eligibleConds(now, todayIst);
+  return [
+    ...(clientId ? [{ $match: { clientId } }] : []),
+    {
+      $project: {
+        _id: 0,
+        c: '$clientId',
+        m: '$mobile',
+        s: '$spamStatus',
+        lu: '$limitedUntil',
+        at: '$spamCheckedAt',
+        h: HARSH_COND,
+        sg: { $and: [conds[5], conds[6]] },
+        g: { $and: [...conds.slice(0, 5), conds[7]] },
+        w: WARMING_COND,
+      },
+    },
+  ];
+}
+
+/** R11 promote rows (as bufferPoolRowsPipeline): a = status active, h = harsh, w = warming. */
+export function promotePoolRowsPipeline(clientId?: string): object[] {
+  return [
+    ...(clientId ? [{ $match: { clientId } }] : []),
+    {
+      $project: {
+        _id: 0,
+        c: '$clientId',
+        m: '$mobile',
+        s: '$spamStatus',
+        lu: '$limitedUntil',
+        at: '$spamCheckedAt',
+        h: HARSH_COND,
+        a: { $eq: ['$status', 'active'] },
+        w: WARMING_COND,
+      },
+    },
+  ];
+}
+
+export interface PoolHealthRow {
+  c?: unknown;
+  m?: unknown;
+  s?: unknown;
+  lu?: unknown;
+  at?: unknown;
+  h?: boolean;
+  sg?: boolean;
+  g?: boolean;
+  a?: boolean;
+  w?: boolean;
+}
+
+/** The health facts R11 counts from (a view of shared/account-facet-read; only source matters beyond these). */
+export interface PoolHealthVerdict {
+  spamStatus: string | null;
+  limitedUntilMs: number | null;
+  verdictAtMs: number | null;
+  source: 'pool' | 'accountHealth';
+}
+
+/**
+ * R11 on: rows -> the $group output shapes ({_id, total, harsh, warming, eligible} buffer; {_id, active, total, harsh,
+ * warming} promote). `verdicts[i]` belongs to rows[i]; a pool-sourced (or missing) verdict keeps the Mongo flags h / sg.
+ * A winning accountHealth verdict decides harsh and the spam gates with today's rules: harsh rest 30 d anchored on the
+ * LAST verdict (verdictAt; as R3 / R4, C17 not adopted), limit lifted when limitedUntil <= now. Every row is counted
+ * (the row set is the $group's), so a verdict moves a row between buckets; it never adds or removes a row.
+ */
+export function poolCountsFromRows(
+  kind: 'buffer' | 'promote',
+  rows: PoolHealthRow[],
+  verdicts: Array<PoolHealthVerdict | undefined>,
+  now: number,
+): Array<Record<string, unknown>> {
+  const out = new Map<unknown, Record<string, unknown> & { total: number; harsh: number; warming: number }>();
+  rows.forEach((r, i) => {
+    const key = r.c ?? null;
+    let g = out.get(key);
+    if (!g) {
+      g = kind === 'buffer' ? { _id: key, total: 0, harsh: 0, warming: 0, eligible: 0 } : { _id: key, active: 0, total: 0, harsh: 0, warming: 0 };
+      out.set(key, g);
+    }
+    const v = verdicts[i];
+    const facet = v?.source === 'accountHealth';
+    const harsh = facet ? v!.spamStatus === 'harsh' : r.h === true;
+    g.total++;
+    if (harsh) g.harsh++;
+    if (r.w === true) g.warming++;
+    if (kind === 'promote') {
+      if (r.a === true) (g.active as number)++;
+      return;
+    }
+    const spamGates = facet
+      ? (!harsh || (v!.verdictAtMs ?? 0) <= now - 30 * DAY_MS) && !((v!.limitedUntilMs ?? 0) > now)
+      : r.sg === true;
+    if (r.g === true && spamGates) (g.eligible as number)++;
+  });
+  return [...out.values()];
 }
 
 export const TTFP_BUCKETS = ['<10m', '10-30m', '30m-2h', '2-24h', '1-3d', '3d+'] as const;

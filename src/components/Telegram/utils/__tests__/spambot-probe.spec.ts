@@ -11,6 +11,8 @@ jest.mock('../connection-manager', () => ({
   },
 }));
 
+import { Api } from 'telegram';
+import { Logger } from '../../../../utils/logger';
 import { classifySpamBotReply, parseLimitedUntil, probeSpamBot } from '../spambot-probe';
 
 const NOW = new Date('2026-10-10T12:00:00Z');
@@ -201,5 +203,138 @@ describe('probeSpamBot', () => {
       mockGetClient.mockResolvedValue({ client: tg });
       expect((await probeSpamBot('9110', fast)).status).toBe('free');
     });
+  });
+});
+
+describe('probeSpamBot: @SpamBot blocked by the account (YOU_BLOCKED_USER)', () => {
+  const fast = { pollIntervalMs: 1, pollTimeoutMs: 50, totalTimeoutMs: 500 };
+  const SPAMBOT_PEER = { className: 'InputPeerUser', userId: 178220800 };
+  // gramjs RPCError shape: errorMessage plus "400: YOU_BLOCKED_USER (caused by ...)" as message.
+  const blockedError = () => Object.assign(new Error('400: YOU_BLOCKED_USER (caused by messages.SendMessage)'), { code: 400, errorMessage: 'YOU_BLOCKED_USER' });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetReuseState.mockReturnValue('none');
+    mockGetLastUsed.mockReturnValue(1000);
+    mockUnregister.mockResolvedValue(undefined);
+  });
+
+  function blockedTg(overrides: Partial<Record<'sendMessage' | 'getMessages' | 'invoke' | 'getInputEntity', jest.Mock>> = {}) {
+    return {
+      sendMessage: jest.fn().mockRejectedValueOnce(blockedError()).mockResolvedValue({ id: 100 }),
+      getMessages: jest.fn().mockResolvedValue([{ id: 101, out: false, message: FREE }]),
+      invoke: jest.fn().mockResolvedValue(true),
+      getInputEntity: jest.fn().mockResolvedValue(SPAMBOT_PEER),
+      ...overrides,
+    };
+  }
+
+  test('unblocks @SpamBot once, resends /start once, and the verdict is parsed', async () => {
+    const tg = blockedTg();
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const r = await probeSpamBot('919876543210', fast);
+
+    expect(r).toMatchObject({ status: 'free' });
+    expect(r.sendFailed).toBeUndefined();
+    expect(tg.invoke).toHaveBeenCalledTimes(1);
+    const req = tg.invoke.mock.calls[0][0];
+    expect(req).toBeInstanceOf(Api.contacts.Unblock);
+    expect(req.id).toBe(SPAMBOT_PEER);
+    expect(tg.getInputEntity).toHaveBeenCalledWith('@SpamBot');
+    expect(tg.sendMessage).toHaveBeenCalledTimes(2);
+    expect(tg.sendMessage).toHaveBeenNthCalledWith(2, '@SpamBot', { message: '/start' });
+    expect(mockUnregister).toHaveBeenCalledWith('919876543210');
+  });
+
+  test('logs one unblock line with the mobile masked to the last 4 digits', async () => {
+    const spy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    try {
+      mockGetClient.mockResolvedValue({ client: blockedTg() });
+      await probeSpamBot('919876543210', fast);
+      const lines = spy.mock.calls.map((c) => String(c[0])).filter((l) => /unblock/i.test(l));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('3210');
+      expect(lines[0]).not.toContain('9198765');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('unblock fails -> rejected exactly as before (sendFailed, YOU_BLOCKED_USER), no resend', async () => {
+    const tg = blockedTg({ invoke: jest.fn().mockRejectedValue(new Error('FLOOD_WAIT_30')) });
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const r = await probeSpamBot('9120', fast);
+
+    expect(r).toMatchObject({ status: 'unknown', sendFailed: true, error: '400: YOU_BLOCKED_USER (caused by messages.SendMessage)' });
+    expect(tg.invoke).toHaveBeenCalledTimes(1);
+    expect(tg.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mockUnregister).toHaveBeenCalledWith('9120');
+  });
+
+  test('resend fails -> rejected (sendFailed), no second unblock and no third send', async () => {
+    const tg = blockedTg({ sendMessage: jest.fn().mockRejectedValueOnce(blockedError()).mockRejectedValueOnce(blockedError()) });
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const r = await probeSpamBot('9121', fast);
+
+    expect(r).toMatchObject({ status: 'unknown', sendFailed: true });
+    expect(r.error).toContain('YOU_BLOCKED_USER');
+    expect(tg.invoke).toHaveBeenCalledTimes(1);
+    expect(tg.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  test('a non-blocked send error (PEER_FLOOD) makes no unblock call', async () => {
+    const tg = blockedTg({ sendMessage: jest.fn().mockRejectedValue(new Error('PEER_FLOOD')) });
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const r = await probeSpamBot('9122', fast);
+
+    expect(r).toMatchObject({ status: 'unknown', sendFailed: true, error: 'PEER_FLOOD' });
+    expect(tg.invoke).not.toHaveBeenCalled();
+    expect(tg.getInputEntity).not.toHaveBeenCalled();
+    expect(tg.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test('a hung unblock is cut at the per-probe deadline -> rejected as before, connection released', async () => {
+    const tg = blockedTg({ invoke: jest.fn().mockReturnValue(new Promise(() => undefined)) });
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const t0 = Date.now();
+    const r = await probeSpamBot('9123', { ...fast, totalTimeoutMs: 80 });
+    const elapsed = Date.now() - t0;
+
+    expect(r).toMatchObject({ status: 'unknown', sendFailed: true });
+    expect(r.error).toContain('YOU_BLOCKED_USER');
+    expect(elapsed).toBeLessThan(80 + 100);
+    expect(tg.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mockUnregister).toHaveBeenCalledWith('9123');
+  });
+
+  test('a hung resend is cut at the per-probe deadline', async () => {
+    const tg = blockedTg({ sendMessage: jest.fn().mockRejectedValueOnce(blockedError()).mockReturnValue(new Promise(() => undefined)) });
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const t0 = Date.now();
+    const r = await probeSpamBot('9124', { ...fast, totalTimeoutMs: 80 });
+
+    expect(Date.now() - t0).toBeLessThan(80 + 100);
+    expect(r).toMatchObject({ status: 'unknown', sendFailed: true, error: 'send /start timed out' });
+  });
+
+  test('time spent unblocking comes out of the same budget: polling stops at the original deadline', async () => {
+    const tg = blockedTg({
+      invoke: jest.fn().mockImplementation(() => new Promise((res) => setTimeout(() => res(true), 60))),
+      getMessages: jest.fn().mockResolvedValue([]), // SpamBot silent: poll runs until the deadline
+    });
+    mockGetClient.mockResolvedValue({ client: tg });
+
+    const t0 = Date.now();
+    const r = await probeSpamBot('9125', { pollIntervalMs: 5, pollTimeoutMs: 10_000, totalTimeoutMs: 120 });
+    const elapsed = Date.now() - t0;
+
+    expect(r).toMatchObject({ status: 'unknown', error: 'no SpamBot reply before timeout' });
+    expect(elapsed).toBeGreaterThanOrEqual(100);
+    expect(elapsed).toBeLessThan(120 + 100);
   });
 });

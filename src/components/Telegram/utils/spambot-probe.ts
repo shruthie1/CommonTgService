@@ -1,3 +1,4 @@
+import { Api } from 'telegram';
 import { connectionManager } from './connection-manager';
 import { TelegramLogger } from './telegram-logger';
 
@@ -129,6 +130,15 @@ function isAfterSend(m: any, sentId: number | undefined, sentAtSec: number): boo
   return date !== undefined && date >= sentAtSec;
 }
 
+/** gramjs RPCError: errorMessage 'YOU_BLOCKED_USER', message "400: YOU_BLOCKED_USER (caused by ...)". */
+function isYouBlockedUser(error: unknown): boolean {
+  if ((error as any)?.errorMessage === 'YOU_BLOCKED_USER') return true;
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /\bYOU_BLOCKED_USER\b/.test(message);
+}
+
+const maskMobile = (mobile: string) => `***${String(mobile).slice(-4)}`;
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export interface ProbeOptions {
@@ -218,8 +228,26 @@ export async function probeSpamBot(mobile: string, options: ProbeOptions = {}): 
     const tg = manager?.client;
     if (!tg) return { status: 'unknown', limitedUntil: null, connectFailed: true, error: 'no telegram client' };
 
-    const sentAtSec = Math.floor(Date.now() / 1000) - SEND_CLOCK_SKEW_SEC;
-    const sent = await withDeadline(tg.sendMessage(SPAMBOT_USERNAME, { message: '/start' }), 'send /start');
+    let sentAtSec = Math.floor(Date.now() / 1000) - SEND_CLOCK_SKEW_SEC;
+    let sent: any;
+    try {
+      sent = await withDeadline(tg.sendMessage(SPAMBOT_USERNAME, { message: '/start' }), 'send /start');
+    } catch (sendError) {
+      if (!isYouBlockedUser(sendError)) throw sendError;
+      // The account blocked @SpamBot, so /start can never reach it. Unblock once and resend once,
+      // both inside the same per-probe deadline. No loop: any further failure rejects as before.
+      try {
+        await withDeadline(
+          (async () => tg.invoke(new Api.contacts.Unblock({ id: await tg.getInputEntity(SPAMBOT_USERNAME) })))(),
+          'unblock @SpamBot',
+        );
+      } catch {
+        throw sendError; // unblock failed or timed out: same rejection as before this fix
+      }
+      logger.info(maskMobile(mobile), 'SpamBot probe: unblocked @SpamBot after YOU_BLOCKED_USER, resending /start once');
+      sentAtSec = Math.floor(Date.now() / 1000) - SEND_CLOCK_SKEW_SEC;
+      sent = await withDeadline(tg.sendMessage(SPAMBOT_USERNAME, { message: '/start' }), 'send /start');
+    }
     const sentId: number | undefined = typeof sent?.id === 'number' && sent.id > 0 ? sent.id : undefined;
     const pollUntil = Math.min(deadline, Date.now() + pollTimeoutMs);
     let lastText = '';

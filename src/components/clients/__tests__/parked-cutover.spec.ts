@@ -13,12 +13,45 @@ import {
 const MOBILE = '15552220000';
 const OTHER = '15553330000';
 
+// Top level, so it applies to every test and hook in this file (a jest.setTimeout call inside a hook does not cover
+// that hook or its siblings: under CPU load they can time out at the 5 s default).
+jest.setTimeout(60_000);
+
 describe('prepareParkedCutover (real Mongo)', () => {
   let mongod: MongoMemoryServer;
   let connection: Connection;
   let episodes: any;
   let leases: any;
   let roleEvents: any;
+  // prepareParkedCutover writes role events fire-and-forget, so its result returns before the insert lands. Every insert
+  // made through `trackedRoleEvents` is kept until it settles; `drainRoleEvents` awaits them (bounded), so a test
+  // asserts on the real write instead of a fixed sleep, and afterEach stops a late write leaking into the next test.
+  const pendingRoleEventWrites = new Set<Promise<unknown>>();
+  const trackedRoleEvents = {
+    insertOne(doc: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> {
+      const write: Promise<unknown> = roleEvents.insertOne(doc, options);
+      pendingRoleEventWrites.add(write);
+      write.then(() => pendingRoleEventWrites.delete(write), () => pendingRoleEventWrites.delete(write));
+      return write;
+    },
+  };
+  const DRAIN_TIMEOUT_MS = 10_000;
+  const drainRoleEvents = async (): Promise<void> => {
+    const deadline = Date.now() + DRAIN_TIMEOUT_MS;
+    // The producer calls insertOne from a microtask/then chain; yield a macrotask first so it has been issued.
+    await new Promise((resolve) => setImmediate(resolve));
+    while (pendingRoleEventWrites.size > 0) {
+      const left = deadline - Date.now();
+      if (left <= 0) throw new Error(`accountRoleEvents: ${pendingRoleEventWrites.size} insert(s) still pending after ${DRAIN_TIMEOUT_MS} ms`);
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        Promise.allSettled([...pendingRoleEventWrites]),
+        new Promise((resolve) => { timer = setTimeout(resolve, left); }),
+      ]);
+      clearTimeout(timer);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
   let logger: { info: jest.Mock; warn: jest.Mock };
 
   const cols = () => ({
@@ -29,17 +62,22 @@ describe('prepareParkedCutover (real Mongo)', () => {
   const parkedHolder = { kind: 'parked', owner: 'vm1:42:abc', app: 'promote', clientId: 'cid' };
 
   beforeAll(async () => {
-    jest.setTimeout(60_000);
-    mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    // mongod start can exceed mongodb-memory-server's 10 s default launch timeout under CPU load.
+    mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1', launchTimeout: 60_000 } });
     connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'parkedCutover' }).asPromise();
     episodes = connection.collection('parkedAccounts');
     leases = connection.collection('accountLeases');
     roleEvents = connection.collection('accountRoleEvents');
-  });
+  }, 60_000);
 
   afterAll(async () => {
     if (connection) { await connection.dropDatabase(); await connection.close(); }
     if (mongod) await mongod.stop();
+  }, 60_000);
+
+  afterEach(async () => {
+    await drainRoleEvents();
+    await roleEvents.deleteMany({});
   });
 
   beforeEach(async () => {
@@ -175,10 +213,10 @@ describe('prepareParkedCutover (real Mongo)', () => {
       { _id: `promote:${MOBILE}:1`, app: 'promote', mobile: MOBILE, clientId: 'kavya1', open: true, state: 'active', version: 2 },
       { _id: `tg-aut:${OTHER}:1`, app: 'tg-aut', mobile: OTHER, clientId: 'x', state: 'stopped', version: 2 },
     ]);
-    const first = await prepareParkedCutover(cols(), { mobile: MOBILE, clientId: 'cid' }, { logger, sleep: async () => undefined, roleEvents });
-    const again = await prepareParkedCutover(cols(), { mobile: MOBILE, clientId: 'cid' }, { logger, sleep: async () => undefined, roleEvents });
-    await prepareParkedCutover(cols(), { mobile: OTHER, clientId: 'cid' }, { logger, sleep: async () => undefined, roleEvents });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const first = await prepareParkedCutover(cols(), { mobile: MOBILE, clientId: 'cid' }, { logger, sleep: async () => undefined, roleEvents: trackedRoleEvents });
+    const again = await prepareParkedCutover(cols(), { mobile: MOBILE, clientId: 'cid' }, { logger, sleep: async () => undefined, roleEvents: trackedRoleEvents });
+    await prepareParkedCutover(cols(), { mobile: OTHER, clientId: 'cid' }, { logger, sleep: async () => undefined, roleEvents: trackedRoleEvents });
+    await drainRoleEvents();
     expect([first.episodesStopped, again.episodesStopped]).toEqual([1, 0]);
     expect(await roleEvents.find({}, { projection: { _id: 0, at: 0 } }).toArray()).toEqual([{
       v: 1, mobile: MOBILE, clientId: 'kavya1', event: 'unparked', pool: 'promote', by: 'cms:parked-cutover', reason: 'became_main',

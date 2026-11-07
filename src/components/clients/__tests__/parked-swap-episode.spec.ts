@@ -17,12 +17,45 @@ import {
 const OLD = '15552220000';
 const SWAPPED_AT = new Date('2026-11-06T06:00:00.000Z');
 
+// Top level, so it applies to every test and hook in this file (a jest.setTimeout call inside a hook does not cover
+// that hook or its siblings: under full-suite CPU load they timed out at the 5 s default).
+jest.setTimeout(60_000);
+
 describe('openSwapEpisode (real Mongo)', () => {
   let mongod: MongoMemoryServer;
   let connection: Connection;
   let episodes: any;
   let controls: any;
   let roleEvents: any;
+  // openSwapEpisode writes role events fire-and-forget, so its result returns before the insert lands. Every insert
+  // made through `trackedRoleEvents` is kept until it settles; `drainRoleEvents` awaits them (bounded), so a test
+  // asserts on the real write instead of a fixed sleep, and afterEach stops a late write leaking into the next test.
+  const pendingRoleEventWrites = new Set<Promise<unknown>>();
+  const trackedRoleEvents = {
+    insertOne(doc: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown> {
+      const write: Promise<unknown> = roleEvents.insertOne(doc, options);
+      pendingRoleEventWrites.add(write);
+      write.then(() => pendingRoleEventWrites.delete(write), () => pendingRoleEventWrites.delete(write));
+      return write;
+    },
+  };
+  const DRAIN_TIMEOUT_MS = 10_000;
+  const drainRoleEvents = async (): Promise<void> => {
+    const deadline = Date.now() + DRAIN_TIMEOUT_MS;
+    // The producer calls insertOne from a microtask/then chain; yield a macrotask first so it has been issued.
+    await new Promise((resolve) => setImmediate(resolve));
+    while (pendingRoleEventWrites.size > 0) {
+      const left = deadline - Date.now();
+      if (left <= 0) throw new Error(`accountRoleEvents: ${pendingRoleEventWrites.size} insert(s) still pending after ${DRAIN_TIMEOUT_MS} ms`);
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        Promise.allSettled([...pendingRoleEventWrites]),
+        new Promise((resolve) => { timer = setTimeout(resolve, left); }),
+      ]);
+      clearTimeout(timer);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
   let logger: { info: jest.Mock; warn: jest.Mock };
   const col = () => episodes as unknown as SwapEpisodeCollection;
   const ctl = () => controls as unknown as SwapEpisodeControlCollection;
@@ -31,19 +64,24 @@ describe('openSwapEpisode (real Mongo)', () => {
   });
 
   beforeAll(async () => {
-    jest.setTimeout(60_000);
-    mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    // mongod start can exceed mongodb-memory-server's 10 s default launch timeout under CPU load.
+    mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1', launchTimeout: 60_000 } });
     connection = await mongoose.createConnection(mongod.getUri(), { dbName: 'parkedSwap' }).asPromise();
     episodes = connection.collection('parkedAccounts');
     controls = connection.collection('parkedControl');
     roleEvents = connection.collection('accountRoleEvents');
     // Same index tg-platform ParkedAccountsRepository.ensureIndexes creates (mobile_open_unique).
     await episodes.createIndex({ mobile: 1 }, { name: 'mobile_open_unique', unique: true, partialFilterExpression: { open: true } });
-  });
+  }, 60_000);
 
   afterAll(async () => {
     if (connection) { await connection.dropDatabase(); await connection.close(); }
     if (mongod) await mongod.stop();
+  }, 60_000);
+
+  afterEach(async () => {
+    await drainRoleEvents();
+    await roleEvents.deleteMany({});
   });
 
   beforeEach(async () => {
@@ -179,13 +217,12 @@ describe('openSwapEpisode (real Mongo)', () => {
   });
 
   describe('accountRoleEvents parked / unparked (split doc §4.2)', () => {
-    const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
     const rows = async () => (await roleEvents.find({}, { projection: { _id: 0, at: 0 } }).sort({ event: -1 }).toArray());
     const key = `tg-aut:${OLD}:${SWAPPED_AT.getTime()}`;
 
     test('inserted: one parked event, opId = episode _id, details carry cutoverOpId and swapDays', async () => {
-      expect(await openSwapEpisode(col(), input({ reason: 'harsh', swapDays: 3 }), { logger, control: ctl(), roleEvents })).toBe('inserted');
-      await settle();
+      expect(await openSwapEpisode(col(), input({ reason: 'harsh', swapDays: 3 }), { logger, control: ctl(), roleEvents: trackedRoleEvents })).toBe('inserted');
+      await drainRoleEvents();
       expect(await rows()).toEqual([{
         v: 1, mobile: OLD, clientId: 'shruthi1', event: 'parked', pool: 'buffer', by: 'cms:parked-swap', reason: 'harsh',
         reasonCode: 'spam_harsh', opId: key, details: { app: 'tg-aut', cutoverOpId: `shruthi1:${SWAPPED_AT.getTime()}`, swapDays: 3 },
@@ -194,17 +231,17 @@ describe('openSwapEpisode (real Mongo)', () => {
 
     test('exists, disabled and failed: no event', async () => {
       expect(await openSwapEpisode(col(), input(), { logger, control: ctl() })).toBe('inserted');
-      expect(await openSwapEpisode(col(), input(), { logger, control: ctl(), roleEvents })).toBe('exists');
-      expect(await openSwapEpisode(col(), input({ clientId: 'other' }), { logger, control: null, roleEvents })).toBe('disabled');
-      await settle();
+      expect(await openSwapEpisode(col(), input(), { logger, control: ctl(), roleEvents: trackedRoleEvents })).toBe('exists');
+      expect(await openSwapEpisode(col(), input({ clientId: 'other' }), { logger, control: null, roleEvents: trackedRoleEvents })).toBe('disabled');
+      await drainRoleEvents();
       expect(await roleEvents.countDocuments({})).toBe(0);
     });
 
     test('supersede: unparked (superseded) for the older episode, parked for the new one', async () => {
       const older = buildSwapEpisode(input({ swappedAt: new Date(SWAPPED_AT.getTime() - 86_400_000) }), new Date(), () => 0);
       await episodes.insertOne(older);
-      expect(await openSwapEpisode(col(), input(), { logger, control: ctl(), roleEvents })).toBe('inserted');
-      await settle();
+      expect(await openSwapEpisode(col(), input(), { logger, control: ctl(), roleEvents: trackedRoleEvents })).toBe('inserted');
+      await drainRoleEvents();
       expect((await rows()).map((r: any) => [r.event, r.opId, r.reasonCode, r.details?.stopReason])).toEqual([
         ['unparked', older._id, 'other', 'superseded'],
         ['parked', key, 'refill', undefined],

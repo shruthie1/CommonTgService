@@ -191,6 +191,43 @@ export function parseSpam(h: Record<string, string> | null | undefined): SpamSta
   };
 }
 
+/** tg::acct TTL (MIRROR of tg-core state-redis accountStateTtlMs): max(floor, limitedUntil + 1 d), floor 48 h, 30 d for harsh. */
+const ACCT_RESTART_TTL_MS = 48 * 60 * 60 * 1000;
+const ACCT_HARSH_REMEMBER_MS = 30 * 86_400_000;
+export function acctStateTtlMs(limitedUntilMs: number | null, now: number, spamStatus: string | null): number {
+  const floor = spamStatus === 'harsh' ? ACCT_HARSH_REMEMBER_MS : ACCT_RESTART_TTL_MS;
+  if (limitedUntilMs === null || !Number.isFinite(limitedUntilMs)) return floor;
+  return Math.max(floor, limitedUntilMs + 86_400_000 - now);
+}
+
+/** The R12 slice of an accountHealth view (shared/account-facet-read AccountHealthView). */
+export interface SpamHealthView {
+  spamStatus: string | null;
+  limitedUntilMs: number | null;
+  verdictAtMs: number | null;
+  source: 'pool' | 'accountHealth';
+}
+
+/**
+ * R12 on (account split reader switch): the spam state shown for one mobile. A view that is not from accountHealth
+ * (missing / older / same-time-disagreeing facet doc, read error) keeps tg::acct as is. A winning accountHealth verdict
+ * replaces it, with the R14 / R15 rule: a verdict tg::acct would no longer hold (acctStateTtlMs from the verdict) is no
+ * state (null), as an expired key is. daysLeft is not stored in the view: kept only when tg::acct holds the same
+ * verdict (same checkedAt and status), else null (unknown).
+ */
+export function spamStateFromHealth(old: SpamState | null, view: SpamHealthView, now: number): SpamState | null {
+  if (view.source !== 'accountHealth' || view.verdictAtMs === null) return old;
+  if (now - view.verdictAtMs >= acctStateTtlMs(view.limitedUntilMs, view.verdictAtMs, view.spamStatus)) return null;
+  const checkedAt = new Date(view.verdictAtMs).toISOString();
+  const same = !!old && old.checkedAt === checkedAt && old.status === view.spamStatus;
+  return {
+    status: view.spamStatus,
+    daysLeft: same ? old!.daysLeft : null,
+    limitedUntil: view.limitedUntilMs === null ? null : new Date(view.limitedUntilMs).toISOString(),
+    checkedAt,
+  };
+}
+
 export interface RouteState {
   /** users mid-route (HLEN promote::route::<mobile>) */
   pending: number;

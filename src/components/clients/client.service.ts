@@ -55,7 +55,11 @@ import { openParkedEpisodeMobiles, parkedCanonicalMobile, ParkedEpisodeFindColle
 import { maskMobile } from '../monitor/monitor-util';
 import { accountRoleEventsCollectionOf, AccountRoleEventInput, AccountRoleReasonCode, recordAccountRoleEventSoon } from './account-role-events';
 import { accountHealthCollectionOf, recordAccountHealthSoon } from '../shared/account-health';
-import { buildSpamEligibleFilter } from '../buffer-clients/schemas/buffer-client.schema';
+import {
+  ACCOUNT_HEALTH_READ_COLLECTION, AccountFacetReadMode, AccountHealthView, accountFacetReadCollectionOf, accountFacetReadMode, healthViewFromPool,
+  poolHealthFields, resolveAccountHealthView, resolveAccountHealthViews, resolveAccountHealthViewsByReader,
+} from '../shared/account-facet-read';
+import { buildSpamEligibleFilter, HARSH_RECHECK_AFTER_MS } from '../buffer-clients/schemas/buffer-client.schema';
 import { probeSpamBot, SpamProbeResult, SPAMBOT_TOTAL_TIMEOUT_MS } from '../Telegram/utils/spambot-probe';
 import {
   buildTier3Query,
@@ -1036,7 +1040,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       ...baseCandidateQuery,
       availableDate: { $lte: today },
     };
-    const candidateBufferClients = await this.bufferClientService.executeQuery(dueCandidateQuery, { availableDate: 1, createdAt: 1 }, 10);
+    // Reader R3 of the account split (S2): the query keeps today's spam filter; behind ACCOUNT_HEALTH_READ the scanned
+    // rows get a drop-only accountHealth re-check (off = the rows as scanned, no extra read).
+    const r3Mode = accountFacetReadMode('health', 'R3');
+    const dueScanned = await this.bufferClientService.executeQuery(dueCandidateQuery, { availableDate: 1, createdAt: 1 }, 10);
+    const candidateBufferClients = r3Mode === 'off' ? dueScanned : await this.recheckSpamEligible(r3Mode, dueScanned);
     this.logger.info(
       `[${clientId}] Setup candidate scan completed`,
       { existingMobile: existingClientMobile, candidateCount: candidateBufferClients.length, query: dueCandidateQuery },
@@ -1054,11 +1062,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         ...baseCandidateQuery,
         availableDate: { $gt: today },
       };
-      const futureCandidateBufferClients = await this.bufferClientService.executeQuery(
+      const futureScanned = await this.bufferClientService.executeQuery(
         futureCandidateQuery,
         { availableDate: 1, createdAt: 1 },
         10,
       );
+      const futureCandidateBufferClients = r3Mode === 'off' ? futureScanned : await this.recheckSpamEligible(r3Mode, futureScanned);
       fallbackBudget = newProbeBudget();
       // Rescue tier: an open parked episode does not exclude (P4 verification fix 2).
       newBufferClient = await this.findSafeSetupBufferCandidate(futureCandidateBufferClients, existingClient.session, fallbackBudget, {}, 'allow');
@@ -1736,7 +1745,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
    * keeps spamStatus 'harsh' and is excluded by the picker regardless of availableDate.
    */
   private resolveReturnAvailableDate(
-    bufferClient: { spamStatus?: string; limitedUntil?: Date | string | null } | null | undefined,
+    bufferClient: { spamStatus?: string | null; limitedUntil?: Date | string | null } | null | undefined,
     days: number,
   ): string {
     const defaultMs = Date.now() + days * 24 * 60 * 60 * 1000;
@@ -1758,10 +1767,20 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     roleOpId?: string | null,
   ): Promise<boolean> {
     let existingBufferClient: Awaited<ReturnType<BufferClientService['findOne']>> | null = null;
+    let returnHealth: ReturnType<typeof poolHealthFields> | null = null;
     try {
       await this.assertDistinctUserBackupSession(existingMobile, existingClient.session);
       existingBufferClient = await this.bufferClientService.findOne(existingMobile, false);
-      const availableDate = this.resolveReturnAvailableDate(existingBufferClient, days);
+      // Reader R6 of the account split (S2): the limit end comes from the buffer doc, or behind ACCOUNT_HEALTH_READ from
+      // a newer accountHealth verdict (off = the buffer doc, no extra read; shadow compares in the background).
+      const r6Mode = accountFacetReadMode('health', 'R6');
+      if (r6Mode !== 'off') {
+        const view = await resolveAccountHealthView(
+          accountFacetReadCollectionOf(this.clientModel, ACCOUNT_HEALTH_READ_COLLECTION), 'R6', existingMobile, existingBufferClient, { mode: r6Mode, logger: this.logger },
+        );
+        if (view.source === 'accountHealth') returnHealth = poolHealthFields(view);
+      }
+      const availableDate = this.resolveReturnAvailableDate(returnHealth ?? existingBufferClient, days);
       const bufferClientDto: CreateBufferClientDto | UpdateBufferClientDto = {
         clientId: existingClient.clientId,
         mobile: existingMobile,
@@ -1831,7 +1850,7 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
         // the live account — but it is still inUse=true/status=active. Release the
         // reservation and push availability forward so it returns to the buffer pool for a
         // later retry instead of being stranded inUse=true (excluded from every selection).
-        const retryAvailableDate = this.resolveReturnAvailableDate(existingBufferClient, days);
+        const retryAvailableDate = this.resolveReturnAvailableDate(returnHealth ?? existingBufferClient, days);
         const released = await this.bufferClientService.update(existingMobile, {
           inUse: false,
           status: 'active',
@@ -1987,8 +2006,14 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     budget: SetupProbeBudget,
     accept: SwapProbeAcceptance = {},
   ): Promise<boolean> {
-    const checkedAt = candidate.spamCheckedAt ? new Date(candidate.spamCheckedAt).getTime() : 0;
-    if (candidate.spamStatus === 'free' && checkedAt > 0 && Date.now() - checkedAt < SPAM_FREE_FRESH_MS) {
+    // Reader R7 of the account split (S2): freshness by the last verdict (accountHealth.verdictAt behind
+    // ACCOUNT_HEALTH_READ; off = the candidate's own spamCheckedAt, no extra read).
+    const r7Mode = accountFacetReadMode('health', 'R7');
+    const health = r7Mode === 'off' ? healthViewFromPool(candidate) : await resolveAccountHealthView(
+      accountFacetReadCollectionOf(this.clientModel, ACCOUNT_HEALTH_READ_COLLECTION), 'R7', candidate.mobile, candidate, { mode: r7Mode, logger: this.logger },
+    );
+    const checkedAt = health.verdictAtMs ?? 0;
+    if (health.spamStatus === 'free' && checkedAt > 0 && Date.now() - checkedAt < SPAM_FREE_FRESH_MS) {
       budget.lastVerdict = { status: 'free', limitedUntil: null };
       return true;
     }
@@ -2103,6 +2128,68 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * Readers R3 / R5 of the account split (S2), shadow / on: re-check candidates that today's pool query (old spam
+   * fields) returned against accountHealth (one `_id` read, design "Join pattern"). The query itself is unchanged, so
+   * the re-check can only DROP or re-order rows (fail closed), never add one the old filter excluded. A candidate is
+   * dropped only in on mode, only when its merged view came from accountHealth (newer verdict) and `rejects` it.
+   * Shadow and every fallback (missing / older / disagreeing doc, read error) keep every row. Never throws.
+   */
+  private async recheckCandidatesByHealth<T extends { mobile: string }>(
+    reader: string,
+    mode: AccountFacetReadMode,
+    candidates: T[],
+    rejects: (view: AccountHealthView, now: number) => boolean,
+  ): Promise<Array<{ candidate: T; view: AccountHealthView }>> {
+    const views = await resolveAccountHealthViews(
+      accountFacetReadCollectionOf(this.clientModel, ACCOUNT_HEALTH_READ_COLLECTION), reader,
+      candidates.map((candidate) => ({ mobile: candidate.mobile, doc: candidate as unknown as Record<string, unknown> })), { mode, logger: this.logger },
+    );
+    const now = Date.now();
+    const kept = candidates
+      .map((candidate, i) => ({ candidate, view: views[i] ?? healthViewFromPool(candidate as unknown as Record<string, unknown>) }))
+      .filter(({ view }) => !(mode === 'on' && view.source === 'accountHealth' && rejects(view, now)));
+    if (kept.length < candidates.length) {
+      this.logger.info(`[account-facet-read] ${reader}: accountHealth dropped ${candidates.length - kept.length} of ${candidates.length} candidates`);
+    }
+    return kept;
+  }
+
+  /** A harsh verdict still inside its 30-day rest, anchored on the LAST verdict as buildSpamEligibleFilter is today. */
+  private static harshResting(view: AccountHealthView, now: number): boolean {
+    return view.spamStatus === 'harsh' && view.verdictAtMs !== null && now - view.verdictAtMs < HARSH_RECHECK_AFTER_MS;
+  }
+
+  /**
+   * Reader R3: tier-1 / tier-2 candidates (buildSpamEligibleFilter rows). on drops a newer accountHealth verdict that
+   * buildSpamEligibleFilter would exclude: harsh inside the rest (anchor = last verdict, as the filter, so supply R4
+   * and selection agree), or a limit not lifted yet.
+   */
+  private async recheckSpamEligible<T extends { mobile: string }>(mode: AccountFacetReadMode, candidates: T[]): Promise<T[]> {
+    const kept = await this.recheckCandidatesByHealth('R3', mode, candidates, (view, now) =>
+      ClientService.harshResting(view, now) || (view.limitedUntilMs !== null && view.limitedUntilMs > now));
+    return kept.map((k) => k.candidate);
+  }
+
+  /**
+   * Reader R5: degraded tier rows. Tier 3 (limited; its probe acceptance rejects harsh): on drops a newer harsh
+   * verdict inside the rest and orders the scanned rows by the merged limitedUntil (stable, so the query's
+   * channels / createdAt order breaks ties). Tier 4 accepts any verdict, so nothing is dropped: compare-only (shadow).
+   */
+  private async recheckDegradedTier<T extends { mobile: string }>(tier: DegradedTier, mode: AccountFacetReadMode, candidates: T[]): Promise<T[]> {
+    if (tier !== 3) {
+      await this.recheckCandidatesByHealth('R5', 'shadow', candidates, () => false);
+      return candidates;
+    }
+    const kept = await this.recheckCandidatesByHealth('R5', mode, candidates, (view, now) => ClientService.harshResting(view, now));
+    if (mode !== 'on' || !kept.some((k) => k.view.source === 'accountHealth')) return kept.map((k) => k.candidate);
+    const until = (view: AccountHealthView): number => view.limitedUntilMs ?? Number.POSITIVE_INFINITY;
+    return kept
+      .map((k, i) => ({ ...k, i }))
+      .sort((a, b) => until(a.view) - until(b.view) || a.i - b.i)
+      .map((k) => k.candidate);
+  }
+
+  /**
    * Degraded tiers 2-4, in the given order, sharing one probe budget. Returns the first candidate
    * that passes the users check (not expired, 2FA on), the distinct-backup-session check and the
    * tier's SpamBot acceptance (frozen / unreachable accounts are always rejected).
@@ -2127,7 +2214,12 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       const { query, sort } = tier === 3
         ? buildTier3Query(existingClient.clientId, busyMobiles)
         : buildTier4Query(existingClient.clientId, busyMobiles);
-      const candidates = await this.bufferClientService.executeQuery(query, sort, 10);
+      const scanned = await this.bufferClientService.executeQuery(query, sort, 10);
+      // Reader R5 of the account split (S2): the tier query keeps today's filter + sort; behind ACCOUNT_HEALTH_READ
+      // tier 3 gets a drop-only accountHealth re-check + re-order of the scanned rows; tier 4 accepts any verdict, so it
+      // is compare-only (shadow). off = the rows as scanned, no extra read.
+      const r5Mode = accountFacetReadMode('health', 'R5');
+      const candidates = r5Mode === 'off' ? scanned : await this.recheckDegradedTier(tier, r5Mode, scanned);
       const healthy = await this.filterServingUsers(candidates);
       this.logger.info(`[${existingClient.clientId}] Degraded tier ${tier} scan`, {
         candidateCount: candidates.length,
@@ -2159,13 +2251,16 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       client.clientId !== existingClient.clientId && (client.dbcoll || '').trim().toLowerCase() === persona);
     const ranked: Array<{ siblingId: string; spares: Awaited<ReturnType<BufferClientService['executeQuery']>> }> = [];
     for (const sibling of siblings) {
-      const rows = await this.bufferClientService.executeQuery(
+      const scanned = await this.bufferClientService.executeQuery(
         {
           ...this.buildEligibleBufferQuery(sibling.clientId, { $nin: [...busyMobiles, sibling.mobile] }),
           availableDate: { $lte: today },
         },
         { availableDate: 1, createdAt: 1 },
       );
+      // Reader R3 (see handleSetupClient): drop-only re-check before the spares are counted.
+      const r3Mode = accountFacetReadMode('health', 'R3');
+      const rows = r3Mode === 'off' ? scanned : await this.recheckSpamEligible(r3Mode, scanned);
       const spares = await this.filterServingUsers(rows, { requireDistinctBackup: true });
       if (spares.length >= SIBLING_MIN_SPARES_AFTER + 1) ranked.push({ siblingId: sibling.clientId, spares });
     }
@@ -2319,6 +2414,11 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     limited: boolean;
     buffer: Awaited<ReturnType<BufferClientService['findOne']>> | null;
     userExpired: boolean;
+    /** Reader R8 (limited) of the account split: the buffer doc's health fields, or accountHealth behind
+     * ACCOUNT_HEALTH_READ (+ _READERS). */
+    health: AccountHealthView;
+    /** Reader R9 (currentMeetsTier1): same, under its own reader id (one accountHealth read serves both). */
+    tier1Health: AccountHealthView;
   }> {
     // Rescue evidence comes from the live session only (tg-aut's dead report), never from users /
     // pool rows: CMS expires those when the BACKUP session (users[0].session) fails.
@@ -2331,19 +2431,27 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
       users = (await this.usersService.findByMobileAnyStatus(client.mobile)) ?? [];
     } catch (error) {
       this.logger.warn(`[${client.clientId}] Could not read main state: ${parseError(error, '', false).message}`);
-      return { dead, evidence, limited: false, buffer: null, userExpired: false };
+      return { dead, evidence, limited: false, buffer: null, userExpired: false, health: healthViewFromPool(null), tier1Health: healthViewFromPool(null) };
     }
     // Used by currentMeetsTier1 only (a degraded account with expired users docs is not "tier 1").
     const userExpired = users.length > 0 && users.every((u) => u.expired === true);
+    // off for both R8 and R9 = no call, no extra await (mode read synchronously, as every other reader).
+    const anyHealthRead = accountFacetReadMode('health', 'R8') !== 'off' || accountFacetReadMode('health', 'R9') !== 'off';
+    const views = buffer && anyHealthRead
+      ? await resolveAccountHealthViewsByReader(accountFacetReadCollectionOf(this.clientModel, ACCOUNT_HEALTH_READ_COLLECTION), ['R8', 'R9'], [{ mobile: client.mobile, doc: buffer }], { logger: this.logger })
+      : null;
+    const health = views ? views.R8[0] : healthViewFromPool(buffer);
+    const tier1Health = views ? views.R9[0] : healthViewFromPool(buffer);
     const now = Date.now();
-    const limitedUntilMs = buffer?.limitedUntil ? new Date(buffer.limitedUntil).getTime() : 0;
-    const checkedAtMs = buffer?.spamCheckedAt ? new Date(buffer.spamCheckedAt).getTime() : 0;
+    const limitedUntilMs = health.limitedUntilMs ?? 0;
+    // Freshness by the last verdict (accountHealth.verdictAt when switched; today bufferClients.spamCheckedAt).
+    const checkedAtMs = health.verdictAtMs ?? 0;
     // A stale verdict says nothing about today: refill trusts it only when fresh.
     const fresh = checkedAtMs > 0 && now - checkedAtMs <= MAIN_SPAM_STATUS_FRESH_MS;
     const limited = !dead && !!buffer && fresh && (
-      buffer.spamStatus === 'harsh' || (buffer.spamStatus === 'limited' && limitedUntilMs > now)
+      health.spamStatus === 'harsh' || (health.spamStatus === 'limited' && limitedUntilMs > now)
     );
-    return { dead, evidence, limited, buffer, userExpired };
+    return { dead, evidence, limited, buffer, userExpired, health, tier1Health };
   }
 
   /**
@@ -2562,14 +2670,17 @@ export class ClientService implements OnModuleDestroy, OnModuleInit {
     if (!buffer || state.dead || state.userExpired) return false;
     const now = Date.now();
     const markerUntil = client.degraded?.limitedUntil ? new Date(client.degraded.limitedUntil).getTime() : 0;
-    const docUntil = buffer.limitedUntil ? new Date(buffer.limitedUntil).getTime() : 0;
+    // Pool source keeps today's expression exactly (an unparsable limitedUntil gives NaN, which fails `<= now`).
+    const docUntil = state.tier1Health.source === 'accountHealth'
+      ? (state.tier1Health.limitedUntilMs ?? 0)
+      : (buffer.limitedUntil ? new Date(buffer.limitedUntil).getTime() : 0);
     const createdAt = (buffer as { createdAt?: Date | string }).createdAt;
     return buffer.clientId === client.clientId
       && buffer.status === 'active'
       && buffer.warmupPhase === WarmupPhase.SESSION_ROTATED
       && (buffer.channels ?? 0) >= MIN_CHANNELS_FOR_MATURING
       && (!createdAt || new Date(createdAt).getTime() <= now - BUFFER_PROFILE.consumerMinAgeDays * 24 * 60 * 60 * 1000)
-      && buffer.spamStatus !== 'harsh'
+      && state.tier1Health.spamStatus !== 'harsh'
       && docUntil <= now
       && markerUntil <= now;
   }

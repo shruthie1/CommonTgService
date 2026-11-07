@@ -65,6 +65,10 @@ import { setAsPoolClient, type SetAsPort } from '../shared/onboarding/set-as';
 import { buildEnrolmentExclusions, enrolmentEligibilityFilter, runEnrolmentBatch } from '../shared/onboarding/candidate-source';
 import type { AvailabilityNeeds } from '../shared/base-client.service';
 import {
+    ACCOUNT_HEALTH_READ_COLLECTION, accountFacetReadCollectionOf, accountFacetReadMode, poolHealthFields, resolveAccountHealthViews,
+    type AccountHealthPoolFields, type AccountHealthView,
+} from '../shared/account-facet-read';
+import {
     allocateByNeed,
     BufferSupplyConfig,
     BufferSupplyConfigResult,
@@ -242,6 +246,15 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 },
             )
             .exec() as unknown as Array<CapClassifiableDoc & { mobile?: string; clientId?: string }>;
+        // Reader R2 of the account split (S2; R1 is the projection above): classifyBufferForCap reads the spam fields
+        // of these docs, or behind ACCOUNT_HEALTH_READ a newer accountHealth verdict (stale_free by its verdictAt).
+        // Legacy counting reads no spam field, so it never reads accountHealth. off = no read, no extra await.
+        const healthMode = config.mode === 'legacy' ? 'off' : accountFacetReadMode('health', 'R2');
+        const healthViews = healthMode === 'off' ? null : await resolveAccountHealthViews(
+            accountFacetReadCollectionOf(this.bufferClientModel, ACCOUNT_HEALTH_READ_COLLECTION), 'R2',
+            assigned.map((doc) => ({ mobile: doc.mobile, doc: doc as AccountHealthPoolFields })), { mode: healthMode, logger: this.logger },
+        );
+        const healthByDoc = healthViews ? new Map<unknown, AccountHealthView>(assigned.map((doc, i) => [doc, healthViews[i]])) : null;
 
         const countedPerClient = new Map<string, number>();
         const capPerClient = new Map<string, number>();
@@ -264,7 +277,14 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
                 }
                 continue;
             }
-            const verdict = classifyBufferForCap(doc, now, classifyOptions);
+            const health = healthByDoc?.get(doc);
+            const verdict = classifyBufferForCap(
+                health?.source === 'accountHealth'
+                    ? { warmupPhase: doc.warmupPhase, channels: doc.channels, failedUpdateAttempts: doc.failedUpdateAttempts, inUse: doc.inUse, ...poolHealthFields(health) }
+                    : doc,
+                now,
+                classifyOptions,
+            );
             if ('kind' in verdict) {
                 bucket.counted[verdict.kind] += 1;
                 countedPerClient.set(doc.clientId, (countedPerClient.get(doc.clientId) || 0) + 1);
@@ -1463,9 +1483,12 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
      * a harsh account checked within HARSH_RECHECK_AFTER_MS is not supply; a limited one counts only
      * from the day its limit lifts.
      */
-    protected adjustSupplyDateForPoolState(doc: unknown, date: string | null, now: number): string | null {
+    protected adjustSupplyDateForPoolState(doc: unknown, date: string | null, now: number, health?: AccountHealthView): string | null {
         if (!date) return date;
-        const spam = doc as { spamStatus?: string; limitedUntil?: Date | string | null; spamCheckedAt?: Date | string | null };
+        // Reader R4 of the account split (S2): a newer accountHealth verdict (on mode) replaces the doc's spam fields;
+        // the harsh rest stays anchored on the LAST verdict (as buildSpamEligibleFilter / R3 select), not on the
+        // status-change time, so supply and selection agree.
+        const spam = (health?.source === 'accountHealth' ? poolHealthFields(health) : doc) as { spamStatus?: string | null; limitedUntil?: Date | string | null; spamCheckedAt?: Date | string | null };
         if (spam.spamStatus === 'harsh') {
             const checkedAt = spam.spamCheckedAt ? new Date(spam.spamCheckedAt).getTime() : NaN;
             if (Number.isFinite(checkedAt) && now - checkedAt < HARSH_RECHECK_AFTER_MS) return null;
@@ -1476,6 +1499,16 @@ export class BufferClientService extends BaseClientService<BufferClientDocument>
             return liftDate > date ? liftDate : date;
         }
         return date;
+    }
+
+    /** Reader R4: accountHealth views for the supply docs, or null while R4 is off (no read, no extra await). */
+    protected supplyHealthViews(docs: unknown[]): Promise<AccountHealthView[]> | null {
+        const mode = accountFacetReadMode('health', 'R4');
+        if (mode === 'off') return null;
+        return resolveAccountHealthViews(
+            accountFacetReadCollectionOf(this.bufferClientModel, ACCOUNT_HEALTH_READ_COLLECTION), 'R4',
+            docs.map((doc) => ({ mobile: (doc as { mobile?: unknown } | null)?.mobile, doc: doc as AccountHealthPoolFields })), { mode, logger: this.logger },
+        );
     }
 
     async getLeastRecentlyUsedBufferClients(clientId: string, limit: number = 1): Promise<BufferClient[]> {
