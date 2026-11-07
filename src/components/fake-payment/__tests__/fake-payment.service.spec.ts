@@ -156,9 +156,9 @@ describe('FakePaymentService', () => {
 
     it('validates input before writing anything', async () => {
         await expect(service.mark('abc', { by: 'a', reason: 'r' })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.mark('1118622422', { by: '', reason: 'r' })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.mark('1118622422', { by: 'a', reason: '  ' })).rejects.toBeInstanceOf(BadRequestException);
-        await expect(service.unmark('1118622422', {})).rejects.toBeInstanceOf(BadRequestException);
+        // by falls back to 'tg-chats' (redesign 2026-11-07); the reason is still required to mark.
+        await expect(service.mark('1118622422', { by: '', reason: '  ' })).rejects.toBeInstanceOf(BadRequestException);
+        await expect(service.unmark('abc', {})).rejects.toBeInstanceOf(BadRequestException);
         expect(pg.calls).toHaveLength(0);
         expect((await raw('1118622422', 'ramya')).fakePaymentAt).toBeUndefined();
     });

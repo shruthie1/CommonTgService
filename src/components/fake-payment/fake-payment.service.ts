@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schema';
@@ -6,6 +6,8 @@ import { AnalyticsPgError, AnalyticsPgReader } from '../daily-analytics/analytic
 import { ChannelCategory } from '../bots/channel-category.enum';
 import { getBotsServiceInstance } from '../../utils';
 import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
+import { parseProofId } from '../payment-proofs/payment-proofs.classify';
+import { FakePaymentHistoryEntry } from '../payment-proofs/payment-proofs.views';
 
 /**
  * Operator fake-payment mark (owner decision 2026-11-02; tg-platform docs/design/2026-11-02-fake-payment-flag.md).
@@ -23,6 +25,12 @@ import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
  *
  * userData.cheatCount (the complaint score) is never read or written here.
  *
+ * Audit (redesign 2026-11-07): the mark also stores fakePaymentProofIds (the proofs the operator judged) and every
+ * mark / unmark / unmute appends to fakePaymentHistory, which the unmark keeps. These two fields are not in the
+ * UserData schema (owned elsewhere), so the bulkWrite runs with strict:false; nothing else reads them.
+ * "Not fake" (notFake) undoes an operator mark (unmark) or a payment-check fraud block / unknown mute (canReply 1,
+ * limitTime 0 on the muted rows, open fraud asks closed in paymentProofs).
+ *
  * Order: Mongo first (it stops tg-aut at once), then Postgres. Both halves are idempotent, so a failure in the second
  * is reported (HTTP 502 with what was done) and the operator simply repeats the same action.
  *
@@ -33,6 +41,9 @@ import { PaymentProofsService } from '../payment-proofs/payment-proofs.service';
 export const CHAT_ID_RE = /^-?\d{3,20}$/;
 const MAX_REASON = 300;
 const MAX_BY = 60;
+/** Who acted when the caller sends no name (tg-chats has no operator login; app-wide key). */
+export const DEFAULT_BY = 'tg-chats';
+const MAX_PROOF_IDS = 50;
 
 export interface FakePaymentPgMark {
     /** payment rows flagged by THIS call (0 on a repeat). */
@@ -49,9 +60,13 @@ export interface FakePaymentPgUnmark {
     payer_days: number;
 }
 
-type Row = Pick<UserData, 'chatId' | 'profile' | 'clientId' | 'payAmount' | 'highestPayAmount' | 'canReply' | 'cheatCount' | 'fakePaymentAt' | 'fakePaymentBy' | 'fakePaymentReason' | 'fakePaymentPrev'> & { _id: unknown };
+type Row = Pick<UserData, 'chatId' | 'profile' | 'clientId' | 'payAmount' | 'highestPayAmount' | 'canReply' | 'cheatCount' | 'fakePaymentAt' | 'fakePaymentBy' | 'fakePaymentReason' | 'fakePaymentPrev'>
+    & { _id: unknown; fakePaymentProofIds?: string[]; fakePaymentHistory?: FakePaymentHistoryEntry[] };
 
-const ROW_PROJECTION = { chatId: 1, profile: 1, clientId: 1, payAmount: 1, highestPayAmount: 1, canReply: 1, cheatCount: 1, fakePaymentAt: 1, fakePaymentBy: 1, fakePaymentReason: 1, fakePaymentPrev: 1 };
+const ROW_PROJECTION = {
+    chatId: 1, profile: 1, clientId: 1, payAmount: 1, highestPayAmount: 1, canReply: 1, cheatCount: 1, fakePaymentAt: 1,
+    fakePaymentBy: 1, fakePaymentReason: 1, fakePaymentPrev: 1, fakePaymentProofIds: 1, fakePaymentHistory: 1,
+};
 
 function clean(value: unknown, max: number): string {
     return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -77,7 +92,7 @@ export class FakePaymentService {
     private async writeRows(chatId: string, ops: unknown[]): Promise<void> {
         if (!ops.length) return;
         try {
-            await this.userDataModel.bulkWrite(ops as any, { ordered: true });
+            await this.userDataModel.bulkWrite(ops as any, { ordered: true, strict: false } as any);
         } finally {
             await this.paymentProofs?.chatChanged(chatId);
         }
@@ -145,13 +160,22 @@ export class FakePaymentService {
         };
     }
 
+    /** Optional proof ids the operator judged: must be proof ids of this chat. */
+    private proofIdsOrThrow(chatId: string, raw: unknown): string[] {
+        if (raw === undefined || raw === null) return [];
+        if (!Array.isArray(raw) || raw.length > MAX_PROOF_IDS || raw.some((p) => parseProofId(p)?.chatId !== chatId)) {
+            throw new BadRequestException(`proofIds must be at most ${MAX_PROOF_IDS} proof ids of this chat`);
+        }
+        return [...new Set(raw.map((p) => String(p).trim()))];
+    }
+
     /** Mark every row of the chat fake (Mongo), then Postgres. Idempotent. */
-    async mark(rawChatId: string, body: { by?: unknown; reason?: unknown } = {}) {
+    async mark(rawChatId: string, body: { by?: unknown; reason?: unknown; proofIds?: unknown } = {}) {
         const chatId = this.chatIdOrThrow(rawChatId);
-        const by = clean(body.by, MAX_BY);
+        const by = clean(body.by, MAX_BY) || DEFAULT_BY;
         const reason = clean(body.reason, MAX_REASON);
-        if (!by) throw new BadRequestException('by (operator name) is required');
         if (!reason) throw new BadRequestException('reason is required');
+        const proofIds = this.proofIdsOrThrow(chatId, body.proofIds);
 
         const rows = await this.rows(chatId);
         const now = new Date();
@@ -165,9 +189,11 @@ export class FakePaymentService {
                             fakePaymentBy: by,
                             fakePaymentReason: reason,
                             fakePaymentPrev: { payAmount: r.payAmount ?? 0, canReply: r.canReply ?? 1 },
+                            ...(proofIds.length ? { fakePaymentProofIds: proofIds } : {}),
                             payAmount: 0,
                             canReply: 0,
                         },
+                        $push: { fakePaymentHistory: { action: 'mark', by, reason, at: now, proofIds } },
                     },
                 },
             }
@@ -209,12 +235,18 @@ export class FakePaymentService {
     /** Remove the mark: restore each row's untouched payAmount / canReply from fakePaymentPrev, then Postgres. Idempotent. */
     async unmark(rawChatId: string, body: { by?: unknown; reason?: unknown } = {}) {
         const chatId = this.chatIdOrThrow(rawChatId);
-        const by = clean(body.by, MAX_BY);
+        const by = clean(body.by, MAX_BY) || DEFAULT_BY;
         const reason = clean(body.reason, MAX_REASON);
-        if (!by) throw new BadRequestException('by (operator name) is required');
+        const now = new Date();
 
         const rows = (await this.rows(chatId)).filter((r) => r.fakePaymentAt != null);
         const ops = rows.map((r) => {
+            // The history keeps the mark: one made before the history existed gets its entry rebuilt from the fields.
+            const history: FakePaymentHistoryEntry[] = [];
+            if (!(r.fakePaymentHistory ?? []).some((h) => h.action === 'mark')) {
+                history.push({ action: 'mark', by: r.fakePaymentBy ?? '', reason: r.fakePaymentReason ?? '', at: r.fakePaymentAt as Date, proofIds: r.fakePaymentProofIds ?? [] });
+            }
+            history.push({ action: 'unmark', by, reason, at: now, proofIds: r.fakePaymentProofIds ?? [] });
             // Restore a pre-mark value only where the row still holds what the mark wrote (canReply 0 / payAmount 0):
             // a hand unblock or a credit made while marked is kept, never overwritten by the stale pre-mark value.
             // payAmount never comes back above the row's current highestPayAmount. (A block written as canReply 0
@@ -231,7 +263,8 @@ export class FakePaymentService {
                     filter: { _id: r._id },
                     update: {
                         ...(Object.keys(restore).length ? { $set: restore } : {}),
-                        $unset: { fakePaymentAt: '', fakePaymentBy: '', fakePaymentReason: '', fakePaymentPrev: '' },
+                        $unset: { fakePaymentAt: '', fakePaymentBy: '', fakePaymentReason: '', fakePaymentPrev: '', fakePaymentProofIds: '' },
+                        $push: { fakePaymentHistory: { $each: history } },
                     },
                 },
             };
@@ -263,6 +296,48 @@ export class FakePaymentService {
             { label: 'Payer-days given back', value: String(postgres.payerDays) },
         ]);
         return { chatId, marked: false, mongo, postgres };
+    }
+
+    /**
+     * "Not fake" from the payments review. An operator mark: the unmark (restore + Postgres, history kept). Otherwise
+     * a payment-check fraud block or a mute with no record: canReply 1 and limitTime 0 on the chat's muted rows, every
+     * open fraud ask of the chat closed, an 'unmute' history entry on every row. cheatCount is never written.
+     * Idempotent: nothing muted and nothing open = no write (source 'none').
+     */
+    async notFake(rawChatId: string, body: { by?: unknown; reason?: unknown } = {}) {
+        const chatId = this.chatIdOrThrow(rawChatId);
+        const by = clean(body.by, MAX_BY) || DEFAULT_BY;
+        const reason = clean(body.reason, MAX_REASON);
+        const rows = await this.rows(chatId);
+        if (rows.some((r) => r.fakePaymentAt != null)) {
+            const res = await this.unmark(chatId, { by, reason });
+            return { ...res, source: 'operator_mark' as const, changed: true, rowsUnmuted: res.mongo.rowsUnmarked, asksClosed: [] as string[] };
+        }
+        if (!this.paymentProofs) throw new ServiceUnavailableException('payment proofs service unavailable');
+        const now = new Date();
+        const closed = await this.paymentProofs.closeFraudAsks(chatId, by, now);
+        const muted = rows.filter((r) => r.canReply === 0);
+        if (!muted.length && !closed.proofIds.length) {
+            return { chatId, source: 'none' as const, changed: false, rowsUnmuted: 0, asksClosed: [] as string[] };
+        }
+        const source = closed.blocked > 0 ? 'fraud_block' as const : 'unknown' as const;
+        const entry: FakePaymentHistoryEntry = { action: 'unmute', by, reason, at: now, proofIds: closed.proofIds, source };
+        await this.writeRows(chatId, rows.map((r) => ({
+            updateOne: {
+                filter: { _id: r._id },
+                update: {
+                    ...(r.canReply === 0 ? { $set: { canReply: 1, limitTime: 0 } } : {}),
+                    $push: { fakePaymentHistory: entry },
+                },
+            },
+        })));
+        this.logger.warn(`fake-payment not-fake ${chatId} by ${by}: ${source}, rows unmuted ${muted.length}, asks closed ${closed.proofIds.length}`);
+        this.notify('info', 'Mute lifted (not fake)', chatId, by, reason, [
+            { label: 'Source', value: source === 'fraud_block' ? 'payment check fraud block' : 'unknown' },
+            { label: 'Persona rows unmuted', value: `${muted.length} of ${rows.length}` },
+            { label: 'Fraud asks closed', value: String(closed.proofIds.length) },
+        ]);
+        return { chatId, source, changed: true, rowsUnmuted: muted.length, asksClosed: closed.proofIds };
     }
 
     /** Audit trail in the ops channel. Fire-and-forget: the write already happened, a failed notice must not undo it. */

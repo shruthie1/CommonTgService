@@ -1,7 +1,8 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PROOF_STATES } from './payment-proofs.classify';
-import { ListQuery, MAX_LIMIT, PROOF_SORTS, PaymentProofsService } from './payment-proofs.service';
+import { ListQuery, MAX_LIMIT, PROOF_SORTS, PaymentProofsService, ViewQuery } from './payment-proofs.service';
+import { REVIEW_VIEWS } from './payment-proofs.views';
 
 /**
  * Payments review (owner-approved scope 2026-11-03). Used by the tg-chats Review screen with the CMS x-api-key;
@@ -37,8 +38,25 @@ export class PaymentProofsController {
     @ApiQuery({ name: 'limit', required: false, description: `default 50, max ${MAX_LIMIT}` })
     @ApiQuery({ name: 'cursor', required: false, description: 'nextCursor from the previous page (same sort)' })
     @ApiQuery({ name: 'sort', required: false, enum: PROOF_SORTS, description: 'default risk for state=review, else time' })
-    list(@Query() query: ListQuery) {
+    @ApiQuery({
+        name: 'view', required: false, enum: REVIEW_VIEWS,
+        description: 'Redesign 2026-11-07 (additive; without view the response above is unchanged). check = one entry per chat ' +
+            'needing a look (real fake signal or high value); muted = one entry per chat with fakePaymentAt or canReply 0 ' +
+            '(source, when, why, evidence); refused = uncredited proofs that look genuine. Response { view, entries, counts, ' +
+            'truncated }; only client applies.',
+    })
+    list(@Query() query: ListQuery & ViewQuery) {
+        if (query?.view !== undefined && query.view !== '') return this.service.views(query);
         return this.service.list(query ?? {});
+    }
+
+    @Post('chat/:chatId/review')
+    @HttpCode(200)
+    @ApiOperation({ summary: "Looks fine on a whole chat: review 'ok' on its credited, unreviewed proofs (only proofIds when given). Idempotent" })
+    @ApiParam({ name: 'chatId' })
+    @ApiBody({ schema: { type: 'object', required: ['by'], properties: { by: { type: 'string' }, proofIds: { type: 'array', items: { type: 'string' } } } } })
+    reviewChat(@Param('chatId') chatId: string, @Body() body: { by?: string; proofIds?: unknown }) {
+        return this.service.reviewChat(chatId, body ?? {});
     }
 
     @Post(':proofId/review')

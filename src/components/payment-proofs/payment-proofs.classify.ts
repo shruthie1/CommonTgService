@@ -53,6 +53,10 @@ export interface ClassifiedProof {
     /** Review facts (buildReviewModel); defaults when the model did not run. */
     risk: number;
     riskReasons: string[];
+    /** Risk points and labels from the non-strong signals only (amount, burst, personas, receipt age): the views'
+     * daily top-N ranks on these so a dropped strong rule (e.g. payer name) does not keep a proof out of the ranking. */
+    baseRisk: number;
+    baseReasons: string[];
     /** Credited ₹ (0 when not credited): the revenue a Mark fake would remove. */
     atRiskAmount: number;
     /** Strong fake signal: enters the queue whatever the amount or threshold. */
@@ -121,6 +125,8 @@ export function classify(row: PaymentProofRow): ClassifiedProof {
         credited,
         risk: 0,
         riskReasons: [],
+        baseRisk: 0,
+        baseReasons: [],
         atRiskAmount: credited ? amount ?? 0 : 0,
         strong: false,
         repeat: outcome === 'repeat',
@@ -340,7 +346,14 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
             const reasons: string[] = [];
             let risk = 0;
             let strong = false;
-            const add = (pts: number, label: string, isStrong = false) => { risk += pts; reasons.push(label); strong ||= isStrong; };
+            let baseRisk = 0;
+            const baseReasons: string[] = [];
+            const add = (pts: number, label: string, isStrong = false) => {
+                risk += pts;
+                reasons.push(label);
+                strong ||= isStrong;
+                if (!isStrong) { baseRisk += pts; baseReasons.push(label); }
+            };
             const fakeCodes = x.c.reasons.filter(isFakeReason);
             if (fakeCodes.length) add(RISK.fakeReason, `Fake sign: ${fakeCodes.join(', ')}`, true);
             if (x.c.fakeScore !== null && x.c.fakeScore >= REVIEW_FAKE_SCORE) add(RISK.fakeScore, `Fake score ${x.c.fakeScore}`, true);
@@ -389,6 +402,8 @@ export function buildReviewModel(items: ReviewItem[], isMarked: (chatId: string)
             x.c.risk = Math.min(100, risk);
             x.c.riskReasons = reasons;
             x.c.strong = strong;
+            x.c.baseRisk = Math.min(100, baseRisk);
+            x.c.baseReasons = baseReasons;
         }
     }
 

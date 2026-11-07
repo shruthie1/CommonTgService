@@ -23,8 +23,16 @@ export class FakePaymentController {
     @HttpCode(200)
     @ApiOperation({ summary: 'Mark ALL payments of the chat fake: no revenue, blocked, owed nothing (idempotent)' })
     @ApiParam({ name: 'chatId' })
-    @ApiBody({ schema: { type: 'object', required: ['by', 'reason'], properties: { by: { type: 'string' }, reason: { type: 'string' } } } })
-    mark(@Param('chatId') chatId: string, @Body() body: { by?: string; reason?: string }) {
+    @ApiBody({
+        schema: {
+            type: 'object', required: ['reason'],
+            properties: {
+                by: { type: 'string', description: "operator; default 'tg-chats'" }, reason: { type: 'string' },
+                proofIds: { type: 'array', items: { type: 'string' }, description: 'the proofs judged fake (proof ids of this chat)' },
+            },
+        },
+    })
+    mark(@Param('chatId') chatId: string, @Body() body: { by?: string; reason?: string; proofIds?: unknown }) {
         return this.service.mark(chatId, body ?? {});
     }
 
@@ -32,8 +40,20 @@ export class FakePaymentController {
     @HttpCode(200)
     @ApiOperation({ summary: 'Remove the fake-payment mark: restore payAmount / canReply and revenue (idempotent)' })
     @ApiParam({ name: 'chatId' })
-    @ApiBody({ schema: { type: 'object', required: ['by'], properties: { by: { type: 'string' }, reason: { type: 'string' } } } })
+    @ApiBody({ schema: { type: 'object', properties: { by: { type: 'string', description: "default 'tg-chats'" }, reason: { type: 'string' } } } })
     unmark(@Param('chatId') chatId: string, @Body() body: { by?: string; reason?: string }) {
         return this.service.unmark(chatId, body ?? {});
+    }
+
+    @Post(':chatId/not-fake')
+    @HttpCode(200)
+    @ApiOperation({
+        summary: 'Not fake: undo an operator mark (unmark, history kept) or a payment-check fraud block / unknown mute ' +
+            '(canReply 1, limitTime 0, open fraud asks closed). Never writes cheatCount. Idempotent',
+    })
+    @ApiParam({ name: 'chatId' })
+    @ApiBody({ schema: { type: 'object', properties: { by: { type: 'string', description: "default 'tg-chats'" }, reason: { type: 'string' } } } })
+    notFake(@Param('chatId') chatId: string, @Body() body: { by?: string; reason?: string }) {
+        return this.service.notFake(chatId, body ?? {});
     }
 }

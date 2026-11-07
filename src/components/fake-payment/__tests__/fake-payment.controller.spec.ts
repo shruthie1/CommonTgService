@@ -16,6 +16,7 @@ describe('FakePaymentController: mark / unmark need no write key', () => {
         mark: async (chatId: string) => { calls.push(`mark:${chatId}`); return { chatId, marked: true }; },
         unmark: async (chatId: string) => { calls.push(`unmark:${chatId}`); return { chatId, marked: false }; },
         status: async (chatId: string) => ({ chatId, marked: false }),
+        notFake: async (chatId: string, body: any) => { calls.push(`notFake:${chatId}:${body.by ?? ''}`); return { chatId, changed: true }; },
     };
     const saved = process.env.OPS_WRITE_KEY;
 
@@ -51,5 +52,11 @@ describe('FakePaymentController: mark / unmark need no write key', () => {
     it('status (read-only GET) works', async () => {
         const res = await request(app.getHttpServer()).get('/fake-payment/1118622422');
         expect(res.status).toBe(200);
+    });
+
+    it('POST /fake-payment/:chatId/not-fake passes the body through', async () => {
+        const res = await request(app.getHttpServer()).post('/fake-payment/1118622422/not-fake').send({ by: 'ops', reason: 'real' });
+        expect(res.status).toBe(200);
+        expect(calls).toEqual(['notFake:1118622422:ops']);
     });
 });

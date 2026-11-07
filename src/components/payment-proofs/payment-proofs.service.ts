@@ -5,8 +5,9 @@ import { UserData, UserDataDocument } from '../user-data/schemas/user-data.schem
 import { PAYMENT_PROOF_MODEL, PaymentProofRow, ProofReview } from './schemas/payment-proof.schema';
 import {
     ClassifiedProof, PROOF_STATES, ProofCounts, ProofState, ReviewModel, addToCounts, buildReviewModel, classify,
-    decodeCursor, emptyCounts, encodeCursor, inState, isAfterCursor, parseProofId, priorityOf, reviewOptionsFromEnv,
+    decodeCursor, emptyCounts, encodeCursor, inState, isAfterCursor, parseProofId, priorityOf, proofIdOf, reviewOptionsFromEnv,
 } from './payment-proofs.classify';
+import { ChatUser, REVIEW_VIEWS, ReviewView, ReviewViews, buildViews } from './payment-proofs.views';
 
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 100;
@@ -51,6 +52,13 @@ const CLASSIFY_PROJECTION = {
     // review model signals (re-sends, image reuse, payer, receipt age)
     imageSha256: 1, 'image.sha256': 1, utr: 1, payeeUpiId: 1, payeeName: 1, 'time.state': 1, 'time.epochMs': 1,
     'verdict.fakeSignals': 1, 'ocr.payerName': 1,
+    // views (redesign 2026-11-07): genuine check, fraud-block source, card thumbnails
+    'verdict.payee': 1, 'ask.state': 1, 'ask.openedAt': 1, 'ask.closedAt': 1, 'image.stored': 1, 'image.host': 1,
+} as const;
+/** userData fields the list join and the views read (index chatId_Profile). */
+const CHAT_USER_PROJECTION = {
+    _id: 0, chatId: 1, profile: 1, clientId: 1, username: 1, cheatCount: 1, canReply: 1, payAmount: 1, fakePaymentAt: 1,
+    fakePaymentBy: 1, fakePaymentReason: 1, fakePaymentPrev: 1, fakePaymentProofIds: 1, fakePaymentHistory: 1,
 } as const;
 export const PROOF_SORTS = ['risk', 'time'] as const;
 export type ProofSort = (typeof PROOF_SORTS)[number];
@@ -103,8 +111,16 @@ export interface ListResult {
     truncated: boolean;
 }
 
-type ChatInfo = { profile: string; username?: string; cheatCount?: number; fakePaymentAt?: Date };
-type ChatEntry = { rows: Map<string, ChatInfo>; marked: boolean; fakePaymentAt: Date | null };
+type ChatEntry = { rows: Map<string, ChatUser>; marked: boolean; fakePaymentAt: Date | null };
+
+export interface ViewQuery { view?: string; client?: string }
+export interface ViewResult {
+    view: ReviewView;
+    entries: ReviewViews[ReviewView];
+    /** Entries per view (same client filter), for the tab badges. */
+    counts: Record<ReviewView, number>;
+    truncated: boolean;
+}
 
 /** One whole-window read and what is derived from it (independent of the request's filters, sort and page). */
 interface WindowData {
@@ -114,6 +130,7 @@ interface WindowData {
     chats: Map<string, ChatEntry>;
     everything: { row: PaymentProofRow; c: ClassifiedProof }[];
     reviewModel: ReviewModel;
+    views: ReviewViews;
 }
 
 /**
@@ -292,15 +309,20 @@ export class PaymentProofsService {
             .exec();
         const truncated = rows.length > MAX_WINDOW_ROWS;
         if (truncated) rows.length = MAX_WINDOW_ROWS;
-        const chats = await this.chatInfo([...new Set(rows.map((row) => String(row.chatId)))]);
+        // Every marked chat is in the "Fake & muted" view, also with no proof left in the window (23 chats on
+        // 2026-11-07; the distinct read took 95 ms).
+        const markedIds = (await this.userDataModel.distinct('chatId', { fakePaymentAt: { $ne: null } }).exec()).map(String);
+        const chats = await this.chatInfo([...new Set([...rows.map((row) => String(row.chatId)), ...markedIds])]);
         return this.derive({ loadedAt: now, rows, truncated, chats });
     }
 
     /** classify + review model from rows + chats (cheap; re-run after a patch since buildReviewModel sets c.repeat). */
     private derive(d: Pick<WindowData, 'loadedAt' | 'rows' | 'truncated' | 'chats'>): WindowData {
         const everything = d.rows.map((row) => ({ row, c: classify(row) }));
-        const reviewModel = buildReviewModel(everything, (chatId) => !!d.chats.get(chatId)?.marked, reviewOptionsFromEnv());
-        return { ...d, everything, reviewModel };
+        const options = reviewOptionsFromEnv();
+        const reviewModel = buildReviewModel(everything, (chatId) => !!d.chats.get(chatId)?.marked, options);
+        const users = new Map([...d.chats].map(([chatId, e]) => [chatId, [...e.rows.values()]]));
+        return { ...d, everything, reviewModel, views: buildViews(everything, users, options) };
     }
 
     /**
@@ -328,7 +350,8 @@ export class PaymentProofsService {
         await this.patchWindows(`fake-payment ${id}`, async () => {
             const fresh = (await this.chatInfo([id])).get(id);
             return (w) => {
-                if (!w.rows.some((r) => String(r.chatId) === id)) return null;
+                // Also a chat with no proof in the window: a marked chat is listed in the muted view regardless.
+                if (!fresh && !w.chats.has(id)) return null;
                 const chats = new Map(w.chats);
                 if (fresh) chats.set(id, fresh); else chats.delete(id);
                 return this.derive({ ...w, chats });
@@ -342,8 +365,8 @@ export class PaymentProofsService {
         for (let i = 0; i < chatIds.length; i += USERDATA_IN_CHUNK) {
             const chunk = chatIds.slice(i, i + USERDATA_IN_CHUNK);
             const docs = await this.userDataModel
-                .find({ chatId: { $in: chunk } }, { _id: 0, chatId: 1, profile: 1, username: 1, cheatCount: 1, fakePaymentAt: 1 })
-                .lean<(ChatInfo & { chatId: string })[]>()
+                .find({ chatId: { $in: chunk } }, CHAT_USER_PROJECTION)
+                .lean<ChatUser[]>()
                 .exec();
             for (const d of docs) {
                 const key = String(d.chatId);
@@ -352,7 +375,7 @@ export class PaymentProofsService {
                 e.rows.set(String(d.profile), d);
                 if (d.fakePaymentAt) {
                     e.marked = true;
-                    const at = new Date(d.fakePaymentAt);
+                    const at = new Date(d.fakePaymentAt as Date);
                     if (!e.fakePaymentAt || at < e.fakePaymentAt) e.fakePaymentAt = at;
                 }
             }
@@ -370,6 +393,95 @@ export class PaymentProofsService {
         for (const d of docs) if (typeof d.clientId === 'string' && typeof d.repl === 'string' && d.repl) map.set(d.clientId, d.repl);
         this.clientHosts = { at: now, map };
         return map;
+    }
+
+    /**
+     * GET /payment-proofs?view=check|muted|refused (redesign 2026-11-07): one view over the whole cached window
+     * (no paging: one entry per chat, measured in the tens). Cards get clientHost for the thumbnail.
+     */
+    async views(q: ViewQuery, now = Date.now()): Promise<ViewResult> {
+        const view = String(q.view ?? '') as ReviewView;
+        if (!REVIEW_VIEWS.includes(view)) throw new BadRequestException(`view must be one of ${REVIEW_VIEWS.join('|')}`);
+        let client: string | undefined;
+        if (q.client !== undefined && q.client !== '') {
+            if (!CLIENT_ID_RE.test(String(q.client))) throw new BadRequestException('client must be a clientId');
+            client = String(q.client);
+        }
+        const w = await this.window(now - DEFAULT_WINDOW_MS, now);
+        const keep = (e: { clients?: string[]; clientId?: string }) => !client || (e.clients ? e.clients.includes(client) : e.clientId === client);
+        const filtered = {
+            check: w.views.check.filter(keep),
+            muted: w.views.muted.filter(keep),
+            refused: w.views.refused.filter(keep),
+        };
+        const hosts = await this.clientHostMap(now);
+        const withHost = <T extends { clientId: string }>(c: T) => ({ ...c, clientHost: hosts.get(c.clientId) ?? null });
+        const entries = view === 'check'
+            ? filtered.check.map((e) => ({ ...e, history: e.history.map(withHost) }))
+            : view === 'muted'
+                ? filtered.muted.map((e) => ({ ...e, evidence: e.evidence.map(withHost) }))
+                : filtered.refused.map(withHost);
+        return {
+            view,
+            entries,
+            counts: { check: filtered.check.length, muted: filtered.muted.length, refused: filtered.refused.length },
+            truncated: w.truncated,
+        };
+    }
+
+    /**
+     * "Looks fine" on a whole chat: review 'ok' on its credited, not yet reviewed proofs (only `proofIds` when given:
+     * the ones the operator saw). Idempotent; returns the proof ids it marked.
+     */
+    async reviewChat(chatId: string, body: { by?: string; proofIds?: unknown }, now = new Date()): Promise<{ chatId: string; reviewed: string[] }> {
+        const id = String(chatId ?? '').trim();
+        if (!/^-?\d{1,20}$/.test(id)) throw new BadRequestException('chatId must be a chatId');
+        const by = typeof body?.by === 'string' ? body.by.trim().slice(0, MAX_BY) : '';
+        if (!by) throw new BadRequestException('by is required');
+        let only: Set<string> | null = null;
+        if (body?.proofIds !== undefined) {
+            if (!Array.isArray(body.proofIds) || body.proofIds.some((p) => parseProofId(p)?.chatId !== id)) {
+                throw new BadRequestException('proofIds must be proof ids of this chat');
+            }
+            only = new Set(body.proofIds as string[]);
+        }
+        const rows = await this.proofModel.find({ chatId: id }, CLASSIFY_PROJECTION).lean<PaymentProofRow[]>().exec();
+        const todo = rows.map((row) => ({ row, c: classify(row) }))
+            .filter(({ c }) => c.credited && !c.reviewed && (!only || only.has(c.proofId)));
+        if (todo.length) {
+            const review: ProofReview = { state: 'ok', by, at: now };
+            await this.proofModel.updateMany({ _id: { $in: todo.map((x) => x.row._id) } }, { $set: { review } }).exec();
+            await this.patchWindows(`review chat ${id}`, () => this.rereadChat(id));
+        }
+        return { chatId: id, reviewed: todo.map((x) => x.c.proofId) };
+    }
+
+    /**
+     * "Not fake" on a payment-check fraud block: closes every open fraud ask of the chat. tg-aut treats only
+     * ask.state 'open' as a live warning / block (proof-gate decide.ts, calls video-policy fraudBlockOn), so the ask
+     * is resolved the way a credit resolves it, plus closedAt / closedBy for the audit. Idempotent.
+     */
+    async closeFraudAsks(chatId: string, by: string, now = new Date()): Promise<{ proofIds: string[]; blocked: number }> {
+        const filter = { chatId, 'ask.kind': 'fraud', 'ask.state': 'open' };
+        const open = await this.proofModel.find(filter, CLASSIFY_PROJECTION).lean<PaymentProofRow[]>().exec();
+        if (!open.length) return { proofIds: [], blocked: 0 };
+        await this.proofModel.updateMany(
+            { _id: { $in: open.map((r) => r._id) }, 'ask.state': 'open' },
+            { $set: { 'ask.state': 'resolved', 'ask.resolvedAt': now, 'ask.closedAt': now, 'ask.closedBy': by } },
+        ).exec();
+        await this.patchWindows(`close fraud asks ${chatId}`, () => this.rereadChat(chatId));
+        return { proofIds: open.map((r) => proofIdOf(r)), blocked: open.filter((r) => !!r.ask?.blockedAt).length };
+    }
+
+    /** Patch for patchWindows: replace the chat's rows with a fresh read. */
+    private async rereadChat(chatId: string): Promise<(w: WindowData) => WindowData | null> {
+        const fresh = new Map((await this.proofModel.find({ chatId }, CLASSIFY_PROJECTION).lean<PaymentProofRow[]>().exec())
+            .map((r) => [String(r._id), r]));
+        return (w) => {
+            let hit = false;
+            const rows = w.rows.map((r) => { const f = fresh.get(String(r._id)); if (f) hit = true; return f ?? r; });
+            return hit ? this.derive({ ...w, rows }) : null;
+        };
     }
 
     /** Sets (state 'ok') or clears the operator review on one proof. Idempotent. */

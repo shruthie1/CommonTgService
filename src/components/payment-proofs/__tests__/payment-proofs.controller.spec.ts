@@ -10,6 +10,8 @@ describe('PaymentProofsController', () => {
     const calls: unknown[] = [];
     const service = {
         list: async (q: unknown) => { calls.push(['list', q]); return { items: [], nextCursor: null, counts: {}, truncated: false }; },
+        views: async (q: unknown) => { calls.push(['views', q]); return { view: 'check', entries: [], counts: { check: 0, muted: 0, refused: 0 }, truncated: false }; },
+        reviewChat: async (chatId: string, body: any) => { calls.push(['reviewChat', chatId, body]); return { chatId, reviewed: [] }; },
         review: async (id: string, body: any) => {
             calls.push(['review', id, body]);
             if (body.state === 'bad') throw new BadRequestException('state');
@@ -40,5 +42,18 @@ describe('PaymentProofsController', () => {
         expect(calls[0]).toEqual(['review', 'ramya1-111-3', { state: 'ok', by: 'ops' }]);
         const bad = await request(app.getHttpServer()).post('/payment-proofs/ramya1-111-3/review').send({ state: 'bad' });
         expect(bad.status).toBe(400);
+    });
+
+    it('GET /payment-proofs?view= goes to the views (old list untouched without view)', async () => {
+        const res = await request(app.getHttpServer()).get('/payment-proofs?view=muted&client=ramya1');
+        expect(res.status).toBe(200);
+        expect(res.body.view).toBe('check');
+        expect(calls).toEqual([['views', { view: 'muted', client: 'ramya1' }]]);
+    });
+
+    it('POST /payment-proofs/chat/:chatId/review marks the chat looks fine', async () => {
+        const res = await request(app.getHttpServer()).post('/payment-proofs/chat/111/review').send({ by: 'ops', proofIds: ['ramya1-111-3'] });
+        expect(res.status).toBe(200);
+        expect(calls).toEqual([['reviewChat', '111', { by: 'ops', proofIds: ['ramya1-111-3'] }]]);
     });
 });
