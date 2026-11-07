@@ -3,6 +3,7 @@ import { RedisClient } from '../../utils/redisClient';
 import { AnalyticsPgReader } from '../daily-analytics/analytics-pg.reader';
 import { MonitorController } from './monitor.controller';
 import { MONITOR_REDIS, MonitorRedis, MonitorService } from './monitor.service';
+import { PoolSnapshotWriter } from './pool-snapshot.writer';
 
 /**
  * Read-only monitoring API (GET /monitor/fleet, /monitor/client/:clientId, /monitor/live).
@@ -10,12 +11,15 @@ import { MONITOR_REDIS, MonitorRedis, MonitorService } from './monitor.service';
  * connection (aggregate/find only); Redis via the shared RedisClient (SMEMBERS + MGET for live; GET/SET
  * only on its own monitor::snapshot::<page> keys; one HGETALL/HLEN/ZCARD pipeline per promotions build, one
  * ZCOUNT/HGETALL/HLEN pipeline per reactions build).
+ * The one write: PoolSnapshotWriter, one INSERT per hour into Postgres pool_snapshot via the same reader
+ * (called by the CMS scheduler under its run-claim).
  */
 @Module({
   controllers: [MonitorController],
   providers: [
     MonitorService,
     AnalyticsPgReader,
+    PoolSnapshotWriter,
     {
       provide: MONITOR_REDIS,
       useFactory: (): MonitorRedis => ({
@@ -38,5 +42,6 @@ import { MONITOR_REDIS, MonitorRedis, MonitorService } from './monitor.service';
       }),
     },
   ],
+  exports: [PoolSnapshotWriter],
 })
 export class MonitorModule {}

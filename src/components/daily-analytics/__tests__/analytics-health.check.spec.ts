@@ -3,7 +3,10 @@ import {
   AnalyticsHealthCheck,
   PROBE_RETRIES,
   PROBE_RETRY_DELAY_MS,
+  HISTORY_REALERT_DAYS,
   decideAnalyticsHealth,
+  decideHistoryFindings,
+  dedupeHistoryFindings,
   istDay,
   median,
 } from '../analytics-health.check';
@@ -89,7 +92,21 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     ...['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29'].map((d) => ({ d, n: '1000' })),
     { d: '2026-10-30', n: String(yesterday) },
   ];
-  const ok = (sql: string) => (sql.includes('analytics_daily_parity') ? [] : sql.includes('promotion_send') ? sends(900) : [{ n: '42' }]);
+  // Last analytics-history run: 2026-10-31 00:45 IST (19:15Z), 1h45m before NOW, succeeded.
+  const JOB_OK = [{ jobid: '7', status: 'succeeded', start_time: '2026-10-30T19:15:00Z', return_message: '1 row' }];
+  const SIZE_OK = [{ level: 'info', subject: 'db', detail: 'pg_database_size 310.0 MB (62.0 % of 500 MB); db + WAL 400.0 MB' }];
+  const ok = (sql: string): any[] =>
+    sql.includes('analytics_size_check')
+      ? SIZE_OK
+      : sql.includes('analytics_rollup_ledger')
+        ? []
+        : sql.includes('cron.job')
+          ? JOB_OK
+          : sql.includes('analytics_daily_parity')
+            ? []
+            : sql.includes('promotion_send')
+              ? sends(900)
+              : [{ n: '42' }];
 
   it('istDay: 02:30 IST on 10-31 => yesterday 10-30', () => {
     expect(istDay(NOW, -1)).toBe('2026-10-30');
@@ -102,7 +119,15 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     expect(notify).not.toHaveBeenCalled();
     expect(queries.every((q) => /^\s*SELECT/i.test(q.sql))).toBe(true);
     expect(queries[0].params).toEqual(['2026-10-23T00:00:00+05:30', '2026-10-31T00:00:00+05:30']);
-    expect(queries.map((q) => q.sql.match(/FROM (\w+)/)![1])).toEqual(['promotion_send', 'daily_client', 'daily_mobile', 'analytics_daily_parity']);
+    expect(queries.map((q) => q.sql.match(/FROM ([\w.]+)/)![1])).toEqual([
+      'promotion_send',
+      'daily_client',
+      'daily_mobile',
+      'analytics_daily_parity',
+      'analytics_size_check',
+      'analytics_rollup_ledger',
+      'cron.job',
+    ]);
     expect(queries[2].params).toEqual(['2026-10-30']);
     expect(queries[3]).toEqual({ sql: 'SELECT * FROM analytics_daily_parity($1::date)', params: ['2026-10-30'] });
   });
@@ -200,5 +225,163 @@ describe('AnalyticsHealthCheck.run (yesterday IST, read-only queries)', () => {
     const { check } = build(() => ({ error: ECONN }));
     check.notify = jest.fn().mockRejectedValue(new Error('telegram 502'));
     await expect(check.run(NOW)).resolves.toEqual(['Postgres unreachable: connect ECONNREFUSED [ECONNREFUSED]']);
+  });
+
+  describe('bounded-history guardrails (analytics/history.sql)', () => {
+    const WARN_PS = { level: 'warn', subject: 'promotion_send', detail: '130.2 MB over its 121 MB budget (expiry or rollup gate stuck, or volume changed)' };
+    const NULL_SVC = Array.from({ length: 17 }, (_, i) => ({
+      step: 'hourly_sends',
+      period_start: `2026-10-${String(8 + i).padStart(2, '0')}`,
+      status: 'error',
+      detail: 'promotion_send has NULL service rows',
+    }));
+    /** 1000 sends on every day of the queried 8-day window, whatever night it is. */
+    const windowSends = (params: unknown[]) =>
+      Array.from({ length: 8 }, (_, i) => ({ d: istDay(Date.parse(String(params[0])), i), n: '1000' }));
+    const withRows = (over: { size?: any[] | { error: any }; ledger?: any[] | { error: any }; job?: any[] | { error: any } }) => (sql: string, params: unknown[] = []) =>
+      sql.includes('FROM promotion_send')
+        ? windowSends(params)
+        : sql.includes('analytics_size_check') && over.size !== undefined
+        ? over.size
+        : sql.includes('analytics_rollup_ledger') && over.ledger !== undefined
+          ? over.ledger
+          : sql.includes('cron.job') && over.job !== undefined
+            ? over.job
+            : ok(sql);
+
+    it('size warn => alert (one message); info is not an alert', async () => {
+      const { check, notify } = build(withRows({ size: [...SIZE_OK, WARN_PS] }));
+      const problems = await check.run(NOW);
+      expect(problems).toEqual([`size warn promotion_send: ${WARN_PS.detail}`]);
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify.mock.calls[0][0]).toMatchObject({ title: 'Analytics history guardrails', severity: 'error', details: problems });
+      expect(notify.mock.calls[0][0].fields).toContainEqual({ label: 'size warn/critical', value: '1' });
+    });
+
+    it('size ok (info only), empty ledger, job succeeded 1h45m ago => no alert', async () => {
+      const { check, notify } = build(ok);
+      expect(await check.run(NOW)).toEqual([]);
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('critical size => critical severity', async () => {
+      const { check, notify } = build(withRows({ size: [{ level: 'critical', subject: 'db', detail: 'pg_database_size 430.0 MB (86.0 % of 500 MB); db + WAL 500.0 MB' }] }));
+      await check.run(NOW);
+      expect(notify.mock.calls[0][0].severity).toBe('critical');
+    });
+
+    it('ledger mismatch/error rows from the last run => one compact line per (status, step)', async () => {
+      const ledger = [
+        ...NULL_SVC,
+        { step: 'monthly_revenue', period_start: '2026-10-01', status: 'mismatch', detail: '5 key(s) src, 4 dst; 4 written, 0 orphan(s)' },
+      ];
+      const { check, notify, queries } = build(withRows({ ledger }));
+      const problems = await check.run(NOW);
+      expect(problems).toEqual([
+        'ledger error: hourly_sends 17 period(s) 2026-10-08..2026-10-24 (e.g. promotion_send has NULL service rows)',
+        'ledger mismatch: monthly_revenue 1 period(s) 2026-10-01 (e.g. 5 key(s) src, 4 dst; 4 written, 0 orphan(s))',
+      ]);
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify.mock.calls[0][0].fields).toContainEqual({ label: 'ledger mismatch/error', value: '18' });
+      const q = queries.find((x) => x.sql.includes('analytics_rollup_ledger'))!;
+      expect(q.sql).toMatch(/run_at = \(SELECT max\(run_at\) FROM analytics_rollup_ledger\)/);
+      expect(q.sql).toMatch(/status IN \('mismatch', 'error'\)/);
+    });
+
+    it('analytics-history job failed, or no run in 26 h, or not scheduled => alert', async () => {
+      const failed = build(withRows({ job: [{ jobid: '7', status: 'failed', start_time: '2026-10-30T19:15:00Z', return_message: 'ERROR: canceling statement due to statement timeout' }] }));
+      expect(await failed.check.run(NOW)).toEqual([
+        'analytics-history last run failed (started 2026-10-30T19:15:00.000Z): ERROR: canceling statement due to statement timeout',
+      ]);
+      const stale = build(withRows({ job: [{ jobid: '7', status: 'succeeded', start_time: '2026-10-29T18:59:00Z', return_message: null }] }));
+      expect(await stale.check.run(NOW)).toEqual([
+        'analytics-history has not run in 26 h (last start 2026-10-29T18:59:00.000Z, succeeded)',
+      ]);
+      const never = build(withRows({ job: [{ jobid: '7', status: null, start_time: null, return_message: null }] }));
+      expect(await never.check.run(NOW)).toEqual(['analytics-history has never run']);
+      const missing = build(withRows({ job: [] }));
+      expect(await missing.check.run(NOW)).toEqual(['pg_cron job analytics-history is not scheduled']);
+    });
+
+    it('missing size function / ledger table (older DB) => skipped quietly: no alert, no retry, no cron probe', async () => {
+      const { check, notify, sleep, queries } = build(
+        withRows({
+          size: { error: { kind: 'query', message: 'function analytics_size_check(date) does not exist', code: '42883' } },
+          ledger: { error: { kind: 'query', message: 'relation "analytics_rollup_ledger" does not exist', code: '42P01' } },
+        }),
+      );
+      expect(await check.run(NOW)).toEqual([]);
+      expect(notify).not.toHaveBeenCalled();
+      expect(sleep).not.toHaveBeenCalled();
+      expect(queries.some((q) => q.sql.includes('cron.job'))).toBe(false);
+    });
+
+    it('pg_cron schema missing or not readable => job probe skipped quietly', async () => {
+      for (const code of ['3F000', '42501', '42P01']) {
+        const { check, notify, sleep } = build(withRows({ job: { error: { kind: 'query', message: 'cron', code } } }));
+        expect(await check.run(NOW)).toEqual([]);
+        expect(notify).not.toHaveBeenCalled();
+        expect(sleep).not.toHaveBeenCalled();
+      }
+    });
+
+    it('dedupe: a persisting condition is sent once, suppressed for the next nights, re-sent after HISTORY_REALERT_DAYS', async () => {
+      expect(HISTORY_REALERT_DAYS).toBe(7);
+      const handler = withRows({ size: [WARN_PS], ledger: NULL_SVC });
+      const night = (d: number) => NOW + d * 24 * 3600_000;
+      const jobAt = (d: number) => [{ jobid: '7', status: 'succeeded', start_time: new Date(night(d) - 105 * 60_000).toISOString(), return_message: '' }];
+
+      const first = build(handler);
+      const r1 = await first.check.runWithState(night(0), {});
+      expect(r1.problems).toHaveLength(2);
+      expect(first.notify).toHaveBeenCalledTimes(1);
+      expect(Object.values(r1.historyAlerts)).toEqual(Array(18).fill('2026-10-31'));
+
+      // Next night: same conditions, figures drifted (130.2 -> 131.0 MB) => no message.
+      const second = build(withRows({ size: [{ ...WARN_PS, detail: WARN_PS.detail.replace('130.2', '131.0') }], ledger: NULL_SVC, job: jobAt(1) }));
+      const r2 = await second.check.runWithState(night(1), r1.historyAlerts);
+      expect(r2.problems).toEqual([]);
+      expect(second.notify).not.toHaveBeenCalled();
+      expect(r2.suppressed).toHaveLength(2);
+      expect(r2.historyAlerts).toEqual(r1.historyAlerts);
+
+      // Escalation is a new condition => sent at once, alongside nothing else.
+      const crit = build(withRows({ size: [{ ...WARN_PS, level: 'critical' }], ledger: NULL_SVC, job: jobAt(2) }));
+      const r3 = await crit.check.runWithState(night(2), r2.historyAlerts);
+      expect(r3.problems).toEqual([`size critical promotion_send: ${WARN_PS.detail}`]);
+      expect(crit.notify).toHaveBeenCalledTimes(1);
+
+      // 7 IST days after the first send, the still-present warn is re-sent once (weekly reminder).
+      const week = build(withRows({ size: [WARN_PS], ledger: [], job: jobAt(7) }));
+      const r4 = await week.check.runWithState(night(7), r2.historyAlerts);
+      expect(r4.problems).toEqual([`size warn promotion_send: ${WARN_PS.detail}`]);
+      // Cleared ledger rows are forgotten, so a return would alert again.
+      expect(Object.keys(r4.historyAlerts)).toHaveLength(1);
+    });
+
+    it('dedupe: an undelivered message does not mark its conditions as sent', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const { check, notify } = build(withRows({ size: [WARN_PS] }));
+      notify.mockResolvedValue(false);
+      const r = await check.runWithState(NOW, {});
+      expect(r.problems).toHaveLength(1);
+      expect(r.historyAlerts).toEqual({});
+    });
+
+    it('existing problems and guardrail lines share ONE message', async () => {
+      const { check, notify } = build((sql, params) => (sql.includes('FROM daily_client') ? [{ n: '0' }] : withRows({ size: [WARN_PS] })(sql, params)));
+      const problems = await check.run(NOW);
+      expect(problems).toEqual(['daily_client has 0 rows', `size warn promotion_send: ${WARN_PS.detail}`]);
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify.mock.calls[0][0].title).toBe('Analytics Postgres health check failed');
+    });
+
+    it('pure: decideHistoryFindings / dedupeHistoryFindings', () => {
+      const f = decideHistoryFindings({ day: '2026-10-30', checkedAt: NOW, sizeRows: [WARN_PS, ...SIZE_OK] });
+      expect(f.map((x) => x.key)).toEqual(['size:warn:promotion_send:# MB over its # MB budget (expiry or rollup gate stuck, or volume changed)']);
+      const d = dedupeHistoryFindings(f, { [f[0].key]: '2026-10-25' }, '2026-10-31');
+      expect(d.alert).toHaveLength(0);
+      expect(dedupeHistoryFindings(f, { [f[0].key]: '2026-10-24' }, '2026-10-31').alert).toHaveLength(1);
+    });
   });
 });

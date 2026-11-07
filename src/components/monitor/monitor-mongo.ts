@@ -3,6 +3,7 @@
  * secondaryPreferred). Pipelines are plain functions so specs can assert their shape.
  */
 import { Types } from 'mongoose';
+import { WarmupPhase } from '../shared/warmup-phases';
 
 export const MONGO_MAX_TIME_MS = 8_000;
 const DAY_MS = 86_400_000;
@@ -73,6 +74,22 @@ export function flattenCohort(rows: Array<{ _id: { c?: string; d: string; h?: nu
   }));
 }
 
+/** Accounts whose spamStatus is 'harsh'. */
+const HARSH_SUM = { $sum: { $cond: [{ $eq: ['$spamStatus', 'harsh'] }, 1, 0] } };
+
+/**
+ * Accounts still warming up (enrolled..maturing; a missing or empty warmupPhase counts as enrolled).
+ * Same phase list as shared/warmup-phases.ts isAccountWarmingUp.
+ */
+export const WARMING_PHASES: string[] = [
+  WarmupPhase.ENROLLED,
+  WarmupPhase.SETTLING,
+  WarmupPhase.IDENTITY,
+  WarmupPhase.GROWING,
+  WarmupPhase.MATURING,
+];
+const WARMING_SUM = { $sum: { $cond: [{ $in: [{ $ifNull: ['$warmupPhase', ''] }, ['', ...WARMING_PHASES]] }, 1, 0] } };
+
 /**
  * Pool depth per clientId. eligible mirrors the CMS handleSetupClient gates as in
  * scripts/buffer-analysis/10-census.cjs (approximation: omits the "not current main" and "users doc
@@ -86,7 +103,8 @@ export function bufferPoolPipeline(now: number, todayIst: string, clientId?: str
       $group: {
         _id: '$clientId',
         total: { $sum: 1 },
-        harsh: { $sum: { $cond: [{ $eq: ['$spamStatus', 'harsh'] }, 1, 0] } },
+        harsh: HARSH_SUM,
+        warming: WARMING_SUM,
         eligible: {
           $sum: {
             $cond: [
@@ -120,7 +138,16 @@ export function bufferPoolPipeline(now: number, todayIst: string, clientId?: str
 export function promotePoolPipeline(clientId?: string): object[] {
   return [
     ...(clientId ? [{ $match: { clientId } }] : []),
-    { $group: { _id: '$clientId', active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } } } },
+    {
+      $group: {
+        _id: '$clientId',
+        active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+        // total / harsh / warming: same definitions as the buffer pipeline (pool_snapshot 'p' rows)
+        total: { $sum: 1 },
+        harsh: HARSH_SUM,
+        warming: WARMING_SUM,
+      },
+    },
   ];
 }
 

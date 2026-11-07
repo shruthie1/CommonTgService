@@ -17,6 +17,7 @@ import { AppService } from '../../app.service';
 import { RuntimeConfigService } from '../config/runtime-config.service';
 import { AccountMaintenanceService } from '../maintenance/account-maintenance.service';
 import { AnalyticsHealthCheck } from '../../components/daily-analytics/analytics-health.check';
+import { PoolSnapshotWriter } from '../../components/monitor/pool-snapshot.writer';
 
 const IST = 'Asia/Kolkata';
 /**
@@ -47,6 +48,7 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     // the one MongooseModule connected, leaving scheduled jobs falsely "offline".
     @InjectConnection() private readonly connection: Connection,
     private readonly analyticsHealth: AnalyticsHealthCheck,
+    private readonly poolSnapshot: PoolSnapshotWriter,
   ) {}
 
   onModuleInit(): void {
@@ -111,6 +113,10 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     // (review L8). 02:30 IST leaves the tg-platform sink and the 00:xx rollups time to land.
     // Run-claimed per IST day (controlPlaneJobRuns) so two processes with the CMS scheduler send one alert.
     this.register('cms-analytics-health', '30 2 * * *', () => this.runAnalyticsHealth());
+    // Hourly pool gauges into Postgres pool_snapshot (one INSERT, ON CONFLICT DO NOTHING). Run-claimed per
+    // UTC hour so one CMS-scheduler process writes. IST :03 = UTC :33, so ts_hour is the current UTC hour.
+    // The writer never throws: a failed hour is recorded as completed with its outcome and stays a gap.
+    this.register('cms-pool-snapshot', '3 * * * *', () => this.runPoolSnapshot());
     // Degraded swap fallback (docs/design/2026-10-24-degraded-swap-fallback.md): every 30 min a
     // swap-maintenance run (rescue dead mains, upgrade degraded clients, refill limited mains); daily
     // summary at 10:05 IST. Both run-claimed so two CMS-scheduler processes never double-swap or
@@ -352,6 +358,18 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** UTC hour, e.g. 2026-11-07T05, the run-claim key of the hourly pool snapshot. */
+  private utcHourKey(now: Date = new Date()): string {
+    return now.toISOString().slice(0, 13);
+  }
+
+  private runPoolSnapshot(now: Date = new Date()): Promise<void> {
+    return this.runClaimed(`pool-snapshot:${this.utcHourKey(now)}`, 'pool snapshot', async () => {
+      const outcome = await this.poolSnapshot.run();
+      return { outcome };
+    });
+  }
+
   private async runAnalyticsHealth(): Promise<void> {
     const db = this.requireDatabase('analytics health check');
     const runs = db.collection<any>('controlPlaneJobRuns');
@@ -361,10 +379,22 @@ export class ScheduledJobsService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     try {
-      const problems = await this.analyticsHealth.run();
+      // Guardrail dedupe state from the last completed day (anchored _id prefix uses the _id index).
+      const previous = await runs
+        .find({ _id: { $regex: /^analytics-health:/ }, completedAt: { $exists: true } })
+        .sort({ completedAt: -1 })
+        .limit(1)
+        .next();
+      const { problems, suppressed, historyAlerts } = await this.analyticsHealth.runWithState(
+        Date.now(),
+        previous?.historyAlerts ?? {},
+      );
       await runs.updateOne(
         { _id: jobId },
-        { $set: { completedAt: new Date(), problems }, $unset: { leaseOwner: '', leaseExpiresAt: '' } },
+        {
+          $set: { completedAt: new Date(), problems, suppressed, historyAlerts },
+          $unset: { leaseOwner: '', leaseExpiresAt: '' },
+        },
       );
     } catch (error) {
       await runs.updateOne(

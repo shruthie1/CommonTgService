@@ -745,6 +745,31 @@ describe('MonitorService.fleetDetail', () => {
     expect(JSON.stringify(r)).not.toContain('"c1"');
   });
 
+  it('pool: unassigned accounts (null / empty clientId) are kept for pool_snapshot but never counted in the fleet pool', async () => {
+    const withUnassigned = (coll: string, op: string, arg: any): any[] => {
+      if (coll === 'bufferClients') {
+        return [
+          { _id: 'alpha1', total: 10, eligible: 2, harsh: 3, warming: 4 },
+          { _id: 'beta1', total: 4, eligible: 1, harsh: 0, warming: 1 },
+          { _id: null, total: 7, eligible: 0, harsh: 1, warming: 5 },
+          { _id: '', total: 1, eligible: 0, harsh: 0, warming: 1 },
+        ];
+      }
+      if (coll === 'promoteClients') {
+        return [{ _id: 'alpha1', active: 12, total: 13, harsh: 1, warming: 0 }, { _id: 'beta1', active: 3, total: 3, harsh: 0, warming: 0 }, { _id: null, active: 0, total: 9, harsh: 2, warming: 9 }];
+      }
+      return mongo(coll, op, arg);
+    };
+    const { svc, mongoCalls } = build(pg, withUnassigned);
+    const r = await svc.buildFleetDetail(7, NOW);
+    expect(r.pool).toEqual({ buffersEligible: 3, buffersTotal: 14, harsh: 3, promoteActive: 15 });
+    const pool = await svc.poolSnapshot();
+    expect(pool.get('')).toEqual({ total: 8, eligible: 0, harsh: 1, warming: 6, promoteActive: 0, promoteTotal: 9, promoteHarsh: 2, promoteWarming: 9 });
+    expect(pool.get('alpha1')).toEqual({ total: 10, eligible: 2, harsh: 3, warming: 4, promoteActive: 12, promoteTotal: 13, promoteHarsh: 1, promoteWarming: 0 });
+    // the same cached part: no second pool aggregation for the snapshot
+    expect(mongoCalls.filter((m) => m.coll === 'bufferClients')).toHaveLength(1);
+  });
+
   it('fleet detail and /monitor/client/all are separate (client "all" filters by that id)', async () => {
     const { svc, pgNames } = build(pg, mongo);
     await svc.fleetDetail(30);

@@ -546,7 +546,23 @@ const AMOUNT_BUCKETS: Array<{ bucket: string; lo: number; hi: number }> = [
   { bucket: '500-999', lo: 500, hi: 1000 },
 ];
 
-type Pool = Map<string, { total: number; eligible: number; harsh: number; promoteActive: number }>;
+/**
+ * Pool counts per clientId. total / eligible / harsh / warming = bufferClients; promote* = promoteClients.
+ * Key UNASSIGNED_POOL_KEY ('') = accounts with no clientId: kept for pool_snapshot, skipped by every
+ * monitor page (they only ever showed assigned accounts).
+ */
+export type PoolCounts = {
+  total: number;
+  eligible: number;
+  harsh: number;
+  warming: number;
+  promoteActive: number;
+  promoteTotal: number;
+  promoteHarsh: number;
+  promoteWarming: number;
+};
+export type Pool = Map<string, PoolCounts>;
+export const UNASSIGNED_POOL_KEY = '';
 
 @Injectable()
 export class MonitorService implements OnModuleInit, OnModuleDestroy {
@@ -967,13 +983,37 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       this.mongoAgg('promoteClients', promotePoolPipeline(), 'mongo.promoteClients_pool', t),
     ]);
     const out: Pool = new Map();
-    const get = (id: string) => {
-      if (!out.has(id)) out.set(id, { total: 0, eligible: 0, harsh: 0, promoteActive: 0 });
-      return out.get(id)!;
+    const get = (id: unknown) => {
+      // null / missing / '' clientId all land on the unassigned key
+      const key = typeof id === 'string' && id ? id : UNASSIGNED_POOL_KEY;
+      if (!out.has(key)) {
+        out.set(key, { total: 0, eligible: 0, harsh: 0, warming: 0, promoteActive: 0, promoteTotal: 0, promoteHarsh: 0, promoteWarming: 0 });
+      }
+      return out.get(key)!;
     };
-    for (const b of buf) if (b._id) Object.assign(get(b._id), { total: num(b.total), eligible: num(b.eligible), harsh: num(b.harsh) });
-    for (const p of prom) if (p._id) get(p._id).promoteActive = num(p.active);
+    for (const b of buf) {
+      const c = get(b._id);
+      c.total += num(b.total);
+      c.eligible += num(b.eligible);
+      c.harsh += num(b.harsh);
+      c.warming += num(b.warming);
+    }
+    for (const p of prom) {
+      const c = get(p._id);
+      c.promoteActive += num(p.active);
+      c.promoteTotal += num(p.total);
+      c.promoteHarsh += num(p.harsh);
+      c.promoteWarming += num(p.warming);
+    }
     return out;
+  }
+
+  /**
+   * The monitor's pool counts for the hourly pool_snapshot writer: the same cached part the pages use
+   * (fresh 10 min); a stale entry is refreshed and awaited (background priority), never served.
+   */
+  async poolSnapshot(): Promise<Pool> {
+    return this.pool(new Ctx(true));
   }
 
   // ---------------------------------------------------------------- fleet
@@ -1637,7 +1677,8 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       }));
     }
     const poolAll = { eligible: 0, total: 0, harsh: 0, promoteActive: 0 };
-    for (const v of pool?.values() ?? []) {
+    for (const [id, v] of pool ?? []) {
+      if (id === UNASSIGNED_POOL_KEY) continue; // unassigned accounts were never in the fleet pool numbers
       poolAll.eligible += v.eligible;
       poolAll.total += v.total;
       poolAll.harsh += v.harsh;

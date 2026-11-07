@@ -35,7 +35,8 @@ describe('ScheduledJobsService scheduler ownership', () => {
     else process.env.LOCAL_SERVER = originalLocalServer;
   });
 
-  const analyticsHealth = { run: jest.fn().mockResolvedValue([]) };
+  const okHealth = { problems: [], suppressed: [], historyAlerts: {} };
+  const analyticsHealth = { runWithState: jest.fn().mockResolvedValue(okHealth) };
 
   function createService(
     enabled: string[],
@@ -60,6 +61,7 @@ describe('ScheduledJobsService scheduler ownership', () => {
       { deleteAll: jest.fn() } as any,
       connection as any,
       analyticsHealth as any,
+      { run: jest.fn().mockResolvedValue({ status: 'skipped', reason: 'test' }) } as any, // PoolSnapshotWriter
     );
   }
 
@@ -83,8 +85,8 @@ describe('ScheduledJobsService scheduler ownership', () => {
       .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-analytics-health-test' })
       .asPromise();
     try {
-      analyticsHealth.run.mockClear();
-      analyticsHealth.run.mockResolvedValue(['daily_client has 0 rows']);
+      analyticsHealth.runWithState.mockClear();
+      analyticsHealth.runWithState.mockResolvedValue({ ...okHealth, problems: ['daily_client has 0 rows'] });
       const cms = createService(['CMS_SCHEDULER'], connection);
       const ums = createService(['CMS_SCHEDULER'], connection);
       cms.onModuleInit();
@@ -93,13 +95,13 @@ describe('ScheduledJobsService scheduler ownership', () => {
       expect(callbacks).toHaveLength(2);
       await Promise.all(callbacks.map((cb) => cb()));
       await callbacks[0](); // a later re-fire the same day
-      expect(analyticsHealth.run).toHaveBeenCalledTimes(1);
+      expect(analyticsHealth.runWithState).toHaveBeenCalledTimes(1);
       const runs = (await connection.db.collection('controlPlaneJobRuns').find({}).toArray())
         .filter((run) => String(run._id).startsWith('analytics-health:'));
       expect(runs).toHaveLength(1);
       expect(runs[0]).toEqual(expect.objectContaining({ completedAt: expect.any(Date), problems: ['daily_client has 0 rows'] }));
     } finally {
-      analyticsHealth.run.mockResolvedValue([]);
+      analyticsHealth.runWithState.mockResolvedValue(okHealth);
       await connection.dropDatabase();
       await connection.close();
       await mongod.stop();
@@ -187,20 +189,61 @@ describe('ScheduledJobsService scheduler ownership', () => {
     }
   });
 
+  it('analytics health: guardrail dedupe state is read from the last completed day and stored on today\'s run', async () => {
+    const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
+    const connection = await mongoose
+      .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-analytics-health-state' })
+      .asPromise();
+    try {
+      const runs = connection.db.collection<any>('controlPlaneJobRuns');
+      await runs.insertMany([
+        { _id: 'analytics-health:2000-01-01', completedAt: new Date('2000-01-01T21:00:00Z'), historyAlerts: { old: '2000-01-01' } },
+        { _id: 'analytics-health:2000-01-02', completedAt: new Date('2000-01-02T21:00:00Z'), historyAlerts: { 'size:warn:x': '2000-01-02' } },
+        { _id: 'analytics-health:2000-01-03', failedAt: new Date('2000-01-03T21:00:00Z'), historyAlerts: { failed: 'x' } },
+        { _id: 'swap-maintenance:2000-01-04T00:00', completedAt: new Date('2000-01-04T00:00:00Z'), historyAlerts: { other: 'x' } },
+      ]);
+      analyticsHealth.runWithState.mockClear();
+      analyticsHealth.runWithState.mockResolvedValueOnce({
+        problems: [],
+        suppressed: ['size warn x: over budget'],
+        historyAlerts: { 'size:warn:x': '2000-01-02' },
+      });
+      const service = createService(['CMS_SCHEDULER'], connection);
+      await (service as any).runAnalyticsHealth();
+      expect(analyticsHealth.runWithState).toHaveBeenCalledWith(expect.any(Number), { 'size:warn:x': '2000-01-02' });
+      const today = (await runs.find({}).toArray()).find(
+        (r) => String(r._id).startsWith('analytics-health:') && !String(r._id).startsWith('analytics-health:2000'),
+      );
+      expect(today).toEqual(
+        expect.objectContaining({
+          completedAt: expect.any(Date),
+          problems: [],
+          suppressed: ['size warn x: over budget'],
+          historyAlerts: { 'size:warn:x': '2000-01-02' },
+        }),
+      );
+    } finally {
+      analyticsHealth.runWithState.mockResolvedValue(okHealth);
+      await connection.dropDatabase();
+      await connection.close();
+      await mongod.stop();
+    }
+  });
+
   it('analytics health: a failed run expires its lease so a later fire the same day retries', async () => {
     const mongod = await MongoMemoryServer.create({ instance: { ip: '127.0.0.1' } });
     const connection = await mongoose
       .createConnection(mongod.getUri(), { dbName: 'scheduled-jobs-analytics-health-retry' })
       .asPromise();
     try {
-      analyticsHealth.run.mockClear();
-      analyticsHealth.run.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([]);
+      analyticsHealth.runWithState.mockClear();
+      analyticsHealth.runWithState.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(okHealth);
       const service = createService(['CMS_SCHEDULER'], connection);
       await expect((service as any).runAnalyticsHealth()).rejects.toThrow('boom');
       await (service as any).runAnalyticsHealth();
-      expect(analyticsHealth.run).toHaveBeenCalledTimes(2);
+      expect(analyticsHealth.runWithState).toHaveBeenCalledTimes(2);
     } finally {
-      analyticsHealth.run.mockResolvedValue([]);
+      analyticsHealth.runWithState.mockResolvedValue(okHealth);
       await connection.dropDatabase();
       await connection.close();
       await mongod.stop();
