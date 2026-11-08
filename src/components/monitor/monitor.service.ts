@@ -9,7 +9,7 @@ import {
   accountFacetReadMode,
   resolveAccountHealthViews,
 } from '../shared/account-facet-read';
-import { CacheState, ConcurrencyGate, SnapshotCache, SnapshotResult, SnapshotSource, SnapshotStore, SwrCache, TtlCache } from './monitor-cache';
+import { CacheState, ConcurrencyGate, SnapshotCache, SnapshotResult, SnapshotSource, SnapshotStore, SnapshotWarmer, SwrCache, TtlCache } from './monitor-cache';
 import {
   addBuckets,
   Credit,
@@ -179,6 +179,25 @@ export const SNAPSHOT_FRESH_MS = TODAY_FRESH_MS;
  * Polling viewers (60 s / 120 s) still get the instant stale-while-revalidate path.
  */
 export const SNAPSHOT_MAX_SERVE_STALE_MS = 120_000;
+/**
+ * Keep-warm (2026-11-08): the app polls every 60 s and each poll found a 63-65 s old snapshot ('stale'),
+ * so it showed the old number and re-fetched 2.5 s later. Each viewer request now schedules one
+ * background rebuild SNAPSHOT_WARM_LEAD_MS before that page's next poll is expected (poll gap measured
+ * per page, SNAPSHOT_WARM_DEFAULT_INTERVAL_MS for a first request), skipped when the snapshot will still
+ * be fresh then (SNAPSHOT_WARM_MARGIN_MS to spare). One rebuild per poll cycle, as before, only earlier.
+ */
+export const SNAPSHOT_WARM_LEAD_MS = 15_000;
+export const SNAPSHOT_WARM_MARGIN_MS = 5_000;
+export const SNAPSHOT_WARM_DEFAULT_INTERVAL_MS = 60_000;
+export const SNAPSHOT_WARM_MIN_INTERVAL_MS = 30_000;
+export const SNAPSHOT_WARM_MAX_INTERVAL_MS = 5 * 60_000;
+export const SNAPSHOT_WARM_IGNORE_GAP_MS = 10_000;
+export const SNAPSHOT_WARM_MAX_KEYS = 20;
+/**
+ * A background snapshot rebuild also refreshes a part within this long of going stale (today parts:
+ * older than 30 s), so a snapshot served ~15 s after its build never reports cache.today 'stale'.
+ */
+export const PART_REFRESH_AHEAD_MS = 30_000;
 /** Redis key prefix of the persisted snapshots (one key per page: fleet:today, detail:all:7, client:<id>:30, ...). */
 export const SNAPSHOT_KEY_PREFIX = 'monitor::snapshot::';
 /** Redis TTL of a snapshot: 36 h, so a boot can tell the monitor was used since yesterday. */
@@ -621,6 +640,9 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   });
   /** Whole responses per page, persisted to Redis (monitor::snapshot::<page>) when the client supports GET/SET. */
   private readonly snapshots: SnapshotCache<any>;
+  /** false = no keep-warm rebuilds (tests). */
+  warmSnapshots = true;
+  private readonly warmer: SnapshotWarmer;
   /** Boot prewarm delay; negative disables the prewarm (and the midnight rebuild). */
   prewarmDelayMs = PREWARM_DELAY_MS;
   private prewarmTimer: NodeJS.Timeout | null = null;
@@ -655,6 +677,27 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       maxServeStaleMsOf: (name) => (this.closedRangePage(name) ? 2 * RANGE_CLOSED_FRESH_MS : undefined),
       onError: (what, err) => this.logger.warn(`monitor snapshot ${what} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
     });
+    this.warmer = new SnapshotWarmer({
+      leadMs: SNAPSHOT_WARM_LEAD_MS,
+      defaultIntervalMs: SNAPSHOT_WARM_DEFAULT_INTERVAL_MS,
+      minIntervalMs: SNAPSHOT_WARM_MIN_INTERVAL_MS,
+      maxIntervalMs: SNAPSHOT_WARM_MAX_INTERVAL_MS,
+      ignoreGapMs: SNAPSHOT_WARM_IGNORE_GAP_MS,
+      maxKeys: SNAPSHOT_WARM_MAX_KEYS,
+      needsRebuild: (name, at) => {
+        if (this.closedRangePage(name)) return false;
+        const p = this.snapshots.peek(name);
+        if (p.building) return false;
+        return p.at === null || at + SNAPSHOT_WARM_MARGIN_MS - p.at >= SNAPSHOT_FRESH_MS;
+      },
+      rebuild: (name) => this.snapshots.refresh(name, (bg) => this.buildPage(name, bg)),
+      onError: (name, err) => this.logger.warn(`monitor snapshot warm ${name} failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`),
+    });
+  }
+
+  /** Keep-warm rebuilds pending (tests / ops). */
+  get warmPending(): number {
+    return this.warmer.pending;
   }
 
   /** true for a from..to snapshot whose range ends before today IST. */
@@ -673,6 +716,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
+    this.warmer.stop();
     if (this.prewarmTimer) clearTimeout(this.prewarmTimer);
     this.prewarmTimer = null;
   }
@@ -749,8 +793,12 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     return this.buildDetail(a, Number(b) as 7 | 30, now, background);
   }
 
-  /** Serves a page from its snapshot; `cache` describes the parts behind it plus the snapshot itself. */
-  private async snap<T extends { cache: CacheInfo }>(page: string): Promise<T> {
+  /**
+   * Serves a page from its snapshot; `cache` describes the parts behind it plus the snapshot itself.
+   * `viewer` = a client request (keeps the page warm); false for a snapshot read inside another build.
+   */
+  private async snap<T extends { cache: CacheInfo }>(page: string, viewer = true): Promise<T> {
+    if (viewer && this.warmSnapshots && !this.closedRangePage(page)) this.warmer.touch(page);
     const r: SnapshotResult<T> = await this.snapshots.get(page, (bg) => this.buildPage(page, bg));
     return withSnapshotCache(r, Date.now());
   }
@@ -832,7 +880,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
         return { value, asOf, timings };
       },
       istDayStart(addDays(today, 1)),
-      { refresh: ctx.background },
+      { refresh: ctx.background, refreshAheadMs: PART_REFRESH_AHEAD_MS },
     );
     ctx.track(kind, r.state, r.at);
     Object.assign(ctx.timings, r.value.timings);
@@ -2492,7 +2540,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
     const routed = await this.section('routed_columns', ctx, () => this.routedColumns(ctx));
     const routedCols = routed?.client ?? [];
     const [fleet, payH, payT, origin, dmsH, dmY, dmT, dcH, dcT, routedRows, routedToday, detail] = await Promise.all([
-      this.section('summary', ctx, () => this.snap<FleetResponse>(fleetPage)),
+      this.section('summary', ctx, () => this.snap<FleetResponse>(fleetPage, false)),
       this.section('revenue', ctx, () => this.payHist(ctx)),
       withToday ? this.section('revenue_today', ctx, () => this.payToday(ctx)) : null,
       this.section('paid_origin', ctx, () => this.paidOrigin(ctx)),
@@ -2503,7 +2551,7 @@ export class MonitorService implements OnModuleInit, OnModuleDestroy {
       withToday ? this.section('daily_client_today', ctx, () => this.dcToday(ctx)) : null,
       routedCols.length ? this.section('routed', ctx, () => this.routedDaily(ctx, intraday ? 'today' : 'hist', routedCols)) : null,
       routedCols.length && mixed ? this.section('routed', ctx, () => this.routedDaily(ctx, 'today', routedCols)) : null,
-      byDay ? this.section('detail', ctx, () => this.snap<any>(detailPage)) : null,
+      byDay ? this.section('detail', ctx, () => this.snap<any>(detailPage, false)) : null,
     ]);
     if (fleet) ctx.merge(fleet.cache, Date.now());
     if (detail) ctx.merge(detail.cache, Date.now());

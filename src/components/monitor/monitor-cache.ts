@@ -110,22 +110,30 @@ export class SwrCache<T> {
    * `opts.refresh` (a background snapshot rebuild, nobody waiting): a stale entry is refreshed and
    * awaited instead of served (a failed refresh falls back to the stale value), and loads run at
    * background priority.
+   * `opts.refreshAheadMs` (with `refresh` only): an entry within this long of going stale is refreshed
+   * too, so the rebuilt snapshot does not carry a part that turns stale soon after it is served.
    */
-  async get(key: string, load: SwrLoader<T>, expiresAt = Number.POSITIVE_INFINITY, opts?: { refresh?: boolean }): Promise<SwrResult<T>> {
+  async get(
+    key: string,
+    load: SwrLoader<T>,
+    expiresAt = Number.POSITIVE_INFINITY,
+    opts?: { refresh?: boolean; refreshAheadMs?: number },
+  ): Promise<SwrResult<T>> {
     const now = this.now();
     const e = this.entries.get(key);
     const refresh = opts?.refresh === true;
     if (e && (now >= e.expiresAt || now - e.at >= (this.opts.maxStaleMs ?? Number.POSITIVE_INFINITY))) {
       this.entries.delete(key);
     } else if (e) {
-      if (now - e.at < this.opts.freshMs) return { value: e.value, at: e.at, state: 'hit' };
+      const ahead = refresh ? Math.max(0, opts?.refreshAheadMs ?? 0) : 0;
+      if (now - e.at < this.opts.freshMs - ahead) return { value: e.value, at: e.at, state: 'hit' };
       if (refresh) {
         try {
           const fresh = await (this.inflight.get(key) ?? this.start(key, load, expiresAt, true));
           return { value: fresh.value, at: fresh.at, state: 'hit' };
         } catch (err) {
           this.opts.onBackgroundError?.(key, err);
-          return { value: e.value, at: e.at, state: 'stale' };
+          return { value: e.value, at: e.at, state: now - e.at < this.opts.freshMs ? 'hit' : 'stale' };
         }
       }
       if (!this.inflight.has(key)) {
@@ -369,6 +377,13 @@ export class SnapshotCache<T> {
     return this.entries.size;
   }
 
+  /** Today's in-memory snapshot of `name` (its build start, null = none) and whether a build is in flight. No side effects. */
+  peek(name: string): { at: number | null; building: boolean } {
+    const day = this.opts.day(this.now());
+    const e = this.entries.get(name);
+    return { at: e && e.day === day ? e.at : null, building: this.inflight.has(`${day}|${name}`) };
+  }
+
   private start(name: string, build: (background: boolean) => Promise<T>, background: boolean): Promise<Built<T>> {
     // in-flight builds are per (day, name): a build started before IST midnight is never joined after it
     const at = this.now();
@@ -459,5 +474,97 @@ export class SnapshotCache<T> {
       const oldest = this.entries.keys().next().value;
       this.entries.delete(oldest);
     }
+  }
+}
+
+export interface WarmerOptions {
+  /** Rebuild this long before the viewer's next poll is expected (covers the build time). */
+  leadMs: number;
+  /** Poll gap assumed for a page's first request (or after a gap above maxIntervalMs). */
+  defaultIntervalMs: number;
+  /** Measured poll gaps are clamped to [minIntervalMs, maxIntervalMs]; a gap above max = a new viewer. */
+  minIntervalMs: number;
+  maxIntervalMs: number;
+  /** A request this soon after the previous one (stale follow-up, second tab) is not a poll: ignored. */
+  ignoreGapMs: number;
+  /** Pages tracked at once (oldest dropped with its timer). */
+  maxKeys: number;
+  /** true when `name` needs a rebuild to be fresh at `at` (false = fresh enough, or a build is in flight). */
+  needsRebuild: (name: string, at: number) => boolean;
+  rebuild: (name: string) => Promise<unknown>;
+  now?: () => number;
+  onError?: (name: string, err: unknown) => void;
+}
+
+interface WarmEntry {
+  last: number;
+  interval: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/**
+ * Keeps polled snapshots warm: each viewer request of a page schedules ONE rebuild just before that
+ * page's next poll is expected (last request + measured poll gap - leadMs), so the poll finds a fresh
+ * snapshot instead of a stale one. It replaces the on-demand rebuild a stale poll would have started
+ * (at most one rebuild per poll cycle, and none when the snapshot is still fresh enough then), and
+ * single-flight is the cache's (a build in flight is never duplicated). Nothing repeats on its own:
+ * with no new request the scheduled rebuild runs at most once and no timer is left. stop() clears all.
+ */
+export class SnapshotWarmer {
+  private readonly keys = new Map<string, WarmEntry>();
+  private readonly now: () => number;
+  private stopped = false;
+
+  constructor(private readonly opts: WarmerOptions) {
+    this.now = opts.now ?? (() => Date.now());
+  }
+
+  /** A viewer requested `name`. */
+  touch(name: string): void {
+    if (this.stopped) return;
+    const now = this.now();
+    const prev = this.keys.get(name);
+    if (prev && now - prev.last < this.opts.ignoreGapMs) return;
+    const gap = prev ? now - prev.last : Number.POSITIVE_INFINITY;
+    const interval =
+      gap <= this.opts.maxIntervalMs ? Math.max(this.opts.minIntervalMs, gap) : this.opts.defaultIntervalMs;
+    if (prev?.timer) clearTimeout(prev.timer);
+    const entry: WarmEntry = { last: now, interval, timer: null };
+    this.keys.delete(name);
+    this.keys.set(name, entry);
+    while (this.keys.size > this.opts.maxKeys) {
+      const [oldest, e] = this.keys.entries().next().value as [string, WarmEntry];
+      if (e.timer) clearTimeout(e.timer);
+      this.keys.delete(oldest);
+    }
+    entry.timer = setTimeout(() => this.fire(name, entry), Math.max(0, interval - this.opts.leadMs));
+    entry.timer.unref?.();
+  }
+
+  /** Rebuilds pending (scheduled, not yet fired). */
+  get pending(): number {
+    let n = 0;
+    for (const e of this.keys.values()) if (e.timer) n += 1;
+    return n;
+  }
+
+  stop(): void {
+    this.stopped = true;
+    for (const e of this.keys.values()) if (e.timer) clearTimeout(e.timer);
+    this.keys.clear();
+  }
+
+  private fire(name: string, entry: WarmEntry): void {
+    entry.timer = null;
+    if (this.stopped) return;
+    let p: Promise<unknown>;
+    try {
+      if (!this.opts.needsRebuild(name, this.now() + this.opts.leadMs)) return;
+      p = this.opts.rebuild(name);
+    } catch (err) {
+      this.opts.onError?.(name, err);
+      return;
+    }
+    p.catch((err) => this.opts.onError?.(name, err));
   }
 }
